@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "benchmark.schema.json",
+  "title": "Benchmark",
+  "type": "object",
+  "required": [
+    "expected_wealth",
+    "expected_liquidity",
+    "expected_property",
+    "expected_listed_equities",
+    "expected_private_business",
+    "expected_cash",
+    "expected_velocity",
+    "expected_counterparties",
+    "expected_jurisdiction"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "expected_wealth": {
+      "type": "number",
+      "minimum": 1
+    },
+    "expected_liquidity": {
+      "type": "number",
+      "minimum": 1
+    },
+    "expected_property": {
+      "type": "number",
+      "minimum": 0
+    },
+    "expected_listed_equities": {
+      "type": "number",
+      "minimum": 0
+    },
+    "expected_private_business": {
+      "type": "number",
+      "minimum": 0
+    },
+    "expected_cash": {
+      "type": "number",
+      "minimum": 0
+    },
+    "expected_velocity": {
+      "type": "number",
+      "minimum": 0
+    },
+    "expected_counterparties": {
+      "type": "array",
+      "items": {
+          "type": "string"
+        }
+    },
+    "expected_jurisdiction": {
+      "type": "array",
+      "items": {
+          "type": "string"
+        }
+    }
+  }
+}

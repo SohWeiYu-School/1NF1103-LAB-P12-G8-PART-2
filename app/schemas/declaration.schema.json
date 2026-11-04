@@ -1,0 +1,85 @@
+{
+  "type": "object",
+  "properties": {
+    "claimed_sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string",
+            "x-vocab": "source_types"
+          },
+          "description": {
+            "type": "string"
+          },
+          "start_year": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "end_year": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "amount": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "country": {
+            "type": "string"
+          },
+          "linked_position_index": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "linked_asset_index": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "quote": {
+            "type": "string"
+          },
+          "counterparty": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "occupation_mismatch": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "source_id",
+          "source_type",
+          "description",
+          "start_year",
+          "end_year",
+          "amount",
+          "country",
+          "linked_position_index",
+          "linked_asset_index",
+          "quote"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "claimed_sources"
+  ],
+  "additionalProperties": false
+}

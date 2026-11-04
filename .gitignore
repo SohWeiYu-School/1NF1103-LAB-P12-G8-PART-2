@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Environments and secrets
+.venv/
+venv/
+env/
+.env
+
+# Tooling
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Runtime data
+data/runtime/
+data/cache/
+data/documents/
+logs/
+*.corrupt-*
+
+
+# Old forecasting file storage (everything is in MongoDB now; stops old local files being committed)
+data/raw/
+data/forecasts/
+data/assessments/
+
+# Docs folder (teammates)
+docs
+
+data/local database/
+data/cache/
