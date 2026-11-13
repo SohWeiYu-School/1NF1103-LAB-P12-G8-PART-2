@@ -10,6 +10,8 @@ from typing import Any, Callable
 import jsonschema
 from app import utilities
 from app.ai import ai_caller
+from app.ai.benchmark_ai import BenchmarkAI
+from app.ai.response_cache import ResponseCache
 from app.utilities import (
     build_instructions,
     cache_check, cache_dir, cache_write,
@@ -113,6 +115,41 @@ def _gemini_search_response(
     text = _gemini(search_model=model)(prompt, schema, options)
     return (text, options.get("raw_response")) if text is not None else (None, None)
 
+# ---------------------------------------------------------------------------
+# Adapters: the AIService classes in app/ai do the work. They are handed this
+# caller and this cache, which pass each call on to the functions above, so the
+# old function names in this file still work until App creates the services itself.
+# ---------------------------------------------------------------------------
+
+def _pipeline_caller(prompt: str, schema: dict | None = None, options: dict | None = None) -> str | None:
+    """An ai_caller: OpenAI first, Gemini as the fallback."""
+    options = options if options is not None else {}
+    if options.get("web_search"):
+        text, response = _ai_search_pipeline(prompt, schema=schema, domains=options.get("domains"))
+        options["raw_response"] = response
+        return text
+    if options.get("parts") is not None:
+        return _openai_document_response(options.get("system") or prompt, options["parts"],
+                                         options.get("model"), schema)
+    return _ai_chat_completion_pipeline(prompt, schema)
+
+
+class _ModuleCache(ResponseCache):
+    """The ResponseCache for the cache folder in use, reached through this file's cache functions."""
+
+    def __init__(self) -> None:
+        super().__init__(cache_dir())
+
+    def key(self, kind: str, payload: dict, model: str, prompt_version: str = "") -> str:
+        return cache_check(kind, payload, prompt_version, model)[0]
+
+    def get(self, kind: str, payload: dict, model: str, prompt_version: str = "") -> dict | None:
+        return cache_check(kind, payload, prompt_version, model)[1]
+
+    def put(self, kind: str, key: str, data: dict) -> None:
+        cache_write(key, data, kind)
+
+
 #Shared function that accepts (AI reponse & Schema) checking if the AI output matches the actaul schema
 def validate_ai_response(data: dict, schema: dict) -> tuple[bool, str | None]:
     """Check an AI reply against a JSON schema. Returns (True, None) or (False, error)."""
@@ -133,56 +170,15 @@ def get_ai_benchmark(client_data: dict, economy: dict | None = None) -> dict | N
     """Entry point. Returns the benchmark dict, or None if the call fails.
 
     economy: the markets the forecast's Call 1 found for this client (logic_manager.economy_brief):
-    yearly % changes and country listings only - no figures about the client. Without it the
-    AI assumes typical conditions.
+    yearly % changes and country listings only - no figures about the client.
     """
-    mdl = model()
-
-    # Step 1: Build payload (allowlist only - no declared figures reach the AI) + the economy
-    payload = build_benchmark_payload(client_data)
-    economy_text = json.dumps(economy, indent=1, ensure_ascii=False) if economy else "not available"
-
-    # Step 2: Load prompt + schema (lines starting with # are notes, not sent)
-    template = load_prompt("benchmark.txt")
-    text_template = "\n".join(line for line in template.splitlines() if not line.startswith("#")).strip()
-    prompt = text_template.replace("{client_data}", str(payload)).replace("{economy}", economy_text)
-    schema = load_schema("benchmark.schema.json")
-
-    # Step 3: Reuse a saved answer if there is one (same career AND same economy)
-    key, cached = cache_check("benchmark", {**payload, "economy": economy},
-                              extract_prompt_version(template), mdl)
-    if cached is not None:
-        return cached
-
-    # Step 4: Call the AI, parse, validate, save (2 attempts)
-    for attempt in range(2):
-        text = _ai_chat_completion_pipeline(prompt, schema)
-        if text is None:
-            logger.warning("get_ai_benchmark attempt %d: API call failed", attempt + 1)
-            continue
-
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError as exc:
-            logger.warning("get_ai_benchmark attempt %d JSON parse error: %s", attempt + 1, repr(exc))
-            continue
-
-        valid, err = validate_ai_response(data, schema)
-        if not valid:
-            logger.warning("get_ai_benchmark attempt %d schema validation failed: %s", attempt + 1, err)
-            continue
-
-        cache_write(key, data, "benchmark")
-        return data
-
-    logger.error("get_ai_benchmark exhausted all retries")
-    return None
+    service = BenchmarkAI("openai", _pipeline_caller, model(), 0.0, _ModuleCache())
+    return service.run({"client": client_data, "economy": economy})
 
 
 def build_benchmark_payload(client_data: dict) -> dict:
-    """Keep only the fields the benchmark AI may see (CLAUDE.md rule 5)."""
-    allowed = utilities.policy().get("benchmark_allowed_fields", ["occupation", "industry", "age", "career_start_year", "country"])
-    return {k: client_data[k] for k in allowed if k in client_data}
+    """Keep only the fields the benchmark AI may see (CLAUDE.md rule 6)."""
+    return {k: client_data[k] for k in BenchmarkAI.ALLOWED_FIELDS if k in client_data}
 
 
 # ============================================================================
