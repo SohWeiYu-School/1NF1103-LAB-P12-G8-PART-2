@@ -33,6 +33,7 @@ import re
 
 from app import utilities
 from app.model.band import Band
+from app.model.config import Config
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -859,13 +860,12 @@ def add_months(date_text: str, months: int) -> str:
 
 def same_country(name: str, policy: dict) -> str:
     """Lower-case a country name and map short forms (UAE, Dubai) to one spelling."""
-    text = (name or "").strip().lower()
-    return policy.get("country_aliases", {}).get(text, text)
+    return Config(policy, {}).same_country(name)
 
 
 def category_name(code: str) -> str:
     """'TRADE_BASED_ML' -> its readable name from the vocabulary file."""
-    return utilities.vocabulary().get("crime_categories", {}).get(code, code)
+    return Config({}, utilities.vocabulary()).category_name(code)
 
 
 def enabled_by_text(person_type: dict, record: dict) -> str:
