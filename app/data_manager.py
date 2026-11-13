@@ -30,6 +30,7 @@ import tempfile
 import hashlib
 
 from app import utilities
+from app.data.json_repository import JsonRepository
 
 logger = logging.getLogger(__name__)
 
@@ -66,19 +67,16 @@ def _ensure_data_dir():
 # LOCAL JSON FILE HELPERS (Primary Data Source)
 # ==============================================================================
 
+class _JsonFile(JsonRepository):
+    """Any local JSON list file, for the functions below that still take a file path."""
+
+    def save(self, record: dict) -> bool:
+        return self._write_all(self.load() + [record])
+
+
 def load_from_json(filepath: str) -> list:
-    # Check if local JSON file exists; if not, return an empty list
-    if not os.path.exists(filepath):
-        return []
-    try:
-        # Open and read the JSON file safely
-        with open(filepath, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            # Return data if it is a list, otherwise return empty list
-            return data if isinstance(data, list) else []
-    except (json.JSONDecodeError, IOError) as e:
-        logger.warning("load_from_json: could not read %s: %s", filepath, repr(e))
-        return []
+    # Every record in a local JSON file; [] if it is missing or unreadable
+    return _JsonFile(filepath, "client_ref").load()
 
 
 def save_to_json(record: dict, filepath: str) -> bool:
