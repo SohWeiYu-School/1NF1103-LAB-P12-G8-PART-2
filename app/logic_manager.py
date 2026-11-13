@@ -32,6 +32,7 @@ import logging
 import re
 
 from app import utilities
+from app.model.band import Band
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -809,12 +810,11 @@ def normalize_declaration_jurisdictions(declaration: dict) -> tuple[dict, list[s
 PASSED, MANUAL_REVIEW, RISKY, SERIOUS_RISK = "PASSED", "MANUAL_REVIEW", "RISKY", "SERIOUS_RISK"
 SEVERITY = {PASSED: 0, MANUAL_REVIEW: 1, RISKY: 2, SERIOUS_RISK: 3}
 
-# Every money result is kept at three levels.
-BANDS = ("cautious", "typical", "optimistic")
-# Which end of an AI range each level uses. For money coming in, cautious = low.
-# For money going out (tax, living costs), cautious = high.
-MONEY_IN = {"cautious": "low", "typical": "typical", "optimistic": "high"}
-MONEY_OUT = {"cautious": "high", "typical": "typical", "optimistic": "low"}
+# Every money result is kept at three levels. The Band class (Domain Model) owns the arithmetic;
+# these names stay until the forecast code moves into its own classes.
+BANDS = Band.LEVELS
+MONEY_IN = Band.MONEY_IN
+MONEY_OUT = Band.MONEY_OUT
 
 
 # ============================================================================
@@ -822,30 +822,29 @@ MONEY_OUT = {"cautious": "high", "typical": "typical", "optimistic": "low"}
 # ============================================================================
 
 def band(cautious: float, typical: float, optimistic: float) -> dict:
-    return {"cautious": round(cautious, 2), "typical": round(typical, 2), "optimistic": round(optimistic, 2)}
+    return Band(cautious, typical, optimistic).to_dict()
 
 
 def zero_band() -> dict:
-    return band(0, 0, 0)
+    return Band().to_dict()
 
 
 def add_bands(first: dict, second: dict) -> dict:
-    return band(*(first[b] + second[b] for b in BANDS))
+    return (Band.from_dict(first) + Band.from_dict(second)).to_dict()
 
 
 def scale_band(values: dict, factor: float) -> dict:
-    return band(*(values[b] * factor for b in BANDS))
+    return (Band.from_dict(values) * factor).to_dict()
 
 
 def sorted_band(three_values: list[float]) -> dict:
     """Three results worked out from the low, typical and high inputs, lowest first."""
-    low, middle, high = sorted(three_values)
-    return band(low, middle, high)
+    return Band.from_values(three_values).to_dict()
 
 
 def range_to_band(ai_range: dict) -> dict:
     """An AI {low, typical, high} range as a cautious/typical/optimistic band."""
-    return band(ai_range["low"], ai_range["typical"], ai_range["high"])
+    return Band.from_range(ai_range).to_dict()
 
 
 def add_months(date_text: str, months: int) -> str:
