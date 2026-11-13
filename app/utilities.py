@@ -14,6 +14,8 @@ from typing import Any
 
 from openai import OpenAI
 
+from app.data.config_reader import ConfigReader
+
 logger = logging.getLogger(__name__)
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -41,22 +43,13 @@ BASELINE_TYPE = "T1"                      # T1 is always "his wealth came exactl
 # Config files
 # ---------------------------------------------------------------------------
 
-_config_cache: dict = {}
+# ConfigReader (Data Manager) reads the files. One shared reader keeps each file after the first read.
+_config_reader = ConfigReader(CONFIG_DIR)
 
 
 def read_config(name: str) -> dict:
     """Read config/<name>.json once and keep it. Returns {} if it can't be read."""
-    if name in _config_cache:
-        return _config_cache[name]
-    path = os.path.join(CONFIG_DIR, f"{name}.json")
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            data = json.load(handle)
-    except (OSError, json.JSONDecodeError) as error:
-        logger.error("Could not read config file %s: %s", path, error)
-        return {}
-    _config_cache[name] = data
-    return data
+    return _config_reader.read(name)
 
 
 def vocabulary() -> dict:
@@ -69,16 +62,7 @@ def policy() -> dict:
 
 def config_problems() -> list[str]:
     """Anything missing from the config folder that would stop the app working."""
-    problems = []
-    vocab = vocabulary()
-    for key in ("signal_codes", "document_codes", "source_types", "crime_categories"):
-        if not vocab.get(key):
-            problems.append(f"config/vocabulary.json is missing '{key}'")
-    rules = policy()
-    for key in ("policy_version", "tolerance", "fit", "review_interval_months", "routing", "forecasting"):
-        if key not in rules:
-            problems.append(f"config/policy.json is missing '{key}'")
-    return problems
+    return _config_reader.problems()
 
 
 # ---------------------------------------------------------------------------
