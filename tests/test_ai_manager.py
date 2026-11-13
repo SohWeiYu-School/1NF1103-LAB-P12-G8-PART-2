@@ -10,7 +10,6 @@ from app.ai_manager import (
     _ai_chat_completion_pipeline,
     _ai_search_pipeline,
     _convert_schema_for_gemini,
-    build_typology_reports,
     get_ai_research,
     get_typologies,
     validate_ai_response,
@@ -548,33 +547,6 @@ def test_get_ai_research_empty_sources_gives_warning(tmp_path, monkeypatch):
     assert result is not None
     assert result["api_sources"] == []
     assert any("no sources" in w.lower() for w in warnings)
-
-
-# ===========================================================================
-# 24. build_typology_reports — URLs stripped, safe fields only
-# ===========================================================================
-
-def test_build_typology_reports_strips_url():
-    result = build_typology_reports(_SAMPLE_RESEARCH, _DEFAULT_REPORT_FIELDS)
-    assert len(result) == 1
-    assert "url" not in result[0]
-    assert result[0]["report_id"] == "R1"
-    assert result[0]["organisation"] == "FATF"
-
-
-def test_build_typology_reports_empty_research():
-    assert build_typology_reports({"reports": []}, _DEFAULT_REPORT_FIELDS) == []
-    assert build_typology_reports({}, _DEFAULT_REPORT_FIELDS) == []
-
-
-def test_build_typology_reports_different_research_gives_different_content():
-    research_a = {"reports": [{"report_id": "R1", "organisation": "FATF", "title": "A",
-                                "year": 2020, "summary": [], "excerpts": []}]}
-    research_b = {"reports": [{"report_id": "R1", "organisation": "MAS", "title": "B",
-                                "year": 2021, "summary": [], "excerpts": []}]}
-    a = build_typology_reports(research_a, _DEFAULT_REPORT_FIELDS)
-    b = build_typology_reports(research_b, _DEFAULT_REPORT_FIELDS)
-    assert a[0]["organisation"] != b[0]["organisation"]
 
 
 # ===========================================================================

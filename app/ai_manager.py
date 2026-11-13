@@ -12,6 +12,7 @@ from app import utilities
 from app.ai import ai_caller
 from app.ai.benchmark_ai import BenchmarkAI
 from app.ai.research_ai import ResearchAI
+from app.ai.typology_ai import TypologyAI
 from app.ai.response_cache import ResponseCache
 from app.utilities import (
     build_instructions,
@@ -206,114 +207,17 @@ def get_typologies(case_input: dict, research: dict | None = None) -> tuple[dict
 
     The AI sees only the allowlisted profile fields and the research reports (no URLs).
     """
-    warnings: list[str] = []
+    service = TypologyAI("openai", _pipeline_caller, model(), 0.0, _ModuleCache(),
+                         max_patterns=utilities.policy().get("typology_max_patterns", 5))
+    data = service.run({"case": case_input, "research": research, "categories": typology_crime_categories()})
+    return data, service.warnings()
 
-    # Step 1: Load policy limits, then build payload (profile + reports)
-    policy = utilities.policy()
-    allowed_fields = policy.get("benchmark_allowed_fields", ["occupation", "industry", "age", "career_start_year", "country"])
-    report_fields = policy.get("typology_report_fields", ["report_id", "organisation", "title", "year", "summary", "excerpts"])
-    max_patterns = policy.get("typology_max_patterns", 5)
-
-    profile_payload = {k: case_input[k] for k in allowed_fields if k in case_input}
-    if "country" not in profile_payload:
-        profile_payload["country"] = case_input.get("country_of_residence", "Singapore")
-
-    reports = build_typology_reports(research, report_fields) if research is not None else []
-    payload = {**profile_payload, "reports": reports}
-
-    # Step 2: Load prompt + schema
-    template = load_prompt("typology.txt")
-    categories = typology_crime_categories()
-    category_lines = "\n".join(f"        {code}: {text}" for code, text in categories.items())
-    prompt = (
-        template
-        .replace("{payload_json}", json.dumps(profile_payload, indent=2))
-        .replace("{reports_json}", json.dumps(reports, indent=2))
-        .replace("{crime_categories_json}", category_lines)
-    )
-    schema = load_schema("typology_response.schema.json")
-    # crime_category must be one of the forecast's crime categories, so person types can be built from it
-    typology_item = schema["properties"]["sector_typologies"]["items"]
-    typology_item["properties"]["crime_category"] = {**typology_item["properties"]["crime_category"],
-                                                     "enum": list(categories)}
-
-    mdl = model()
-
-    # Step 3: Reuse a saved answer if there is one
-    key, cached = cache_check("typology", payload, extract_prompt_version(prompt), mdl)
-    if cached is not None:
-        return cached, warnings
-
-    # Step 4: Call the AI, parse, trim, validate, save (2 attempts)
-    last_error = ""
-    error_type = "api"
-
-    for attempt in range(2):
-        attempt_warnings: list[str] = []
-
-        text = _ai_chat_completion_pipeline(prompt, schema)
-        if text is None:
-            error_type = "api"
-            last_error = "API call failed"
-            logger.warning("get_typologies attempt %d: API call failed", attempt + 1)
-            continue
-
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError as exc:
-            error_type = "json"
-            last_error = repr(exc)
-            logger.warning("get_typologies attempt %d JSON parse error: %s", attempt + 1, last_error)
-            continue
-
-        data, trim_warnings = trim_typologies(data, max_patterns)
-        attempt_warnings.extend(trim_warnings)
-
-        valid, err = validate_ai_response(data, schema)
-        if not valid:
-            error_type = "schema"
-            last_error = err
-            logger.warning("get_typologies attempt %d schema validation failed: %s", attempt + 1, last_error)
-            continue
-
-        data["model"] = mdl
-        cache_write(key, data, "typology")
-        data["_cache_path"] = os.path.join(cache_dir("typology"), f"{key}.json")
-        warnings.extend(attempt_warnings)
-        return data, warnings
-
-    logger.error("get_typologies exhausted all retries. error_type=%s last_error=%s", error_type, last_error)
-    return None, []
 
 def typology_crime_categories() -> dict:
     """{code: description} of the crime categories a typology may belong to (every one but HONEST)."""
     honest = forecast_settings()["honest_category"]
     return {code: text for code, text in utilities.vocabulary().get("crime_categories", {}).items()
             if code != honest}
-
-
-# Trim AI response to policy max typologies. Called by get_typologies before schema validation.
-
-def trim_typologies(data: dict, max_patterns: int) -> tuple[dict, list[str]]:
-    """Keep at most max_patterns typologies. Returns (data, warnings)."""
-    typologies = data.get("sector_typologies", [])
-    if len(typologies) <= max_patterns:
-        return data, []
-    trimmed = {**data, "sector_typologies": typologies[:max_patterns]}
-    warning = (
-        f"AI returned {len(typologies)} typologies; "
-        f"kept first {max_patterns} per policy."
-    )
-    logger.warning(warning)
-    return trimmed, [warning]
-
-
-def build_typology_reports(research: dict, report_fields: list) -> list[dict]:
-    """Keep only the safe report fields (no URLs) for the typology AI."""
-    return [
-        {k: r[k] for k in report_fields if k in r}
-        for r in research.get("reports", [])
-    ]
 
 
 # ============================================================================
