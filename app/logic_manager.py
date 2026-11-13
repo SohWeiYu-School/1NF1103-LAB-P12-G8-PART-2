@@ -33,7 +33,9 @@ import re
 
 from app import utilities
 from app.model.band import Band
+from app.model.check import Check
 from app.model.config import Config
+from app.model.verdict import Verdict
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -808,7 +810,7 @@ def normalize_declaration_jurisdictions(declaration: dict) -> tuple[dict, list[s
 # Forecasting Section (runs after the benchmark)
 # ===========================================================================
 
-PASSED, MANUAL_REVIEW, RISKY, SERIOUS_RISK = "PASSED", "MANUAL_REVIEW", "RISKY", "SERIOUS_RISK"
+PASSED, MANUAL_REVIEW, RISKY, SERIOUS_RISK = Verdict.OUTCOMES
 SEVERITY = {PASSED: 0, MANUAL_REVIEW: 1, RISKY: 2, SERIOUS_RISK: 3}
 
 # Every money result is kept at three levels. The Band class (Domain Model) owns the arithmetic;
@@ -1908,8 +1910,7 @@ def _sgd(value) -> str:
 def _check(feature: str, check: str, label: str, theme: str, status: str, detail: str,
            explanation: str = "", group: str = "") -> dict:
     """One finding in the shared shape all three features use."""
-    return {"feature": feature, "check": check, "label": label, "theme": theme, "status": status,
-            "detail": detail, "explanation": explanation, "group": group or label}
+    return Check(feature, check, label, theme, status, detail, explanation, group).to_dict()
 
 
 # ---------------------------------------------------------------------------
