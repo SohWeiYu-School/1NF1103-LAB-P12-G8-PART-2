@@ -15,6 +15,7 @@ from openai import OpenAI
 
 from app.ai.response_cache import ResponseCache
 from app.data.config_reader import ConfigReader
+from app.logic.case_timeline import CaseTimeline
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ PEP_OPTIONS = [
     "International organisation PEP",
     "Family member / close associate of a PEP",
 ]
-FORECAST_YEARS = 4                        # how many years after the current year we forecast
+FORECAST_YEARS = CaseTimeline.FORECAST_YEARS   # how many years after the current year we forecast
 SCENARIOS = ("steady", "boom", "downturn")
 RANGE_KEYS = ("low", "typical", "high")   # every AI figure comes as a low / typical / high range
 BASELINE_TYPE = "T1"                      # T1 is always "his wealth came exactly as declared"
@@ -71,24 +72,17 @@ def config_problems() -> list[str]:
 
 def career_positions(record: dict) -> list[dict]:
     """His jobs, oldest first. Falls back to the current job if no history was given."""
-    history = record.get("career_history") or []
-    if history:
-        return history
-    career = record.get("career", {})
-    return [{**career, "start_year": career.get("career_start_year"), "end_year": None}]
+    return CaseTimeline(record).positions()
 
 
 def current_year(record: dict) -> int:
     """The year of the assessment date, e.g. 2026 from '2026-09-24'."""
-    return int(str(record.get("current_date", ""))[:4])
+    return CaseTimeline(record).current_year()
 
 
 def career_years(record: dict) -> tuple[int, int]:
     """(first year he worked, current year)."""
-    this_year = current_year(record)
-    start_years = [p["start_year"] for p in career_positions(record) if p.get("start_year")]
-    first = min(start_years) if start_years else this_year
-    return int(first), this_year
+    return CaseTimeline(record).career_years()
 
 
 def position_end(position: dict, this_year: int) -> int:
@@ -98,8 +92,7 @@ def position_end(position: dict, this_year: int) -> int:
 
 def future_years(record: dict) -> list[int]:
     """The forecast years, e.g. [2027, 2028, 2029, 2030]."""
-    this_year = current_year(record)
-    return list(range(this_year + 1, this_year + FORECAST_YEARS + 1))
+    return CaseTimeline(record, FORECAST_YEARS).future_years()
 
 
 # ---------------------------------------------------------------------------

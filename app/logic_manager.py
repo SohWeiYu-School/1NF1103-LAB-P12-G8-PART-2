@@ -32,6 +32,7 @@ import logging
 import re
 
 from app import utilities
+from app.logic.formatter import Formatter
 from app.model.band import Band
 from app.model.check import Check
 from app.model.config import Config
@@ -847,12 +848,7 @@ def range_to_band(ai_range: dict) -> dict:
 
 def add_months(date_text: str, months: int) -> str:
     """'2026-09-24' + 3 months = '2026-12-24' (the day is clipped to the month's length)."""
-    date = datetime.date.fromisoformat(date_text)
-    month_index = date.month - 1 + months
-    year, month = date.year + month_index // 12, month_index % 12 + 1
-    first_of_next = datetime.date(year + month // 12, month % 12 + 1, 1)
-    last_day = (first_of_next - datetime.timedelta(days=1)).day
-    return datetime.date(year, month, min(date.day, last_day)).isoformat()
+    return Formatter.add_months(date_text, months)
 
 
 def same_country(name: str, policy: dict) -> str:
@@ -1897,9 +1893,7 @@ COMPOSITION_RULES = {"COMPOSITION_PROPERTY": "property", "COMPOSITION_EQUITIES":
 
 def _sgd(value) -> str:
     """12345.6 -> 'S$12,346'. Anything that isn't a number -> 'n/a'."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return "n/a"
-    return f"-S${-value:,.0f}" if value < 0 else f"S${value:,.0f}"
+    return Formatter.sgd(value)
 
 
 def _check(feature: str, check: str, label: str, theme: str, status: str, detail: str,
