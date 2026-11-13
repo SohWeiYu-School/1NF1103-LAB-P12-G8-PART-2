@@ -11,6 +11,7 @@ import jsonschema
 from app import utilities
 from app.ai import ai_caller
 from app.ai.benchmark_ai import BenchmarkAI
+from app.ai.document_ai import DocumentAI
 from app.ai.research_ai import ResearchAI
 from app.ai.typology_ai import TypologyAI
 from app.ai.response_cache import ResponseCache
@@ -224,38 +225,7 @@ def typology_crime_categories() -> dict:
 # 5. Document auto-fill - reads uploaded client documents into form details
 # ============================================================================
 
-# Most documents sent to the AI in one go (each one is a separate part of the message)
-MAX_EXTRACT_DOCUMENTS = 10
-
-
-def build_document_parts(documents: list[dict]) -> list[dict]:
-    """Turn documents read by data_manager.read_document_for_extraction into
-    chat message parts. Text goes between <document> markers so the AI treats it as data."""
-    parts: list[dict] = []
-    for document in documents[:MAX_EXTRACT_DOCUMENTS]:
-        name = document.get("file_name", "document")
-        kind = document.get("kind")
-        if kind == "text":
-            body = wrap_free_text(document.get("text", ""), f'<document name="{name}">', "</document>")
-            parts.append({"type": "text", "text": body})
-        elif kind == "image":
-            parts.append({"type": "text", "text": f'<document name="{name}"> (image below)'})
-            parts.append({"type": "image_url", "image_url": {
-                "url": f"data:{document['mime']};base64,{document['data_b64']}"}})
-        elif kind == "pdf":
-            parts.append({"type": "text", "text": f'<document name="{name}"> (scanned PDF below)'})
-            parts.append({"type": "file", "file": {
-                "filename": name, "file_data": f"data:application/pdf;base64,{document['data_b64']}"}})
-    return parts
-
-
-def document_fingerprints(documents: list[dict]) -> list[list[str]]:
-    """[file name, SHA-256 of its content] for each document read, in order."""
-    prints = []
-    for document in documents[:MAX_EXTRACT_DOCUMENTS]:
-        content = document.get("text") or document.get("data_b64") or ""
-        prints.append([document.get("file_name", ""), hashlib.sha256(content.encode("utf-8")).hexdigest()])
-    return prints
+MAX_EXTRACT_DOCUMENTS = DocumentAI.MAX_DOCUMENTS
 
 
 def _openai_document_response(prompt: str, parts: list[dict], mdl: str, schema: dict) -> str | None:
@@ -269,52 +239,17 @@ def extract_client_details(documents: list[dict]) -> tuple[dict | None, list[str
     The details follow app/schemas/document_extract.schema.json. Nothing is decided here:
     the officer reviews every pre-filled value before the client is saved.
     """
-    warnings = [d["error"] for d in documents if d.get("kind") == "error"]
-    readable = [d for d in documents if d.get("kind") in ("text", "image", "pdf")]
-    if len(readable) > MAX_EXTRACT_DOCUMENTS:
-        warnings.append(f"Only the first {MAX_EXTRACT_DOCUMENTS} documents were read.")
-    if not readable:
-        logger.warning("extract_client_details: none of the uploaded files could be read")
-        return None, warnings
-    if not has_api_key():
+    service = DocumentAI("openai", _pipeline_caller, utilities.extract_model(), 0.0, _ModuleCache())
+    readable = [d for d in documents if d.get("kind") in DocumentAI.READABLE_KINDS]
+    if readable and not has_api_key():
         logger.warning("extract_client_details: no API key configured")
-        return None, warnings
-
-    prompt = load_prompt("document_extract.txt")
-    schema = load_schema("document_extract.schema.json")
-    parts = build_document_parts(readable)
-    mdl = utilities.extract_model()
-
-    # The same documents always give the same reading: the form auto-fill and the assessment
-    # (which reads every submitted document again) share one saved reply.
-    key, cached = cache_check("document_extract", {"documents": document_fingerprints(readable)},
-                              extract_prompt_version(prompt), mdl or "")
-    if cached is not None:
-        cached.pop("_cache_path", None)
-        return cached, warnings
-
-    last_error = ""
-    for attempt in range(2):
-        text = _openai_document_response(prompt, parts, mdl, schema)
-        if text is None:
-            last_error = "API call failed"
-            continue
-        try:
-            data = json.loads(extract_json(text))
-        except json.JSONDecodeError as exc:
-            last_error = repr(exc)
-            logger.warning("extract_client_details attempt %d JSON error: %s", attempt + 1, last_error)
-            continue
-        valid, err = validate_ai_response(data, schema)
-        if not valid:
-            last_error = err or "schema"
-            logger.warning("extract_client_details attempt %d schema error: %s", attempt + 1, last_error)
-            continue
-        cache_write(key, data, "document_extract")
-        return data, warnings
-
-    logger.error("extract_client_details failed: %s", last_error)
-    return None, warnings
+        service.run({"documents": [d for d in documents if d.get("kind") == "error"]})
+        notes = service.warnings()
+        if len(readable) > DocumentAI.MAX_DOCUMENTS:
+            notes.append(f"Only the first {DocumentAI.MAX_DOCUMENTS} documents were read.")
+        return None, notes
+    data = service.run({"documents": documents})
+    return data, service.warnings()
 
 
 # ============================================================================
