@@ -30,6 +30,7 @@ import tempfile
 import hashlib
 
 from app import utilities
+from app.data.client_repository import ClientRepository
 from app.data.json_repository import JsonRepository
 
 logger = logging.getLogger(__name__)
@@ -80,36 +81,8 @@ def load_from_json(filepath: str) -> list:
 
 
 def save_to_json(record: dict, filepath: str) -> bool:
-    # Ensure record is a valid dictionary and contains a client_ref key
-    if not isinstance(record, dict) or "client_ref" not in record:
-        return False
-
-    # Make sure the data directory exists
-    _ensure_data_dir()
-    
-    # Read current records from the JSON file
-    records = load_from_json(filepath)
-
-    # Search for an existing record with the same client_ref
-    updated = False
-    for i, existing in enumerate(records):
-        if existing.get("client_ref") == record["client_ref"]:
-            records[i] = record  # Overwrite existing record
-            updated = True
-            break
-
-    # If it is a new client, append it to the end of the list
-    if not updated:
-        records.append(record)
-
-    # Write the updated list back to the local JSON file formatted with 4-space indent
-    try:
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(records, f, indent=4, ensure_ascii=False)
-        return True
-    except IOError as e:
-        logger.error("save_to_json: could not write %s: %s", filepath, repr(e))
-        return False
+    # Add the record, or replace the saved one with the same client_ref
+    return ClientRepository(filepath).save(record)
 
 
 # ==============================================================================
@@ -142,38 +115,13 @@ def get_assessment_collection():
 # ==============================================================================
 
 def save_case_record(record: dict) -> bool:
-    # Save or update a client record strictly in local sow_cases.json, always in the current layout
-    return save_to_json(standardise_record(record), LOCAL_CASES_JSON)
-
-
-# Older command-line records used other names for these asset values. The web app, the documents
-# auto-fill and the forecasting all use the names on the left.
-OLD_ASSET_KEYS = {"current_declared_value": "current_value", "income_produced": "yearly_income"}
-
-
-def standardise_record(record: dict) -> dict:
-    """Bring a client record saved in an older layout up to the one layout every screen uses:
-    asset values as current_declared_value / income_produced, and the asset's description
-    folded into asset_type ("Property - Condo"). Records already in that layout are unchanged."""
-    if not isinstance(record, dict):
-        return record
-    for asset in record.get("investments") or []:
-        if not isinstance(asset, dict):
-            continue
-        for new, old in OLD_ASSET_KEYS.items():
-            if asset.get(new) is None and old in asset:
-                asset[new] = asset[old]
-            asset.pop(old, None)
-        description = str(asset.pop("asset_description", None) or asset.pop("description", None) or "").strip()
-        kind = str(asset.get("asset_type") or "").strip()
-        if description and description.lower() not in kind.lower():
-            asset["asset_type"] = f"{kind} - {description}" if kind else description
-    return record
+    # Save or update a client record in local sow_cases.json, always in the current layout
+    return ClientRepository(LOCAL_CASES_JSON).save(record)
 
 
 def load_local_records() -> list:
     # Local sow_cases.json only (this is what Manual Sync uploads), in the current layout
-    return [standardise_record(record) for record in load_from_json(LOCAL_CASES_JSON)]
+    return ClientRepository(LOCAL_CASES_JSON).load()
 
 
 def load_all_records() -> list:
@@ -184,11 +132,7 @@ def load_all_records() -> list:
 
 def find_client_record(client_ref: str) -> dict | None:
     # One client from the local sow_cases.json (case-insensitive), or None
-    wanted = client_ref.strip().upper()
-    for record in load_local_records():
-        if str(record.get("client_ref", "")).upper() == wanted:
-            return record
-    return None
+    return ClientRepository(LOCAL_CASES_JSON).find(client_ref)
 
 
 def append_to_json(record: dict, filepath: str) -> bool:
