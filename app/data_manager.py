@@ -30,6 +30,7 @@ import tempfile
 import hashlib
 
 from app import utilities
+from app.data.assessment_repository import AssessmentRepository
 from app.data.client_repository import ClientRepository
 from app.data.json_repository import JsonRepository
 
@@ -137,29 +138,16 @@ def find_client_record(client_ref: str) -> dict | None:
 
 def append_to_json(record: dict, filepath: str) -> bool:
     # Append a record to a JSON file without overwriting existing entries
-    _ensure_data_dir()
-    records = load_from_json(filepath)
-    records.append(record)
-    try:
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(records, f, indent=4, ensure_ascii=False)
-        return True
-    except IOError as exc:
-        logger.error("append_to_json: could not write %s: %s", filepath, repr(exc))
-        return False
+    return _JsonFile(filepath, "client_ref").save(record)
 
 
 def save_assessment(record: dict) -> bool:
     # Append an AI assessment record to local ai_assessments.json (multiple per client allowed)
-    if not isinstance(record, dict) or "client_ref" not in record:
-        return False
-    if "assessment_id" not in record:
-        record = {**record, "assessment_id": str(uuid.uuid4())}
-    return append_to_json(record, LOCAL_ASSESSMENTS_JSON)
+    return AssessmentRepository(LOCAL_ASSESSMENTS_JSON).save(record)
 
 
 def load_local_assessments() -> list:
-    return load_from_json(LOCAL_ASSESSMENTS_JSON)
+    return AssessmentRepository(LOCAL_ASSESSMENTS_JSON).load()
 
 
 def load_all_assessments() -> list:
@@ -171,10 +159,9 @@ def query_assessments(assessments: list, outcome: str = None) -> list:
     # Filter a list of assessments by an outcome status string
     if not outcome:
         return assessments
-    # A combined assessment's outcome is its one verdict; older records only have the forecast's
-    def outcome_of(a: dict):
-        return a.get("outcome") or (a.get("assessment") or {}).get("outcome")
-    return [a for a in assessments if outcome_of(a) == outcome]
+    wanted = AssessmentRepository(LOCAL_ASSESSMENTS_JSON).query(outcome)
+    return [a for a in assessments if a in wanted]
+
 
 def mongo_is_online() -> bool:
     try:
@@ -539,16 +526,12 @@ def list_sample_cases() -> list:
 
 def load_client_assessments(ref: str) -> list:
     # Return all assessments for a client, newest first
-    matches = [a for a in load_all_assessments() if a.get("client_ref") == ref]
-    return sorted(matches, key=lambda a: a.get("assessed_at", ""), reverse=True)
+    return AssessmentRepository(LOCAL_ASSESSMENTS_JSON).for_client(ref)
 
 
 def load_assessment_by_id(assessment_id: str) -> dict | None:
     # Return a single assessment by its unique assessment_id
-    for a in load_all_assessments():
-        if a.get("assessment_id") == assessment_id:
-            return a
-    return None
+    return AssessmentRepository(LOCAL_ASSESSMENTS_JSON).find(assessment_id)
 
 
 # ==============================================================================
