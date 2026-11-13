@@ -16,6 +16,7 @@ from openai import OpenAI
 from app.ai.response_cache import ResponseCache
 from app.data.config_reader import ConfigReader
 from app.logic.case_timeline import CaseTimeline
+from app.logic.market_model import MarketModel
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +36,8 @@ PEP_OPTIONS = [
     "Family member / close associate of a PEP",
 ]
 FORECAST_YEARS = CaseTimeline.FORECAST_YEARS   # how many years after the current year we forecast
-SCENARIOS = ("steady", "boom", "downturn")
-RANGE_KEYS = ("low", "typical", "high")   # every AI figure comes as a low / typical / high range
+SCENARIOS = MarketModel.SCENARIOS
+RANGE_KEYS = MarketModel.RANGE_KEYS   # every AI figure comes as a low / typical / high range
 BASELINE_TYPE = "T1"                      # T1 is always "his wealth came exactly as declared"
 
 

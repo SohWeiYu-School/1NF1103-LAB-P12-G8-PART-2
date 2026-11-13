@@ -35,6 +35,7 @@ from app import utilities
 from app.logic.formatter import Formatter
 from app.logic.indicator import (CounterpartyUnnamed, GiftOrInheritanceUnnamed, Indicator,
                                  RelatedPartyTransaction, SourceContradictsOccupation, UnvaluedSource)
+from app.logic.market_model import MarketModel
 from app.model.band import Band
 from app.model.check import Check
 from app.model.config import Config
@@ -875,23 +876,17 @@ def asset_category(asset_type: str, policy: dict) -> str:
 
 def market_history(forecast: dict) -> dict:
     """{market_id: {year: % change or None}}"""
-    return {market_id: {row["year"]: row["change_pct"] for row in series["history"]}
-            for market_id, series in forecast["markets"]["series"].items()}
+    return MarketModel(forecast).history()
 
 
 def market_outlook(forecast: dict) -> dict:
     """{market_id: {year: {scenario: {low, typical, high}}}}"""
-    return {market_id: {row["year"]: {s: row[s] for s in utilities.SCENARIOS} for row in series["outlook"]}
-            for market_id, series in forecast["markets"]["series"].items()}
+    return MarketModel(forecast).outlook()
 
 
 def scenario_chances(forecast: dict) -> dict:
     """{year: {scenario: share}} with the shares adding up to exactly 1."""
-    chances = {}
-    for row in forecast["markets"]["scenario_chances"]:
-        total = sum(row[s] for s in utilities.SCENARIOS) or 1
-        chances[row["year"]] = {s: row[s] / total for s in utilities.SCENARIOS}
-    return chances
+    return MarketModel(forecast).scenario_chances()
 
 
 def market_change(history: dict, outlook: dict, market_id: str, year: int, scenario: str,
