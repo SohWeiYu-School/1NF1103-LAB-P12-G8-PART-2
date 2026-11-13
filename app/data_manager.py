@@ -17,7 +17,6 @@ Every function returns False / None / [] / {} on error instead of crashing.
 import json
 import logging
 import os
-import uuid
 
 from app import utilities
 from app.data.assessment_repository import AssessmentRepository

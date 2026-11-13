@@ -17,6 +17,7 @@ import pytest
 
 import main
 from app import ai_manager, data_manager, logic_manager, utilities
+from app.ai.forecast_ai import ForecastAI
 from tests import fake_ai
 
 SAMPLE = os.path.join(data_manager.sample_dir(), "case_001.json")
@@ -272,7 +273,7 @@ def test_person_types_are_linked_to_typologies_by_id_or_category():
     data = {"person_types": [{"type_id": "T1", "category": "HONEST", "typology_id": None},
                              {"type_id": "T2", "category": "TRADE_BASED_ML", "typology_id": "made_up"},
                              {"type_id": "T3", "category": "TAX_EVASION", "typology_id": "bribes"}]}
-    linked = ai_manager.link_typologies(data, researched)["person_types"]
+    linked = ai_manager._forecast_service()._link_typologies(data, researched)["person_types"]
     assert linked[1]["typology_id"] == "tbml"                  # unknown id -> linked by its category
     assert linked[2]["typology_id"] == "bribes"
     assert linked[2]["category"] == "BRIBERY_CORRUPTION"      # takes its typology's category
@@ -282,11 +283,10 @@ def test_person_types_request_gets_the_typologies():
     case = client_record() | {"current_date": "2026-10-14"}
     case, _ = logic_manager.forecasting_case(case, "2026-10-14")
     replies = fake_ai.forecast_replies(case)
-    real = ai_manager.run_forecasting
-    with patch("app.ai_manager.run_forecasting", side_effect=real) as spy:
+    with patch.object(ForecastAI, "_ask", autospec=True, side_effect=ForecastAI._ask) as spy:
         run_result = ai_manager.run_onboarding_forecast(case, replies, fake_ai.typologies()["sector_typologies"])
     assert run_result["ok"]
-    sent = next(c.args[3] for c in spy.call_args_list if c.args[0] == "call3_types.list")
+    sent = next(c.args[4] for c in spy.call_args_list if c.args[1] == "call3_types.list")
     assert sent["researched_typologies"][0]["typology_id"] == "trade_based_laundering"
     assert sent["researched_typologies"][0]["crime_category"] == "TRADE_BASED_ML"
 
@@ -525,11 +525,11 @@ def test_the_bishan_reply_from_the_log_is_repaired_not_rejected():
         "income_yield_by_year": [{"year": y, "yield_pct": {"low": 2, "typical": 3, "high": 4}} for y in range(2010, 2027)],
         "future_income_yield_pct": {s: {"low": 2, "typical": 3, "high": 4} for s in ("steady", "boom", "downturn")},
         "valuation_basis": "Bishan property index"}
-    repaired = ai_manager.repair_asset_model(reply, markets)
+    service = ai_manager._forecast_service()
+    repaired = service._repair_asset_model(reply, markets)
     assert len(repaired["exposures"]) == utilities.forecast_settings()["max_asset_exposures"]
     assert all(v <= 3.0 for e in repaired["exposures"] for v in e["sensitivity"].values())
-    with patch("app.ai_manager.forecast_settings", return_value={**utilities.forecast_settings()}):
-        assert ai_manager.check_asset_model(repaired, 0, list(range(2010, 2027)), markets) == []
+    assert service._check_asset_model(repaired, 0, list(range(2010, 2027)), markets) == []
 
 
 def test_one_asset_the_ai_cant_describe_doesnt_stop_the_forecast(storage):
