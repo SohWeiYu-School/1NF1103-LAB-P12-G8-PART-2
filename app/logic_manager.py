@@ -40,6 +40,7 @@ from app.logic.career_savings import CareerSavings
 from app.logic.asset_path import AssetPath
 from app.logic.future_paths import FuturePaths
 from app.logic.onboarding_assessor import OnboardingAssessor
+from app.logic.pay_calibrator import PayCalibrator
 from app.model.band import Band
 from app.model.check import Check
 from app.model.config import Config
@@ -1882,43 +1883,7 @@ def calibrate_pay(case: dict, forecast: dict, documented_pay: list[dict], policy
     documented / AI-typical over those years (the current job's future pay too), so the honest
     story is built on his real pay. The AI never sees these figures; only this arithmetic does.
     Returns (adjusted forecast copy, one row per adjusted job)."""
-    settings = policy["verdict"]["pay_calibration"]
-    documented = {row["year"]: row for row in documented_pay or []}
-    if not documented:
-        return forecast, []
-    forecast = copy.deepcopy(forecast)
-    _, end = utilities.career_years(case)
-    jobs = utilities.career_positions(case)
-    adjusted = []
-    for position in forecast["earnings"]["positions"]:
-        index = position["position_index"]
-        if not 0 <= index < len(jobs):
-            continue
-        job = jobs[index]
-        first, last = int(job["start_year"]), utilities.position_end(job, end)
-        years = [row for row in position["yearly"] if row["year"] in documented and first <= row["year"] <= last]
-        guessed = sum(pay_total(row, "typical") for row in years)
-        actual = sum(documented[row["year"]]["amount"] for row in years)
-        if not years or guessed <= 0:
-            continue
-        ratio = min(max(actual / guessed, 1 / settings["max_ratio"]), settings["max_ratio"])
-        if abs(ratio - 1) < settings["min_change"]:
-            continue
-        for row in position["yearly"]:
-            for part in ("base_pay", "bonus", "equity_or_profit_share"):
-                row[part] = {k: v * ratio for k, v in row[part].items()}
-        if job.get("end_year") in (None, ""):
-            for row in forecast["earnings"]["future_pay"]["yearly"]:
-                for scenario in utilities.SCENARIOS:
-                    for part in ("base_pay", "bonus", "equity_or_profit_share"):
-                        row[scenario][part] = {k: v * ratio for k, v in row[scenario][part].items()}
-        shown = years[-1]["year"]
-        adjusted.append({"position_index": index, "job": f"{job.get('occupation')} at {job.get('employer_name')}",
-                         "ratio": round(ratio, 2), "year": shown, "ai_pay": round(pay_total(
-                             next(r for r in years if r["year"] == shown), "typical") / ratio),
-                         "documented_pay": documented[shown]["amount"],
-                         "source_file": documented[shown].get("source_file")})
-    return forecast, adjusted
+    return PayCalibrator(CareerSavings(), policy).calibrate(case, forecast, documented_pay)
 
 
 def document_checks(evidence: dict | None, types: list[dict], policy: dict) -> list[dict]:

@@ -43,3 +43,24 @@ class Feature(ABC):
         if not isinstance(jump, (int, float)) or jump <= 0 or not isinstance(years, (int, float)) or years <= 0:
             return None, None
         return float(jump), max(1, round(years))
+
+    def _row(self, feature: str, check: str, label: str, theme: str, status: str, detail: str,
+             explanation: str = "", group: str = "") -> dict:
+        """One finding in its saved layout (a dict), which the report and the verdict rules read."""
+        return Check(feature, check, label, theme, status, detail, explanation, group).to_dict()
+
+    def _as_checks(self, rows: list[dict]) -> list[Check]:
+        """Findings in their saved layout as Check objects."""
+        return [Check.from_dict(row) for row in rows]
+
+    def _best_honest_jump(self, honest: dict, years: int) -> tuple[float, int, int]:
+        """The most the honest story's wealth rose over any `years`-long stretch: (gain, first, last)."""
+        by_year = honest["by_year"]
+        first_year, last_year = honest["start"], honest["end"]
+        years = max(1, min(years, last_year - first_year + 1))
+        best = None
+        for last in range(first_year + years - 1, last_year + 1):
+            gain = by_year[last]["optimistic"] - by_year[last - years]["optimistic"]
+            if best is None or gain > best[0]:
+                best = (gain, last - years + 1, last)
+        return best

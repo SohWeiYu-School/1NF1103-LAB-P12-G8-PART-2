@@ -83,3 +83,22 @@ def test_verdict_notes_and_not_run_are_copied():
     notes.append("two")
     assert verdict.notes == ["one"]
     assert verdict.not_run == ["forecast"]
+
+
+def test_a_check_keeps_the_extra_details_a_feature_attaches():
+    row = {"feature": "crime", "check": "TYPOLOGY", "label": "Trade-based laundering", "theme": "pattern",
+           "status": "weak", "detail": "1 of 2 signs fired", "explanation": "", "group": "Trade-based laundering",
+           "signs": ["counterparty_unnamed"], "match": "partial", "typology_id": "tbml"}
+    check = Check.from_dict(row)
+    assert check.status == "weak"
+    assert check.to_dict() == row
+
+
+def test_a_check_round_trips_sources_even_when_empty():
+    row = {"feature": "documents", "check": "UNDECLARED_INCOME", "label": "Income", "theme": "sources",
+           "status": "failed", "detail": "x", "explanation": "", "group": "Income", "sources": [], "supports": ["T2"]}
+    assert Check.from_dict(row).to_dict() == row
+
+
+def test_outcomes_can_be_compared_by_severity():
+    assert Verdict.SEVERITY["SERIOUS_RISK"] > Verdict.SEVERITY["RISKY"] > Verdict.SEVERITY["MANUAL_REVIEW"] > Verdict.SEVERITY["PASSED"]

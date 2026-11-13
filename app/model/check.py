@@ -12,7 +12,8 @@ class Check:
 
     def __init__(self, feature: str, check: str, label: str, theme: str, status: str = "passed",
                  detail: str = "", explanation: str = "", group: str = "",
-                 sources: list[str] | None = None, supports: list[str] | None = None) -> None:
+                 sources: list[str] | None = None, supports: list[str] | None = None,
+                 extra: dict | None = None) -> None:
         self.__check_status(status)
         self.__feature: str = feature
         self.__check: str = check
@@ -24,6 +25,8 @@ class Check:
         self.__group: str = group or label
         self.__sources: list[str] = list(sources or [])
         self.__supports: list[str] = list(supports or [])
+        # Details one feature attaches for the report (for example which warning signs fired).
+        self.__extra: dict = dict(extra or {})
 
     @property
     def feature(self) -> str:
@@ -81,7 +84,20 @@ class Check:
             data["sources"] = list(self.__sources)
         if self.__supports:
             data["supports"] = list(self.__supports)
+        data.update(self.__extra)
         return data
+
+    @staticmethod
+    def from_dict(data: dict) -> "Check":
+        """Build a Check from its saved layout. Fields this class has no name for are kept as extra."""
+        names = ("feature", "check", "label", "theme", "status", "detail", "explanation", "group")
+        known = {name: data.get(name, "") for name in names}
+        extra = {key: value for key, value in data.items() if key not in names + ("sources", "supports")}
+        if "sources" in data and not data["sources"]:
+            extra["sources"] = data["sources"]
+        if "supports" in data and not data["supports"]:
+            extra["supports"] = data["supports"]
+        return Check(sources=data.get("sources"), supports=data.get("supports"), extra=extra, **known)
 
     def __check_status(self, status: str) -> None:
         if status not in Check.STATUSES:
