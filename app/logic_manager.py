@@ -41,6 +41,7 @@ from app.logic.asset_path import AssetPath
 from app.logic.future_paths import FuturePaths
 from app.logic.onboarding_assessor import OnboardingAssessor
 from app.logic.pay_calibrator import PayCalibrator
+from app.logic.forecast import Forecast
 from app.model.band import Band
 from app.model.check import Check
 from app.model.config import Config
@@ -846,24 +847,6 @@ def category_name(code: str) -> str:
     return Config({}, utilities.vocabulary()).category_name(code)
 
 
-def enabled_by_text(person_type: dict, record: dict) -> str:
-    """What makes this type possible for him, in words: the job, asset or declared source."""
-    if person_type["type_id"] == utilities.BASELINE_TYPE:
-        return "everything he declared"
-    parts = []
-    jobs = utilities.career_positions(record)
-    assets = record.get("investments", [])
-    job_index = person_type.get("enabled_by_position_index")
-    asset_index = person_type.get("enabled_by_asset_index")
-    if job_index is not None and 0 <= job_index < len(jobs):
-        job = jobs[job_index]
-        parts.append(f"job {job_index} ({job.get('title') or job.get('occupation') or 'position'}, "
-                     f"{job.get('country', '')})")
-    if asset_index is not None and 0 <= asset_index < len(assets):
-        parts.append(f"asset {asset_index} ({assets[asset_index].get('asset_type', 'asset')})")
-    if person_type.get("enabled_by_source_id"):
-        parts.append(f"declared source {person_type['enabled_by_source_id']}")
-    return " and ".join(parts) or "not stated"
 
 
 def asset_category(asset_type: str, policy: dict) -> str:
@@ -1034,58 +1017,10 @@ def monitoring_ranges(forecast: dict, year: int, policy: dict) -> dict:
     return FuturePaths(MarketModel(forecast), forecast, policy).monitoring_ranges(year)
 
 
-def rank_documents(forecast: dict, candidates: list[str]) -> list[dict]:
-    """Documents ordered by how many candidate types each one would rule out."""
-    pool = set(candidates)
-    covers: dict[str, set] = {}
-    for person_type in forecast["types"]["person_types"]:
-        if person_type["type_id"] not in pool:
-            continue
-        for document in person_type["rule_out_documents"]:
-            ruled_out = ({person_type["type_id"]} | set(document["also_rules_out"])) & pool
-            covers.setdefault(document["document_code"], set()).update(ruled_out)
-    ranked = sorted(covers.items(), key=lambda item: (-len(item[1]), item[0]))
-    return [{"document_code": code, "rules_out": sorted(types)} for code, types in ranked]
 
 
-def document_request(failures: list[dict], forecast: dict, candidates: list[str], policy: dict) -> list[dict]:
-    """Documents for failed checks first, then the ones that rule out the most types."""
-    names = utilities.vocabulary().get("document_codes", {})
-    lookup = policy.get("breach_documents", {})
-    request, seen = [], set()
-
-    def add(code: str, reason: str) -> None:
-        if code in names and code not in seen:
-            seen.add(code)
-            request.append({"document_code": code, "document": names[code], "reason": reason})
-
-    for failure in failures:
-        key = failure["rule_id"]
-        if key in ("ASSET_VALUE", "ASSET_INCOME"):
-            key = f"{key}.{failure['category']}"
-        elif key == "AFFORDABILITY":
-            key = f"AFFORDABILITY.{failure['payment_method']}"
-        elif key == "UNQUANTIFIED_SOURCE":
-            key = f"UNQUANTIFIED_SOURCE.{failure['source_type']}"
-        for code in lookup.get(key, []):
-            add(code, failure["detail"])
-    if len(candidates) > 1:
-        for document in rank_documents(forecast, candidates):
-            add(document["document_code"], f"rules out {', '.join(document['rules_out'])}")
-    return request[:policy["max_documents"]]
 
 
-def data_quality(forecast: dict) -> dict:
-    """How many market figures the AI could only give from memory or not at all."""
-    figures = [row for series in forecast["markets"]["series"].values() for row in series["history"]]
-    unverified = [row for row in figures
-                  if row["change_pct"] is None or "unverified" in row["source_name"].lower()]
-    gaps = list(forecast["markets"]["data_gaps"])
-    for series in forecast["markets"]["series"].values():
-        gaps += series["data_gaps"]
-    return {"market_figures": len(figures),
-            "unverified_share": round(len(unverified) / len(figures), 3) if figures else 0.0,
-            "data_gaps": sorted(set(gaps))}
 
 
 # ============================================================================
@@ -1095,112 +1030,8 @@ def data_quality(forecast: dict) -> dict:
 def assess_onboarding(record: dict, forecast: dict, policy: dict | None = None) -> dict:
     """Measure the client against the forecasts and decide. No AI involved."""
     policy = policy or utilities.policy()
-    start, end = utilities.career_years(record)
-    years = utilities.future_years(record)
-    savings_rows = career_savings(forecast, start, end)
-    paths = all_asset_paths(record, forecast, end, "steady")
-
-    # The decision, plus the stability test with every forecast 10% lower and higher
-    shift = policy["stability_shift"]
-    main = evaluate(record, forecast, savings_rows, paths, policy)
-    stability = {f"{-shift:+.0%}": evaluate(record, forecast, savings_rows, paths, policy, 1 - shift)["outcome"],
-                 "+0%": main["outcome"],
-                 f"{shift:+.0%}": evaluate(record, forecast, savings_rows, paths, policy, 1 + shift)["outcome"]}
-    outcome, borderline = stable_outcome(main["outcome"], stability)
-
-    # Type table and starting scores (every type starts equal; only the fit separates them)
-    names = {t["type_id"]: t for t in forecast["types"]["person_types"]}
-    total_fit = sum(f["fit_score"] for f in main["fits"].values()) or 1.0
-    type_table = []
-    for type_id, fit in main["fits"].items():
-        behaviour = forecast["types"]["behaviour"][type_id]
-        person_type = names[type_id]
-        type_table.append({**fit, "category": person_type["category"],
-                           "category_name": category_name(person_type["category"]),
-                           "name": person_type["name"], "route": person_type["route"],
-                           "enabled_by": enabled_by_text(person_type, record),
-                           "why_it_applies": person_type.get("why_it_applies", ""),
-                           "route_years": f"{behaviour['route_open_from']}-{behaviour['route_open_to']}",
-                           "score": round(fit["fit_score"] / total_fit, 3)})
-
-    # Reasons in plain words
-    t1 = main["fits"][utilities.BASELINE_TYPE]
-    declared = record["claims"]["declared_net_worth"]
-    others_fit = [t for t, f in main["fits"].items() if t != utilities.BASELINE_TYPE and f["fits"]]
-    reasons = [f"Declared net worth {declared:,.0f}; the honest version explains "
-               f"{t1['wealth_now']['cautious']:,.0f} to {t1['wealth_now']['optimistic']:,.0f}."]
-    if not t1["fits"]:
-        reasons.append("The honest version does not fit his figures.")
-    if others_fit:
-        reasons.append("Crime types that do fit: " + "; ".join(
-            f"{t} {category_name(names[t]['category'])} via {enabled_by_text(names[t], record)} "
-            f"({forecast['types']['behaviour'][t]['route_open_from']}-"
-            f"{forecast['types']['behaviour'][t]['route_open_to']})" for t in others_fit) + ".")
-    for row in main["affordability"][utilities.BASELINE_TYPE]:
-        if not row["affordable"]:
-            reasons.append(f"{row['year']}: he needed {row['needed']:,.0f} in cash but the honest "
-                           f"version had at most {row['available']['optimistic']:,.0f}.")
-    failures = [c for c in main["asset_checks"] + [main["jurisdiction"]] + main["sources"] if c["failed"]]
-    reasons += [c["detail"] for c in failures]
-    if borderline:
-        reasons.append(f"Borderline: the outcome changes when the forecasts move 10% ({stability}).")
-
-    # Documents: for the failed checks, then to tell the fitting types apart
-    affordability_failures = [{"rule_id": "AFFORDABILITY", "payment_method": row["payment_method"],
-                               "detail": f"{row['year']} purchase of asset {row['asset_index']}"}
-                              for row in main["affordability"][utilities.BASELINE_TYPE] if not row["affordable"]]
-    if not t1["fits"]:
-        affordability_failures.insert(0, {"rule_id": "NET_WORTH", "detail": reasons[0]})
-    candidates = [utilities.BASELINE_TYPE] + others_fit
-    if len(candidates) == 1 and outcome != PASSED:
-        candidates = [t for t, b in forecast["types"]["behaviour"].items() if b["route_open_to"] >= end]
-    documents = []
-    if outcome != PASSED:
-        documents = document_request(affordability_failures + failures, forecast, candidates, policy)
-
-    # The future
-    expected = expected_paths(record, forecast, savings_rows)
-    divergence = divergence_years(expected)
-    watch_dates = sorted(
-        [{"date": f"{d['distinguishable_from']}-01-01", "what": f"{utilities.BASELINE_TYPE} and {d['type_id']} "
-          "can be told apart"} for d in divergence if d["distinguishable_from"]]
-        + [{"date": f"{e['year']}-01-01", "what": f"{e['event_id']} {e['name']} could happen"}
-           for e in forecast["events"]["events"]],
-        key=lambda w: (w["date"], w["what"]))
-    scheduled = add_months(record["current_date"], policy["review_interval_months"][outcome])
-    first_divergence = [w["date"] for w in watch_dates if "told apart" in w["what"] and w["date"] > record["current_date"]]
-
-    return {
-        "case_ref": record["client_ref"],
-        "assessed_on": record["current_date"],
-        "policy_version": policy["policy_version"],
-        "prompt_versions": forecast.get("prompt_versions", {}),
-        "outcome": outcome,
-        "routing": policy["routing"][outcome],
-        "reasons": reasons,
-        "borderline": borderline,
-        "stability": stability,
-        "declared_net_worth": declared,
-        "types": type_table,
-        "affordability": main["affordability"][utilities.BASELINE_TYPE],
-        "asset_checks": main["asset_checks"],
-        "jurisdiction": main["jurisdiction"],
-        "declared_sources": main["sources"],
-        "country_notes": [{"country": j["country"], "listings": j["listings"], "summary": j["summary"],
-                           "source_name": j["source_name"]} for j in forecast["markets"]["jurisdictions"]],
-        "markets_used": [{"market_id": m["market_id"], "name": m["name"], "country": m["country"],
-                          "indicator": m["indicator"]} for m in forecast["markets"]["relevant_markets"]],
-        "career_savings": savings_rows,
-        "career_outlook": forecast["earnings"]["future_pay"]["career_outlook"],
-        "forward_paths": {t: [{"year": y, **v} for y, v in points.items()] for t, points in expected.items()},
-        "event_impacts": event_impacts(record, forecast, savings_rows),
-        "divergence": divergence,
-        "monitoring_ranges": monitoring_ranges(forecast, years[0], policy),
-        "documents": documents,
-        "watch_dates": watch_dates,
-        "next_review_date": min([scheduled] + first_divergence),
-        "data_quality": data_quality(forecast),
-    }
+    feature = Forecast(policy, Config(policy, utilities.vocabulary()))
+    return feature.run(record, {"forecast": forecast})
 
 
 # ============================================================================
@@ -1828,16 +1659,7 @@ def crime_declaration(declaration: dict | None, policy: dict | None = None) -> t
 def economy_brief(markets: dict | None) -> dict | None:
     """What the benchmark AI may see of the forecast's economy (Call 1): each market's yearly %
     change and each country's risk listings. Nothing about the client's own figures."""
-    if not markets or not markets.get("series"):
-        return None
-    return {
-        "markets": [{"name": m["name"], "country": m["country"], "indicator": m["indicator"],
-                     "yearly_change_pct": {str(h["year"]): h["change_pct"]
-                                           for h in markets["series"].get(m["market_id"], {}).get("history", [])}}
-                    for m in markets.get("relevant_markets", [])],
-        "country_listings": [{"country": j["country"], "listings": j["listings"]}
-                             for j in markets.get("jurisdictions", [])],
-    }
+    return Forecast().economy_brief(markets)
 
 
 # ---------------------------------------------------------------------------
@@ -1955,28 +1777,7 @@ def type_patterns(forecast: dict | None, assessment: dict | None, crime_result: 
 
 def honest_numbers(case: dict, forecast: dict, assessment: dict, policy: dict) -> dict:
     """T1's fit, wealth today, liquid wealth, wealth by year and peak pay."""
-    start, end = utilities.career_years(case)
-    savings_rows = career_savings(forecast, start, end)
-    paths = all_asset_paths(case, forecast, end, "steady")
-    t1 = next(row for row in assessment["types"] if row["type_id"] == utilities.BASELINE_TYPE)
-    now = honest_wealth(case, savings_rows, paths, end)
-    held = {b: sum(p["values"][end][b] for p in paths) for b in BANDS}
-    # honest_wealth counts each asset as bought outright from savings. In cash terms, a loan
-    # only took the deposit out of savings, and an asset sale paid with the sale's proceeds.
-    not_from_savings = sum(asset["price_paid"] * policy["loan_to_value_max"] if asset.get("payment_method") == "loan"
-                           else asset["price_paid"] if asset.get("payment_method") == "asset_sale" else 0.0
-                           for asset in case.get("investments", []))
-    cash = band(*(now[b] - held[b] + not_from_savings for b in BANDS))
-    listed = {b: sum(p["values"][end][b] for asset, p in zip(case.get("investments", []), paths)
-                     if asset_category(asset["asset_type"], policy) == "listed_equities") for b in BANDS}
-    liquid = band(*(cash[b] + listed[b] for b in BANDS))
-    by_year = {start - 1: zero_band()}
-    for year in range(start, end + 1):
-        by_year[year] = honest_wealth(case, savings_rows, paths, year)
-    peak_pay = max((row["total_pay"]["typical"] for row in savings_rows), default=0.0)
-    return {"t1": t1, "now": now, "cash": cash, "liquid": liquid, "by_year": by_year,
-            "peak_pay": peak_pay, "paths": paths, "savings_rows": savings_rows, "start": start, "end": end,
-            "models": sorted(forecast["earnings"]["assets"], key=lambda a: a["asset_index"])}
+    return Forecast(policy, Config(policy, utilities.vocabulary())).honest_numbers(case, forecast, assessment)
 
 
 def _market_growth(history: dict, market_id: str, first: int, last: int) -> float:
@@ -2330,83 +2131,7 @@ def forecast_checks(case: dict, assessment: dict | None, honest: dict | None, ty
                     failed_step: str | None, policy: dict, unmodelled: list[dict] | None = None) -> list[dict]:
     """The forecast's checks in the shared shape, plus the two new ones (wealth jump, liquid wealth).
     failed_step: why the forecast stopped, in words (if it did)."""
-    if not assessment or not honest:
-        return [_check("forecast", "FORECAST", "Forecast", "wealth", "skipped",
-                       f"The forecast stopped at {failed_step or 'an early step'}, so the stories couldn't be tested.")]
-    worth = case["claims"]["declared_net_worth"]
-    t1 = honest["t1"]
-    wealth = t1["wealth_now"]
-    checks = []
-    if not t1["fits"]:
-        status, note = "failed", "It doesn't reach the declared wealth."
-    elif not t1["fits_at_typical"]:
-        status, note = "failed", "It only reaches the declared wealth at the optimistic edge."
-    else:
-        status, note = "passed", "That covers the declared wealth."
-    checks.append(_check("forecast", "NET_WORTH_FIT", "Honest story (T1)", "wealth", status,
-                         f"Explains {_sgd(wealth['cautious'])} to {_sgd(wealth['optimistic'])} today (typical "
-                         f"{_sgd(wealth['typical'])}); declared {_sgd(worth)}. {note}"))
-
-    assets = case.get("investments", [])
-    for row in assessment["affordability"]:
-        asset = assets[row["asset_index"]] if row["asset_index"] < len(assets) else {}
-        checks.append(_check(
-            "forecast", "AFFORDABILITY", f"{row['year']} purchase: {asset.get('asset_type', 'asset')}", "purchases",
-            "passed" if row["affordable"] else "failed",
-            f"Needed {_sgd(row['needed'])} ({row['payment_method'].replace('_', ' ')}); the honest story had up to "
-            f"{_sgd(row['available']['optimistic'])}", group="Purchases"))
-    for check in assessment["asset_checks"]:
-        asset = assets[check["asset_index"]] if check["asset_index"] < len(assets) else {}
-        is_value = check["rule_id"] == "ASSET_VALUE"
-        checks.append(_check(
-            "forecast", check["rule_id"],
-            f"{asset.get('asset_type', 'Asset')}: {'value' if is_value else 'income'}", "wealth",
-            "failed" if check["failed"] else "passed",
-            (f"Declared {_sgd(check['declared'])}; its markets explain about {_sgd(check['expected']['typical'])} "
-             f"(up to {_sgd(check['ceiling'])})") if is_value else
-            (f"Declared {_sgd(check['declared'])} a year; normal is about {_sgd(check['expected']['typical'])} "
-             f"(up to {_sgd(check['ceiling'])})"),
-            group="Asset values" if is_value else "Asset income"))
-    for missing in unmodelled or []:
-        asset = assets[missing["asset_index"]] if missing["asset_index"] < len(assets) else {}
-        checks.append(_check("forecast", "ASSET_NOT_MODELLED", f"{asset.get('asset_type', 'Asset')}: not modelled",
-                             "wealth", "skipped",
-                             f"The AI's answers about this asset failed the sense checks ({missing['error']}), so it is "
-                             f"held at its purchase price {_sgd(asset.get('price_paid'))} and its value and income "
-                             "weren't checked.", group="Asset values"))
-    juris = assessment["jurisdiction"]
-    checks.append(_check("forecast", "JURISDICTION", "Countries behind his wealth", "countries",
-                         "failed" if juris["failed"] else "passed",
-                         f"With nothing behind them: {', '.join(juris['unexplained_countries']) or 'none'}. "
-                         f"On a risk list: {', '.join(juris['listed_countries']) or 'none'}."))
-    for source in assessment["declared_sources"]:
-        checks.append(_check("forecast", "UNQUANTIFIED_SOURCE", f"Declared source {source['source_id']}", "sources",
-                             "failed" if source["failed"] else "passed", source["detail"], group="Declared sources"))
-
-    # NEW: could the honest path make his biggest wealth jump?
-    jump, jump_years = _jump_years(case)
-    if jump is not None:
-        gain, first, last = _best_honest_jump(honest, jump_years)
-        fits = jump <= gain * (1 + policy["tolerance"]["net_worth"])
-        checks.append(_check("forecast", "WEALTH_JUMP", "Wealth jump vs honest path", "wealth",
-                             "passed" if fits else "failed",
-                             f"Declared jump {_sgd(jump)} over {jump_years} year(s); the honest story gains at most "
-                             f"{_sgd(gain)} in any {jump_years}-year stretch (best {first}-{last})"))
-    # NEW: cash and shares the honest story leaves him today (used by "Money brought to the bank")
-    liquid = honest["liquid"]
-    checks.append(_check("forecast", "LIQUID_WEALTH", "Liquid wealth today", "wealth", "info",
-                         f"The honest story leaves him {_sgd(liquid['cautious'])} to {_sgd(liquid['optimistic'])} "
-                         f"in cash and listed shares"))
-    checks.append(_check("forecast", "STABILITY", "Stability", "wealth",
-                         "weak" if assessment["borderline"] else "passed",
-                         "Moving every forecast 10% changes the result, so it is borderline."
-                         if assessment["borderline"] else "The result holds when every forecast moves 10%."))
-    for row in types:
-        checks.append(_check("forecast", "CRIME_STORY", f"{row['type_id']} {row['name']}", "pattern", "info",
-                             f"{'Fits' if row['fits'] else 'Does not fit'} his money (fit {row['fit_score'] or 0:.2f}"
-                             f"{', open ' + row['route_years'] if row['route_years'] else ''})",
-                             group="Crime stories"))
-    return checks
+    return Forecast(policy)._forecast_checks(case, assessment, honest, types, failed_step, unmodelled)
 
 
 def crime_checks(crime_result: dict | None, research: dict | None, typologies: list[dict] | None,
