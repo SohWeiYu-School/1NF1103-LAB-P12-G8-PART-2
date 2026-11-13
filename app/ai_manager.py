@@ -1,3 +1,19 @@
+"""
+ai_manager.py - the old function names of the AI layer.
+
+The work now lives in the classes in app/ai (the AI Manager):
+    AIService                       what every AI question shares
+    ResearchAI, TypologyAI,
+    BenchmarkAI, DocumentAI,
+    ForecastAI                      one class per kind of question
+    ResponseCache                   saved replies
+    ai_caller.py                    openai_caller, gemini_caller, with_fallback
+
+The functions below only build one of those classes and run it, so main.py, the web
+app and the older tests keep working while the rest of the refactor is done. This
+file is deleted once App creates the AI services itself.
+"""
+
 import logging
 import os
 from typing import Callable
