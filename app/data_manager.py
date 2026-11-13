@@ -1,18 +1,15 @@
 """
-data_manager.py - the data layer.
+data_manager.py - the old function names of the data layer.
 
-Primary storage — local JSON files (data/local database/):
-    sow_cases.json        one entry per client, written on every save
-    ai_assessments.json   one entry per assessment, appended on every run
+The work now lives in the classes in app/data (the Data Manager):
+    ClientRepository, AssessmentRepository    local JSON files (data/local database/)
+    MongoRepository, CloudSync                the MongoDB Atlas backup ("Manual Sync")
+    DocumentStore and the document readers    supporting documents
+    ConfigReader                              the settings files
 
-Backup — MongoDB Atlas, pushed only when the officer chooses
-"Manual Sync to Cloud Database" (sync_json_to_mongodb):
-    sow_risk_db.client_cases      mirrors sow_cases.json
-    sow_risk_db.ai_assessments    mirrors ai_assessments.json
-    GridFS                        uploaded supporting documents
-
-Forecasting reply cache — local files (data/cache/forecasting/<client_ref>.json):
-    raw AI replies reused on re-runs so they are free and give identical answers.
+The functions below only pass each call on to those classes, so main.py, the web
+app and the older tests keep working while the rest of the refactor is done. This
+file is deleted once App calls the classes directly.
 
 Every function returns False / None / [] / {} on error instead of crashing.
 """
