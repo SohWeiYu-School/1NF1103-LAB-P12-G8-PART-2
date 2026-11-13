@@ -57,3 +57,31 @@ class Band:
 
     def to_dict(self) -> dict:
         return {"cautious": self.__cautious, "typical": self.__typical, "optimistic": self.__optimistic}
+
+    # ----- the same arithmetic on bands in their saved layout (dicts) -------------
+    # Forecast results are saved and compared as plain dicts, so the forecast classes
+    # keep them in that layout and ask Band to do the arithmetic.
+
+    @staticmethod
+    def as_dict(cautious: float, typical: float, optimistic: float) -> dict:
+        return Band(cautious, typical, optimistic).to_dict()
+
+    @staticmethod
+    def zero() -> dict:
+        return Band().to_dict()
+
+    @staticmethod
+    def add(first: dict, second: dict) -> dict:
+        return (Band.from_dict(first) + Band.from_dict(second)).to_dict()
+
+    @staticmethod
+    def scale(values: dict, factor: float) -> dict:
+        return (Band.from_dict(values) * factor).to_dict()
+
+    @staticmethod
+    def ordered(values: list[float]) -> dict:
+        return Band.from_values(values).to_dict()
+
+    @staticmethod
+    def from_ai(ai_range: dict) -> dict:
+        return Band.from_range(ai_range).to_dict()

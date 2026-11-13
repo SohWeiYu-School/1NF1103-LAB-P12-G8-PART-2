@@ -38,6 +38,7 @@ from app.logic.indicator import (CounterpartyUnnamed, GiftOrInheritanceUnnamed, 
 from app.logic.market_model import MarketModel
 from app.logic.career_savings import CareerSavings
 from app.logic.asset_path import AssetPath
+from app.logic.future_paths import FuturePaths
 from app.model.band import Band
 from app.model.check import Check
 from app.model.config import Config
@@ -929,31 +930,17 @@ def income_up_to(path: dict, year: int) -> dict:
 
 def extra_money_up_to(behaviour: dict, year: int) -> dict:
     """A type's extra money (Call 3) added up to and including a year."""
-    total = zero_band()
-    for row in behaviour["extra_money_history"]:
-        if row["year"] <= year:
-            total = add_bands(total, range_to_band(row["amount"]))
-    return total
+    return FuturePaths(MarketModel()).extra_money_up_to(behaviour, year)
 
 
 def honest_wealth(record: dict, savings_rows: list[dict], paths: list[dict], year: int) -> dict:
     """Wealth of the as-declared version: savings + gain on each asset + its income so far."""
-    savings = next(row["savings"] for row in savings_rows if row["year"] == year)
-    total = dict(savings)
-    for asset, path in zip(record.get("investments", []), paths):
-        if int(asset["year_acquired"]) > year:
-            continue
-        gain = band(*(path["values"][year][b] - asset["price_paid"] for b in BANDS))
-        total = add_bands(total, add_bands(gain, income_up_to(path, year)))
-    return total
+    return FuturePaths(MarketModel()).honest_wealth(record, savings_rows, paths, year)
 
 
 def type_wealth_now(record: dict, forecast: dict, savings_rows: list[dict], paths: list[dict]) -> dict:
     """{type_id: wealth band today} = honest wealth + that type's extra money so far."""
-    _, end = utilities.career_years(record)
-    honest = honest_wealth(record, savings_rows, paths, end)
-    return {type_id: add_bands(honest, extra_money_up_to(behaviour, end))
-            for type_id, behaviour in forecast["types"]["behaviour"].items()}
+    return FuturePaths(MarketModel(forecast), forecast).type_wealth_now(record, savings_rows, paths)
 
 
 # ============================================================================
@@ -1142,105 +1129,27 @@ def forward_paths(record: dict, forecast: dict, savings_rows: list[dict], scenar
     Wealth of every type for the current year and each forecast year in one scenario.
     event_changes = {type_id: (year, extra money change)} adds an event reaction.
     """
-    _, end = utilities.career_years(record)
-    years = utilities.future_years(record)
-    paths = all_asset_paths(record, forecast, years[-1], scenario, shocks)
-    future_pay = {row["year"]: row for row in forecast["earnings"]["future_pay"]["yearly"]}
-
-    honest_now = honest_wealth(record, savings_rows, paths, end)
-    cash = {b: honest_now[b] - sum(p["values"][end][b] for p in paths) for b in BANDS}
-    honest = {end: honest_now}
-    for year in years:
-        row = future_pay[year]
-        for b in BANDS:
-            income = pay_total(row[scenario], MONEY_IN[b]) + sum(p["income"][year][b] for p in paths)
-            after_tax = income * (1 - row["tax_rate_pct"][MONEY_OUT[b]] / 100)
-            growth = cash[b] * row["savings_return_pct"][MONEY_IN[b]] / 100
-            cash[b] += after_tax - row["living_costs"][MONEY_OUT[b]] + growth
-        honest[year] = band(*(cash[b] + sum(p["values"][year][b] for p in paths) for b in BANDS))
-
-    result = {}
-    for type_id, behaviour in forecast["types"]["behaviour"].items():
-        extra = extra_money_up_to(behaviour, end)
-        forecast_rows = {row["year"]: row for row in behaviour["extra_money_forecast"]}
-        points = {end: add_bands(honest[end], extra)}
-        for year in years:
-            extra = add_bands(extra, range_to_band(forecast_rows[year][scenario]))
-            if event_changes and type_id in event_changes and event_changes[type_id][0] == year:
-                extra = add_bands(extra, range_to_band(event_changes[type_id][1]))
-            points[year] = add_bands(honest[year], extra)
-        result[type_id] = points
-    return result
+    return FuturePaths(MarketModel(forecast), forecast).forward_paths(record, savings_rows, scenario, shocks, event_changes)
 
 
 def expected_paths(record: dict, forecast: dict, savings_rows: list[dict]) -> dict:
     """Each type's wealth path weighted by the AI's chance of each scenario."""
-    chances = scenario_chances(forecast)
-    by_scenario = {s: forward_paths(record, forecast, savings_rows, s) for s in utilities.SCENARIOS}
-    expected = {}
-    for type_id in forecast["types"]["behaviour"]:
-        expected[type_id] = {}
-        for year in by_scenario["steady"][type_id]:
-            weights = chances.get(year, {"steady": 1.0, "boom": 0.0, "downturn": 0.0})
-            expected[type_id][year] = band(*(sum(weights[s] * by_scenario[s][type_id][year][b]
-                                                 for s in utilities.SCENARIOS) for b in BANDS))
-    return expected
+    return FuturePaths(MarketModel(forecast), forecast).expected_paths(record, savings_rows)
 
 
 def event_impacts(record: dict, forecast: dict, savings_rows: list[dict]) -> list[dict]:
     """For each event and type: change in 2030 wealth if it happens, and weighted by its chance."""
-    last_year = utilities.future_years(record)[-1]
-    without = forward_paths(record, forecast, savings_rows, "steady")
-    rows = []
-    for event in forecast["events"]["events"]:
-        shocks = {(s["market_id"], event["year"]): s["change_pct"] for s in event["shocks"]}
-        changes = {}
-        for type_id, reactions in forecast["events"]["reactions"].items():
-            for reaction in reactions["reactions"]:
-                if reaction["event_id"] == event["event_id"]:
-                    changes[type_id] = (event["year"], reaction["extra_money_change"])
-        with_event = forward_paths(record, forecast, savings_rows, "steady", shocks, changes)
-        chance = event["probability_pct"]["typical"] / 100
-        for type_id in with_event:
-            impact = with_event[type_id][last_year]["typical"] - without[type_id][last_year]["typical"]
-            rows.append({"event_id": event["event_id"], "event": event["name"], "year": event["year"],
-                         "type_id": type_id, "impact": round(impact), "chance": round(chance, 3),
-                         "weighted_impact": round(impact * chance)})
-    return rows
+    return FuturePaths(MarketModel(forecast), forecast).event_impacts(record, savings_rows)
 
 
 def divergence_years(paths: dict) -> list[dict]:
     """First forecast year each type's range stops overlapping the as-declared type's range."""
-    baseline = paths[utilities.BASELINE_TYPE]
-    rows = []
-    for type_id, points in paths.items():
-        if type_id == utilities.BASELINE_TYPE:
-            continue
-        first = None
-        for year in sorted(points)[1:]:
-            a, b = baseline[year], points[year]
-            if a["cautious"] > b["optimistic"] or b["cautious"] > a["optimistic"]:
-                first = year
-                break
-        rows.append({"type_id": type_id, "distinguishable_from": first})
-    return rows
+    return FuturePaths(MarketModel()).divergence_years(paths)
 
 
 def monitoring_ranges(forecast: dict, year: int, policy: dict) -> dict:
     """What normal account activity looks like next year, from the as-declared type's signals."""
-    tolerance = policy["tolerance"]["signal_amount"]
-    ranges = {}
-    for signal in forecast["types"]["behaviour"][utilities.BASELINE_TYPE]["signals"]:
-        if not signal["first_year"] <= year <= signal["last_year"]:
-            continue
-        code = signal["signal_code"]
-        count_max = round(signal["count_per_year"]["high"] * (1 + tolerance), 2)
-        amount_max = round(signal["amount_per_year"]["high"] * (1 + tolerance))
-        if code in ranges:
-            count_max = max(count_max, ranges[code]["count_max"])
-            amount_max = max(amount_max, ranges[code]["amount_max"])
-        ranges[code] = {"count_max": count_max, "amount_max": amount_max}
-    return ranges
+    return FuturePaths(MarketModel(forecast), forecast, policy).monitoring_ranges(year)
 
 
 def rank_documents(forecast: dict, candidates: list[str]) -> list[dict]:
