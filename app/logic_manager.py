@@ -33,9 +33,12 @@ import re
 
 from app import utilities
 from app.logic.formatter import Formatter
+from app.logic.indicator import (CounterpartyUnnamed, GiftOrInheritanceUnnamed, Indicator,
+                                 RelatedPartyTransaction, SourceContradictsOccupation, UnvaluedSource)
 from app.model.band import Band
 from app.model.check import Check
 from app.model.config import Config
+from app.model.declaration import Declaration
 from app.model.research_report import ResearchReport
 from app.model.verdict import Verdict
 from urllib.parse import urlparse
@@ -434,13 +437,6 @@ def _split_org_names(org_string: str) -> set[str]:
 # # Crime Scan Section — Typologies Check
 # ---------------------------------------------------------------------------
 
-_RELATED_PARTY_KEYWORDS = [
-    "associate", "family", "relative", "friend",
-    "brother", "sister", "spouse", "wife", "husband",
-    "son", "daughter", "parent", "mother", "father",
-    "partner", "in-law",
-]
-
 # Orchestrate the full crime scan: normalise case → match typologies → count breaches.
 def assess_typology_case(
     case_input: dict,
@@ -470,47 +466,30 @@ def assess_typology_case(
     return {"breach_count": breach_count, "match_count": match_count, "match_results": match_results}
 
 
-# Fire if any gift or inheritance source has no named counterparty (anonymous gift/bequest).
+# The five warning signs are the Indicator classes in app/logic/indicator.py.
+# These functions keep their old names until match_typologies moves into CrimeScan.
+def _fires(indicator: Indicator, declaration: dict) -> bool:
+    return indicator.fires(Declaration(declaration.get("sources", [])))
+
+
 def _check_gift_or_inheritance_unnamed(declaration: dict) -> bool:
-    """True if any gift or inheritance source has no counterparty named."""
-    gift_types = {"inheritance", "gift"}
-    return any(
-        s.get("source_type") in gift_types and s.get("counterparty") is None
-        for s in declaration.get("sources", [])
-    )
+    return _fires(GiftOrInheritanceUnnamed(), declaration)
 
 
-# Fire if too many declaration sources have no named counterparty (policy threshold).
 def _check_counterparty_unnamed(declaration: dict, policy: dict) -> bool:
-    """True if the count of null-counterparty sources meets or exceeds the policy limit."""
-    limit = policy.get("thresholds", {}).get("unknown_counterparty_limit", 1)
-    count = sum(1 for s in declaration.get("sources", []) if s.get("counterparty") is None)
-    return count >= limit
+    return _fires(CounterpartyUnnamed(policy), declaration)
 
 
-# Fire if any declared source was flagged by the declaration AI as mismatching the occupation.
 def _check_source_contradicts_occupation(declaration: dict) -> bool:
-    """True if the AI marked any source as inconsistent with the client's occupation."""
-    return any(s.get("occupation_mismatch") is True for s in declaration.get("sources", []))
+    return _fires(SourceContradictsOccupation(), declaration)
 
 
-# Fire if any declared wealth source has no SGD amount attached.
 def _check_unvalued_source(declaration: dict) -> bool:
-    """True if any declaration source has amount_sgd = null.
-    A salary, bonus or savings source tied to one of his jobs is left out: the forecast works
-    out what that job paid, so it doesn't need an amount (crime_declaration marks these)."""
-    return any(s.get("amount_sgd") is None and not s.get("amount_explained_by_forecast")
-               for s in declaration.get("sources", []))
+    return _fires(UnvaluedSource(), declaration)
 
 
-# Fire if any counterparty name contains a related-party keyword (family, associate, etc.).
 def _check_related_party(declaration: dict) -> bool:
-    """True if any counterparty contains a related-party keyword."""
-    for src in declaration.get("sources", []):
-        cp = src.get("counterparty")
-        if cp and any(kw in cp.lower() for kw in _RELATED_PARTY_KEYWORDS):
-            return True
-    return False
+    return _fires(RelatedPartyTransaction(), declaration)
 
 
 # Map fired indicator counts to a severity category.
