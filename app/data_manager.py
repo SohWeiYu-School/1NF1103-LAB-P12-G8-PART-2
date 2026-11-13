@@ -21,18 +21,15 @@ import json
 import logging
 import os
 import uuid
-import certifi
-from pymongo import MongoClient
-from pymongo.errors import PyMongoError
-from gridfs import GridFS
 import shutil
 import tempfile
-import hashlib
 
 from app import utilities
 from app.data.assessment_repository import AssessmentRepository
 from app.data.client_repository import ClientRepository
+from app.data.cloud_sync import CloudSync
 from app.data.json_repository import JsonRepository
+from app.data.mongo_repository import MongoRepository
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +50,7 @@ LOCAL_CASES_JSON = os.path.join(LOCAL_DB_DIR, "sow_cases.json")
 LOCAL_ASSESSMENTS_JSON = os.path.join(LOCAL_DB_DIR, "ai_assessments.json")
 
 # Define MongoDB database and collection names
-DB_NAME = "sow_risk_db"
+DB_NAME = MongoRepository.DB_NAME
 COLLECTION_NAME = "client_cases"
 ASSESSMENT_COLLECTION_NAME = "ai_assessments"
 
@@ -84,31 +81,6 @@ def load_from_json(filepath: str) -> list:
 def save_to_json(record: dict, filepath: str) -> bool:
     # Add the record, or replace the saved one with the same client_ref
     return ClientRepository(filepath).save(record)
-
-
-# ==============================================================================
-# MONGODB CONNECTION HELPERS (Backup Target)
-# ==============================================================================
-
-def _mongo_client():
-    """One MongoDB client for each call (connections are short-lived sync operations)."""
-    return MongoClient(os.getenv("MONGODB_URI"), serverSelectionTimeoutMS=2000, tlsCAFile=certifi.where())
-
-
-def get_collection():
-    try:
-        return _mongo_client()[DB_NAME][COLLECTION_NAME]
-    except Exception as exc:
-        logger.warning("get_collection: MongoDB connection failed: %s", repr(exc))
-        return None
-
-
-def get_assessment_collection():
-    try:
-        return _mongo_client()[DB_NAME][ASSESSMENT_COLLECTION_NAME]
-    except Exception as exc:
-        logger.warning("get_assessment_collection: MongoDB connection failed: %s", repr(exc))
-        return None
 
 
 # ==============================================================================
@@ -163,113 +135,37 @@ def query_assessments(assessments: list, outcome: str = None) -> list:
     return [a for a in assessments if a in wanted]
 
 
+def _cloud_syncs() -> list:
+    """One CloudSync for the clients and one for the assessments, both to MongoDB."""
+    uri = os.getenv("MONGODB_URI")
+    return [
+        CloudSync(ClientRepository(LOCAL_CASES_JSON),
+                  MongoRepository(COLLECTION_NAME, "client_ref", uri), SYNC_STATE_JSON),
+        CloudSync(AssessmentRepository(LOCAL_ASSESSMENTS_JSON),
+                  MongoRepository(ASSESSMENT_COLLECTION_NAME, "assessment_id", uri), SYNC_STATE_JSON),
+    ]
+
+
 def mongo_is_online() -> bool:
-    try:
-        _mongo_client().admin.command("ping")
-        return True
-    except Exception as exc:
-        logger.warning("mongo_is_online: %s", repr(exc))
-        return False
+    return _cloud_syncs()[0].is_online()
 
 
-def _upload_local_documents(record: dict, db) -> int:
-    """Push documents that only exist locally to GridFS and remember their file_id."""
-
-
-    uploaded = 0
-    for doc in record.get("supporting_documents", []):
-        path = doc.get("file_path")
-        if doc.get("file_id") or not path:
-            continue
-        full = os.path.join(utilities.ROOT_DIR, path)
-        if not os.path.exists(full):
-            continue
-        with open(full, "rb") as f:
-            doc["file_id"] = str(GridFS(db).put(f, filename=doc.get("file_name")))
-        uploaded += 1
-    return uploaded
 # ==============================================================================
 # SYNC FUNCTIONALITY (JSON -> MongoDB Backup)
 # ==============================================================================
 SYNC_STATE_JSON = os.path.join(LOCAL_DB_DIR, "sync_state.json")
 
 
-def _load_sync_state() -> dict:
-    state = load_json(SYNC_STATE_JSON, default={})
-    return state if isinstance(state, dict) else {}
-
-
-def _save_sync_state(state: dict) -> None:
-    _ensure_data_dir()
-    try:
-        with open(SYNC_STATE_JSON, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=4)
-    except IOError as exc:
-        logger.warning("_save_sync_state: could not write sync state: %s", repr(exc))
-
-
-def _fingerprint(record: dict) -> str:
-    # Same content gives the same fingerprint, so an unchanged record can be skipped
-    return hashlib.sha256(json.dumps(record, sort_keys=True, default=str).encode()).hexdigest()
 def sync_json_to_mongodb() -> dict:
     # Sends only what is new or changed since the last sync
     stats = {"cases_synced": 0, "assessments_synced": 0, "skipped": 0, "errors": []}
-
-    if not mongo_is_online():
-        logger.warning("sync_json_to_mongodb: MongoDB is not reachable — sync aborted")
-        stats["errors"].append("Cannot reach MongoDB. Your data is still safe in the local JSON files.")
-        return stats
-
-    state = _load_sync_state()
-    cases_state = state.setdefault("cases", {})
-    assess_state = state.setdefault("assessments", {})
-
-    # Step 1: client cases (and their documents)
-    cases_coll = get_collection()
-    if cases_coll is None:
-        stats["errors"].append("Could not connect to MongoDB for client_cases backup.")
-    else:
-        for record in load_local_records():
-            ref = record.get("client_ref")
-            try:
-                # Upload local-only documents first (this adds file_id to the record)
-                if _upload_local_documents(record, cases_coll.database):
-                    save_to_json(record, LOCAL_CASES_JSON)
-                fingerprint = _fingerprint(record)
-                if cases_state.get(ref) == fingerprint:
-                    stats["skipped"] += 1
-                    continue
-                cases_coll.update_one({"client_ref": ref}, {"$set": record}, upsert=True)
-                cases_state[ref] = fingerprint
-                stats["cases_synced"] += 1
-            except (PyMongoError, OSError) as e:
-                logger.error("sync_json_to_mongodb: case %s failed: %s", ref, repr(e))
-                stats["errors"].append(f"Case {ref}: {e}")
-
-    # Step 2: assessments (never edited after saving, so the id alone is enough)
-    assess_coll = get_assessment_collection()
-    if assess_coll is None:
-        stats["errors"].append("Could not connect to MongoDB for ai_assessments backup.")
-    else:
-        for record in load_local_assessments():
-            key = record.get("assessment_id") or _fingerprint(record)
-            if key in assess_state:
-                stats["skipped"] += 1
-                continue
-            try:
-                if record.get("assessment_id"):
-                    match = {"assessment_id": record["assessment_id"]}
-                else:
-                    match = {"client_ref": record.get("client_ref"), "assessed_at": record.get("assessed_at")}
-                assess_coll.update_one(match, {"$set": record}, upsert=True)
-                assess_state[key] = True
-                stats["assessments_synced"] += 1
-            except PyMongoError as e:
-                logger.error("sync_json_to_mongodb: assessment %s failed: %s", record.get("client_ref"), repr(e))
-                stats["errors"].append(f"Assessment {record.get('client_ref')}: {e}")
-
-    _save_sync_state(state)
+    for name, sync in zip(("cases_synced", "assessments_synced"), _cloud_syncs()):
+        result = sync.sync()
+        stats[name] = result["synced"]
+        stats["skipped"] += result["skipped"]
+        stats["errors"] += [error for error in result["errors"] if error not in stats["errors"]]
     return stats
+
 
 # ==============================================================================
 # READING UPLOADED DOCUMENTS (for auto-filling the client form)

@@ -24,6 +24,11 @@ class DatabaseRepository(Repository):
         """The name of the collection this repository writes to."""
         return self._collection_name
 
+    @property
+    def key_field(self) -> str:
+        """The field that tells one record from another."""
+        return self._key_field
+
     def save(self, record: dict) -> bool:
         """Add the record, or replace the stored one with the same key."""
         if not isinstance(record, dict) or not self._connect():
