@@ -44,7 +44,7 @@ def client_record(**claims) -> dict:
 def save_fake_forecast(record: dict, **options) -> dict:
     case, missing = logic_manager.forecasting_case(record, main.today())
     assert missing == []
-    data_manager.save_raw_replies(case["client_ref"],
+    utilities.response_cache().save_raw_replies(case["client_ref"],
                                   {k: {"raw": v} for k, v in fake_ai.forecast_replies(case, **options).items()})
     return case
 
@@ -546,9 +546,9 @@ def test_the_bishan_reply_from_the_log_is_repaired_not_rejected():
 
 def test_one_asset_the_ai_cant_describe_doesnt_stop_the_forecast(storage):
     case = save_fake_forecast(client_record())
-    replies = data_manager.load_raw_replies(case["client_ref"])
+    replies = utilities.response_cache().load_raw_replies(case["client_ref"])
     replies["call2_earnings.asset.0"] = json.dumps({"asset_index": 0})          # unusable, and no API key
-    data_manager.save_raw_replies(case["client_ref"], {k: {"raw": v} for k, v in replies.items()})
+    utilities.response_cache().save_raw_replies(case["client_ref"], {k: {"raw": v} for k, v in replies.items()})
     result = run(case)
     assert result["forecast"] is not None                                          # the forecast finished
     item = check(result["verdict"], "forecast", "ASSET_NOT_MODELLED")
@@ -558,9 +558,9 @@ def test_one_asset_the_ai_cant_describe_doesnt_stop_the_forecast(storage):
 
 def test_the_report_says_why_the_forecast_stopped(storage):
     case = save_fake_forecast(client_record())
-    replies = data_manager.load_raw_replies(case["client_ref"])
+    replies = utilities.response_cache().load_raw_replies(case["client_ref"])
     replies["call3_types.list"] = json.dumps({"person_types": []})                # unusable, and no API key
-    data_manager.save_raw_replies(case["client_ref"], {k: {"raw": v} for k, v in replies.items()})
+    utilities.response_cache().save_raw_replies(case["client_ref"], {k: {"raw": v} for k, v in replies.items()})
     verdict = run(case)["verdict"]
     item = check(verdict, "forecast", "FORECAST")
     assert "the list of person types" in item["detail"] and "API key" in item["detail"]
