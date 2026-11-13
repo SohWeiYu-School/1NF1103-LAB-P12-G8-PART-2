@@ -63,6 +63,7 @@ class AIService(ABC):
             return cached
 
         for attempt in range(1, self.ATTEMPTS + 1):
+            self._warnings = []          # only the attempt that succeeds may leave warnings
             options = self._options(source)
             data = self._complete(prompt, schema, options)
             if data is None:

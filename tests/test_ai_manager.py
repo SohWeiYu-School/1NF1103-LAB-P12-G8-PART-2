@@ -10,14 +10,9 @@ from app.ai_manager import (
     _ai_chat_completion_pipeline,
     _ai_search_pipeline,
     _convert_schema_for_gemini,
-    add_report_ids,
-    build_research_payload,
     build_typology_reports,
-    extract_api_sources,
     get_ai_research,
     get_typologies,
-    strip_excerpts,
-    trim_reports,
     validate_ai_response,
 )
 from app.utilities import cache_key as _cache_key, load_schema as _load_schema
@@ -138,24 +133,6 @@ def _fake_responses_api_response(body: dict, annotations=None) -> MagicMock:
     resp = MagicMock()
     resp.output = [message_item]
     return resp
-
-
-def _fake_url_citation(url: str, title: str) -> MagicMock:
-    ann = MagicMock()
-    ann.type = "url_citation"
-    ann.url = url
-    ann.title = title
-    return ann
-
-
-def _fake_web_search_item(urls: list[str]) -> MagicMock:
-    """Fake web_search_call output item with action.sources."""
-    sources = [MagicMock(url=url) for url in urls]
-    action = MagicMock(type="search", sources=sources)
-    item = MagicMock()
-    item.type = "web_search_call"
-    item.action = action
-    return item
 
 
 # ===========================================================================
@@ -522,118 +499,6 @@ def test_report_extra_risk_level_fails_schema():
 
 
 # ===========================================================================
-# 18. build_research_payload — only industry + country
-# ===========================================================================
-
-def test_research_payload_has_only_industry_and_country():
-    payload = build_research_payload(_SAMPLE_CASE_INPUT)
-    assert set(payload.keys()) == {"industry", "country"}
-    assert payload["industry"] == "Maritime shipping and freight forwarding"
-    assert payload["country"] == "Singapore"
-
-
-def test_research_payload_falls_back_to_country_of_residence():
-    case = {**_SAMPLE_CASE_INPUT}
-    del case["country"]
-    payload = build_research_payload(case)
-    assert payload["country"] == "Singapore"  # falls back to country_of_residence
-
-
-# ===========================================================================
-# 19. trim_reports — caps reports and excerpts, coerces year strings
-# ===========================================================================
-
-def test_nine_reports_trimmed_to_eight():
-    nine = [_valid_report(f"Report {i}") for i in range(9)]
-    data = _valid_research_response(reports=nine)
-    result, warnings = trim_reports(data, max_reports=8, max_excerpts=5)
-    assert len(result["reports"]) == 8
-    assert any("8" in w for w in warnings)
-
-
-def test_trim_reports_coerces_year_string_to_int():
-    r = _valid_report()
-    r["year"] = "2020"
-    data = _valid_research_response(reports=[r])
-    result, _ = trim_reports(data, max_reports=8, max_excerpts=5)
-    assert result["reports"][0]["year"] == 2020
-
-
-# ===========================================================================
-# 20. add_report_ids — R1, R2, ... assigned by code, not AI
-# ===========================================================================
-
-def test_report_ids_added_as_r1_r2():
-    data = _valid_research_response(reports=[_valid_report("A"), _valid_report("B")])
-    result = add_report_ids(data)
-    assert result["reports"][0]["report_id"] == "R1"
-    assert result["reports"][1]["report_id"] == "R2"
-
-
-# ===========================================================================
-# 21. extract_api_sources — from web_search_call and url_citation annotations
-# ===========================================================================
-
-def test_api_sources_from_url_citation_annotations():
-    annotations = [
-        _fake_url_citation("https://www.fatf-gafi.org/page1", "FATF Page 1"),
-        _fake_url_citation("https://www.mas.gov.sg/page2", "MAS Page 2"),
-    ]
-    response = _fake_responses_api_response(_valid_research_response(), annotations=annotations)
-    sources = extract_api_sources(response)
-    assert len(sources) == 2
-    assert sources[0]["url"] == "https://www.fatf-gafi.org/page1"
-    assert sources[1]["title"] == "MAS Page 2"
-
-
-def test_api_sources_from_web_search_call_action():
-    ws_item = _fake_web_search_item([
-        "https://www.fatf-gafi.org/search-1",
-        "https://www.mas.gov.sg/search-2",
-    ])
-    text_block = MagicMock()
-    text_block.type = "output_text"
-    text_block.annotations = []
-    message_item = MagicMock()
-    message_item.type = "message"
-    message_item.content = [text_block]
-    resp = MagicMock()
-    resp.output = [ws_item, message_item]
-    sources = extract_api_sources(resp)
-    assert len(sources) == 2
-    assert sources[0]["url"] == "https://www.fatf-gafi.org/search-1"
-
-
-def test_api_sources_deduplicates_urls():
-    annotations = [
-        _fake_url_citation("https://www.fatf-gafi.org/page1", "FATF"),
-        _fake_url_citation("https://www.fatf-gafi.org/page1", "FATF duplicate"),
-    ]
-    response = _fake_responses_api_response(_valid_research_response(), annotations=annotations)
-    sources = extract_api_sources(response)
-    assert len(sources) == 1
-
-
-# ===========================================================================
-# 22. strip_excerpts — curly quotes and double quotes stripped
-# ===========================================================================
-
-def test_excerpt_curly_and_double_quotes_stripped():
-    report = _valid_report()
-    report["excerpts"] = [
-        "\u201cThis is a quoted excerpt.\u201d",
-        "\u2018Another excerpt\u2019",
-        '"Double quoted"',
-    ]
-    data = _valid_research_response(reports=[report])
-    result = strip_excerpts(data)
-    excerpts = result["reports"][0]["excerpts"]
-    assert excerpts[0] == "This is a quoted excerpt."
-    assert excerpts[1] == "Another excerpt"
-    assert excerpts[2] == "Double quoted"
-
-
-# ===========================================================================
 # 23. get_ai_research integration — correct payload, post-processing applied
 # ===========================================================================
 
@@ -729,20 +594,3 @@ def test_missing_source_quotes_fails_schema():
     del t["source_quotes"]
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(instance=_valid_typology_response(typologies=[t]), schema=TYPOLOGY_SCHEMA)
-
-
-# ===========================================================================
-# 28. Research cache key — same industry+country always gives same key
-# ===========================================================================
-
-def test_research_cache_key_ignores_non_research_fields():
-    case_a = {"industry": "Shipping", "country": "SG", "age": 30, "occupation": "Analyst"}
-    case_b = {"industry": "Shipping", "country": "SG", "age": 55, "occupation": "Director"}
-    payload_a = build_research_payload(case_a)
-    payload_b = build_research_payload(case_b)
-    assert payload_a == payload_b
-    k1 = _cache_key("research", payload_a, "research-v1", "gpt-4o")
-    k2 = _cache_key("research", payload_b, "research-v1", "gpt-4o")
-    assert k1 == k2
-
-

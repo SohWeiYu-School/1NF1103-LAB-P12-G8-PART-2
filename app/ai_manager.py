@@ -11,6 +11,7 @@ import jsonschema
 from app import utilities
 from app.ai import ai_caller
 from app.ai.benchmark_ai import BenchmarkAI
+from app.ai.research_ai import ResearchAI
 from app.ai.response_cache import ResponseCache
 from app.utilities import (
     build_instructions,
@@ -186,221 +187,17 @@ def build_benchmark_payload(client_data: dict) -> dict:
 # ============================================================================
 
 def get_ai_research(case_input: dict) -> tuple[dict | None, list[str]]:
-    """Orchestrate the full research AI flow for a given case input.
+    """Entry point. Returns (research dict or None, warnings).
 
-    Internally: build payload → cache check → search pipeline (OpenAI first, Gemini fallback) →
-    JSON parse → trim + validate → post-process → return.
-
-    Returns (research_dict | None, warnings).
+    The AI sees only the industry and the country. The search is limited to the trusted
+    sites in config/policy.json.
     """
-    warnings: list[str] = []
-
-    # Step 1: Build payload (allowlist only - industry + country)
-    payload = build_research_payload(case_input)
-
-    # Step 2: Load policy limits, then build prompt + schema
     policy = utilities.policy()
-    domains = policy.get("trusted_sources", [])
-    max_reports = policy.get("research_max_reports")
-    max_excerpts = policy.get("research_max_excerpts_per_report")
-
-    template = load_prompt("research.txt")
-    prompt = (
-        template
-        .replace("{payload_json}", json.dumps(payload, indent=2))
-        .replace("{trusted_sources}", ", ".join(domains))
-        .replace("{max_reports}", str(max_reports))
-        .replace("{max_excerpts}", str(max_excerpts))
-    )
-    schema = load_schema("research_response.schema.json")
-
-    mdl = model()
-
-    # Step 3: Reuse a saved answer if there is one
-    key, cached = cache_check("research", payload, extract_prompt_version(prompt), mdl)
-    if cached is not None:
-        return cached, warnings
-
-    # Step 4: API call + parse + validate + post-process (no retry — web search is expensive)
-    # Uses _ai_search_pipeline: OpenAI Responses API first, Gemini grounding as fallback
-    last_error = ""
-    error_type = "api"
-
-    for attempt in range(1):
-        attempt_warnings: list[str] = []
-
-        text, response = _ai_search_pipeline(prompt, schema=schema, domains=domains)
-        if text is None:
-            error_type = "api"
-            last_error = "API call failed"
-            logger.warning("get_ai_research attempt %d: API call failed", attempt + 1)
-            continue
-
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError as exc:
-            error_type = "json"
-            last_error = repr(exc)
-            logger.warning("get_ai_research attempt %d JSON parse error: %s", attempt + 1, last_error)
-            continue
-
-        # Cut to the policy limits first, so an over-long reply can still pass the schema
-        data, trim_warnings = trim_reports(data, max_reports, max_excerpts)
-        attempt_warnings.extend(trim_warnings)
-
-        valid, err = validate_ai_response(data, schema)
-        if not valid:
-            error_type = "schema"
-            last_error = err
-            logger.warning("get_ai_research attempt %d schema validation failed: %s", attempt + 1, last_error)
-            continue
-
-        data, pp_warnings = research_post_process(data, response, key, "research", mdl)
-        warnings.extend(attempt_warnings)
-        warnings.extend(pp_warnings)
-        return data, warnings
-
-    logger.error("get_ai_research exhausted all retries. error_type=%s last_error=%s", error_type, last_error)
-    return None, []
-
-
-def build_research_payload(case_input: dict) -> dict:
-    """Keep only the fields the research AI may see. Country falls back to residence."""
-    allowed = utilities.policy().get("research_allowed_fields", ["industry", "country"])
-    payload = {k: case_input[k] for k in allowed if k in case_input}
-    if "country" not in payload:
-        payload["country"] = case_input.get("country_of_residence", "Singapore")
-    return payload
-
-
-def research_post_process(
-    data: dict,
-    response,
-    key: str,
-    kind: str,
-    mdl: str,
-) -> tuple[dict, list[str]]:
-    """Finish a valid research reply and save it. Returns (data, warnings).
-
-    Adds the web sources, report IDs, clean excerpts, a timestamp and the model name.
-    """
-    warnings: list[str] = []
-    api_sources = extract_api_sources(response) if response is not None else []
-    # Gemini fallback: grounding chunks often unavailable with structured output.
-    # Use the report URLs themselves so verify_research can still apply domain trust (Rule 2).
-    if not api_sources and response is not None and not hasattr(response, "output"):
-        api_sources = [
-            {"url": r["url"], "title": r.get("title", r["url"])}
-            for r in data.get("reports", [])
-            if r.get("url")
-        ]
-        if api_sources:
-            logger.info("research_post_process: Gemini grounding metadata unavailable — using report URLs as api_sources")
-    if not api_sources:
-        warnings.append("Research: web search returned no sources — results may not be grounded.")
-    data = add_report_ids(data)
-    data = strip_excerpts(data)
-    data["api_sources"] = api_sources
-    data["retrieved_at"] = datetime.now(timezone.utc).isoformat()
-    # Record the actual model that responded, not always the OpenAI model name
-    if response is not None and not hasattr(response, "output"):
-        actual_mdl = os.getenv("GEMINI_SEARCH_MODEL", "gemini-3.8-flash")
-    else:
-        actual_mdl = mdl
-    data["model"] = actual_mdl
-    cache_write(key, data, kind)
-    data["_cache_path"] = os.path.join(cache_dir(kind), f"{key}.json")
-    return data, warnings
-
-
-def trim_reports(data: dict, max_reports: int, max_excerpts: int) -> tuple[dict, list[str]]:
-    """Cut reports and excerpts down to the policy limits. Turns year strings into ints."""
-    warnings: list[str] = []
-    reports = data.get("reports", [])
-
-    if len(reports) > max_reports:
-        warning = (
-            f"AI returned {len(reports)} reports; "
-            f"kept first {max_reports} per policy."
-        )
-        logger.warning(warning)
-        warnings.append(warning)
-        reports = reports[:max_reports]
-
-    for r in reports:
-        excerpts = r.get("excerpts", [])
-        if len(excerpts) > max_excerpts:
-            r["excerpts"] = excerpts[:max_excerpts]
-        if isinstance(r.get("year"), str):
-            try:
-                r["year"] = int(r["year"])
-            except (ValueError, TypeError):
-                pass
-
-    return {**data, "reports": reports}, warnings
-
-
-def add_report_ids(data: dict) -> dict:
-    """Number the reports R1, R2, ... Done by code, not the AI."""
-    for i, r in enumerate(data.get("reports", []), 1):
-        r["report_id"] = f"R{i}"
-    return data
-
-
-def extract_api_sources(response) -> list[dict]:
-    """List the pages the web search really opened, as {url, title}, no repeats."""
-    seen: set[str] = set()
-    sources: list[dict] = []
-
-    if not hasattr(response, "output"):
-        # Gemini GenerateContentResponse — extract from grounding metadata
-        try:
-            candidates = getattr(response, "candidates", [])
-            logger.debug("extract_api_sources (gemini): %d candidates", len(candidates))
-            for candidate in candidates:
-                grounding = getattr(candidate, "grounding_metadata", None)
-                chunks = getattr(grounding, "grounding_chunks", [])
-                logger.debug("extract_api_sources (gemini): %d grounding_chunks", len(chunks))
-                for chunk in chunks:
-                    web = getattr(chunk, "web", None)
-                    url = getattr(web, "uri", None)
-                    if url and url not in seen:
-                        seen.add(url)
-                        title = getattr(web, "title", None) or url
-                        sources.append({"url": url, "title": title})
-        except Exception as exc:
-            logger.warning("extract_api_sources (gemini): error reading grounding metadata: %s", repr(exc))
-        logger.debug("extract_api_sources (gemini): found %d sources", len(sources))
-        return sources
-
-    for item in response.output:
-        # First place to look: the sources of each search call
-        if item.type == "web_search_call":
-            action = getattr(item, "action", None)
-            for src in getattr(action, "sources", None) or []:
-                url = getattr(src, "url", None)
-                if url and url not in seen:
-                    seen.add(url)
-                    sources.append({"url": url, "title": url})
-        # Second place: the links cited inside the reply text
-        if item.type == "message":
-            for block in item.content:
-                if block.type != "output_text":
-                    continue
-                for ann in getattr(block, "annotations", []):
-                    if ann.type == "url_citation" and ann.url not in seen:
-                        seen.add(ann.url)
-                        sources.append({"url": ann.url, "title": ann.title})
-    logger.debug("extract_api_sources: found %d sources", len(sources))
-    return sources
-
-
-def strip_excerpts(data: dict) -> dict:
-    """Remove the quote marks and spaces the AI puts around each excerpt."""
-    quote_chars = '"\u201c\u201d\u2018\u2019\''
-    for r in data.get("reports", []):
-        r["excerpts"] = [e.strip(quote_chars).strip() for e in r.get("excerpts", [])]
-    return data
+    service = ResearchAI("openai", _pipeline_caller, model(), 0.0, _ModuleCache(),
+                         max_reports=policy.get("research_max_reports"),
+                         max_excerpts=policy.get("research_max_excerpts_per_report"))
+    data = service.run({"case": case_input, "domains": policy.get("trusted_sources", [])})
+    return data, service.warnings()
 
 
 # Single entry point for typology AI — main.py calls only this
