@@ -36,6 +36,8 @@ from app.logic.formatter import Formatter
 from app.logic.indicator import (CounterpartyUnnamed, GiftOrInheritanceUnnamed, Indicator,
                                  RelatedPartyTransaction, SourceContradictsOccupation, UnvaluedSource)
 from app.logic.market_model import MarketModel
+from app.logic.career_savings import CareerSavings
+from app.logic.asset_path import AssetPath
 from app.model.band import Band
 from app.model.check import Check
 from app.model.config import Config
@@ -889,19 +891,6 @@ def scenario_chances(forecast: dict) -> dict:
     return MarketModel(forecast).scenario_chances()
 
 
-def market_change(history: dict, outlook: dict, market_id: str, year: int, scenario: str,
-                  level: str, shocks: dict | None = None) -> float:
-    """A market's % change in a year: the recalled history, otherwise the scenario forecast."""
-    past = history.get(market_id, {})
-    if year in past:
-        change = float(past[year] or 0.0)   # a year the AI couldn't find counts as no change
-    elif year in outlook.get(market_id, {}):
-        change = float(outlook[market_id][year][scenario][level])
-    else:
-        change = 0.0
-    if shocks and (market_id, year) in shocks:
-        change += shocks[(market_id, year)][level]
-    return change
 
 
 # ============================================================================
@@ -909,86 +898,29 @@ def market_change(history: dict, outlook: dict, market_id: str, year: int, scena
 # ============================================================================
 
 def pay_total(pay: dict, level: str) -> float:
-    return pay["base_pay"][level] + pay["bonus"][level] + pay["equity_or_profit_share"][level]
+    return CareerSavings().pay_total(pay, level)
 
 
 def career_savings(forecast: dict, start: int, end: int) -> list[dict]:
     """Year by year: total pay, after tax, living costs, saved, growth and savings so far."""
-    pay_by_year = {}
-    for job in sorted(forecast["earnings"]["positions"], key=lambda p: p["position_index"]):
-        for row in job["yearly"]:
-            pay_by_year[row["year"]] = row
-
-    savings = {b: 0.0 for b in BANDS}
-    rows = []
-    for year in range(start, end + 1):
-        row = pay_by_year.get(year)
-        if row is None:
-            logger.warning("No pay forecast for %d, counting it as a year with no pay", year)
-            rows.append({"year": year, "total_pay": zero_band(), "after_tax": zero_band(),
-                         "living_costs": zero_band(), "saved": zero_band(), "savings": band(*savings.values())})
-            continue
-        parts = {"total_pay": {}, "after_tax": {}, "living_costs": {}, "saved": {}}
-        for b in BANDS:
-            gross = pay_total(row, MONEY_IN[b])
-            after_tax = gross * (1 - row["tax_rate_pct"][MONEY_OUT[b]] / 100)
-            costs = row["living_costs"][MONEY_OUT[b]]
-            growth = savings[b] * row["savings_return_pct"][MONEY_IN[b]] / 100
-            savings[b] += after_tax - costs + growth
-            parts["total_pay"][b], parts["after_tax"][b] = gross, after_tax
-            parts["living_costs"][b], parts["saved"][b] = costs, after_tax - costs
-        rows.append({"year": year, **{key: band(*(values[b] for b in BANDS)) for key, values in parts.items()},
-                     "savings": band(*(savings[b] for b in BANDS))})
-    return rows
+    return CareerSavings(forecast["earnings"]).rows(start, end)
 
 
 # ============================================================================
 # 3. Assets (Call 2 behaviour + Call 1 markets)
 # ============================================================================
 
-def asset_path(asset: dict, model: dict, history: dict, outlook: dict, end_year: int,
-               last_year: int, scenario: str, shocks: dict | None = None) -> dict:
-    """Value and income of one asset every year from purchase to last_year."""
-    bought = int(asset["year_acquired"])
-    past_yields = {row["year"]: row["yield_pct"] for row in model["income_yield_by_year"]}
-    future_yield = model["future_income_yield_pct"][scenario]
-
-    results = {}
-    for level in utilities.RANGE_KEYS:      # one path using all the low inputs, one typical, one high
-        value = float(asset["price_paid"])
-        values, incomes = {}, {}
-        for year in range(bought, last_year + 1):
-            if year > bought:
-                change = sum(exposure["sensitivity"][level]
-                             * market_change(history, outlook, exposure["market_id"], year, scenario, level, shocks)
-                             for exposure in model["exposures"])
-                value = max(value * (1 + (change + model["own_growth_pct"][level]) / 100), 0.0)
-            yield_pct = past_yields.get(year, future_yield) if year <= end_year else future_yield
-            values[year] = value
-            incomes[year] = value * yield_pct[level] / 100
-        results[level] = (values, incomes)
-
-    years = range(bought, last_year + 1)
-    return {"values": {y: sorted_band([results[level][0][y] for level in utilities.RANGE_KEYS]) for y in years},
-            "income": {y: sorted_band([results[level][1][y] for level in utilities.RANGE_KEYS]) for y in years}}
 
 
 def all_asset_paths(record: dict, forecast: dict, last_year: int, scenario: str,
                     shocks: dict | None = None) -> list[dict]:
-    history, outlook = market_history(forecast), market_outlook(forecast)
-    _, end = utilities.career_years(record)
-    models = sorted(forecast["earnings"]["assets"], key=lambda a: a["asset_index"])
-    return [asset_path(asset, model, history, outlook, end, last_year, scenario, shocks)
-            for asset, model in zip(record.get("investments", []), models)]
+    assets = AssetPath(MarketModel(forecast), forecast["earnings"]["assets"])
+    return assets.build(record, last_year, scenario, shocks)
 
 
 def income_up_to(path: dict, year: int) -> dict:
     """Total income an asset produced up to and including a year."""
-    total = zero_band()
-    for income_year, income in path["income"].items():
-        if income_year <= year:
-            total = add_bands(total, income)
-    return total
+    return AssetPath(MarketModel()).income_up_to(path, year)
 
 
 # ============================================================================
