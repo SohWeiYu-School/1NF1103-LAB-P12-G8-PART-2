@@ -517,18 +517,6 @@ def test_web_search_is_switched_from_env(monkeypatch):
     assert utilities.forecast_settings()["web_search"] == utilities.policy()["forecasting"]["web_search"]
 
 
-def test_model_that_refuses_temperature_zero_is_asked_again():
-    calls = []
-
-    def create(**request):
-        calls.append(request)
-        if "temperature" in request:
-            raise ValueError("Unsupported value: 'temperature' does not support 0 with this model.")
-        return "reply"
-    assert ai_manager._create_at_temperature_zero(create, model="m") == "reply"
-    assert calls == [{"temperature": 0, "model": "m"}, {"model": "m"}]
-
-
 def test_the_bishan_reply_from_the_log_is_repaired_not_rejected():
     markets = {"ECO_SG", "PROP_BISHAN", "PROP_SG", "FX_SGD", "IND_PARTS", "STOCK_SG"}
     reply = {"asset_index": 0, "exposures": [

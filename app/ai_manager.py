@@ -8,10 +8,8 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 import jsonschema
-from google import genai as google_genai
-from google.genai import types as google_types
-
 from app import utilities
+from app.ai import ai_caller
 from app.utilities import (
     build_instructions,
     cache_check, cache_dir, cache_write,
@@ -57,183 +55,63 @@ def _ai_chat_completion_pipeline(prompt: str, schema: dict | None = None) -> str
 # ============================================================================
 # 1. Shared helpers - used by every section below
 # ============================================================================
+# The calls to OpenAI and Gemini live in app/ai/ai_caller.py (openai_caller, gemini_caller).
+# The functions below keep their old names and pass each call on to those callers.
 
-def _create_at_temperature_zero(create, **request):
-    """Call an OpenAI create function at temperature 0 (same question, same answer). Some
-    models only accept their default temperature; for those the request is sent again without it."""
+def _openai() -> ai_caller.AICaller:
     try:
-        return create(temperature=0, **request)
-    except Exception as exc:
-        if "temperature" not in str(exc).lower():
-            raise
-        logger.info("%s does not accept temperature 0; asking again with its default",
-                    request.get("model"))
-        return create(**request)
+        return ai_caller.openai_caller(client())
+    except Exception as exc:   # no API key: every question then gets "no answer"
+        logger.warning("OpenAI is not available: %s", repr(exc))
+        return lambda prompt, schema=None, options=None: None
+
+
+def _gemini(model: str = "", search_model: str = "") -> ai_caller.AICaller:
+    unsupported = set(utilities.policy().get("gemini_unsupported_schema_keys",
+                                             ai_caller.GEMINI_UNSUPPORTED_SCHEMA_KEYS))
+    return ai_caller.gemini_caller(None, model, search_model, unsupported)
 
 
 def _openai_completion_response(prompt: str, model: str, schema: dict | None = None) -> str | None:
-    """Plain chat call. Returns the reply text, or None if the call fails.
+    """Plain chat call. Returns the reply text, or None if the call fails."""
+    return _openai()(prompt, schema, {"model": model})
 
-    With a schema the reply must follow it; without one it is just any JSON object.
-    """
-    try:
-        if schema:
-            response_format = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "response",
-                    "schema": schema,
-                    "strict": False,
-                },
-            }
-        else:
-            response_format = {"type": "json_object"}
-        response = _create_at_temperature_zero(
-            client().chat.completions.create,
-            model=model,
-            response_format=response_format,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.choices[0].message.content
-    except Exception as exc:
-        logger.warning("_openai_completion_response failed: %s", repr(exc))
-        return None
 
-# Purely to call Google Gemini chat completion API. Pass schema to enforce JSON output shape; omit for plain JSON mode.
 def _convert_schema_for_gemini(node, unsupported: set | None = None):
-    """Recursively convert a JSON Schema dict into Gemini-compatible schema format.
-
-    Strips unsupported meta-fields (from policy.json) and converts nullable type arrays
-    (e.g. ["string", "null"]) to Gemini's {type, nullable: true} form.
-    """
+    """A JSON Schema in the form Gemini accepts."""
     if unsupported is None:
-        unsupported = set(utilities.policy().get("gemini_unsupported_schema_keys", ["$schema", "$id", "title", "additionalProperties"]))
-    if isinstance(node, list):
-        return [_convert_schema_for_gemini(item, unsupported) for item in node]
-    if not isinstance(node, dict):
-        return node
-    result = {}
-    for k, v in node.items():
-        if k in unsupported:
-            continue
-        if k == "type" and isinstance(v, list):
-            non_null = [t for t in v if t != "null"]
-            if non_null:
-                result["type"] = non_null[0]
-                result["nullable"] = True
-            continue
-        # properties keys are field names (e.g. "title", "url") — never filter them
-        if k == "properties" and isinstance(v, dict):
-            result["properties"] = {name: _convert_schema_for_gemini(schema, unsupported)
-                                    for name, schema in v.items()}
-            continue
-        result[k] = _convert_schema_for_gemini(v, unsupported)
-    return result
+        unsupported = set(utilities.policy().get("gemini_unsupported_schema_keys",
+                                                 ai_caller.GEMINI_UNSUPPORTED_SCHEMA_KEYS))
+    return ai_caller.gemini_schema(node, unsupported)
+
 
 def _gemini_completion_response(prompt: str, model: str, schema: dict | None = None) -> str | None:
-    """
-    Raw Google Gemini API call (chat completion, no web search).
-    If schema is provided, passes it as response_schema to enforce structured output.
-    Otherwise requests plain JSON via response_mime_type only.
-    Returns the response text, or None if the call fails.
-    """
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        logger.warning("_gemini_completion_response: GEMINI_API_KEY not set")
-        return None
-    try:
-        gemini_client = google_genai.Client(api_key=api_key)
-        gemini_schema = _convert_schema_for_gemini(schema) if schema else None
-        config = google_types.GenerateContentConfig(
-            temperature=0,
-            response_mime_type="application/json",
-            response_schema=gemini_schema,
-        )
-        response = gemini_client.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=config,
-        )
-        return response.text
-    except Exception as exc:
-        logger.warning("_gemini_completion_response failed: %s", repr(exc))
-        return None
+    """Google Gemini chat call (no web search). Returns the reply text, or None if the call fails."""
+    return _gemini(model=model)(prompt, schema, {})
 
-#Purely to call OpenAI Responses API with web search + strict JSON schema output (json_schema works with web_search, json_object does not)
+
 def _openai_search_response(
     prompt: str,
     model: str,
     schema: dict,
     domains: list | None = None,
 ) -> tuple[str | None, object | None]:
-    """Web-search call. Returns (reply text, raw response), or (None, None) if it fails.
+    """Web-search call. Returns (reply text, raw response), or (None, None) if it fails."""
+    options = {"model": model, "web_search": True, "domains": domains, "schema_name": "research_response"}
+    text = _openai()(prompt, schema, options)
+    return (text, options.get("raw_response")) if text is not None else (None, None)
 
-    The reply must follow the schema (json_object mode does not work with web search).
-    domains: if given, the search is limited to these sites.
-    """
-    try:
-        tools = [{"type": "web_search"}]
-        if domains:
-            tools = [{"type": "web_search", "filters": {"allowed_domains": domains}}]
-        response = _create_at_temperature_zero(
-            client().responses.create,
-            model=model,
-            input=prompt,
-            tools=tools,
-            tool_choice="required",
-            include=["web_search_call.action.sources"],
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": "research_response",
-                    "schema": schema,
-                    "strict": True,
-                }
-            },
-        )
-        return response.output_text, response
-    except Exception as exc:
-        logger.warning("_openai_search_response failed: %s", repr(exc))
-        return None, None
 
-# Purely to call Google Gemini API with Google Search grounding + structured JSON output.
-# Domain filtering is not supported by Gemini — the domains param is accepted for API symmetry but ignored.
 def _gemini_search_response(
     prompt: str,
     model: str,
     schema: dict,
     domains: list | None = None,
 ) -> tuple[str | None, object | None]:
-    """
-    Raw Google Gemini API call with Google Search grounding.
-    Passes schema as response_schema to enforce structured output.
-    Domain filtering is not supported by Gemini — domains param is ignored.
-    Returns (json_text, response_object), or (None, None) if the call fails.
-    """
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        logger.warning("_gemini_search_response: GEMINI_API_KEY not set")
-        return None, None
-    if domains:
-        logger.warning("_gemini_search_response: domain filtering not supported by Gemini — searching all sources")
-    try:
-        gemini_client = google_genai.Client(api_key=api_key)
-        gemini_schema = _convert_schema_for_gemini(schema)
-        config = google_types.GenerateContentConfig(
-            temperature=0,
-            tools=[google_types.Tool(google_search=google_types.GoogleSearch())],
-            response_mime_type="application/json",
-            response_schema=gemini_schema,
-        )
-        response = gemini_client.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=config,
-        )
-        return response.text, response
-    except Exception as exc:
-        logger.warning("_gemini_search_response failed: %s", repr(exc))
-        return None, None
+    """Google Gemini call with Google Search. Returns (reply text, raw response), or (None, None)."""
+    options = {"web_search": True, "domains": domains}
+    text = _gemini(search_model=model)(prompt, schema, options)
+    return (text, options.get("raw_response")) if text is not None else (None, None)
 
 #Shared function that accepts (AI reponse & Schema) checking if the AI output matches the actaul schema
 def validate_ai_response(data: dict, schema: dict) -> tuple[bool, str | None]:
@@ -685,19 +563,7 @@ def document_fingerprints(documents: list[dict]) -> list[list[str]]:
 
 def _openai_document_response(prompt: str, parts: list[dict], mdl: str, schema: dict) -> str | None:
     """Chat call with documents attached (text, images, scanned PDFs). Returns the reply text or None."""
-    try:
-        response = _create_at_temperature_zero(
-            client().chat.completions.create,
-            model=mdl,
-            response_format={"type": "json_schema",
-                             "json_schema": {"name": "document_extract", "schema": schema, "strict": False}},
-            messages=[{"role": "system", "content": prompt},
-                      {"role": "user", "content": parts}],
-        )
-        return response.choices[0].message.content
-    except Exception as exc:
-        logger.warning("_openai_document_response failed: %s", repr(exc))
-        return None
+    return _openai()(prompt, schema, {"model": mdl, "parts": parts, "schema_name": "document_extract"})
 
 
 def extract_client_details(documents: list[dict]) -> tuple[dict | None, list[str]]:
