@@ -21,13 +21,12 @@ import json
 import logging
 import os
 import uuid
-import shutil
-import tempfile
 
 from app import utilities
 from app.data.assessment_repository import AssessmentRepository
 from app.data.client_repository import ClientRepository
 from app.data.cloud_sync import CloudSync
+from app.data.document_store import DocumentStore
 from app.data.json_repository import JsonRepository
 from app.data.mongo_repository import MongoRepository
 
@@ -168,168 +167,36 @@ def sync_json_to_mongodb() -> dict:
 
 
 # ==============================================================================
-# READING UPLOADED DOCUMENTS (for auto-filling the client form)
+# SUPPORTING DOCUMENTS (DocumentStore owns the work; these names stay until App calls it directly)
 # ==============================================================================
 
-# Longest text kept from one document, so one huge file can't crowd out the others
-MAX_DOCUMENT_CHARS = 40_000
-
-# Below this many characters a PDF is treated as scanned and sent to the AI as a file
-MIN_PDF_TEXT_CHARS = 80
-
-IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-               ".webp": "image/webp", ".gif": "image/gif"}
-TEXT_TYPES = {".txt", ".csv", ".md", ".json"}
-
-
-def _pdf_text(file_path: str) -> str:
-    from pypdf import PdfReader
-    reader = PdfReader(file_path)
-    pages = [f"[Page {number}]\n{page.extract_text() or ''}"
-             for number, page in enumerate(reader.pages, start=1)]
-    return "\n\n".join(pages)
-
-
-def _docx_text(file_path: str) -> str:
-    from docx import Document
-    document = Document(file_path)
-    parts = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
-    for table in document.tables:                  # tables often hold the figures
-        for row in table.rows:
-            parts.append(" | ".join(cell.text.strip() for cell in row.cells))
-    return "\n".join(parts)
-
-
-def _xlsx_text(file_path: str) -> str:
-    from openpyxl import load_workbook
-    workbook = load_workbook(file_path, read_only=True, data_only=True)
-    parts = []
-    for sheet in workbook.worksheets:
-        parts.append(f"[Sheet {sheet.title}]")
-        for row in sheet.iter_rows(values_only=True):
-            cells = ["" if cell is None else str(cell) for cell in row]
-            if any(cells):
-                parts.append(" | ".join(cells))
-    workbook.close()
-    return "\n".join(parts)
-
-
-def _base64_file(file_path: str) -> str:
-    import base64
-    with open(file_path, "rb") as handle:
-        return base64.b64encode(handle.read()).decode("ascii")
+def _document_store() -> DocumentStore:
+    return DocumentStore(DOCUMENTS_DIR, root=utilities.ROOT_DIR)
 
 
 def read_document_for_extraction(file_path: str, file_name: str | None = None) -> dict:
-    """Read one uploaded file so the AI can pull client details out of it.
-
-    Returns {"file_name", "kind", ...}:
-        kind "text"   -> "text": the document's text (PDF, Word, Excel, plain text)
-        kind "image"  -> "mime", "data_b64": a photo or scan
-        kind "pdf"    -> "data_b64": a scanned PDF with no readable text
-        kind "error"  -> "error": why it couldn't be read
-    """
-    name = file_name or os.path.basename(file_path)
-    extension = os.path.splitext(name)[1].lower()
-    try:
-        if extension in IMAGE_TYPES:
-            return {"file_name": name, "kind": "image", "mime": IMAGE_TYPES[extension],
-                    "data_b64": _base64_file(file_path)}
-        if extension == ".pdf":
-            text = _pdf_text(file_path)
-            readable = "".join(line for line in text.splitlines() if not line.startswith("[Page "))
-            if len(readable.strip()) < MIN_PDF_TEXT_CHARS:
-                return {"file_name": name, "kind": "pdf", "data_b64": _base64_file(file_path)}
-        elif extension == ".docx":
-            text = _docx_text(file_path)
-        elif extension in (".xlsx", ".xlsm"):
-            text = _xlsx_text(file_path)
-        elif extension in TEXT_TYPES:
-            with open(file_path, encoding="utf-8", errors="replace") as handle:
-                text = handle.read()
-        else:
-            return {"file_name": name, "kind": "error",
-                    "error": f"{name}: this file type can't be read (use PDF, Word, Excel, text or an image)."}
-    except Exception as exc:   # a damaged or password-protected file
-        logger.warning("read_document_for_extraction: %s: %s", name, repr(exc))
-        return {"file_name": name, "kind": "error", "error": f"{name}: could not be read ({exc.__class__.__name__})."}
-
-    if not text.strip():
-        return {"file_name": name, "kind": "error", "error": f"{name}: no text was found in it."}
-    return {"file_name": name, "kind": "text", "text": text[:MAX_DOCUMENT_CHARS]}
-
-
-DOCUMENT_TYPES = {".pdf", ".docx", ".xlsx", ".xlsm"} | TEXT_TYPES | set(IMAGE_TYPES)
+    """Read one uploaded file so the AI can pull client details out of it."""
+    return _document_store().read_for_extraction(file_path, file_name)
 
 
 def list_documents_in_folder(folder: str) -> list[str] | None:
-    """The readable documents directly inside a folder (not sub-folders), sorted by name.
-    Returns None if the folder doesn't exist. Hidden and Office temp files (~$...) are skipped."""
-    folder = os.path.expanduser(folder or "")
-    if not os.path.isdir(folder):
-        return None
-    files = []
-    for name in sorted(os.listdir(folder), key=str.lower):
-        path = os.path.join(folder, name)
-        if (os.path.isfile(path) and not name.startswith((".", "~$"))
-                and os.path.splitext(name)[1].lower() in DOCUMENT_TYPES):
-            files.append(path)
-    return files
+    """The readable documents directly inside a folder, sorted by name. None if there is no such folder."""
+    return _document_store().list_folder(folder)
 
-
-# ==============================================================================
-# SUPPORTING DOCUMENTS & MAIN.PY HELPERS
-# ==============================================================================
 
 def upload_supporting_document(file_path: str):
     """Copy the file into data/documents/. Does NOT touch MongoDB (sync does that later)."""
-    if not os.path.exists(file_path):
-        return None
-    os.makedirs(DOCUMENTS_DIR, exist_ok=True)
-    dest = os.path.join(DOCUMENTS_DIR, f"{uuid.uuid4().hex[:8]}_{os.path.basename(file_path)}")
-    try:
-        shutil.copy2(file_path, dest)
-    except OSError as exc:
-        logger.warning("upload_supporting_document: copy failed for %s: %s", file_path, repr(exc))
-        return None
-    return os.path.relpath(dest, utilities.ROOT_DIR).replace("\\", "/")   # forward slashes so it works on any OS
+    return _document_store().upload(file_path)
 
 
 def download_supporting_document(file_id: str, output_path: str) -> bool:
-    """Copy a supporting document from its local copy in data/documents/ (never from MongoDB).
-    file_id is the local path saved with the client."""
-    if not file_id:
-        return False
-    local = os.path.join(utilities.ROOT_DIR, file_id)
-    if not os.path.isfile(local):
-        return False
-    try:
-        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-        shutil.copy2(local, output_path)
-        return True
-    except OSError as exc:
-        logger.warning("download_supporting_document: copy failed for %s: %s", file_id, repr(exc))
-        return False
+    """Copy a supporting document from its local copy in data/documents/ (never from MongoDB)."""
+    return _document_store().download(file_id, output_path)
 
 
 def read_supporting_documents(entries: list[dict] | None) -> list[dict]:
-    """Read every supporting document saved with a client, the same way the auto-fill reads
-    uploads (read_document_for_extraction), under the file name the officer uploaded it as.
-    Reads the local copies only."""
-    read = []
-    for entry in entries or []:
-        file_id = entry.get("file_path") or entry.get("file_id")     # the local copy first
-        name = os.path.basename(str(entry.get("file_name") or file_id or "document"))
-        folder = tempfile.mkdtemp()
-        try:
-            path = os.path.join(folder, name)
-            if download_supporting_document(str(file_id or ""), path):
-                read.append(read_document_for_extraction(path, name))
-            else:
-                read.append({"file_name": name, "kind": "error", "error": f"{name}: the saved copy couldn't be found."})
-        finally:
-            shutil.rmtree(folder, ignore_errors=True)
-    return read
+    """Read every supporting document saved with a client. Reads the local copies only."""
+    return _document_store().read_all(entries)
 
 
 # Compatibility stub functions required by main.py
