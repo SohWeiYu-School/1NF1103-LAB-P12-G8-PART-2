@@ -35,6 +35,7 @@ from app import utilities
 from app.model.band import Band
 from app.model.check import Check
 from app.model.config import Config
+from app.model.research_report import ResearchReport
 from app.model.verdict import Verdict
 from urllib.parse import urlparse
 
@@ -356,8 +357,7 @@ def verify_typology_sources(
                 )
                 continue
             excerpts = report_map[rid].get("excerpts", [])
-            norm_quote = _normalise_text(quote)
-            if any(norm_quote in _normalise_text(e) for e in excerpts):
+            if _report_contains_quote(excerpts, quote):
                 valid_quotes.append({"report_id": rid, "quote": quote})
             else:
                 warnings.append(
@@ -405,16 +405,11 @@ def verify_typology_sources(
     return cleaned, warnings
 
 
-# Normalise text for quote matching — lowercase, collapse whitespace, unify smart quotes and dashes.
-def _normalise_text(text: str) -> str:
-    """Lowercase, collapse whitespace, unify quote marks and dashes for substring matching."""
-    text = text.lower()
-    for ch in '\u201c\u201d':   # " "  → "
-        text = text.replace(ch, '"')
-    for ch in '\u2018\u2019':   # ' '  → '
-        text = text.replace(ch, "'")
-    text = text.replace('\u2013', '-').replace('\u2014', '-')   # en/em dash → -
-    return re.sub(r'\s+', ' ', text).strip()
+# Normalise text for quote matching. ResearchReport (Domain Model) owns the matching;
+# this function stays until verify_typology_sources moves into CrimeScan.
+def _report_contains_quote(excerpts: list[str], quote: str) -> bool:
+    """True if the quote appears in an excerpt, ignoring case, spacing and curly quote marks."""
+    return ResearchReport("", "", excerpts).contains_quote(quote)
 
 
 # Check if a URL's domain is in the trusted sources list (including subdomains).
