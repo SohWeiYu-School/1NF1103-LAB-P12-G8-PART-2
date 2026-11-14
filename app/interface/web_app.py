@@ -13,6 +13,7 @@ from flask import (Flask, abort, flash, jsonify, redirect, render_template,
                    request, send_file, url_for)
 from jinja2 import DictLoader
 from werkzeug.utils import secure_filename
+from werkzeug.wrappers import Response
 
 from app.application.app import App
 from app.interface.client_form import ClientForm
@@ -588,10 +589,10 @@ class WebApp:
                                assessed_at=assessed_at, assessment_id=assessment_id,
                                crime_result=crime_result, typologies_by_id=typologies_by_id, benchmark=benchmark)
 
-    def home(self):
+    def home(self) -> str:
         return render_template("home.html", clients=self.__app.clients().load())
 
-    def find(self):
+    def find(self) -> Response:
         client_ref = request.args.get("ref", "").strip().upper()
         if client_ref and self.get_record(client_ref):
             return redirect(url_for("view_client", client_ref=client_ref))
@@ -604,7 +605,7 @@ class WebApp:
         stored, _ = self.store_uploads(files)
         return self.pending_documents(form) + stored
 
-    def new_client(self):
+    def new_client(self) -> str | Response:
         if request.method == "POST":
             values = self.values_from_form(request.form)
             documents = self._documents_on_save(request.form, request.files.getlist("autofill_files"))
@@ -622,10 +623,10 @@ class WebApp:
  
         return self.show_form("New client", self.values_from_record({"current_date": self.today()}), [])
 
-    def new_client_autofill(self):
+    def new_client_autofill(self) -> str:
         return self.autofill_form("New client", request.form, request.files.getlist("autofill_files"))
 
-    def view_client(self, client_ref):
+    def view_client(self, client_ref: str) -> str:
         record = self.get_record(client_ref)
         if record is None:
             abort(404)
@@ -634,7 +635,7 @@ class WebApp:
                                values=self.values_from_record(record), SECTIONS=WebApp.SECTIONS,
                                assessments=assessments)
 
-    def view_assessment(self, assessment_id):
+    def view_assessment(self, assessment_id: str) -> str:
         saved = self.__app.assessments().find(assessment_id)
         if saved is None:
             abort(404)
@@ -645,7 +646,7 @@ class WebApp:
                            crime_result=saved.get("crime_result"), typologies=typology_list,
                            benchmark=saved.get("benchmark"))
 
-    def edit_client(self, client_ref):
+    def edit_client(self, client_ref: str) -> str | Response:
         old = self.get_record(client_ref)
         if old is None:
             abort(404)
@@ -669,12 +670,12 @@ class WebApp:
  
         return self.show_form(f"Edit {client_ref}", self.values_from_record(old), [])
 
-    def edit_client_autofill(self, client_ref):
+    def edit_client_autofill(self, client_ref: str) -> str:
         if self.get_record(client_ref) is None:
             abort(404)
         return self.autofill_form(f"Edit {client_ref}", request.form, request.files.getlist("autofill_files"))
 
-    def upload_documents(self, client_ref):
+    def upload_documents(self, client_ref: str) -> Response:
         record = self.get_record(client_ref)
         if record is None:
             abort(404)
@@ -710,7 +711,7 @@ class WebApp:
             flash("Choose at least one file first.")
         return redirect(url_for("view_client", client_ref=client_ref))
 
-    def download_document(self, client_ref, file_id):
+    def download_document(self, client_ref: str, file_id: str) -> Response:
         record = self.get_record(client_ref)
         if record is None:
             abort(404)
@@ -737,7 +738,7 @@ class WebApp:
             return redirect(url_for("view_client", client_ref=client_ref))
         return send_file(io.BytesIO(data), as_attachment=True, download_name=name)
 
-    def assess_client(self, client_ref):
+    def assess_client(self, client_ref: str) -> Response:
         record = self.get_record(client_ref)
         if record is None:
             abort(404)
@@ -774,7 +775,7 @@ class WebApp:
         ).start()
         return redirect(url_for("assess_loading", job_id=job_id))
 
-    def assess_loading(self, job_id):
+    def assess_loading(self, job_id: str) -> str:
         if job_id not in self.__jobs:
             abort(404)
         client_ref = self.__jobs[job_id]["client_ref"]
@@ -782,7 +783,7 @@ class WebApp:
         return render_template("assess_loading.html", job_id=job_id, record=record,
                                ASSESS_STEPS=self._steps())
 
-    def assess_poll(self, job_id):
+    def assess_poll(self, job_id: str) -> Response:
         if job_id not in self.__jobs:
             return jsonify({"status": "error", "error": "Job not found."})
         job = self.__jobs[job_id]
@@ -793,7 +794,7 @@ class WebApp:
             "error":    job.get("error"),
         })
 
-    def assess_result(self, job_id):
+    def assess_result(self, job_id: str) -> str | Response:
         if job_id not in self.__jobs:
             abort(404)
         job = self.__jobs[job_id]
@@ -809,10 +810,10 @@ class WebApp:
                            crime_result=r.get("crime_result"), typologies=r.get("typologies"),
                            benchmark=r.get("benchmark"))
 
-    def list_assessments_view(self):
+    def list_assessments_view(self) -> str:
         return render_template("assessments.html", assessments=self.__app.assessments().load())
 
-    def sync_to_cloud(self):
+    def sync_to_cloud(self) -> Response:
         stats = self.__app.sync_to_cloud()
         cases = stats["cases_synced"]
         assessments = stats["assessments_synced"]

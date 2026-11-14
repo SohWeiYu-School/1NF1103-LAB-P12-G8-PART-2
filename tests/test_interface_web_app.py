@@ -58,6 +58,18 @@ def test_the_web_app_only_holds_an_app(web):
     assert set(vars(site)) == {"_WebApp__app", "_WebApp__jobs", "_WebApp__flask"}
 
 
+def test_pages_return_html_text_and_redirects_return_a_response(web):
+    """The type hints match what Flask really returns: a page is HTML text (str), while
+    redirect(), jsonify() and send_file() all give a werkzeug Response object."""
+    from werkzeug.wrappers import Response
+    _, site, _ = web
+    with site.flask().test_request_context("/find?ref=NOBODY"):
+        assert isinstance(site.home(), str)
+        assert isinstance(site.find(), Response)
+        assert isinstance(site.sync_to_cloud(), Response)
+        assert isinstance(site.assess_poll("no-such-job"), Response)
+
+
 def test_the_home_page_lists_the_saved_clients(web):
     application, _, client = web
     application.clients().save(sample_case())
