@@ -31,6 +31,13 @@ def test_app_creates_every_manager_and_shares_one_config(app):
     assert isinstance(app.runner(), AssessmentRunner)
 
 
+def test_the_document_reader_is_ready_as_soon_as_the_app_is_built(app):
+    """App creates its DocumentAI in __init__, so documents can be read before any assessment."""
+    extracted, warnings = app.read_documents([])
+    assert extracted is None or isinstance(extracted, dict)
+    assert isinstance(warnings, list)
+
+
 def test_with_no_ai_caller_the_app_says_ai_is_not_available(app):
     assert app.ai_available() is False
 

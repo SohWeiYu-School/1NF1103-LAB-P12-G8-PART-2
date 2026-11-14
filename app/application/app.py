@@ -95,6 +95,8 @@ class App:
         cache_folder = os.getenv("CACHE_DIR") or os.path.join(data_folder, "cache")
         self.__response_cache: ResponseCache = ResponseCache(
             cache_folder if os.path.isabs(cache_folder) else os.path.join(root, cache_folder))
+        # Kept by App because the new-client screen also reads documents outside an assessment.
+        self.__document_ai: DocumentAI = self.__create_document_ai()
         self.__runner: AssessmentRunner = self.__create_runner(policy)
 
         # IO Manager
@@ -499,14 +501,24 @@ class App:
 
     # ----- private ---------------------------------------------------------------------------------
 
+    def __ai_model(self) -> str:
+        """The model name the AI caller reports, or "" when there is no caller."""
+        return getattr(self.__ai_caller, "model_name", lambda: "")() if self.__ai_caller else ""
+
+    def __create_document_ai(self) -> DocumentAI:
+        """The document reader. It gets no caller when the AI is unavailable, so it then uses
+        saved replies only."""
+        caller = self.__ai_caller if self.ai_available() else None
+        return DocumentAI("ai", caller, self.__ai_model(), 0.0, self.__response_cache)
+
     def __create_runner(self, policy: dict) -> AssessmentRunner:
         """The AssessmentRunner and the five AI services it is handed. App creates the services
-        but does not keep them, except the document reader the new-client screen also uses."""
+        but does not keep them, except the document reader (created in __init__), which the
+        new-client screen also uses."""
         caller = self.__ai_caller if self.ai_available() else None
-        model = getattr(self.__ai_caller, "model_name", lambda: "")() if self.__ai_caller else ""
+        model = self.__ai_model()
         cache = self.__response_cache
         settings = self.forecast_settings()
-        self.__document_ai: DocumentAI = DocumentAI("ai", caller, model, 0.0, cache)
         return AssessmentRunner(
             self.__config,
             ResearchAI("ai", self.__ai_caller, model, 0.0, cache, policy.get("research_max_reports", 8),
