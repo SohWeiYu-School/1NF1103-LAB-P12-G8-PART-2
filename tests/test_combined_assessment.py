@@ -6,11 +6,8 @@ No API key and no network: the forecast runs on made-up saved replies (tests/fak
 through its real checks, and the crime scan's and benchmark's AI calls are replaced.
 """
 
-import copy
-import html
 import json
 import os
-import time
 from unittest.mock import patch
 
 import pytest
@@ -166,64 +163,6 @@ def test_a_part_that_cant_run_means_a_person_must_look(storage):
 def test_same_inputs_give_the_same_verdict(storage):
     case = save_fake_forecast(client_record())
     assert run(case)["report"] == run(case)["report"]
-
-
-# ---------------------------------------------------------------------------
-# The command line and the web app give the same assessment
-# ---------------------------------------------------------------------------
-
-def test_cli_and_web_app_give_the_same_report(storage, capsys):
-    from app import web_app
-
-    record = client_record()
-    save_fake_forecast(record)
-    data_manager.save_case_record(copy.deepcopy(record))
-
-    # the command line (menu option 4)
-    research, typology, bench = fake_ai_calls()
-    with research, typology, bench, patch("builtins.input", return_value="y") as answer:
-        cli = main.assess_client_record(copy.deepcopy(record))
-    printed = capsys.readouterr().out
-    assert "COMBINED ASSESSMENT" in printed and cli["report"]["header"]["verdict_label"] in printed
-    assert "Show the full evidence?" in answer.call_args.args[0]       # asked before the evidence
-    assert printed.index("FULL EVIDENCE  ") > printed.index("WHAT CAME BACK CLEAN")
-
-    # the web app (Run Assessment button)
-    research, typology, bench = fake_ai_calls()
-    with research, typology, bench, patch("app.ai_manager.has_api_key", return_value=True):
-        browser = web_app.app.test_client()
-        reply = browser.post(f"/client/{record['client_ref']}/assess")
-        assert reply.status_code == 302
-        job_id = reply.headers["Location"].rstrip("/").split("/")[-1]
-        for _ in range(200):
-            if web_app._assessment_jobs[job_id]["status"] != "running":
-                break
-            time.sleep(0.05)
-        job = web_app._assessment_jobs[job_id]
-        assert job["status"] == "done", job.get("error")
-        page = browser.get(f"/assess/result/{job_id}").get_data(as_text=True)
-
-    assert job["result"]["report"] == cli["report"]               # the same verdict, reasons and evidence
-    saved = [a for a in data_manager.load_all_assessments() if a.get("report")]
-    assert len(saved) == 2 and saved[0]["report"] == saved[1]["report"]
-    for part in cli["report"]["sections"]:                         # and the page shows every line of it
-        for item in part["items"]:
-            if "Crime" in part["title"]:
-                continue  # crime section renders as a card UI, not plain text items
-            assert item["text"] in html.unescape(page), item["text"]
-    assert cli["report"]["header"]["verdict_label"] in page
-
-
-def test_web_page_shows_a_saved_assessment(storage):
-    from app import web_app
-
-    record = client_record()
-    case = save_fake_forecast(record)
-    data_manager.save_case_record(copy.deepcopy(record))
-    result = run(case)
-    assessment_id = main.save_combined_assessment(result, copy.deepcopy(record))
-    page = web_app.app.test_client().get(f"/assessment/{assessment_id}").get_data(as_text=True)
-    assert result["report"]["header"]["summary"] in html.unescape(page)
 
 
 # ---------------------------------------------------------------------------
@@ -464,31 +403,6 @@ def test_the_reader_is_told_to_fill_gaps_from_any_document():
     assert "Read EVERY document for every field" in prompt
     assert "EVIDENCE" in prompt and "documented_pay" in prompt
 
-
-
-def test_cli_and_web_app_read_the_documents_the_same_way(storage):
-    from app import web_app
-
-    record, reading = marcus()
-    save_fake_forecast(record)
-    data_manager.save_case_record(copy.deepcopy(record))
-    research, typology, bench = fake_ai_calls()
-    reader = patch("app.ai_manager.extract_client_details", return_value=(reading, []))
-    with research, typology, bench, reader, patch("builtins.input", return_value="n"):
-        cli = main.assess_client_record(copy.deepcopy(record))
-    research, typology, bench = fake_ai_calls()
-    reader = patch("app.ai_manager.extract_client_details", return_value=(reading, []))
-    with research, typology, bench, reader, patch("app.ai_manager.has_api_key", return_value=True), \
-            patch("app.utilities.check_rate_limit", return_value=(True, 0)):
-        browser = web_app.app.test_client()
-        job_id = browser.post(f"/client/{record['client_ref']}/assess").headers["Location"].rstrip("/").split("/")[-1]
-        for _ in range(200):
-            if web_app._assessment_jobs[job_id]["status"] != "running":
-                break
-            time.sleep(0.05)
-        page = html.unescape(browser.get(f"/assess/result/{job_id}").get_data(as_text=True))
-    assert web_app._assessment_jobs[job_id]["result"]["report"] == cli["report"]
-    assert "Documents - what his papers show" in page and "Arcadia Holdings Ltd" in page
 
 
 # ---------------------------------------------------------------------------

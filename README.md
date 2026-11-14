@@ -114,7 +114,7 @@ python main.py
 Instead of typing every field, the officer can upload the client's documents and let the AI fill in the form.
 
 ```bash
-python -m app.web_app        # then open http://127.0.0.1:5000
+python main.py --web         # then open http://127.0.0.1:5000
 ```
 
 1. Open **+ New client** (or **Edit** on an existing client).

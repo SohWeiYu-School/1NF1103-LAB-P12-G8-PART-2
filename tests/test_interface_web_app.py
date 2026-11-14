@@ -1,0 +1,294 @@
+"""WebApp: the browser front end, driven through Flask's test client. No network: the App
+behind it has a made-up AI caller and keeps its files in a temporary folder."""
+
+import io
+import re
+import time
+
+import pytest
+
+from app.application.app import App
+from app.interface.web_app import WebApp
+from tests import fake_ai, fake_services
+from tests.logic_fixtures import sample_case
+
+
+def _no_answer(prompt, schema, options):
+    """A made-up AI caller that is "available" but never answers, like a connection that fails."""
+    return None
+
+
+@pytest.fixture
+def web(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    application = App(_no_answer, data_folder=str(tmp_path))
+    site = WebApp(application)
+    site.flask().config["TESTING"] = True
+    return application, site, site.flask().test_client()
+
+
+def _form_fields(site, record: dict) -> dict:
+    """The record as the browser would post it: "claims.declared_net_worth" for single values,
+    and one list per field ("jobs.start_year") for the repeated job and asset rows."""
+    fields = {}
+    for prefix, values in site.values_from_record(record).items():
+        if isinstance(values, dict):
+            fields.update({f"{prefix}.{key}": value for key, value in values.items()})
+        else:
+            for row in values:
+                for key, value in row.items():
+                    fields.setdefault(f"{prefix}.{key}", []).append(value)
+    return fields
+
+
+def _wait_for(site_client, job_id, seconds=20):
+    for _ in range(seconds * 10):
+        state = site_client.get(f"/assess/poll/{job_id}").get_json()
+        if state["status"] != "running":
+            return state
+        time.sleep(0.1)
+    raise AssertionError("the assessment did not finish")
+
+
+def test_the_web_app_only_holds_an_app(web):
+    _, site, _ = web
+    held = [name for name in vars(site) if not name.startswith("_WebApp__")]
+    assert held == []
+    assert set(vars(site)) == {"_WebApp__app", "_WebApp__jobs", "_WebApp__flask"}
+
+
+def test_the_home_page_lists_the_saved_clients(web):
+    application, _, client = web
+    application.clients().save(sample_case())
+    page = client.get("/")
+    assert page.status_code == 200
+    assert sample_case()["client_ref"] in page.get_data(as_text=True)
+
+
+def test_the_new_client_form_opens(web):
+    _, _, client = web
+    assert client.get("/client/new").status_code == 200
+
+
+def test_an_incomplete_form_is_shown_again_with_what_is_wrong(web):
+    application, _, client = web
+    page = client.post("/client/new", data={"name": "", "nationality": ""})
+    assert page.status_code == 200
+    assert application.clients().load() == []
+    assert "class=\"problems\"" in page.get_data(as_text=True) or "required" in page.get_data(as_text=True).lower()
+
+
+def test_a_complete_form_saves_the_client(web):
+    application, site, client = web
+    page = client.post("/client/new", data=_form_fields(site, sample_case()))
+    assert page.status_code == 302, page.get_data(as_text=True)[:2000]
+    saved = application.clients().load()
+    assert len(saved) == 1
+    assert saved[0]["name"] == sample_case()["name"]
+    assert saved[0]["claims"]["declared_net_worth"] == sample_case()["claims"]["declared_net_worth"]
+
+
+def test_a_saved_client_can_be_viewed_and_an_unknown_one_is_not_found(web):
+    application, _, client = web
+    application.clients().save(sample_case())
+    assert client.get(f"/client/{sample_case()['client_ref']}").status_code == 200
+    assert client.get("/client/NO-SUCH-CLIENT").status_code == 404
+
+
+def test_an_unknown_page_shows_the_error_page(web):
+    _, _, client = web
+    page = client.get("/no/such/page")
+    assert page.status_code == 404
+    assert "Back to home" in page.get_data(as_text=True)
+
+
+def test_with_no_api_key_the_assessment_is_refused_with_a_message(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    application = App(None, data_folder=str(tmp_path))
+    application.clients().save(sample_case())
+    client = WebApp(application).flask().test_client()
+    page = client.post(f"/client/{sample_case()['client_ref']}/assess", follow_redirects=True)
+    assert page.status_code == 200
+    assert application.assessments().load() == []
+
+
+def test_an_assessment_runs_in_the_background_and_is_saved(web):
+    application, _, client = web
+    record = sample_case()
+    application.clients().save(record)
+    case, _ = application.read_case(record)
+    fake_services.save_forecast_replies(application.response_cache(), case)
+    started = client.post(f"/client/{record['client_ref']}/assess")
+    assert started.status_code == 302 and "/assess/loading/" in started.headers["Location"]
+    job_id = started.headers["Location"].rsplit("/", 1)[-1]
+    assert client.get(f"/assess/loading/{job_id}").status_code == 200
+    state = _wait_for(client, job_id)
+    assert state["status"] == "done", state
+    assert client.get(f"/assess/result/{job_id}").status_code == 200
+    saved = application.assessments().for_client(record["client_ref"])
+    assert len(saved) == 1
+    assert application.clients().find(record["client_ref"])["outcome"] == saved[0]["outcome"]
+    assert client.get(f"/assessment/{saved[0]['assessment_id']}").status_code == 200
+    assert client.get("/assessments").status_code == 200
+
+
+def test_a_second_assessment_straight_away_is_rate_limited(web):
+    application, _, client = web
+    record = sample_case()
+    application.clients().save(record)
+    case, _ = application.read_case(record)
+    fake_services.save_forecast_replies(application.response_cache(), case)
+    first = client.post(f"/client/{record['client_ref']}/assess")
+    _wait_for(client, first.headers["Location"].rsplit("/", 1)[-1])
+    second = client.post(f"/client/{record['client_ref']}/assess")
+    assert "/assess/loading/" not in second.headers["Location"]
+
+
+def test_an_unknown_assessment_job_is_reported_as_an_error(web):
+    _, _, client = web
+    assert client.get("/assess/poll/no-such-job").get_json() == {"status": "error", "error": "Job not found."}
+
+
+def test_syncing_with_no_database_says_so_and_goes_home(web):
+    _, _, client = web
+    page = client.post("/sync", follow_redirects=True)
+    assert page.status_code == 200
+    assert "Sync unsuccessful" in page.get_data(as_text=True)
+
+
+# ---------------------------------------------------------------------------
+# Filling the form from uploaded documents (moved from the old app/web_app.py tests)
+# ---------------------------------------------------------------------------
+
+AI_READING = {
+    "client": {"name": "Daniel Tan", "nationality": "Singaporean", "country_of_residence": "Singapore",
+               "date_of_birth": "1980-03-15", "age": None},
+    "jobs": [
+        {"start_year": 2004, "end_year": 2012, "occupation": "Analyst", "seniority": "Analyst",
+         "industry": "Banking", "employer_name": "DBS Bank", "employer_size": "30000",
+         "country": "Singapore", "source_file": "cv.pdf"},
+        {"start_year": 2012, "end_year": None, "occupation": "Portfolio Manager", "seniority": "Director",
+         "industry": "Asset Management", "employer_name": "Temasek", "employer_size": None,
+         "country": "Singapore", "source_file": "cv.pdf"},
+    ],
+    "assets": [
+        {"asset_type": "Property - Condo", "country": "Singapore", "year_acquired": 2015,
+         "price_paid_sgd": 1800000, "current_declared_value_sgd": 2400000, "payment_method": "loan",
+         "income_produced_sgd": 60000, "source_file": "deed.pdf"},
+    ],
+    "composition": {"property": 50, "listed_equities": 30, "private_business": 0, "cash": 20},
+    "claims": {"declared_net_worth_sgd": 4800000, "expected_aum_sgd": 2000000, "pep_status": "None",
+               "wealth_countries": ["Singapore"], "biggest_wealth_jump_sgd": None,
+               "wealth_jump_years": None, "declared_counterparties": ["DBS Bank", "UOB Kay Hian"]},
+    "sow_declaration": None,
+    "notes": ["2019 bonus is in USD (payslip.pdf) - convert to SGD"],
+}
+
+
+@pytest.fixture
+def reading_web(tmp_path, monkeypatch):
+    """A WebApp whose AI reads every upload as AI_READING."""
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    application = App(fake_ai.caller(documents_reply=AI_READING), data_folder=str(tmp_path))
+    site = WebApp(application)
+    site.flask().config["TESTING"] = True
+    return application, site, site.flask().test_client()
+
+
+def _empty_values(site):
+    return site.values_from_record({"current_date": "2026-10-13"})
+
+
+def test_an_ai_reading_becomes_form_text(web):
+    _, site, _ = web
+    found = site.extracted_to_values(AI_READING, "2026-10-13")
+    assert found["client"]["age"] == "46"                      # worked out from the date of birth
+    assert found["composition"]["property"] == "50"
+    assert found["assets"][0]["price_paid"] == "1800000"
+    assert found["claims"]["declared_counterparties"] == "DBS Bank, UOB Kay Hian"
+    assert len(found["jobs"]) == 2
+
+
+def test_fill_blanks_never_overwrites_typed_values(web):
+    _, site, _ = web
+    values = _empty_values(site)
+    values["client"]["name"] = "Daniel K. Tan"
+    merged, filled = site.fill_blanks(values, site.extracted_to_values(AI_READING, "2026-10-13"))
+    assert merged["client"]["name"] == "Daniel K. Tan"
+    assert "client.name" not in filled
+    assert merged["client"]["nationality"] == "Singaporean"
+    assert "client.nationality" in filled
+
+
+def test_fill_blanks_skips_jobs_already_on_the_form_and_keeps_order(web):
+    _, site, _ = web
+    values = _empty_values(site)
+    values["jobs"] = [{"start_year": "2012", "end_year": "", "occupation": "PM", "seniority": "",
+                       "industry": "", "employer_name": "temasek", "employer_size": "", "country": ""}]
+    merged, filled = site.fill_blanks(values, site.extracted_to_values(AI_READING, "2026-10-13"))
+    assert [job["employer_name"] for job in merged["jobs"]] == ["DBS Bank", "temasek"]
+    assert "jobs.0.employer_name" in filled                    # the added DBS job, now first
+    assert "jobs.1.employer_name" not in filled                # the typed one is untouched
+
+
+def test_the_wealth_split_is_left_alone_if_partly_typed(web):
+    _, site, _ = web
+    values = _empty_values(site)
+    values["composition"]["cash"] = "100"
+    merged, filled = site.fill_blanks(values, site.extracted_to_values(AI_READING, "2026-10-13"))
+    assert merged["composition"]["property"] == ""
+    assert not [name for name in filled if name.startswith("composition.")]
+
+
+def test_only_this_apps_document_references_are_accepted(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    site = WebApp(App(None, root=str(tmp_path), data_folder="data"))     # laid out as in production
+    assert site._is_stored_document("data/documents/ab12cd34_cv.pdf")
+    assert site._is_stored_document("0123456789abcdef01234567")
+    assert not site._is_stored_document("data/documents/../../.env")
+    assert not site._is_stored_document("/etc/passwd")
+
+
+def test_the_autofill_page_fills_the_form_and_keeps_the_upload(reading_web):
+    _, _, client = reading_web
+    response = client.post("/client/new/autofill", content_type="multipart/form-data", data={
+        "client.current_date": "2026-10-13",
+        "autofill_files": (io.BytesIO(b"Daniel Tan, Portfolio Manager at Temasek since 2012"), "cv.txt"),
+    })
+    page = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert 'value="Daniel Tan"' in page
+    assert re.search(r'value="[^"/]+/documents/[0-9a-f]{8}_cv\.txt"', page)  # carried until the client is saved
+    assert "convert to SGD" in page                                          # the AI's note is shown
+
+
+def test_saving_after_autofill_attaches_the_documents(reading_web, tmp_path):
+    application, _, client = reading_web
+    upload = tmp_path / "cv.txt"
+    upload.write_text("Daniel Tan, Portfolio Manager", encoding="utf-8")
+    stored = application.documents().upload(str(upload))
+    form = {
+        "client.name": "Daniel Tan", "client.nationality": "Singaporean",
+        "client.country_of_residence": "Singapore", "client.age": "46", "client.current_date": "2026-10-13",
+        "jobs.start_year": "2012", "jobs.end_year": "", "jobs.occupation": "Portfolio Manager",
+        "jobs.seniority": "Director", "jobs.industry": "Asset Management", "jobs.employer_name": "Temasek",
+        "jobs.employer_size": "10000", "jobs.country": "Singapore",
+        "composition.property": "50", "composition.listed_equities": "30",
+        "composition.private_business": "0", "composition.cash": "20",
+        "claims.declared_net_worth": "4800000", "claims.expected_aum": "2000000",
+        "claims.pep_status": "None", "claims.wealth_countries": "Singapore",
+        "sow.sow_declaration": "Salary and bonuses from 2012 onwards as a portfolio manager, plus rent.",
+        "doc.file_name": "cv.txt", "doc.file_id": stored,
+    }
+    response = client.post("/client/new", data=form)
+    assert response.status_code == 302, response.get_data(as_text=True)
+    assert application.clients().load()[0]["supporting_documents"] == [
+        {"file_name": "cv.txt", "file_id": stored}]
+
+
+def test_the_new_client_form_has_no_date_box_because_assessments_are_dated_today(web):
+    _, _, client = web
+    page = client.get("/client/new").get_data(as_text=True)
+    assert 'name="client.current_date"' not in page

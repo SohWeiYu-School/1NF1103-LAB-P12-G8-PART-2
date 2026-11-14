@@ -16,4 +16,7 @@ RUN mkdir -p /app/data/cache /app/data/"local database" /app/logs \
 
 USER appuser
 
-CMD ["python", "main.py"]
+# The web app; set HOST so it can be reached from outside the container
+ENV HOST=0.0.0.0 PORT=5000
+EXPOSE 5000
+CMD ["python", "main.py", "--web"]

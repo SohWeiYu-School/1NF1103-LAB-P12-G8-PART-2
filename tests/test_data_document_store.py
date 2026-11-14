@@ -86,3 +86,15 @@ def test_list_folder_gives_only_readable_documents_sorted_by_name(tmp_path):
 
 def test_list_folder_of_a_missing_folder_is_none(tmp_path):
     assert _store(tmp_path).list_folder(str(tmp_path / "nowhere")) is None
+
+
+def test_the_store_only_owns_references_it_made(tmp_path):
+    store = _store(tmp_path)
+    file_id = store.upload(_file(tmp_path, "payslip.txt"))
+    assert store.owns(file_id)
+    assert store.owns("data/documents/ab12cd34_cv.pdf")
+    assert store.owns("0123456789abcdef01234567")          # a cloud backup id
+    assert not store.owns("data/documents/../../.env")
+    assert not store.owns("/etc/passwd")
+    assert not store.owns("config/policy.json")
+    assert not store.owns("")
