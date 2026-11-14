@@ -7,6 +7,7 @@ import os
 import pytest
 
 from app import data_manager, utilities
+from app.data.mongo_repository import MongoRepository
 
 
 @pytest.fixture
@@ -19,8 +20,7 @@ def local_db(tmp_path, monkeypatch):
 
     def no_mongo(*args, **kwargs):
         raise AssertionError("MongoDB was read")
-    monkeypatch.setattr(data_manager, "get_collection", no_mongo)
-    monkeypatch.setattr(data_manager, "get_assessment_collection", no_mongo)
+    monkeypatch.setattr(MongoRepository, "_connect", no_mongo)
     return db
 
 

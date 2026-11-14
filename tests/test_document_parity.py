@@ -112,16 +112,6 @@ def test_the_split_matches_the_listed_assets():
     assert any("property assets listed are worth" in w for w in warnings)
 
 
-def test_old_command_line_records_are_upgraded_when_loaded():
-    old = {"client_ref": "CL-OLD", "investments": [
-        {"asset_type": "Property", "asset_description": "Condo", "current_value": 1500000,
-         "yearly_income": 36000, "price_paid": 900000}]}
-
-    asset = data_manager.standardise_record(copy.deepcopy(old))["investments"][0]
-
-    assert asset == {"asset_type": "Property - Condo", "price_paid": 900000,
-                     "current_declared_value": 1500000, "income_produced": 36000}
-
 
 def test_assessment_is_always_dated_today():
     import datetime

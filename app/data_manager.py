@@ -1,18 +1,15 @@
 """
-data_manager.py - the data layer.
+data_manager.py - the old function names of the data layer.
 
-Primary storage — local JSON files (data/local database/):
-    sow_cases.json        one entry per client, written on every save
-    ai_assessments.json   one entry per assessment, appended on every run
+The work now lives in the classes in app/data (the Data Manager):
+    ClientRepository, AssessmentRepository    local JSON files (data/local database/)
+    MongoRepository, CloudSync                the MongoDB Atlas backup ("Manual Sync")
+    DocumentStore and the document readers    supporting documents
+    ConfigReader                              the settings files
 
-Backup — MongoDB Atlas, pushed only when the officer chooses
-"Manual Sync to Cloud Database" (sync_json_to_mongodb):
-    sow_risk_db.client_cases      mirrors sow_cases.json
-    sow_risk_db.ai_assessments    mirrors ai_assessments.json
-    GridFS                        uploaded supporting documents
-
-Forecasting reply cache — local files (data/cache/forecasting/<client_ref>.json):
-    raw AI replies reused on re-runs so they are free and give identical answers.
+The functions below only pass each call on to those classes, so main.py, the web
+app and the older tests keep working while the rest of the refactor is done. This
+file is deleted once App calls the classes directly.
 
 Every function returns False / None / [] / {} on error instead of crashing.
 """
@@ -21,15 +18,14 @@ import json
 import logging
 import os
 import uuid
-import certifi
-from pymongo import MongoClient
-from pymongo.errors import PyMongoError
-from gridfs import GridFS
-import shutil
-import tempfile
-import hashlib
 
 from app import utilities
+from app.data.assessment_repository import AssessmentRepository
+from app.data.client_repository import ClientRepository
+from app.data.cloud_sync import CloudSync
+from app.data.document_store import DocumentStore
+from app.data.json_repository import JsonRepository
+from app.data.mongo_repository import MongoRepository
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +46,7 @@ LOCAL_CASES_JSON = os.path.join(LOCAL_DB_DIR, "sow_cases.json")
 LOCAL_ASSESSMENTS_JSON = os.path.join(LOCAL_DB_DIR, "ai_assessments.json")
 
 # Define MongoDB database and collection names
-DB_NAME = "sow_risk_db"
+DB_NAME = MongoRepository.DB_NAME
 COLLECTION_NAME = "client_cases"
 ASSESSMENT_COLLECTION_NAME = "ai_assessments"
 
@@ -66,77 +62,21 @@ def _ensure_data_dir():
 # LOCAL JSON FILE HELPERS (Primary Data Source)
 # ==============================================================================
 
+class _JsonFile(JsonRepository):
+    """Any local JSON list file, for the functions below that still take a file path."""
+
+    def save(self, record: dict) -> bool:
+        return self._write_all(self.load() + [record])
+
+
 def load_from_json(filepath: str) -> list:
-    # Check if local JSON file exists; if not, return an empty list
-    if not os.path.exists(filepath):
-        return []
-    try:
-        # Open and read the JSON file safely
-        with open(filepath, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            # Return data if it is a list, otherwise return empty list
-            return data if isinstance(data, list) else []
-    except (json.JSONDecodeError, IOError) as e:
-        logger.warning("load_from_json: could not read %s: %s", filepath, repr(e))
-        return []
+    # Every record in a local JSON file; [] if it is missing or unreadable
+    return _JsonFile(filepath, "client_ref").load()
 
 
 def save_to_json(record: dict, filepath: str) -> bool:
-    # Ensure record is a valid dictionary and contains a client_ref key
-    if not isinstance(record, dict) or "client_ref" not in record:
-        return False
-
-    # Make sure the data directory exists
-    _ensure_data_dir()
-    
-    # Read current records from the JSON file
-    records = load_from_json(filepath)
-
-    # Search for an existing record with the same client_ref
-    updated = False
-    for i, existing in enumerate(records):
-        if existing.get("client_ref") == record["client_ref"]:
-            records[i] = record  # Overwrite existing record
-            updated = True
-            break
-
-    # If it is a new client, append it to the end of the list
-    if not updated:
-        records.append(record)
-
-    # Write the updated list back to the local JSON file formatted with 4-space indent
-    try:
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(records, f, indent=4, ensure_ascii=False)
-        return True
-    except IOError as e:
-        logger.error("save_to_json: could not write %s: %s", filepath, repr(e))
-        return False
-
-
-# ==============================================================================
-# MONGODB CONNECTION HELPERS (Backup Target)
-# ==============================================================================
-
-def _mongo_client():
-    """One MongoDB client for each call (connections are short-lived sync operations)."""
-    return MongoClient(os.getenv("MONGODB_URI"), serverSelectionTimeoutMS=2000, tlsCAFile=certifi.where())
-
-
-def get_collection():
-    try:
-        return _mongo_client()[DB_NAME][COLLECTION_NAME]
-    except Exception as exc:
-        logger.warning("get_collection: MongoDB connection failed: %s", repr(exc))
-        return None
-
-
-def get_assessment_collection():
-    try:
-        return _mongo_client()[DB_NAME][ASSESSMENT_COLLECTION_NAME]
-    except Exception as exc:
-        logger.warning("get_assessment_collection: MongoDB connection failed: %s", repr(exc))
-        return None
+    # Add the record, or replace the saved one with the same client_ref
+    return ClientRepository(filepath).save(record)
 
 
 # ==============================================================================
@@ -144,38 +84,13 @@ def get_assessment_collection():
 # ==============================================================================
 
 def save_case_record(record: dict) -> bool:
-    # Save or update a client record strictly in local sow_cases.json, always in the current layout
-    return save_to_json(standardise_record(record), LOCAL_CASES_JSON)
-
-
-# Older command-line records used other names for these asset values. The web app, the documents
-# auto-fill and the forecasting all use the names on the left.
-OLD_ASSET_KEYS = {"current_declared_value": "current_value", "income_produced": "yearly_income"}
-
-
-def standardise_record(record: dict) -> dict:
-    """Bring a client record saved in an older layout up to the one layout every screen uses:
-    asset values as current_declared_value / income_produced, and the asset's description
-    folded into asset_type ("Property - Condo"). Records already in that layout are unchanged."""
-    if not isinstance(record, dict):
-        return record
-    for asset in record.get("investments") or []:
-        if not isinstance(asset, dict):
-            continue
-        for new, old in OLD_ASSET_KEYS.items():
-            if asset.get(new) is None and old in asset:
-                asset[new] = asset[old]
-            asset.pop(old, None)
-        description = str(asset.pop("asset_description", None) or asset.pop("description", None) or "").strip()
-        kind = str(asset.get("asset_type") or "").strip()
-        if description and description.lower() not in kind.lower():
-            asset["asset_type"] = f"{kind} - {description}" if kind else description
-    return record
+    # Save or update a client record in local sow_cases.json, always in the current layout
+    return ClientRepository(LOCAL_CASES_JSON).save(record)
 
 
 def load_local_records() -> list:
     # Local sow_cases.json only (this is what Manual Sync uploads), in the current layout
-    return [standardise_record(record) for record in load_from_json(LOCAL_CASES_JSON)]
+    return ClientRepository(LOCAL_CASES_JSON).load()
 
 
 def load_all_records() -> list:
@@ -186,38 +101,21 @@ def load_all_records() -> list:
 
 def find_client_record(client_ref: str) -> dict | None:
     # One client from the local sow_cases.json (case-insensitive), or None
-    wanted = client_ref.strip().upper()
-    for record in load_local_records():
-        if str(record.get("client_ref", "")).upper() == wanted:
-            return record
-    return None
+    return ClientRepository(LOCAL_CASES_JSON).find(client_ref)
 
 
 def append_to_json(record: dict, filepath: str) -> bool:
     # Append a record to a JSON file without overwriting existing entries
-    _ensure_data_dir()
-    records = load_from_json(filepath)
-    records.append(record)
-    try:
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(records, f, indent=4, ensure_ascii=False)
-        return True
-    except IOError as exc:
-        logger.error("append_to_json: could not write %s: %s", filepath, repr(exc))
-        return False
+    return _JsonFile(filepath, "client_ref").save(record)
 
 
 def save_assessment(record: dict) -> bool:
     # Append an AI assessment record to local ai_assessments.json (multiple per client allowed)
-    if not isinstance(record, dict) or "client_ref" not in record:
-        return False
-    if "assessment_id" not in record:
-        record = {**record, "assessment_id": str(uuid.uuid4())}
-    return append_to_json(record, LOCAL_ASSESSMENTS_JSON)
+    return AssessmentRepository(LOCAL_ASSESSMENTS_JSON).save(record)
 
 
 def load_local_assessments() -> list:
-    return load_from_json(LOCAL_ASSESSMENTS_JSON)
+    return AssessmentRepository(LOCAL_ASSESSMENTS_JSON).load()
 
 
 def load_all_assessments() -> list:
@@ -229,282 +127,73 @@ def query_assessments(assessments: list, outcome: str = None) -> list:
     # Filter a list of assessments by an outcome status string
     if not outcome:
         return assessments
-    # A combined assessment's outcome is its one verdict; older records only have the forecast's
-    def outcome_of(a: dict):
-        return a.get("outcome") or (a.get("assessment") or {}).get("outcome")
-    return [a for a in assessments if outcome_of(a) == outcome]
+    wanted = AssessmentRepository(LOCAL_ASSESSMENTS_JSON).query(outcome)
+    return [a for a in assessments if a in wanted]
+
+
+def _cloud_syncs() -> list:
+    """One CloudSync for the clients and one for the assessments, both to MongoDB."""
+    uri = os.getenv("MONGODB_URI")
+    return [
+        CloudSync(ClientRepository(LOCAL_CASES_JSON),
+                  MongoRepository(COLLECTION_NAME, "client_ref", uri), SYNC_STATE_JSON),
+        CloudSync(AssessmentRepository(LOCAL_ASSESSMENTS_JSON),
+                  MongoRepository(ASSESSMENT_COLLECTION_NAME, "assessment_id", uri), SYNC_STATE_JSON),
+    ]
+
 
 def mongo_is_online() -> bool:
-    try:
-        _mongo_client().admin.command("ping")
-        return True
-    except Exception as exc:
-        logger.warning("mongo_is_online: %s", repr(exc))
-        return False
+    return _cloud_syncs()[0].is_online()
 
 
-def _upload_local_documents(record: dict, db) -> int:
-    """Push documents that only exist locally to GridFS and remember their file_id."""
-
-
-    uploaded = 0
-    for doc in record.get("supporting_documents", []):
-        path = doc.get("file_path")
-        if doc.get("file_id") or not path:
-            continue
-        full = os.path.join(utilities.ROOT_DIR, path)
-        if not os.path.exists(full):
-            continue
-        with open(full, "rb") as f:
-            doc["file_id"] = str(GridFS(db).put(f, filename=doc.get("file_name")))
-        uploaded += 1
-    return uploaded
 # ==============================================================================
 # SYNC FUNCTIONALITY (JSON -> MongoDB Backup)
 # ==============================================================================
 SYNC_STATE_JSON = os.path.join(LOCAL_DB_DIR, "sync_state.json")
 
 
-def _load_sync_state() -> dict:
-    state = load_json(SYNC_STATE_JSON, default={})
-    return state if isinstance(state, dict) else {}
-
-
-def _save_sync_state(state: dict) -> None:
-    _ensure_data_dir()
-    try:
-        with open(SYNC_STATE_JSON, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=4)
-    except IOError as exc:
-        logger.warning("_save_sync_state: could not write sync state: %s", repr(exc))
-
-
-def _fingerprint(record: dict) -> str:
-    # Same content gives the same fingerprint, so an unchanged record can be skipped
-    return hashlib.sha256(json.dumps(record, sort_keys=True, default=str).encode()).hexdigest()
 def sync_json_to_mongodb() -> dict:
     # Sends only what is new or changed since the last sync
     stats = {"cases_synced": 0, "assessments_synced": 0, "skipped": 0, "errors": []}
-
-    if not mongo_is_online():
-        logger.warning("sync_json_to_mongodb: MongoDB is not reachable — sync aborted")
-        stats["errors"].append("Cannot reach MongoDB. Your data is still safe in the local JSON files.")
-        return stats
-
-    state = _load_sync_state()
-    cases_state = state.setdefault("cases", {})
-    assess_state = state.setdefault("assessments", {})
-
-    # Step 1: client cases (and their documents)
-    cases_coll = get_collection()
-    if cases_coll is None:
-        stats["errors"].append("Could not connect to MongoDB for client_cases backup.")
-    else:
-        for record in load_local_records():
-            ref = record.get("client_ref")
-            try:
-                # Upload local-only documents first (this adds file_id to the record)
-                if _upload_local_documents(record, cases_coll.database):
-                    save_to_json(record, LOCAL_CASES_JSON)
-                fingerprint = _fingerprint(record)
-                if cases_state.get(ref) == fingerprint:
-                    stats["skipped"] += 1
-                    continue
-                cases_coll.update_one({"client_ref": ref}, {"$set": record}, upsert=True)
-                cases_state[ref] = fingerprint
-                stats["cases_synced"] += 1
-            except (PyMongoError, OSError) as e:
-                logger.error("sync_json_to_mongodb: case %s failed: %s", ref, repr(e))
-                stats["errors"].append(f"Case {ref}: {e}")
-
-    # Step 2: assessments (never edited after saving, so the id alone is enough)
-    assess_coll = get_assessment_collection()
-    if assess_coll is None:
-        stats["errors"].append("Could not connect to MongoDB for ai_assessments backup.")
-    else:
-        for record in load_local_assessments():
-            key = record.get("assessment_id") or _fingerprint(record)
-            if key in assess_state:
-                stats["skipped"] += 1
-                continue
-            try:
-                if record.get("assessment_id"):
-                    match = {"assessment_id": record["assessment_id"]}
-                else:
-                    match = {"client_ref": record.get("client_ref"), "assessed_at": record.get("assessed_at")}
-                assess_coll.update_one(match, {"$set": record}, upsert=True)
-                assess_state[key] = True
-                stats["assessments_synced"] += 1
-            except PyMongoError as e:
-                logger.error("sync_json_to_mongodb: assessment %s failed: %s", record.get("client_ref"), repr(e))
-                stats["errors"].append(f"Assessment {record.get('client_ref')}: {e}")
-
-    _save_sync_state(state)
+    for name, sync in zip(("cases_synced", "assessments_synced"), _cloud_syncs()):
+        result = sync.sync()
+        stats[name] = result["synced"]
+        stats["skipped"] += result["skipped"]
+        stats["errors"] += [error for error in result["errors"] if error not in stats["errors"]]
     return stats
 
+
 # ==============================================================================
-# READING UPLOADED DOCUMENTS (for auto-filling the client form)
+# SUPPORTING DOCUMENTS (DocumentStore owns the work; these names stay until App calls it directly)
 # ==============================================================================
 
-# Longest text kept from one document, so one huge file can't crowd out the others
-MAX_DOCUMENT_CHARS = 40_000
-
-# Below this many characters a PDF is treated as scanned and sent to the AI as a file
-MIN_PDF_TEXT_CHARS = 80
-
-IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-               ".webp": "image/webp", ".gif": "image/gif"}
-TEXT_TYPES = {".txt", ".csv", ".md", ".json"}
-
-
-def _pdf_text(file_path: str) -> str:
-    from pypdf import PdfReader
-    reader = PdfReader(file_path)
-    pages = [f"[Page {number}]\n{page.extract_text() or ''}"
-             for number, page in enumerate(reader.pages, start=1)]
-    return "\n\n".join(pages)
-
-
-def _docx_text(file_path: str) -> str:
-    from docx import Document
-    document = Document(file_path)
-    parts = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
-    for table in document.tables:                  # tables often hold the figures
-        for row in table.rows:
-            parts.append(" | ".join(cell.text.strip() for cell in row.cells))
-    return "\n".join(parts)
-
-
-def _xlsx_text(file_path: str) -> str:
-    from openpyxl import load_workbook
-    workbook = load_workbook(file_path, read_only=True, data_only=True)
-    parts = []
-    for sheet in workbook.worksheets:
-        parts.append(f"[Sheet {sheet.title}]")
-        for row in sheet.iter_rows(values_only=True):
-            cells = ["" if cell is None else str(cell) for cell in row]
-            if any(cells):
-                parts.append(" | ".join(cells))
-    workbook.close()
-    return "\n".join(parts)
-
-
-def _base64_file(file_path: str) -> str:
-    import base64
-    with open(file_path, "rb") as handle:
-        return base64.b64encode(handle.read()).decode("ascii")
+def _document_store() -> DocumentStore:
+    return DocumentStore(DOCUMENTS_DIR, root=utilities.ROOT_DIR)
 
 
 def read_document_for_extraction(file_path: str, file_name: str | None = None) -> dict:
-    """Read one uploaded file so the AI can pull client details out of it.
-
-    Returns {"file_name", "kind", ...}:
-        kind "text"   -> "text": the document's text (PDF, Word, Excel, plain text)
-        kind "image"  -> "mime", "data_b64": a photo or scan
-        kind "pdf"    -> "data_b64": a scanned PDF with no readable text
-        kind "error"  -> "error": why it couldn't be read
-    """
-    name = file_name or os.path.basename(file_path)
-    extension = os.path.splitext(name)[1].lower()
-    try:
-        if extension in IMAGE_TYPES:
-            return {"file_name": name, "kind": "image", "mime": IMAGE_TYPES[extension],
-                    "data_b64": _base64_file(file_path)}
-        if extension == ".pdf":
-            text = _pdf_text(file_path)
-            readable = "".join(line for line in text.splitlines() if not line.startswith("[Page "))
-            if len(readable.strip()) < MIN_PDF_TEXT_CHARS:
-                return {"file_name": name, "kind": "pdf", "data_b64": _base64_file(file_path)}
-        elif extension == ".docx":
-            text = _docx_text(file_path)
-        elif extension in (".xlsx", ".xlsm"):
-            text = _xlsx_text(file_path)
-        elif extension in TEXT_TYPES:
-            with open(file_path, encoding="utf-8", errors="replace") as handle:
-                text = handle.read()
-        else:
-            return {"file_name": name, "kind": "error",
-                    "error": f"{name}: this file type can't be read (use PDF, Word, Excel, text or an image)."}
-    except Exception as exc:   # a damaged or password-protected file
-        logger.warning("read_document_for_extraction: %s: %s", name, repr(exc))
-        return {"file_name": name, "kind": "error", "error": f"{name}: could not be read ({exc.__class__.__name__})."}
-
-    if not text.strip():
-        return {"file_name": name, "kind": "error", "error": f"{name}: no text was found in it."}
-    return {"file_name": name, "kind": "text", "text": text[:MAX_DOCUMENT_CHARS]}
-
-
-DOCUMENT_TYPES = {".pdf", ".docx", ".xlsx", ".xlsm"} | TEXT_TYPES | set(IMAGE_TYPES)
+    """Read one uploaded file so the AI can pull client details out of it."""
+    return _document_store().read_for_extraction(file_path, file_name)
 
 
 def list_documents_in_folder(folder: str) -> list[str] | None:
-    """The readable documents directly inside a folder (not sub-folders), sorted by name.
-    Returns None if the folder doesn't exist. Hidden and Office temp files (~$...) are skipped."""
-    folder = os.path.expanduser(folder or "")
-    if not os.path.isdir(folder):
-        return None
-    files = []
-    for name in sorted(os.listdir(folder), key=str.lower):
-        path = os.path.join(folder, name)
-        if (os.path.isfile(path) and not name.startswith((".", "~$"))
-                and os.path.splitext(name)[1].lower() in DOCUMENT_TYPES):
-            files.append(path)
-    return files
+    """The readable documents directly inside a folder, sorted by name. None if there is no such folder."""
+    return _document_store().list_folder(folder)
 
-
-# ==============================================================================
-# SUPPORTING DOCUMENTS & MAIN.PY HELPERS
-# ==============================================================================
 
 def upload_supporting_document(file_path: str):
     """Copy the file into data/documents/. Does NOT touch MongoDB (sync does that later)."""
-    if not os.path.exists(file_path):
-        return None
-    os.makedirs(DOCUMENTS_DIR, exist_ok=True)
-    dest = os.path.join(DOCUMENTS_DIR, f"{uuid.uuid4().hex[:8]}_{os.path.basename(file_path)}")
-    try:
-        shutil.copy2(file_path, dest)
-    except OSError as exc:
-        logger.warning("upload_supporting_document: copy failed for %s: %s", file_path, repr(exc))
-        return None
-    return os.path.relpath(dest, utilities.ROOT_DIR).replace("\\", "/")   # forward slashes so it works on any OS
+    return _document_store().upload(file_path)
 
 
 def download_supporting_document(file_id: str, output_path: str) -> bool:
-    """Copy a supporting document from its local copy in data/documents/ (never from MongoDB).
-    file_id is the local path saved with the client."""
-    if not file_id:
-        return False
-    local = os.path.join(utilities.ROOT_DIR, file_id)
-    if not os.path.isfile(local):
-        return False
-    try:
-        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-        shutil.copy2(local, output_path)
-        return True
-    except OSError as exc:
-        logger.warning("download_supporting_document: copy failed for %s: %s", file_id, repr(exc))
-        return False
+    """Copy a supporting document from its local copy in data/documents/ (never from MongoDB)."""
+    return _document_store().download(file_id, output_path)
 
 
 def read_supporting_documents(entries: list[dict] | None) -> list[dict]:
-    """Read every supporting document saved with a client, the same way the auto-fill reads
-    uploads (read_document_for_extraction), under the file name the officer uploaded it as.
-    Reads the local copies only."""
-    read = []
-    for entry in entries or []:
-        file_id = entry.get("file_path") or entry.get("file_id")     # the local copy first
-        name = os.path.basename(str(entry.get("file_name") or file_id or "document"))
-        folder = tempfile.mkdtemp()
-        try:
-            path = os.path.join(folder, name)
-            if download_supporting_document(str(file_id or ""), path):
-                read.append(read_document_for_extraction(path, name))
-            else:
-                read.append({"file_name": name, "kind": "error", "error": f"{name}: the saved copy couldn't be found."})
-        finally:
-            shutil.rmtree(folder, ignore_errors=True)
-    return read
+    """Read every supporting document saved with a client. Reads the local copies only."""
+    return _document_store().read_all(entries)
 
 
 # Compatibility stub functions required by main.py
@@ -597,16 +286,12 @@ def list_sample_cases() -> list:
 
 def load_client_assessments(ref: str) -> list:
     # Return all assessments for a client, newest first
-    matches = [a for a in load_all_assessments() if a.get("client_ref") == ref]
-    return sorted(matches, key=lambda a: a.get("assessed_at", ""), reverse=True)
+    return AssessmentRepository(LOCAL_ASSESSMENTS_JSON).for_client(ref)
 
 
 def load_assessment_by_id(assessment_id: str) -> dict | None:
     # Return a single assessment by its unique assessment_id
-    for a in load_all_assessments():
-        if a.get("assessment_id") == assessment_id:
-            return a
-    return None
+    return AssessmentRepository(LOCAL_ASSESSMENTS_JSON).find(assessment_id)
 
 
 # ==============================================================================
