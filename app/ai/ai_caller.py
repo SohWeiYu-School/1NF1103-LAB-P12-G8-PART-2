@@ -89,6 +89,10 @@ def openai_caller(client: object = None, model: str = "") -> AICaller:
         options["answered_by"] = use_model
         return text
 
+    # What the caller tells whoever holds it, without them knowing the brand:
+    call.available = lambda: state["client"] is not None or bool(
+        os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_AI_API_KEY"))
+    call.model_name = lambda: model or os.getenv("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL
     return call
 
 
@@ -159,6 +163,8 @@ def gemini_caller(client: object = None, model: str = "", search_model: str = ""
         options["answered_by"] = use_model
         return text
 
+    call.available = lambda: state["client"] is not None or bool(os.getenv("GEMINI_API_KEY"))
+    call.model_name = lambda: model or os.getenv("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
     return call
 
 
@@ -175,4 +181,8 @@ def with_fallback(*callers: AICaller) -> AICaller:
                 logger.warning("with_fallback: AI caller %d gave no answer, trying the next one", position + 1)
         return None
 
+    # The first caller is the main one: it decides whether AI can be used at all and which
+    # model name saved answers are filed under.
+    call.available = lambda: bool(callers) and getattr(callers[0], "available", lambda: True)()
+    call.model_name = lambda: getattr(callers[0], "model_name", lambda: "")() if callers else ""
     return call
