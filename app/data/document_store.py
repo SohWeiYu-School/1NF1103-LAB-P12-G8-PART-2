@@ -37,6 +37,17 @@ class DocumentStore:
             return None
         return os.path.relpath(destination, self.__root).replace("\\", "/")   # forward slashes on any system
 
+    def owns(self, file_id: str) -> bool:
+        """True only for a document reference this store made: a path inside its own folder,
+        or a cloud backup (GridFS) id. Anything else, such as "../../.env", is refused."""
+        file_id = str(file_id or "")
+        if len(file_id) == 24 and all(character in "0123456789abcdef" for character in file_id.lower()):
+            return True
+        if not file_id or ".." in file_id or "\\" in file_id or os.path.isabs(file_id):
+            return False
+        prefix = os.path.relpath(self.__folder, self.__root).replace("\\", "/") + "/"
+        return file_id.startswith(prefix)
+
     def download(self, file_id: str, output_path: str) -> bool:
         """Copy a stored document out to output_path. file_id is the id upload() returned."""
         if not file_id:
