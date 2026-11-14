@@ -40,6 +40,8 @@ _BASE = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(_BASE, ".env"))  # read .env before ai_manager reads its settings
 
 from app import ai_manager, data_manager, io_manager, logic_manager, utilities  # noqa: E402
+from app.application.assessment_runner import AssessmentRunner  # noqa: E402
+from app.model.config import Config  # noqa: E402
 
 
 def _configure_logging() -> None:
@@ -51,24 +53,7 @@ def _configure_logging() -> None:
 # ---------------------------------------------------------------------------
 
 # The steps both the command line and the web app's loading page show, in order
-ASSESSMENT_STEPS = [
-    "Reading the submitted documents",
-    "Searching trusted sources for typology reports",
-    "Checking the research sources",
-    "Describing sector typologies",
-    "Checking the typology quotes",
-    "Reading the source of wealth declaration",
-    "Forecasting the economy",
-    "Forecasting pay and assets",
-    "Building person types from the typologies",
-    "Forecasting behaviour and future events",
-    "Comparing with peers in the same economy",
-    "Testing every story",
-    "Deciding the verdict",
-    "Saving the assessment",
-]
-_FORECAST_STEP = {"step0_declaration": 6, "call1_markets": 7, "call2_earnings": 8,
-                  "call3_types": 9, "call4_events": 10}
+ASSESSMENT_STEPS = list(AssessmentRunner.STEPS)
 
 
 def today() -> str:
@@ -92,134 +77,43 @@ def prepare_case(client_record: dict) -> dict | None:
     return case
 
 
+class _OldFunction:
+    """Stands in for an AI service while the older tests still replace the ai_manager functions:
+    run() calls the old function, so a test that replaces it is still obeyed. Removed with them."""
+
+    def __init__(self, call) -> None:
+        self.__call = call
+        self.__warnings: list[str] = []
+
+    def run(self, source: dict):
+        answer = self.__call(source)
+        if isinstance(answer, tuple):
+            answer, self.__warnings = answer[0], list(answer[1])
+        return answer
+
+    def warnings(self) -> list[str]:
+        return list(self.__warnings)
+
+
+def _runner() -> AssessmentRunner:
+    """The AssessmentRunner, with its AI services reached through the old ai_manager function names."""
+    config = Config(utilities.policy(), utilities.vocabulary())
+    return AssessmentRunner(
+        config,
+        _OldFunction(lambda source: ai_manager.get_ai_research(source["case"])),
+        _OldFunction(lambda source: ai_manager.get_typologies(source["case"], source["research"])),
+        _OldFunction(lambda source: ai_manager.get_ai_benchmark(source["client"], source["economy"])),
+        _OldFunction(lambda source: ai_manager.extract_client_details(source["documents"])),
+        _OldFunction(lambda source: ai_manager.run_onboarding_forecast(
+            source["record"], source["cache"], source["typologies"], source["on_step"])),
+        data_manager._document_store(),
+        utilities.response_cache())
+
+
 def run_combined_assessment(case: dict, supporting_documents: list[dict] | None = None, on_step=None) -> dict:
     """Documents, crime scan, forecast and benchmark as ONE assessment, then ONE verdict.
-
-    supporting_documents: the client record's saved documents; every one is read.
-
-    on_step(number, label) is told each step in ASSESSMENT_STEPS as it starts (the command
-    line prints it, the web app's loading page shows it). Nothing is printed here.
-    """
-    def step(number: int) -> None:
-        if on_step is not None:
-            on_step(number, ASSESSMENT_STEPS[number - 1])
-
-    policy = utilities.policy()
-    ref = case["client_ref"]
-    notes: list[str] = []
-    not_run: list[str] = []
-    crime_input = logic_manager.crime_scan_input(case)
-
-    # 1. Documents: what every submitted document shows (compared later with what he declared)
-    step(1)
-    files = [str(d.get("file_name") or "document") for d in supporting_documents or []]
-    extracted = None
-    if files:
-        extracted, warnings = ai_manager.extract_client_details(
-            data_manager.read_supporting_documents(supporting_documents))
-        notes += warnings
-        if extracted is None:
-            not_run.append("Reading the submitted documents")
-    evidence = logic_manager.document_evidence(extracted, files, policy)
-
-    # 2-5. Crime scan context: what published reports say about his industry
-    step(2)
-    research, warnings = ai_manager.get_ai_research(crime_input)
-    notes += warnings
-    step(3)
-    clean_research = None
-    if research is not None:
-        clean_research, warnings = logic_manager.verify_research(research, policy)
-        notes += warnings
-    step(4)
-    typology_response, warnings = ai_manager.get_typologies(crime_input, research)
-    notes += warnings
-    step(5)
-    typologies = None
-    if typology_response is None:
-        not_run.append("The crime scan (sector typologies)")
-    else:
-        typologies = typology_response.get("sector_typologies", [])
-        if clean_research is not None:
-            typologies, warnings = logic_manager.verify_typology_sources(typologies, clean_research, policy)
-            notes += warnings
-
-    # 6-10. Forecast: the declaration is read once here, and the crime types are built from the typologies
-    run = ai_manager.run_onboarding_forecast(case, utilities.response_cache().load_raw_replies(ref), typologies,
-                                             on_step=lambda stage: step(_FORECAST_STEP[stage]))
-    utilities.response_cache().save_raw_replies(ref, run["results"])
-    partial = run["partial"]
-    forecast = run["forecast"] if run["ok"] else None
-    stopped_at = None
-    if forecast is None:
-        stopped_at = (f"{logic_manager.describe_piece(case, run.get('failed_piece'))} "
-                      f"({run.get('failed_error') or 'unknown error'})")
-        not_run.append("The forecast")
-        notes.append(f"The forecast stopped at {stopped_at}. Finished AI replies are saved, "
-                     "so running again carries on from there.")
-    else:
-        data_manager.save_forecast(ref, forecast)
-    # his real pay, from his tax notices / employment letter, replaces the AI's guess
-    pay_adjustments = []
-    if forecast is not None:
-        forecast, pay_adjustments = logic_manager.calibrate_pay(case, forecast, evidence["documented_pay"], policy)
-
-    # 11. Benchmark: peers in the same economy (the forecast's markets, never his own figures)
-    step(11)
-    bench_input, unreadable = logic_manager.benchmark_input(case, crime_input)
-    bench_ai = findings = None
-    if unreadable:
-        notes.append(f"Peer benchmark skipped: can't read {', '.join(unreadable)} from the case.")
-    else:
-        bench_ai = ai_manager.get_ai_benchmark(bench_input, logic_manager.economy_brief(partial.get("markets")))
-        if bench_ai is not None:
-            try:
-                findings = logic_manager.run_benchmark(bench_input, bench_ai, utilities.policy())["findings"]
-            except (ZeroDivisionError, KeyError, TypeError) as error:
-                notes.append(f"Peer benchmark couldn't be worked out from the AI's reply ({error!r}).")
-    if findings is None:
-        not_run.append("The peer benchmark")
-
-    # 12. Test every story
-    step(12)
-    forecast_assessment = logic_manager.assess_onboarding(case, forecast) if forecast else None
-    declaration = partial.get("declaration")
-    crime_decl, warnings = logic_manager.crime_declaration(declaration, policy)
-    notes += warnings
-    crime_result = None
-    if typologies is not None and crime_decl is not None:
-        crime_decl, warnings = logic_manager.normalize_declaration_jurisdictions(crime_decl)
-        notes += warnings
-        crime_result = logic_manager.assess_typology_case(crime_input, {"sector_typologies": typologies},
-                                                          crime_decl, policy)
-    elif typologies is not None:
-        not_run.append("The crime scan's warning signs (the declaration couldn't be read)")
-
-    # 13. One verdict, and the report both front ends show
-    step(13)
-    verdict = logic_manager.combined_verdict(case, {
-        "research": clean_research if clean_research is not None else research,
-        "typologies": typologies, "crime_result": crime_result, "declaration": declaration,
-        "benchmark_input": bench_input, "benchmark_ai": bench_ai, "benchmark_findings": findings,
-        "forecast": forecast, "forecast_assessment": forecast_assessment,
-        "markets": partial.get("markets"), "evidence": evidence, "pay_adjustments": pay_adjustments,
-        "failed_step": stopped_at, "not_run": not_run, "notes": notes,
-    }, policy)
-    return {
-        "case": case,
-        "research": research,
-        "typology_response": typology_response,
-        "typologies": typologies,
-        "declaration": declaration,
-        "crime_declaration": crime_decl,
-        "crime_result": crime_result,
-        "benchmark": {"input": bench_input, "expected": bench_ai, "findings": findings},
-        "forecast": forecast,
-        "forecast_assessment": forecast_assessment,
-        "evidence": evidence,
-        "verdict": verdict,
-        "report": logic_manager.verdict_report(verdict),
-    }
+    AssessmentRunner (app/application) does the work; on_step(number, label) is told each step."""
+    return _runner().run(case, supporting_documents, on_step)
 
 
 def save_combined_assessment(result: dict, client_record: dict | None = None,
