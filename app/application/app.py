@@ -79,7 +79,9 @@ class App:
         self.__clients: ClientRepository = ClientRepository(os.path.join(database_dir, "sow_cases.json"))
         self.__assessments: AssessmentRepository = AssessmentRepository(
             os.path.join(database_dir, "ai_assessments.json"))
-        self.__documents: DocumentStore = DocumentStore(os.path.join(data_dir, "documents"), root=root)
+        # Document ids are paths from the folder that holds the data folder ("data/documents/...").
+        self.__documents: DocumentStore = DocumentStore(os.path.join(data_dir, "documents"),
+                                                        root=os.path.dirname(data_dir))
         self.__case_files: CaseFiles = CaseFiles(os.path.join(root, "data", "sample"))   # shipped with the code
         uri = os.getenv("MONGODB_URI") or ""
         state_path = os.path.join(database_dir, "sync_state.json")

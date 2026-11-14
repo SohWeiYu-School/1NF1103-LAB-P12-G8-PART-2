@@ -457,11 +457,8 @@ class WebApp:
         return merged, filled
 
     def _is_stored_document(self, file_id: str) -> bool:
-        """Only accept document references this app made (a local copy or a GridFS id)."""
-        file_id = str(file_id or "")
-        if len(file_id) == 24 and all(c in "0123456789abcdef" for c in file_id.lower()):
-            return True
-        return file_id.startswith("data/documents/") and ".." not in file_id and "\\" not in file_id
+        """Only accept document references this app made (the DocumentStore decides)."""
+        return self.__app.documents().owns(file_id)
 
     def pending_documents(self, form) -> list[dict]:
         """Documents uploaded during auto-fill, carried in hidden boxes until the client is saved."""

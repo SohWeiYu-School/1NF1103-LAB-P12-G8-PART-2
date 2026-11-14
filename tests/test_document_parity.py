@@ -4,14 +4,29 @@ Uses the specimen documents in tests/documents/marcus_lim/ and marcus_lim_expect
 what a correct AI reading of them looks like (no AI calls are made here).
 """
 
-import copy
+import datetime
 import json
 import os
 
-from app import data_manager, io_manager, logic_manager, utilities, web_app
+import pytest
+
+from app.application.app import App
+from app.data.document_store import DocumentStore
+from app.interface.case_builder import CaseBuilder
+from app.interface.console_ui import ConsoleUI
+from app.interface.web_app import WebApp
+from app.logic.case_reader import CaseReader
+from app.logic.document_record_builder import DocumentRecordBuilder
+from tests.logic_fixtures import CONFIG
 
 FOLDER = os.path.join(os.path.dirname(__file__), "documents", "marcus_lim")
 TODAY = "2026-10-13"
+
+
+@pytest.fixture(scope="module")
+def site(tmp_path_factory):
+    folder = tmp_path_factory.mktemp("parity")
+    return WebApp(App(None, data_folder=str(folder)))
 
 
 def expected_reply() -> dict:
@@ -21,25 +36,26 @@ def expected_reply() -> dict:
 
 def cli_record(reply: dict) -> dict:
     """What menu option 2 saves: documents -> record, the officer types what's missing."""
-    record, _ = logic_manager.record_from_documents(reply, "CL-MARCUS", TODAY)
-    for field in logic_manager.missing_client_fields(record):
+    builder = DocumentRecordBuilder(CONFIG, TODAY)
+    record, _ = builder.build(reply, "CL-MARCUS")
+    for field in builder.missing_fields(record):
         assert field["path"] == ["investments", 2, "income_produced"], field   # the only gap
-        record = logic_manager.set_path(record, field["path"], 0)
-    return logic_manager.finish_document_record(record)
+        record = builder.set_path(record, field["path"], 0)
+    return builder.finish(record)
 
 
-def web_record(reply: dict) -> dict:
+def web_record(site: WebApp, reply: dict) -> dict:
     """What the web form saves: auto-fill an empty form, the officer saves it unchanged."""
-    empty = web_app.values_from_record({"current_date": TODAY})
-    values, _ = web_app.fill_blanks(empty, web_app.extracted_to_values(reply, TODAY))
-    record, problems, _ = web_app.build_record(values, "CL-MARCUS")
+    empty = site.values_from_record({"current_date": TODAY})
+    values, _ = site.fill_blanks(empty, site.extracted_to_values(reply, TODAY))
+    record, problems, _ = site.build_record(values, "CL-MARCUS")
     assert problems == []
     return record
 
 
 def test_all_specimen_documents_are_read_as_text():
-    paths = data_manager.list_documents_in_folder(FOLDER)
-    read = [data_manager.read_document_for_extraction(path) for path in paths]
+    store = DocumentStore()
+    read = [store.read_for_extraction(path) for path in store.list_folder(FOLDER)]
 
     assert len(read) == 9
     assert all(document["kind"] == "text" for document in read)
@@ -47,8 +63,8 @@ def test_all_specimen_documents_are_read_as_text():
     assert "SGD 14,500,000" in kyc["text"] and "Sentosa Cove" in kyc["text"]
 
 
-def test_cli_and_web_save_the_same_client():
-    cli, web = cli_record(expected_reply()), web_record(expected_reply())
+def test_cli_and_web_save_the_same_client(site):
+    cli, web = cli_record(expected_reply()), web_record(site, expected_reply())
 
     for key in ("name", "nationality", "career", "career_history", "investments", "sow_declaration"):
         assert cli[key] == web[key], key
@@ -57,8 +73,8 @@ def test_cli_and_web_save_the_same_client():
         assert cli["claims"][key] == web["claims"][key], key
 
 
-def test_the_record_holds_the_declared_figures():
-    record = web_record(expected_reply())
+def test_the_record_holds_the_declared_figures(site):
+    record = web_record(site, expected_reply())
 
     assert record["career"]["age"] == 47                      # born 22 April 1979
     assert record["career"]["career_start_year"] == 2001
@@ -75,52 +91,52 @@ def test_the_record_holds_the_declared_figures():
     assert "Arcadia Holdings Ltd" not in json.dumps(record)
 
 
-def test_both_records_pass_the_forecasting_checks():
-    for record in (cli_record(expected_reply()), web_record(expected_reply())):
+def test_both_records_pass_the_forecasting_checks(site):
+    schema_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app", "schemas", "case_input.schema.json")
+    with open(schema_path, encoding="utf-8") as handle:
+        builder = CaseBuilder(ConsoleUI(), json.load(handle))
+    for record in (cli_record(expected_reply()), web_record(site, expected_reply())):
         case = {key: value for key, value in record.items() if key != "supporting_documents"}
-        assert io_manager.validate_case(case) == []
+        assert builder.validate_case(case) == []
 
 
-def test_the_ai_gets_the_same_inputs_from_both():
-    cli, web = cli_record(expected_reply()), web_record(expected_reply())
+def test_the_ai_gets_the_same_inputs_from_both(site):
+    cli, web = cli_record(expected_reply()), web_record(site, expected_reply())
+    reader = CaseReader()
 
-    assert logic_manager.crime_scan_input(cli) == logic_manager.crime_scan_input(web)
-    cli_bench, cli_missing = logic_manager.benchmark_input(cli, logic_manager.crime_scan_input(cli))
-    web_bench, web_missing = logic_manager.benchmark_input(web, logic_manager.crime_scan_input(web))
+    assert reader.crime_scan_input(cli) == reader.crime_scan_input(web)
+    cli_bench, cli_missing = reader.benchmark_input(cli, reader.crime_scan_input(cli))
+    web_bench, web_missing = reader.benchmark_input(web, reader.crime_scan_input(web))
     assert cli_bench == web_bench and cli_missing == web_missing == []
-    # whole percents, as run_benchmark expects
+    # whole percents, as the benchmark rules expect
     assert (cli_bench["property"], cli_bench["listed_equities"],
             cli_bench["private_business"], cli_bench["cash"]) == (45, 15, 30, 10)
 
 
-def test_forecasting_case_uses_the_saved_values_without_asking():
-    def no_questions(question):
-        raise AssertionError(f"asked: {question}")
-
-    for record in (cli_record(expected_reply()), web_record(expected_reply())):
-        case = io_manager.case_from_client_record(record, no_questions)
+def test_the_case_uses_the_saved_values_without_asking(site):
+    for record in (cli_record(expected_reply()), web_record(site, expected_reply())):
+        case, missing = CaseReader(TODAY).forecasting_case(record)
+        assert missing == []
         assert case["investments"][0]["current_declared_value"] == 1900000
         assert case["investments"][0]["income_produced"] == 54000
 
 
 def test_the_split_matches_the_listed_assets():
+    builder = DocumentRecordBuilder(CONFIG, TODAY)
     record = cli_record(expected_reply())
-    assert logic_manager.check_document_record(record, TODAY, utilities.policy()) == []
+    assert builder.check(record) == []
 
-    misread = logic_manager.set_path(record, ["investments", 0, "current_declared_value"], 19000000)
-    warnings = logic_manager.check_document_record(misread, TODAY, utilities.policy())
-    assert any("property assets listed are worth" in w for w in warnings)
-
+    misread = builder.set_path(record, ["investments", 0, "current_declared_value"], 19000000)
+    assert any("property assets listed are worth" in warning for warning in builder.check(misread))
 
 
-def test_assessment_is_always_dated_today():
-    import datetime
+def test_assessments_are_always_dated_today(site, tmp_path):
     today = datetime.date.today().isoformat()
+    application = App(None, data_folder=str(tmp_path))
 
-    case = io_manager.case_from_client_record(cli_record(expected_reply()),
-                                              lambda question: (_ for _ in ()).throw(AssertionError(question)))
+    case, _ = application.read_case(cli_record(expected_reply()))
     assert case["current_date"] == today                       # command line: not asked
 
-    assert web_record(expected_reply())["current_date"] == today   # web form: no date box
-    page = web_app.app.test_client().get("/client/new").get_data(as_text=True)
+    assert web_record(site, expected_reply())["current_date"] == today   # web form: no date box
+    page = site.flask().test_client().get("/client/new").get_data(as_text=True)
     assert 'name="client.current_date"' not in page

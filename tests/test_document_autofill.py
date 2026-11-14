@@ -3,14 +3,12 @@
 No AI calls are made: the AI step is replaced with a fixed reply.
 """
 
-import io
 import os
 
-import pytest
 from docx import Document
 from openpyxl import Workbook
 
-from app import ai_manager, data_manager, web_app
+from app import ai_manager, data_manager
 
 
 AI_REPLY = {
@@ -36,10 +34,6 @@ AI_REPLY = {
     "sow_declaration": None,
     "notes": ["2019 bonus is in USD (payslip.pdf) - convert to SGD"],
 }
-
-
-def empty_values() -> dict:
-    return web_app.values_from_record({"current_date": "2026-10-13"})
 
 
 # ---- reading files ----
@@ -101,109 +95,6 @@ def test_no_readable_documents_skips_the_ai():
 
     assert data is None
     assert warnings == ["x.exe: this file type can't be read"]
-
-
-# ---- filling the form ----
-
-def test_ai_reply_becomes_form_text():
-    found = web_app.extracted_to_values(AI_REPLY, "2026-10-13")
-
-    assert found["client"]["age"] == "46"                      # worked out from the date of birth
-    assert found["composition"]["property"] == "50"
-    assert found["assets"][0]["price_paid"] == "1800000"
-    assert found["claims"]["declared_counterparties"] == "DBS Bank, UOB Kay Hian"
-    assert len(found["jobs"]) == 2
-
-
-def test_fill_blanks_never_overwrites_typed_values():
-    values = empty_values()
-    values["client"]["name"] = "Daniel K. Tan"
-
-    merged, filled = web_app.fill_blanks(values, web_app.extracted_to_values(AI_REPLY, "2026-10-13"))
-
-    assert merged["client"]["name"] == "Daniel K. Tan"
-    assert "client.name" not in filled
-    assert merged["client"]["nationality"] == "Singaporean"
-    assert "client.nationality" in filled
-
-
-def test_fill_blanks_skips_jobs_already_on_the_form_and_keeps_order():
-    values = empty_values()
-    values["jobs"] = [{"start_year": "2012", "end_year": "", "occupation": "PM", "seniority": "",
-                       "industry": "", "employer_name": "temasek", "employer_size": "", "country": ""}]
-
-    merged, filled = web_app.fill_blanks(values, web_app.extracted_to_values(AI_REPLY, "2026-10-13"))
-
-    assert [job["employer_name"] for job in merged["jobs"]] == ["DBS Bank", "temasek"]
-    assert "jobs.0.employer_name" in filled                    # the added DBS job, now first
-    assert "jobs.1.employer_name" not in filled                # the typed one is untouched
-
-
-def test_wealth_split_is_left_alone_if_partly_typed():
-    values = empty_values()
-    values["composition"]["cash"] = "100"
-
-    merged, filled = web_app.fill_blanks(values, web_app.extracted_to_values(AI_REPLY, "2026-10-13"))
-
-    assert merged["composition"]["property"] == ""
-    assert not [name for name in filled if name.startswith("composition.")]
-
-
-def test_only_this_apps_document_references_are_accepted():
-    assert web_app._is_stored_document("data/documents/ab12cd34_cv.pdf")
-    assert web_app._is_stored_document("0123456789abcdef01234567")
-    assert not web_app._is_stored_document("data/documents/../../.env")
-    assert not web_app._is_stored_document("/etc/passwd")
-
-
-# ---- the web pages ----
-
-@pytest.fixture
-def web(monkeypatch, tmp_path):
-    saved = []
-    monkeypatch.setattr(web_app.ai_manager, "extract_client_details",
-                        lambda documents: (AI_REPLY, []))
-    monkeypatch.setattr(web_app, "upload_supporting_document",
-                        lambda path: "data/documents/test_" + os.path.basename(path))
-    monkeypatch.setattr(web_app, "save_case_record", lambda record: saved.append(record) or True)
-    web_app.app.config["TESTING"] = True
-    return web_app.app.test_client(), saved
-
-
-def test_autofill_page_fills_the_form_and_keeps_the_upload(web):
-    client, _ = web
-    response = client.post("/client/new/autofill", content_type="multipart/form-data", data={
-        "client.current_date": "2026-10-13",
-        "autofill_files": (io.BytesIO(b"Daniel Tan, Portfolio Manager at Temasek since 2012"), "cv.txt"),
-    })
-    page = response.get_data(as_text=True)
-
-    assert response.status_code == 200
-    assert 'value="Daniel Tan"' in page
-    assert 'value="data/documents/test_cv.txt"' in page        # carried until the client is saved
-    assert "convert to SGD" in page                            # the AI's note is shown
-
-
-def test_saving_after_autofill_attaches_the_documents(web):
-    client, saved = web
-    form = {
-        "client.name": "Daniel Tan", "client.nationality": "Singaporean",
-        "client.country_of_residence": "Singapore", "client.age": "46", "client.current_date": "2026-10-13",
-        "jobs.start_year": "2012", "jobs.end_year": "", "jobs.occupation": "Portfolio Manager",
-        "jobs.seniority": "Director", "jobs.industry": "Asset Management", "jobs.employer_name": "Temasek",
-        "jobs.employer_size": "10000", "jobs.country": "Singapore",
-        "composition.property": "50", "composition.listed_equities": "30",
-        "composition.private_business": "0", "composition.cash": "20",
-        "claims.declared_net_worth": "4800000", "claims.expected_aum": "2000000",
-        "claims.pep_status": "None", "claims.wealth_countries": "Singapore",
-        "sow.sow_declaration": "Salary and bonuses from 2012 onwards as a portfolio manager, plus rent.",
-        "doc.file_name": "cv.txt", "doc.file_id": "data/documents/test_cv.txt",
-    }
-    response = client.post("/client/new", data=form)
-
-    assert response.status_code == 302, response.get_data(as_text=True)
-    assert saved[0]["supporting_documents"] == [
-        {"file_name": "cv.txt", "file_id": "data/documents/test_cv.txt"}]
 
 
 # ---- command-line flow (menu option 2): pure logic ----

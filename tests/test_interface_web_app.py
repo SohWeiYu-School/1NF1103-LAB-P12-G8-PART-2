@@ -1,13 +1,15 @@
 """WebApp: the browser front end, driven through Flask's test client. No network: the App
 behind it has a made-up AI caller and keeps its files in a temporary folder."""
 
+import io
+import re
 import time
 
 import pytest
 
 from app.application.app import App
 from app.interface.web_app import WebApp
-from tests import fake_services
+from tests import fake_ai, fake_services
 from tests.logic_fixtures import sample_case
 
 
@@ -153,3 +155,140 @@ def test_syncing_with_no_database_says_so_and_goes_home(web):
     page = client.post("/sync", follow_redirects=True)
     assert page.status_code == 200
     assert "Sync unsuccessful" in page.get_data(as_text=True)
+
+
+# ---------------------------------------------------------------------------
+# Filling the form from uploaded documents (moved from the old app/web_app.py tests)
+# ---------------------------------------------------------------------------
+
+AI_READING = {
+    "client": {"name": "Daniel Tan", "nationality": "Singaporean", "country_of_residence": "Singapore",
+               "date_of_birth": "1980-03-15", "age": None},
+    "jobs": [
+        {"start_year": 2004, "end_year": 2012, "occupation": "Analyst", "seniority": "Analyst",
+         "industry": "Banking", "employer_name": "DBS Bank", "employer_size": "30000",
+         "country": "Singapore", "source_file": "cv.pdf"},
+        {"start_year": 2012, "end_year": None, "occupation": "Portfolio Manager", "seniority": "Director",
+         "industry": "Asset Management", "employer_name": "Temasek", "employer_size": None,
+         "country": "Singapore", "source_file": "cv.pdf"},
+    ],
+    "assets": [
+        {"asset_type": "Property - Condo", "country": "Singapore", "year_acquired": 2015,
+         "price_paid_sgd": 1800000, "current_declared_value_sgd": 2400000, "payment_method": "loan",
+         "income_produced_sgd": 60000, "source_file": "deed.pdf"},
+    ],
+    "composition": {"property": 50, "listed_equities": 30, "private_business": 0, "cash": 20},
+    "claims": {"declared_net_worth_sgd": 4800000, "expected_aum_sgd": 2000000, "pep_status": "None",
+               "wealth_countries": ["Singapore"], "biggest_wealth_jump_sgd": None,
+               "wealth_jump_years": None, "declared_counterparties": ["DBS Bank", "UOB Kay Hian"]},
+    "sow_declaration": None,
+    "notes": ["2019 bonus is in USD (payslip.pdf) - convert to SGD"],
+}
+
+
+@pytest.fixture
+def reading_web(tmp_path, monkeypatch):
+    """A WebApp whose AI reads every upload as AI_READING."""
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    application = App(fake_ai.caller(documents_reply=AI_READING), data_folder=str(tmp_path))
+    site = WebApp(application)
+    site.flask().config["TESTING"] = True
+    return application, site, site.flask().test_client()
+
+
+def _empty_values(site):
+    return site.values_from_record({"current_date": "2026-10-13"})
+
+
+def test_an_ai_reading_becomes_form_text(web):
+    _, site, _ = web
+    found = site.extracted_to_values(AI_READING, "2026-10-13")
+    assert found["client"]["age"] == "46"                      # worked out from the date of birth
+    assert found["composition"]["property"] == "50"
+    assert found["assets"][0]["price_paid"] == "1800000"
+    assert found["claims"]["declared_counterparties"] == "DBS Bank, UOB Kay Hian"
+    assert len(found["jobs"]) == 2
+
+
+def test_fill_blanks_never_overwrites_typed_values(web):
+    _, site, _ = web
+    values = _empty_values(site)
+    values["client"]["name"] = "Daniel K. Tan"
+    merged, filled = site.fill_blanks(values, site.extracted_to_values(AI_READING, "2026-10-13"))
+    assert merged["client"]["name"] == "Daniel K. Tan"
+    assert "client.name" not in filled
+    assert merged["client"]["nationality"] == "Singaporean"
+    assert "client.nationality" in filled
+
+
+def test_fill_blanks_skips_jobs_already_on_the_form_and_keeps_order(web):
+    _, site, _ = web
+    values = _empty_values(site)
+    values["jobs"] = [{"start_year": "2012", "end_year": "", "occupation": "PM", "seniority": "",
+                       "industry": "", "employer_name": "temasek", "employer_size": "", "country": ""}]
+    merged, filled = site.fill_blanks(values, site.extracted_to_values(AI_READING, "2026-10-13"))
+    assert [job["employer_name"] for job in merged["jobs"]] == ["DBS Bank", "temasek"]
+    assert "jobs.0.employer_name" in filled                    # the added DBS job, now first
+    assert "jobs.1.employer_name" not in filled                # the typed one is untouched
+
+
+def test_the_wealth_split_is_left_alone_if_partly_typed(web):
+    _, site, _ = web
+    values = _empty_values(site)
+    values["composition"]["cash"] = "100"
+    merged, filled = site.fill_blanks(values, site.extracted_to_values(AI_READING, "2026-10-13"))
+    assert merged["composition"]["property"] == ""
+    assert not [name for name in filled if name.startswith("composition.")]
+
+
+def test_only_this_apps_document_references_are_accepted(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    site = WebApp(App(None, root=str(tmp_path), data_folder="data"))     # laid out as in production
+    assert site._is_stored_document("data/documents/ab12cd34_cv.pdf")
+    assert site._is_stored_document("0123456789abcdef01234567")
+    assert not site._is_stored_document("data/documents/../../.env")
+    assert not site._is_stored_document("/etc/passwd")
+
+
+def test_the_autofill_page_fills_the_form_and_keeps_the_upload(reading_web):
+    _, _, client = reading_web
+    response = client.post("/client/new/autofill", content_type="multipart/form-data", data={
+        "client.current_date": "2026-10-13",
+        "autofill_files": (io.BytesIO(b"Daniel Tan, Portfolio Manager at Temasek since 2012"), "cv.txt"),
+    })
+    page = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert 'value="Daniel Tan"' in page
+    assert re.search(r'value="[^"/]+/documents/[0-9a-f]{8}_cv\.txt"', page)  # carried until the client is saved
+    assert "convert to SGD" in page                                          # the AI's note is shown
+
+
+def test_saving_after_autofill_attaches_the_documents(reading_web, tmp_path):
+    application, _, client = reading_web
+    upload = tmp_path / "cv.txt"
+    upload.write_text("Daniel Tan, Portfolio Manager", encoding="utf-8")
+    stored = application.documents().upload(str(upload))
+    form = {
+        "client.name": "Daniel Tan", "client.nationality": "Singaporean",
+        "client.country_of_residence": "Singapore", "client.age": "46", "client.current_date": "2026-10-13",
+        "jobs.start_year": "2012", "jobs.end_year": "", "jobs.occupation": "Portfolio Manager",
+        "jobs.seniority": "Director", "jobs.industry": "Asset Management", "jobs.employer_name": "Temasek",
+        "jobs.employer_size": "10000", "jobs.country": "Singapore",
+        "composition.property": "50", "composition.listed_equities": "30",
+        "composition.private_business": "0", "composition.cash": "20",
+        "claims.declared_net_worth": "4800000", "claims.expected_aum": "2000000",
+        "claims.pep_status": "None", "claims.wealth_countries": "Singapore",
+        "sow.sow_declaration": "Salary and bonuses from 2012 onwards as a portfolio manager, plus rent.",
+        "doc.file_name": "cv.txt", "doc.file_id": stored,
+    }
+    response = client.post("/client/new", data=form)
+    assert response.status_code == 302, response.get_data(as_text=True)
+    assert application.clients().load()[0]["supporting_documents"] == [
+        {"file_name": "cv.txt", "file_id": stored}]
+
+
+def test_the_new_client_form_has_no_date_box_because_assessments_are_dated_today(web):
+    _, _, client = web
+    page = client.get("/client/new").get_data(as_text=True)
+    assert 'name="client.current_date"' not in page

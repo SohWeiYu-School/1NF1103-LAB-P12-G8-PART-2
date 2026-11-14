@@ -162,3 +162,32 @@ def forecast_replies(case: dict, pay_scale: float = 1.0, crime_money: float = 40
         replies[f"call4_events.reactions.{type_id}"] = {"type_id": type_id, "reactions": [
             {"event_id": f"E{n}", "extra_money_change": _r(-10_000, 0, 10_000), "signals": []} for n in (1, 2, 3)]}
     return {name: json.dumps(data) for name, data in replies.items()}
+
+
+def caller(research_reply: dict | None = "default", typologies_reply: dict | None = "default",
+           benchmark_reply: dict | None = "default", documents_reply: dict | None = None):
+    """A made-up AI caller to hand to App, as main.py hands it a real one. It answers each
+    AI service with a hard-coded reply, picked by the schema the service sends.
+    Pass None for a reply to make that service get no answer (like a failed connection).
+    The forecast is not answered here: it uses the replies saved with save_forecast_replies."""
+    replies = {
+        "reports": research() if research_reply == "default" else research_reply,
+        "sector_typologies": typologies() if typologies_reply == "default" else typologies_reply,
+        "expected_wealth": benchmark() if benchmark_reply == "default" else benchmark_reply,
+        "jobs": documents_reply,
+    }
+    asked: list[str] = []
+
+    def call(prompt: str, schema: dict | None = None, options: dict | None = None) -> str | None:
+        keys = (schema or {}).get("required") or list((schema or {}).get("properties", {}))
+        for key, reply in replies.items():
+            if key in keys:
+                asked.append(key)
+                return None if reply is None else json.dumps(reply)
+        asked.append("other")
+        return None
+
+    call.available = lambda: True
+    call.model_name = lambda: "fake-model"
+    call.asked = asked
+    return call
