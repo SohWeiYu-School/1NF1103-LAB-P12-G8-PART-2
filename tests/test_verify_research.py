@@ -1,6 +1,10 @@
 """Tests for logic_manager.verify_research."""
 
-from app.logic_manager import verify_research
+from app.logic.crime_scan import CrimeScan
+
+
+def verify_research(research, policy):
+    return CrimeScan(policy).verify_research(research)
 
 
 def _sample_policy(trusted=None):

@@ -13,34 +13,37 @@ Tests that need saved replies are skipped, with a message, until the case has be
 
 import json
 import os
-from unittest.mock import patch
 
 import pytest
 
-from app import ai_manager, data_manager, logic_manager, utilities
+from app.ai.forecast_ai import ForecastAI
+from app.ai.response_cache import ResponseCache
+from app.data.case_files import CaseFiles
+from app.logic.forecast import Forecast
+from tests.logic_fixtures import CONFIG, POLICY, VOCABULARY
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(TESTS_DIR)
 GOLDEN_DIR = os.path.join(TESTS_DIR, "golden")
 CROSSCHECK_DIR = os.path.join(TESTS_DIR, "crosscheck")
-def _is_forecasting_case(path: str) -> bool:
-    case = data_manager.load_case(path)
-    return isinstance(case, dict) and "career_history" in case and "client_ref" in case
-
+SAMPLE_DIR = os.path.join(ROOT_DIR, "data", "sample")
+FILES = CaseFiles(SAMPLE_DIR)
 
 CASE_IDS = sorted(os.path.splitext(os.path.basename(path))[0]
-                  for path in data_manager.list_sample_cases() if _is_forecasting_case(path))
+                  for path in FILES.list_samples() if FILES.is_forecasting_case(FILES.load(path)))
 
 
 def load_case(case_id: str) -> dict:
-    case = data_manager.load_case(os.path.join(data_manager.sample_dir(), f"{case_id}.json"))
+    case = FILES.load(os.path.join(SAMPLE_DIR, f"{case_id}.json"))
     assert case is not None, f"data/sample/{case_id}.json is missing or not valid JSON"
     return case
 
 
 def saved_replies(case_id: str) -> dict:
-    """The real AI replies saved in the database for this case, or skip the test if there are none."""
+    """The real AI replies saved for this case, or skip the test if there are none."""
     client_ref = load_case(case_id)["client_ref"]
-    replies = utilities.response_cache().load_raw_replies(client_ref)
+    cache = ResponseCache(os.getenv("CACHE_DIR") or os.path.join(ROOT_DIR, "data", "cache"))
+    replies = cache.load_raw_replies(client_ref)
     if not replies:
         pytest.skip(f"no saved AI replies for {client_ref} in the database yet - run the system on "
                     f"{case_id} first (python main.py --case data/sample/{case_id}.json)")
@@ -51,8 +54,8 @@ def run_from_saved(case_id: str) -> dict:
     """Rebuild the forecast from the saved replies. No API calls. Returns {"case", "forecast"}."""
     case = load_case(case_id)
     replies = saved_replies(case_id)
-    with patch("app.ai_manager.has_api_key", return_value=False):   # saved replies only, never the API
-        run = ai_manager.run_onboarding_forecast(case, replies)
+    service = ForecastAI("saved", None, "", 0.0, None, 4, POLICY["forecasting"], VOCABULARY)
+    run = service.run({"record": case, "cache": replies})
     assert run["ok"], (f"the saved replies for {case_id} are incomplete (stopped at {run['failed_step']}) - "
                        f"run the system on {case_id} again so it finishes")
     return {"case": case, "forecast": run["forecast"]}
@@ -61,7 +64,7 @@ def run_from_saved(case_id: str) -> dict:
 def decision(case_id: str) -> dict:
     """The onboarding decision from the saved replies, as it would look saved to JSON."""
     run = run_from_saved(case_id)
-    return as_saved(logic_manager.assess_onboarding(run["case"], run["forecast"]))
+    return as_saved(Forecast(POLICY, CONFIG).run(run["case"], {"forecast": run["forecast"]}))
 
 
 def golden_path(case_id: str, name: str) -> str:
