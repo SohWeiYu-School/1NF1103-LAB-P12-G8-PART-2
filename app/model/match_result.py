@@ -6,8 +6,8 @@ from app.model.typology import Typology
 class MatchResult:
     """The warning signs of one typology that fired for the client."""
 
-    def __init__(self, typology: Typology, core_fired: list[str] | None = None) -> None:
-        self.__typology: Typology = typology
+    def __init__(self, typology: Typology | None = None, core_fired: list[str] | None = None) -> None:
+        self.__typology: Typology = typology or Typology()
         self.__core_fired: list[str] = list(core_fired or [])
 
     @property

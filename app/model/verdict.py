@@ -14,7 +14,7 @@ class Verdict:
     # How serious each outcome is, so two outcomes can be compared.
     SEVERITY: dict[str, int] = {"PASSED": 0, "MANUAL_REVIEW": 1, "RISKY": 2, "SERIOUS_RISK": 3}
 
-    def __init__(self, assessment_id: str, client_ref: str, assessed_at: str, outcome: str,
+    def __init__(self, assessment_id: str = "", client_ref: str = "", assessed_at: str = "", outcome: str = "MANUAL_REVIEW",
                  next_step: str = "", next_review_date: str = "",
                  notes: list[str] | None = None, not_run: list[str] | None = None) -> None:
         self.__check_outcome(outcome)

@@ -7,7 +7,7 @@ class ClientProfile:
     MIN_AGE: int = 18
     MAX_AGE: int = 120
 
-    def __init__(self, name: str, nationality: str, country_of_residence: str = "",
+    def __init__(self, name: str = "", nationality: str = "", country_of_residence: str = "",
                  age: int | None = None) -> None:
         self.__check_age(age)
         self.__name: str = name

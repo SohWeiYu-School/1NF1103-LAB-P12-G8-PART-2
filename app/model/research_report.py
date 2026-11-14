@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 class ResearchReport:
     """A report (FATF, MAS, ...) with the excerpts taken from it."""
 
-    def __init__(self, report_id: str, url: str, excerpts: list[str] | None = None) -> None:
+    def __init__(self, report_id: str = "", url: str = "", excerpts: list[str] | None = None) -> None:
         self.__report_id: str = report_id
         self.__url: str = url or ""
         self.__excerpts: list[str] = [str(excerpt) for excerpt in excerpts or []]

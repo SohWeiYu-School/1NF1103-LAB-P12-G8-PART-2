@@ -6,8 +6,8 @@ class ClaimedSource:
 
     GIFT_TYPES: tuple[str, ...] = ("inheritance", "gift")
 
-    def __init__(self, source_type: str, counterparty: str | None, amount: float | None,
-                 occupation_mismatch: bool, amount_explained: bool = False) -> None:
+    def __init__(self, source_type: str = "", counterparty: str | None = None, amount: float | None = None,
+                 occupation_mismatch: bool = False, amount_explained: bool = False) -> None:
         self.__check_amount(amount)
         self.__source_type: str = source_type
         self.__counterparty: str | None = counterparty
