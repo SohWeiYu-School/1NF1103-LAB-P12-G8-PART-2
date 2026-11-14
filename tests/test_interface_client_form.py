@@ -21,6 +21,14 @@ def test_a_new_client_reference_is_made_up_of_cl_and_eight_characters():
     assert first != second
 
 
+def test_editing_changes_the_record_in_place_and_returns_nothing(monkeypatch):
+    """edit_existing_client edits the record it is given; it returns None, not a new record."""
+    _type(monkeypatch, "8")
+    record = {"client_ref": "CL-TEST0001", "name": "Tan"}
+    assert _form().edit_existing_client(record) is None
+    assert record == {"client_ref": "CL-TEST0001", "name": "Tan"}
+
+
 def test_the_pep_choices_and_payment_methods_are_fixed_lists():
     assert ClientForm.PEP_OPTIONS[0] == "None"
     assert ClientForm.PAYMENT_METHODS == ["cash", "loan", "asset_sale"]

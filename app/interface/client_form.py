@@ -211,7 +211,7 @@ class ClientForm:
 
         return documents
 
-    def create_new_client(self, save_fn=None, upload_fn=None):
+    def create_new_client(self, save_fn=None, upload_fn=None) -> dict | None:
         """Collect, review and optionally save a new client."""
 
         self.__ui.show("\n")
@@ -511,7 +511,7 @@ class ClientForm:
             f"\n{len(new_documents)} document(s) added."
         )
 
-    def edit_existing_client(self, record, upload_fn=None):
+    def edit_existing_client(self, record, upload_fn=None) -> None:
         """Allow the user to edit or add information to an existing client."""
 
         while True:
