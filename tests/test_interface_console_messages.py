@@ -1,7 +1,11 @@
-"""Tests for sow/io_manager.py."""
+"""The messages the console shows when the AI fails: friendly, and never the technical detail."""
 
-from app import io_manager
-from app.io_manager import show_ai_unavailable, show_ai_progress, show_unexpected_error
+from app.interface.console_ui import ConsoleUI
+
+_ui = ConsoleUI()
+show_ai_unavailable = _ui.show_ai_unavailable
+show_ai_progress = _ui.show_ai_progress
+show_unexpected_error = _ui.show_unexpected_error
 
 
 # ===========================================================================
