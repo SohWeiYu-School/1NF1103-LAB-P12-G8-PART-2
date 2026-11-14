@@ -245,21 +245,21 @@ package "IO Manager (app/interface)" {
     +__init__(app : App, limiter : RateLimiter)
     +start(host : str = "0.0.0.0", port : int = 5000) : None
     +home() : str
-    +find() : str
-    +new_client() : str
+    +find() : Response
+    +new_client() : str | Response
     +new_client_autofill() : str
     +view_client(client_ref : str) : str
-    +edit_client(client_ref : str) : str
+    +edit_client(client_ref : str) : str | Response
     +edit_client_autofill(client_ref : str) : str
-    +upload_documents(client_ref : str) : str
-    +download_document(client_ref : str, file_id : str) : None
-    +assess_client(client_ref : str) : str
+    +upload_documents(client_ref : str) : Response
+    +download_document(client_ref : str, file_id : str) : Response
+    +assess_client(client_ref : str) : Response
     +assess_loading(job_id : str) : str
-    +assess_poll(job_id : str) : dict
-    +assess_result(job_id : str) : str
+    +assess_poll(job_id : str) : Response
+    +assess_result(job_id : str) : str | Response
     +view_assessment(assessment_id : str) : str
     +list_assessments_view() : str
-    +sync_to_cloud() : str
+    +sync_to_cloud() : Response
     -__run_in_background(job_id : str, record : ClientRecord) : None
   }
 }
@@ -447,8 +447,8 @@ package "Logic Manager (app/logic)" {
     --
     +__init__(today : str = "")
     +forecasting_case(record : dict) : tuple[dict, list]
-    {static} +read_amount(text : str) : float | None
-    {static} +read_year(text : str) : int | None
+    {static} +read_amount(text : str | int | float | None) : float | None
+    {static} +read_year(text : str | int | float | None) : int | None
   }
   class CaseTimeline {
     -__record : dict = {}
