@@ -1,12 +1,12 @@
 """CaseFiles: single JSON files, including a missing and a damaged one."""
-
+import os
 import json
 
 from app.data.case_files import CaseFiles
 
 
 def test_the_real_sample_folder_holds_the_sample_cases():
-    names = [path.rsplit("/", 1)[-1] for path in CaseFiles().list_samples()]
+    names = [os.path.basename(path) for path in CaseFiles().list_samples()]
     assert "case_001.json" in names
     assert names == sorted(names)
 
@@ -19,7 +19,7 @@ def test_only_json_files_are_listed(tmp_path):
     (tmp_path / "b.json").write_text("{}", encoding="utf-8")
     (tmp_path / "a.json").write_text("{}", encoding="utf-8")
     (tmp_path / "notes.txt").write_text("x", encoding="utf-8")
-    assert [path.rsplit("/", 1)[-1] for path in CaseFiles(str(tmp_path)).list_samples()] == ["a.json", "b.json"]
+    assert [os.path.basename(path) for path in CaseFiles(str(tmp_path)).list_samples()] == ["a.json", "b.json"]
 
 
 def test_load_returns_the_file_contents(tmp_path):
