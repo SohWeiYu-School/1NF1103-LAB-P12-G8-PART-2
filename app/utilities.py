@@ -4,7 +4,6 @@ Nothing in here makes a decision. It holds what more than one manager needs,
 so the managers never have to import each other.
 """
 
-import hashlib
 import time
 import json
 import logging
@@ -14,6 +13,7 @@ from typing import Any
 
 from openai import OpenAI
 
+from app.ai.response_cache import ResponseCache
 from app.data.config_reader import ConfigReader
 
 logger = logging.getLogger(__name__)
@@ -338,52 +338,25 @@ def cache_dir(kind: str | None = None) -> str:
     return os.path.join(base, kind) if kind else base
 
 
+def response_cache() -> ResponseCache:
+    """The ResponseCache (AI Manager) for the cache folder in use. CACHE_DIR in .env moves the folder."""
+    return ResponseCache(cache_dir())
+
+
 def cache_key(kind: str, payload: dict, prompt_version: str, model: str) -> str:
     """SHA-256 of canonical JSON of {kind, payload, prompt_version, model}."""
-    canonical = json.dumps(
-        {"kind": kind, "model": model, "payload": payload, "prompt_version": prompt_version},
-        sort_keys=True,
-    )
-    return hashlib.sha256(canonical.encode()).hexdigest()
-
-
-def cache_read(key: str, kind: str | None = None) -> dict | None:
-    path = os.path.join(cache_dir(kind), f"{key}.json")
-    if os.path.exists(path):
-        try:
-            with open(path) as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            return None
-    return None
+    return response_cache().key(kind, payload, model, prompt_version)
 
 
 def cache_check(kind: str, payload: dict, prompt_version: str, mdl: str) -> tuple[str, dict | None]:
-    """Compute cache key and return (key, cached_data) on hit or (key, None) on miss.
-
-    cached_data includes _cache_path so the caller does not need to reconstruct it.
-    The returned key should be passed to cache_write() on a successful API call.
-    """
-    key = cache_key(kind, payload, prompt_version, mdl)
-    cached = cache_read(key, kind)
-    if cached is not None:
-        cached["_cache_path"] = os.path.join(cache_dir(kind), f"{key}.json")
-        return key, cached
-    return key, None
+    """Compute cache key and return (key, cached_data) on hit or (key, None) on miss."""
+    cache = response_cache()
+    return cache.key(kind, payload, mdl, prompt_version), cache.get(kind, payload, mdl, prompt_version)
 
 
 def cache_write(key: str, data: dict, kind: str | None = None) -> None:
-    """Write data to cache atomically (temp file + os.replace)."""
-    directory = cache_dir(kind)
-    os.makedirs(directory, exist_ok=True)
-    path = os.path.join(directory, f"{key}.json")
-    tmp = path + ".tmp"
-    try:
-        with open(tmp, "w") as f:
-            json.dump(data, f, indent=2)
-        os.replace(tmp, path)
-    except OSError as exc:
-        logger.warning("Cache write failed: %s", exc)
+    """Write data to the cache."""
+    response_cache().put(kind or "", key, data)
 
 # ---------------------------------------------------------------------------
 # Assessment rate limit — one assessment per cooldown window per user

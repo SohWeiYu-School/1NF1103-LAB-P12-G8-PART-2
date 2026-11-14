@@ -17,7 +17,6 @@ Every function returns False / None / [] / {} on error instead of crashing.
 import json
 import logging
 import os
-import uuid
 
 from app import utilities
 from app.data.assessment_repository import AssessmentRepository
@@ -196,40 +195,6 @@ def read_supporting_documents(entries: list[dict] | None) -> list[dict]:
     return _document_store().read_all(entries)
 
 
-# Compatibility stub functions required by main.py
-def load_raw_replies(ref: str) -> dict:
-    path = os.path.join(DATA_DIR, "cache", "forecasting", f"{ref}.json")
-    if not os.path.exists(path):
-        return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data if isinstance(data, dict) else {}
-    except (json.JSONDecodeError, IOError) as exc:
-        logger.warning("load_raw_replies: could not read cache for %s: %s", ref, repr(exc))
-        return {}
-
-
-def save_raw_replies(ref: str, replies: dict) -> int:
-    if not isinstance(replies, dict):
-        return 0
-    path = os.path.join(DATA_DIR, "cache", "forecasting", f"{ref}.json")
-    existing = load_raw_replies(ref)
-    count = 0
-    for name, result in replies.items():
-        if isinstance(result, dict) and result.get("raw"):
-            existing[name] = result["raw"]
-            count += 1
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(existing, f, indent=2, ensure_ascii=False)
-    except IOError as exc:
-        logger.warning("save_raw_replies: could not write cache for %s: %s", ref, repr(exc))
-        return 0
-    return count
-
-
 def save_forecast(ref: str, forecast: dict) -> bool:
     return True
 
@@ -237,23 +202,6 @@ def save_forecast(ref: str, forecast: dict) -> bool:
 def is_forecasting_case(case: dict | None) -> bool:
     """Sample files come in two formats; only the forecasting format can be assessed directly."""
     return isinstance(case, dict) and "career_history" in case and "client_ref" in case
-
-
-def copy_recorded_replies(golden_dir: str) -> int:
-    """Copy AI replies from tests/golden into the reply cache. Only fills gaps — existing replies
-    are never overwritten. Returns the number of pieces copied."""
-    copied = 0
-    for path in list_sample_cases():
-        name = os.path.splitext(os.path.basename(path))[0]
-        recorded = load_json(os.path.join(golden_dir, name, "ai_responses.json"), default={})
-        case = load_case(path)
-        if not is_forecasting_case(case) or not isinstance(recorded, dict):
-            continue
-        saved = load_raw_replies(case["client_ref"])
-        missing = {piece: {"ok": True, "from_cache": False, "raw": json.dumps(reply), "prompt_version": "recorded"}
-                   for piece, reply in recorded.items() if piece not in saved}
-        copied += save_raw_replies(case["client_ref"], missing)
-    return copied
 
 
 def load_case(path: str) -> dict | None:

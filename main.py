@@ -145,9 +145,9 @@ def run_combined_assessment(case: dict, supporting_documents: list[dict] | None 
             notes += warnings
 
     # 6-10. Forecast: the declaration is read once here, and the crime types are built from the typologies
-    run = ai_manager.run_onboarding_forecast(case, data_manager.load_raw_replies(ref), typologies,
+    run = ai_manager.run_onboarding_forecast(case, utilities.response_cache().load_raw_replies(ref), typologies,
                                              on_step=lambda stage: step(_FORECAST_STEP[stage]))
-    data_manager.save_raw_replies(ref, run["results"])
+    utilities.response_cache().save_raw_replies(ref, run["results"])
     partial = run["partial"]
     forecast = run["forecast"] if run["ok"] else None
     stopped_at = None
@@ -390,7 +390,19 @@ def use_recorded_replies() -> int:
     """Copy the recorded AI replies from tests/golden into the reply cache.
     Only fills gaps, so real replies already saved are never overwritten."""
     golden = os.path.join(utilities.ROOT_DIR, "tests", "golden")
-    return data_manager.copy_recorded_replies(golden)
+    cache = utilities.response_cache()
+    copied = 0
+    for path in data_manager.list_sample_cases():
+        name = os.path.splitext(os.path.basename(path))[0]
+        recorded = data_manager.load_json(os.path.join(golden, name, "ai_responses.json"), default={})
+        case = data_manager.load_case(path)
+        if not data_manager.is_forecasting_case(case) or not isinstance(recorded, dict):
+            continue
+        saved = cache.load_raw_replies(case["client_ref"])
+        missing = {piece: {"ok": True, "from_cache": False, "raw": json.dumps(reply), "prompt_version": "recorded"}
+                   for piece, reply in recorded.items() if piece not in saved}
+        copied += cache.save_raw_replies(case["client_ref"], missing)
+    return copied
 
 
 # ---------------------------------------------------------------------------

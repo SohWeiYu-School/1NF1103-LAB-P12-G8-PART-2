@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app import ai_manager, data_manager, logic_manager
+from app import ai_manager, data_manager, logic_manager, utilities
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 GOLDEN_DIR = os.path.join(TESTS_DIR, "golden")
@@ -40,7 +40,7 @@ def load_case(case_id: str) -> dict:
 def saved_replies(case_id: str) -> dict:
     """The real AI replies saved in the database for this case, or skip the test if there are none."""
     client_ref = load_case(case_id)["client_ref"]
-    replies = data_manager.load_raw_replies(client_ref)
+    replies = utilities.response_cache().load_raw_replies(client_ref)
     if not replies:
         pytest.skip(f"no saved AI replies for {client_ref} in the database yet - run the system on "
                     f"{case_id} first (python main.py --case data/sample/{case_id}.json)")

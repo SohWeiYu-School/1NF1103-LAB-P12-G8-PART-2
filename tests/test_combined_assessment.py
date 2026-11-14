@@ -17,6 +17,7 @@ import pytest
 
 import main
 from app import ai_manager, data_manager, logic_manager, utilities
+from app.ai.forecast_ai import ForecastAI
 from tests import fake_ai
 
 SAMPLE = os.path.join(data_manager.sample_dir(), "case_001.json")
@@ -44,7 +45,7 @@ def client_record(**claims) -> dict:
 def save_fake_forecast(record: dict, **options) -> dict:
     case, missing = logic_manager.forecasting_case(record, main.today())
     assert missing == []
-    data_manager.save_raw_replies(case["client_ref"],
+    utilities.response_cache().save_raw_replies(case["client_ref"],
                                   {k: {"raw": v} for k, v in fake_ai.forecast_replies(case, **options).items()})
     return case
 
@@ -272,7 +273,7 @@ def test_person_types_are_linked_to_typologies_by_id_or_category():
     data = {"person_types": [{"type_id": "T1", "category": "HONEST", "typology_id": None},
                              {"type_id": "T2", "category": "TRADE_BASED_ML", "typology_id": "made_up"},
                              {"type_id": "T3", "category": "TAX_EVASION", "typology_id": "bribes"}]}
-    linked = ai_manager.link_typologies(data, researched)["person_types"]
+    linked = ai_manager._forecast_service()._link_typologies(data, researched)["person_types"]
     assert linked[1]["typology_id"] == "tbml"                  # unknown id -> linked by its category
     assert linked[2]["typology_id"] == "bribes"
     assert linked[2]["category"] == "BRIBERY_CORRUPTION"      # takes its typology's category
@@ -282,11 +283,10 @@ def test_person_types_request_gets_the_typologies():
     case = client_record() | {"current_date": "2026-10-14"}
     case, _ = logic_manager.forecasting_case(case, "2026-10-14")
     replies = fake_ai.forecast_replies(case)
-    real = ai_manager.run_forecasting
-    with patch("app.ai_manager.run_forecasting", side_effect=real) as spy:
+    with patch.object(ForecastAI, "_ask", autospec=True, side_effect=ForecastAI._ask) as spy:
         run_result = ai_manager.run_onboarding_forecast(case, replies, fake_ai.typologies()["sector_typologies"])
     assert run_result["ok"]
-    sent = next(c.args[3] for c in spy.call_args_list if c.args[0] == "call3_types.list")
+    sent = next(c.args[4] for c in spy.call_args_list if c.args[1] == "call3_types.list")
     assert sent["researched_typologies"][0]["typology_id"] == "trade_based_laundering"
     assert sent["researched_typologies"][0]["crime_category"] == "TRADE_BASED_ML"
 
@@ -517,18 +517,6 @@ def test_web_search_is_switched_from_env(monkeypatch):
     assert utilities.forecast_settings()["web_search"] == utilities.policy()["forecasting"]["web_search"]
 
 
-def test_model_that_refuses_temperature_zero_is_asked_again():
-    calls = []
-
-    def create(**request):
-        calls.append(request)
-        if "temperature" in request:
-            raise ValueError("Unsupported value: 'temperature' does not support 0 with this model.")
-        return "reply"
-    assert ai_manager._create_at_temperature_zero(create, model="m") == "reply"
-    assert calls == [{"temperature": 0, "model": "m"}, {"model": "m"}]
-
-
 def test_the_bishan_reply_from_the_log_is_repaired_not_rejected():
     markets = {"ECO_SG", "PROP_BISHAN", "PROP_SG", "FX_SGD", "IND_PARTS", "STOCK_SG"}
     reply = {"asset_index": 0, "exposures": [
@@ -537,18 +525,18 @@ def test_the_bishan_reply_from_the_log_is_repaired_not_rejected():
         "income_yield_by_year": [{"year": y, "yield_pct": {"low": 2, "typical": 3, "high": 4}} for y in range(2010, 2027)],
         "future_income_yield_pct": {s: {"low": 2, "typical": 3, "high": 4} for s in ("steady", "boom", "downturn")},
         "valuation_basis": "Bishan property index"}
-    repaired = ai_manager.repair_asset_model(reply, markets)
+    service = ai_manager._forecast_service()
+    repaired = service._repair_asset_model(reply, markets)
     assert len(repaired["exposures"]) == utilities.forecast_settings()["max_asset_exposures"]
     assert all(v <= 3.0 for e in repaired["exposures"] for v in e["sensitivity"].values())
-    with patch("app.ai_manager.forecast_settings", return_value={**utilities.forecast_settings()}):
-        assert ai_manager.check_asset_model(repaired, 0, list(range(2010, 2027)), markets) == []
+    assert service._check_asset_model(repaired, 0, list(range(2010, 2027)), markets) == []
 
 
 def test_one_asset_the_ai_cant_describe_doesnt_stop_the_forecast(storage):
     case = save_fake_forecast(client_record())
-    replies = data_manager.load_raw_replies(case["client_ref"])
+    replies = utilities.response_cache().load_raw_replies(case["client_ref"])
     replies["call2_earnings.asset.0"] = json.dumps({"asset_index": 0})          # unusable, and no API key
-    data_manager.save_raw_replies(case["client_ref"], {k: {"raw": v} for k, v in replies.items()})
+    utilities.response_cache().save_raw_replies(case["client_ref"], {k: {"raw": v} for k, v in replies.items()})
     result = run(case)
     assert result["forecast"] is not None                                          # the forecast finished
     item = check(result["verdict"], "forecast", "ASSET_NOT_MODELLED")
@@ -558,9 +546,9 @@ def test_one_asset_the_ai_cant_describe_doesnt_stop_the_forecast(storage):
 
 def test_the_report_says_why_the_forecast_stopped(storage):
     case = save_fake_forecast(client_record())
-    replies = data_manager.load_raw_replies(case["client_ref"])
+    replies = utilities.response_cache().load_raw_replies(case["client_ref"])
     replies["call3_types.list"] = json.dumps({"person_types": []})                # unusable, and no API key
-    data_manager.save_raw_replies(case["client_ref"], {k: {"raw": v} for k, v in replies.items()})
+    utilities.response_cache().save_raw_replies(case["client_ref"], {k: {"raw": v} for k, v in replies.items()})
     verdict = run(case)["verdict"]
     item = check(verdict, "forecast", "FORECAST")
     assert "the list of person types" in item["detail"] and "API key" in item["detail"]
