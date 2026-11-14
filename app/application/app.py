@@ -242,7 +242,7 @@ class App:
         case, missing = self.read_case(record)
         if case is None:
             self.__ui.show_error("Needed before the assessment can run: " + ", ".join(missing))
-            case = self.__case_builder.case_from_client_record(record.to_dict())
+            case = self.__case_builder.case_from_client_record(record)
             if case is None:
                 return None
         problems = self.__case_builder.validate_case(case)

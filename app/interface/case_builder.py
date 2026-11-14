@@ -7,6 +7,7 @@ from jsonschema import Draft202012Validator
 
 from app.interface.client_form import ClientForm
 from app.interface.console_ui import ConsoleUI
+from app.model.client_record import ClientRecord
 
 Ask = Callable[[str], str]
 
@@ -82,11 +83,11 @@ class CaseBuilder:
         text = str(value or "").strip()
         return text if text else self.__ui.ask_text(question, ask)
 
-    def _jobs_from_record(self, record: dict, this_year: int, ask: Ask) -> list[dict]:
+    def _jobs_from_record(self, record: ClientRecord, this_year: int, ask: Ask) -> list[dict]:
         """Career history entries plus the current job from career dict."""
-        career = record.get("career", {})
+        career = record.to_dict()["career"]
         jobs = []
-        for number, entry in enumerate(record.get("career_history", []), start=1):
+        for number, entry in enumerate([job.to_dict() for job in record.jobs()], start=1):
             label = f"Job {number} ({entry.get('occupation') or 'no title'})"
             start = self._year_or_ask(entry.get("start_year"), f"{label}: start year", ask, 1900, this_year)
             end_text = str(entry.get("end_year") or "").strip().lower()
@@ -129,10 +130,10 @@ class CaseBuilder:
                 return value
         return None
 
-    def _assets_from_record(self, record: dict, first_year: int, this_year: int, ask: Ask) -> list[dict]:
+    def _assets_from_record(self, record: ClientRecord, first_year: int, this_year: int, ask: Ask) -> list[dict]:
         """Investments still held, amounts in SGD. Sold assets are excluded."""
         investments = []
-        for number, entry in enumerate(record.get("investments", []), start=1):
+        for number, entry in enumerate([asset.to_dict() for asset in record.investments()], start=1):
             name = str(entry.get("asset_type") or "").strip() or f"Asset {number}"
             if str(entry.get("year_sold") or "").strip():
                 self.__ui.show(f"  {name}: sold in {entry['year_sold']}, so it's left out of the forecast.")
@@ -162,9 +163,9 @@ class CaseBuilder:
             })
         return investments
 
-    def _composition_from_record(self, record: dict, ask: Ask) -> dict:
+    def _composition_from_record(self, record: ClientRecord, ask: Ask) -> dict:
         """Asset composition as fractions (0.60 = 60%). Asks if missing or doesn't add up."""
-        typed = record.get("claims", {}).get("asset_composition", {})
+        typed = record.claims.asset_composition if record.claims is not None else {}
         split = {key: self.__ui.read_number(typed.get(key)) for key in ("property", "listed_equities", "private_business", "cash")}
         # Values may already be fractions (0-1) — check sum
         if all(v is not None for v in split.values()):
@@ -183,20 +184,21 @@ class CaseBuilder:
                 return split
             self.__ui.show_error(f"That adds up to {sum(split.values()):.0%}. Please make it 100%.")
 
-    def case_from_client_record(self, record: dict, ask: Ask | None = None) -> dict | None:
+    def case_from_client_record(self, record: ClientRecord, ask: Ask | None = None) -> dict | None:
         """Build the forecasting case from a saved client record.
 
-        Reads directly from the new flat structure. The officer is asked only for
+        Reads the record in its saved layout. The officer is asked only for
         what's missing or unreadable.
         Returns None if the case fails validation.
         """
         ask = ask or self.__ui.read_answer
-        if not record:
+        if record is None:
             return None
-        career     = record.get("career", {})
-        claims     = record.get("claims", {})
+        saved      = record.to_dict()
+        career     = saved["career"]
+        claims     = saved["claims"]
         self.__ui.show(ConsoleUI.LINE)
-        self.__ui.show(f"Preparing {record.get('client_ref')} for the forecasting assessment")
+        self.__ui.show(f"Preparing {record.client_ref} for the forecasting assessment")
         self.__ui.show(ConsoleUI.LINE)
 
         # The assessment is always dated today - the web app does the same (WebApp.assess_client).
@@ -210,10 +212,10 @@ class CaseBuilder:
         current    = jobs[-1]
 
         case = {
-            "client_ref":   record["client_ref"],
+            "client_ref":   record.client_ref,
             "current_date": current_date,
-            "name":         self._text_or_ask(record.get("name"),        "Client name", ask),
-            "nationality":  self._text_or_ask(record.get("nationality"), "Nationality", ask),
+            "name":         self._text_or_ask(record.profile.name,        "Client name", ask),
+            "nationality":  self._text_or_ask(record.profile.nationality, "Nationality", ask),
             "career": {
                 "occupation":           current["occupation"],
                 "seniority":            current["seniority"],
@@ -242,7 +244,7 @@ class CaseBuilder:
                 "wealth_jump_years":       self.__ui.read_number(claims.get("wealth_jump_years")),
                 "declared_counterparties": list(claims.get("declared_counterparties") or []),
             },
-            "sow_declaration": self._text_or_ask(record.get("sow_declaration"), "Source of wealth declaration", ask),
+            "sow_declaration": self._text_or_ask(record.sow_declaration, "Source of wealth declaration", ask),
         }
         if len(case["sow_declaration"]) < 50:
             self.__ui.show_error("The source of wealth declaration is too short (50 characters minimum).")
