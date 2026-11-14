@@ -4,6 +4,7 @@ import os
 import textwrap
 
 from app.interface.console_ui import ConsoleUI
+from app.model.client_record import ClientRecord
 
 
 class ReportView:
@@ -158,20 +159,20 @@ class ReportView:
             return f"{value:,}"
         return str(value)
 
-    def display_client_record(self, record: dict) -> None:
+    def display_client_record(self, record: ClientRecord) -> None:
         """Display all information collected for the client."""
 
         self.__ui.display_section("CLIENT INFORMATION REVIEW")
 
-        self.__ui.show(f"Client Reference: {record['client_ref']}")
+        self.__ui.show(f"Client Reference: {record.client_ref}")
 
         # -------------------------------------------------
         # Client Profile
         # -------------------------------------------------
 
         self.__ui.display_section("CLIENT PROFILE")
-        self.__ui.show(f"Name:        {record.get('name', '—')}")
-        self.__ui.show(f"Nationality: {record.get('nationality', '—')}")
+        self.__ui.show(f"Name:        {record.profile.name or '—'}")
+        self.__ui.show(f"Nationality: {record.profile.nationality or '—'}")
 
         # -------------------------------------------------
         # Career History
@@ -179,7 +180,7 @@ class ReportView:
 
         self.__ui.display_section("CAREER HISTORY")
 
-        for index, career in enumerate(record.get("career_history", []), start=1):
+        for index, career in enumerate([job.to_dict() for job in record.jobs()], start=1):
             self.__ui.show(f"\n--- Job {index} ---")
             for key, value in career.items():
                 self.__ui.show(f"{self._field_name(key)}: {self._field_value(key, value)}")
@@ -188,7 +189,7 @@ class ReportView:
         # Investments
         # -------------------------------------------------
 
-        investments = record.get("investments", [])
+        investments = [asset.to_dict() for asset in record.investments()]
         if investments:
             self.__ui.display_section("INVESTMENTS")
             for index, inv in enumerate(investments, start=1):
@@ -202,7 +203,7 @@ class ReportView:
         # Claims
         # -------------------------------------------------
 
-        claims = record.get("claims", {})
+        claims = record.claims.to_dict() if record.claims is not None else {}
         if claims:
             self.__ui.display_section("CLAIMS")
             for key, value in claims.items():
@@ -212,7 +213,7 @@ class ReportView:
         # Source of Wealth Declaration
         # -------------------------------------------------
 
-        sow = record.get("sow_declaration")
+        sow = record.sow_declaration
         if sow:
             self.__ui.display_section("SOURCE OF WEALTH DECLARATION")
             self.__ui.show(sow)
@@ -223,7 +224,7 @@ class ReportView:
 
         self.__ui.display_section("SUPPORTING DOCUMENTS")
 
-        documents = record.get("supporting_documents", [])
+        documents = record.documents()
 
         if not documents:
             self.__ui.show("No supporting documents provided.")

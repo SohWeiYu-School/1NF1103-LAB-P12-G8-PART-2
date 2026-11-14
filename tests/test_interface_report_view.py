@@ -7,6 +7,7 @@ from app.logic.crime_scan import CrimeScan
 from app.logic.document_evidence import DocumentEvidence
 from app.logic.forecast import Forecast
 from app.logic.verdict_engine import VerdictEngine
+from app.model.client_record import ClientRecord
 from tests.logic_fixtures import CONFIG, POLICY, sample_case, sample_forecast
 
 
@@ -52,8 +53,18 @@ def test_the_assessment_list_shows_one_line_per_assessment():
 
 
 def test_showing_a_client_record_prints_through_the_console(capsys):
-    assert _view().display_client_record({"client_ref": "SOW-1", "name": "Daniel Tan", "nationality": "Malaysian",
-                                          "career": {"occupation": "COO"}, "career_history": [], "investments": [],
-                                          "claims": {}, "sow_declaration": "Salary savings."}) is None
+    record = ClientRecord.from_dict({"client_ref": "SOW-1", "name": "Daniel Tan", "nationality": "Malaysian",
+                                     "career": {"occupation": "COO"}, "career_history": [], "investments": [],
+                                     "claims": {}, "sow_declaration": "Salary savings."})
+    assert _view().display_client_record(record) is None
     out = capsys.readouterr().out
-    assert "Daniel Tan" in out and "SOW-1" in out
+    assert "Daniel Tan" in out and "SOW-1" in out and "Salary savings." in out
+
+
+def test_a_client_record_shows_every_job_asset_and_document(capsys):
+    _view().display_client_record(ClientRecord.from_dict({**sample_case(), "supporting_documents": [
+        {"file_name": "payslip.pdf", "file_id": "f1"}]}))
+    out = capsys.readouterr().out
+    assert "--- Job 2 ---" in out and "--- Investment 1 ---" in out
+    assert "present (current job)" in out
+    assert "1. payslip.pdf" in out and "File ID: f1" in out

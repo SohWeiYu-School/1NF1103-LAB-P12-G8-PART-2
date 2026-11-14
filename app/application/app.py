@@ -197,17 +197,17 @@ class App:
         while True:
             choice = self.__ui.show_app_menu()
             if choice == "1":
-                record = self.__client_form.create_new_client(save_fn=self.__clients.save,
+                record = self.__client_form.create_new_client(save_fn=self.save_client,
                                                              upload_fn=self.__documents.upload)
                 if record is not None:
-                    self.__assess_saved_answers(record)
+                    self.__assess_if_allowed(record)
             elif choice == "2":
                 record = self.new_client_from_documents()
                 if record is not None:
                     self.__assess_saved_answers(record)
             elif choice == "3":
                 self.__client_form.find_existing_client(
-                    find_fn=self.__clients.find, save_fn=self.__clients.save,
+                    find_fn=self.find_client, save_fn=self.save_client,
                     download_fn=self.__documents.download, upload_fn=self.__documents.upload)
             elif choice == "4":
                 ref = self.__ui.ask_client_ref()
@@ -429,8 +429,14 @@ class App:
                 return None
             if action == "edit":
                 before = json.loads(json.dumps(record))
-                self.__client_form.edit_existing_client(record, self.__documents.upload)
-                record = builder.sync_after_edit(before, record)
+                try:
+                    edited = self.__client_form.edit_existing_client(ClientRecord.from_dict(record),
+                                                                     self.__documents.upload)
+                except ValueError as error:
+                    logger.error("App.new_client_from_documents: record cannot be edited: %r", error)
+                    self.__ui.show_error(f"The record cannot be edited because {error}.")
+                    continue
+                record = builder.sync_after_edit(before, edited.to_dict())
                 for field in builder.missing_fields(record):
                     record = builder.set_path(record, field["path"], self.__client_form.ask_missing_field(field))
                 continue
@@ -449,7 +455,13 @@ class App:
             return None
         self.__ui.show_message(f"\nClient saved. Reference: {record['client_ref']} "
                                f"({len(record.get('supporting_documents', []))} document(s) attached).")
-        return record if self.__client_form.ask_after_save(record) else None
+        try:
+            saved = ClientRecord.from_dict(record)
+        except ValueError as error:
+            logger.error("App.new_client_from_documents: the saved client cannot be read: %r", error)
+            self.__ui.show_error(f"The client was saved, but cannot be shown or assessed because {error}.")
+            return None
+        return record if self.__client_form.ask_after_save(saved) else None
 
     def read_documents(self, documents: list[dict]) -> tuple[dict | None, list[str]]:
         """Ask the AI to read documents the DocumentStore has opened. Returns (details, warnings)."""

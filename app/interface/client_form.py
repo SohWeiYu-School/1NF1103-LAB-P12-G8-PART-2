@@ -1,17 +1,21 @@
 """ClientForm: the questions that create and edit a client record."""
 
 import datetime
+import logging
 import os
 import uuid
 
 from app.interface.console_ui import ConsoleUI
 from app.interface.report_view import ReportView
+from app.model.client_record import ClientRecord
 
 try:                                  # the file pickers need a desktop; servers have none
     import tkinter as tk
     from tkinter import filedialog
 except ImportError:
     tk = filedialog = None
+
+logger = logging.getLogger(__name__)
 
 
 class ClientForm:
@@ -21,6 +25,7 @@ class ClientForm:
 
     It never saves or loads by itself: the caller passes in the functions that do
     (save_fn, find_fn, upload_fn, ...), so this class does not know where records are kept.
+    The answers are collected in the saved layout and handed back as a ClientRecord.
     """
 
     PAYMENT_METHODS = ["cash", "loan", "asset_sale"]
@@ -211,8 +216,9 @@ class ClientForm:
 
         return documents
 
-    def create_new_client(self, save_fn=None, upload_fn=None) -> dict | None:
-        """Collect, review and optionally save a new client."""
+    def create_new_client(self, save_fn=None, upload_fn=None) -> ClientRecord | None:
+        """Collect, review and optionally save a new client. save_fn is given the ClientRecord.
+        Returns the saved record when the officer wants to assess it now, otherwise None."""
 
         self.__ui.show("\n")
         self.__ui.show("=" * 60)
@@ -233,7 +239,7 @@ class ClientForm:
         supporting_documents = self.get_supporting_documents(upload_fn)
 
         # Create complete record
-        client_record = {
+        answers = {
             "client_ref":          client_ref,
             "name":                profile_data["name"],
             "nationality":         profile_data["nationality"],
@@ -245,6 +251,14 @@ class ClientForm:
             "sow_declaration":     sow_declaration,
             "supporting_documents": supporting_documents,
         }
+        try:
+            client_record = ClientRecord.from_dict(answers)
+        except ValueError as error:
+            logger.error("ClientForm.create_new_client: the answers for %s are not a valid record: %r",
+                         client_ref, error)
+            self.__ui.show_error(f"The client could not be created because {error}. Nothing was saved.")
+            self.__ui.read_answer("\nPress Enter to return to the main menu...")
+            return None
 
         # Show everything before saving
         self.__report_view.display_client_record(client_record)
@@ -317,7 +331,7 @@ class ClientForm:
             return self.__ui.ask_text("Describe how the client accumulated their wealth", min_length=50)
         return self.__ui.ask_text(label)
 
-    def ask_after_save(self, record: dict) -> bool:
+    def ask_after_save(self, record: ClientRecord) -> bool:
         """After a client is saved: view the saved details, run the assessment, or go back.
         Returns True if the assessment should run now."""
         options = ["View the saved client details",
@@ -348,6 +362,11 @@ class ClientForm:
         career["age"] = self.__ui.keep_int("Age", career.get("age", ""), 18, 100)
         career["career_start_year"] = self.__ui.keep_int("Year first career started",
                                                career.get("career_start_year", ""), 1940, this_year)
+        # The current job is also listed in career_history (web form, documents): keep the two the same.
+        open_jobs = [job for job in record.get("career_history") or [] if job.get("end_year") in (None, "")]
+        if open_jobs:
+            for key in ClientRecord.CAREER_JOB_KEYS:
+                open_jobs[-1][key] = career[key]
 
         self.__ui.show("\nClient profile updated.")
 
@@ -511,8 +530,11 @@ class ClientForm:
             f"\n{len(new_documents)} document(s) added."
         )
 
-    def edit_existing_client(self, record, upload_fn=None) -> None:
-        """Allow the user to edit or add information to an existing client."""
+    def edit_existing_client(self, client: ClientRecord, upload_fn=None) -> ClientRecord:
+        """Allow the user to edit or add information to an existing client. Returns the edited
+        record; if the changes do not make a valid record, says why and returns the record unchanged."""
+
+        record = client.to_dict()     # the answers are edited in the saved layout, then checked as a whole
 
         while True:
 
@@ -601,8 +623,18 @@ class ClientForm:
             if not self.__ui.ask_yes_no("Make another change?"):
                 break
 
+        try:
+            return ClientRecord.from_dict(record)
+        except ValueError as error:
+            logger.error("ClientForm.edit_existing_client: the edited record %s is not valid: %r",
+                         client.client_ref, error)
+            self.__ui.show_error(f"The changes could not be kept because {error}. The record is unchanged.")
+            return client
+
     def find_existing_client(self, find_fn=None, load_fn=None, save_fn=None, download_fn=None, upload_fn=None):
-        """Find, display, edit and manage an existing client from local records."""
+        """Find, display, edit and manage an existing client from local records.
+        find_fn gives a ClientRecord or None (and raises ValueError if the saved record cannot be
+        read); save_fn is given the edited ClientRecord."""
 
         self.__ui.show("\n=== Existing Client ===")
 
@@ -615,7 +647,12 @@ class ClientForm:
 
         self.__ui.show("\nSearching saved clients...")
 
-        client_record = find_fn(client_ref) if find_fn else None
+        try:
+            client_record = find_fn(client_ref) if find_fn else None
+        except ValueError as error:      # the client exists, but the saved record cannot be read
+            self.__ui.show_error(str(error))
+            self.__ui.read_answer("\nPress Enter to return to the main menu...")
+            return
 
         if client_record is None:
             self.__ui.show(f"\nNo client found with reference: {client_ref}")
@@ -658,7 +695,7 @@ class ClientForm:
 
             if choice == "1":
 
-                self.edit_existing_client(client_record, upload_fn)
+                client_record = self.edit_existing_client(client_record, upload_fn)
 
                 self.__ui.show("\nSaving changes locally...")
 
@@ -683,10 +720,7 @@ class ClientForm:
 
             elif choice == "2":
 
-                documents = client_record.get(
-                    "supporting_documents",
-                    []
-                )
+                documents = client_record.documents()
 
                 if not documents:
                     self.__ui.show(
