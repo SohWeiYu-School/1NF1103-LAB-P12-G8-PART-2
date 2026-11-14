@@ -524,12 +524,31 @@ class WebApp:
             flash("The documents were read, but nothing new was found to fill in.")
         return self.show_form(heading, values, [], documents=documents, autofilled=filled, notes=notes)
 
-    def get_record(self, client_ref: str):
-        """Find one client record by reference. Returns None if not found."""
-        for record in self.__app.clients().load():
-            if record.get("client_ref") == client_ref:
-                return record
-        return None
+    def get_record(self, client_ref: str) -> ClientRecord | None:
+        """Find one client record by reference. Returns None if not found; raises ValueError,
+        saying what is wrong, if the saved record cannot be read."""
+        return self.__app.find_client(client_ref)
+
+    def page_record(self, client_ref: str) -> dict:
+        """The client as a page header shows it (saved layout). If the record is missing or
+        cannot be read, the reference stands in for the name."""
+        try:
+            record = self.get_record(client_ref)
+        except ValueError as error:
+            flash(str(error))
+            record = None
+        return record.to_dict() if record is not None else {"client_ref": client_ref, "name": client_ref}
+
+    def save_form_record(self, record: dict) -> list[str]:
+        """Save a record built from the form. Returns the problems ([] = saved)."""
+        try:
+            client = ClientRecord.from_dict(record)
+        except ValueError as error:
+            logger.error("WebApp: the form for %s did not make a valid record: %r", record.get("client_ref"), error)
+            return [f"The client could not be saved because {error}."]
+        if not self.__app.save_client(client):
+            return ["The client could not be saved. Check the database connection."]
+        return []
 
     def flash_ai_unavailable(self, feature: str = "Assessment") -> None:
         flash(f"{feature} is not available right now — please try again later.")
@@ -603,7 +622,12 @@ class WebApp:
 
     def find(self) -> Response:
         client_ref = request.args.get("ref", "").strip().upper()
-        if client_ref and self.get_record(client_ref):
+        try:
+            found = bool(client_ref) and self.get_record(client_ref) is not None
+        except ValueError as error:
+            flash(str(error))
+            return redirect(url_for("home"))
+        if found:
             return redirect(url_for("view_client", client_ref=client_ref))
         flash(f"No client found with reference '{client_ref}'.")
         return redirect(url_for("home"))
@@ -624,10 +648,10 @@ class WebApp:
                 field_errors = {}
             if not problems:
                 record["supporting_documents"] = documents
-                if self.__app.clients().save(record):
+                problems = self.save_form_record(record)
+                if not problems:
                     flash("Client saved.")
                     return redirect(url_for("view_client", client_ref=record["client_ref"]))
-                problems = ["The client could not be saved. Check the database connection."]
             return self.show_form("New client", values, problems, field_errors, documents=documents)
  
         return self.show_form("New client", self.values_from_record({"current_date": self.today()}), [])
@@ -635,20 +659,25 @@ class WebApp:
     def new_client_autofill(self) -> str:
         return self.autofill_form("New client", request.form, request.files.getlist("autofill_files"))
 
-    def view_client(self, client_ref: str) -> str:
-        record = self.get_record(client_ref)
+    def view_client(self, client_ref: str) -> str | Response:
+        try:
+            record = self.get_record(client_ref)
+        except ValueError as error:
+            flash(str(error))
+            return redirect(url_for("home"))
         if record is None:
             abort(404)
+        saved = record.to_dict()                 # the page template reads the saved layout
         assessments = self.__app.assessments().for_client(client_ref)
-        return render_template("client_view.html", record=record,
-                               values=self.values_from_record(record), SECTIONS=WebApp.SECTIONS,
+        return render_template("client_view.html", record=saved,
+                               values=self.values_from_record(saved), SECTIONS=WebApp.SECTIONS,
                                assessments=assessments)
 
     def view_assessment(self, assessment_id: str) -> str:
         saved = self.__app.assessments().find(assessment_id)
         if saved is None:
             abort(404)
-        record = self.get_record(saved["client_ref"]) or {"client_ref": saved["client_ref"], "name": saved["client_ref"]}
+        record = self.page_record(saved["client_ref"])
         typologies = (saved.get("crime_scan") or {}).get("typologies", {})
         typology_list = typologies.get("sector_typologies") if isinstance(typologies, dict) else None
         return self.show_report(record, saved.get("report"), saved.get("assessed_at", ""), assessment_id,
@@ -656,9 +685,14 @@ class WebApp:
                            benchmark=saved.get("benchmark"))
 
     def edit_client(self, client_ref: str) -> str | Response:
-        old = self.get_record(client_ref)
-        if old is None:
+        try:
+            client = self.get_record(client_ref)
+        except ValueError as error:
+            flash(str(error))
+            return redirect(url_for("home"))
+        if client is None:
             abort(404)
+        old = client.to_dict()                   # the form is filled from, and saved in, the saved layout
  
         if request.method == "POST":
             values = self.values_from_form(request.form)
@@ -671,21 +705,30 @@ class WebApp:
                 known = {d.get("file_id") for d in record.get("supporting_documents", [])}
                 record["supporting_documents"] = list(record.get("supporting_documents", [])) + [
                     d for d in documents if d["file_id"] not in known]
-                if self.__app.clients().save(record):
+                problems = self.save_form_record(record)
+                if not problems:
                     flash("Changes saved.")
                     return redirect(url_for("view_client", client_ref=client_ref))
-                problems = ["The changes could not be saved. Check the database connection."]
             return self.show_form(f"Edit {client_ref}", values, problems, field_errors, documents=documents)
  
         return self.show_form(f"Edit {client_ref}", self.values_from_record(old), [])
 
-    def edit_client_autofill(self, client_ref: str) -> str:
-        if self.get_record(client_ref) is None:
+    def edit_client_autofill(self, client_ref: str) -> str | Response:
+        try:
+            found = self.get_record(client_ref) is not None
+        except ValueError as error:
+            flash(str(error))
+            return redirect(url_for("home"))
+        if not found:
             abort(404)
         return self.autofill_form(f"Edit {client_ref}", request.form, request.files.getlist("autofill_files"))
 
     def upload_documents(self, client_ref: str) -> Response:
-        record = self.get_record(client_ref)
+        try:
+            record = self.get_record(client_ref)
+        except ValueError as error:
+            flash(str(error))
+            return redirect(url_for("home"))
         if record is None:
             abort(404)
  
@@ -707,12 +750,11 @@ class WebApp:
             if file_id is None:
                 flash(f"Could not upload {name}.")
                 continue
-            record.setdefault("supporting_documents", []).append(
-                {"file_name": name, "file_id": file_id})
+            record.add_document({"file_name": name, "file_id": file_id})
             added += 1
  
         if added:
-            if self.__app.clients().save(record):
+            if self.__app.save_client(record):
                 flash(f"{added} document(s) uploaded.")
             else:
                 flash("Documents uploaded, but the record could not be saved.")
@@ -721,12 +763,16 @@ class WebApp:
         return redirect(url_for("view_client", client_ref=client_ref))
 
     def download_document(self, client_ref: str, file_id: str) -> Response:
-        record = self.get_record(client_ref)
+        try:
+            record = self.get_record(client_ref)
+        except ValueError as error:
+            flash(str(error))
+            return redirect(url_for("home"))
         if record is None:
             abort(404)
  
         document = None
-        for item in record.get("supporting_documents", []):
+        for item in record.documents():
             if item.get("file_id") == file_id:
                 document = item
         if document is None:
@@ -749,10 +795,10 @@ class WebApp:
 
     def assess_client(self, client_ref: str) -> Response:
         try:
-            record = self.__app.find_client(client_ref)
+            record = self.get_record(client_ref)
         except ValueError as error:
-            flash(f"{error} Please correct it (Edit) before assessing.")
-            return redirect(url_for("view_client", client_ref=client_ref))
+            flash(str(error))
+            return redirect(url_for("home"))
         if record is None:
             abort(404)
         if not self.__app.ai_available():
@@ -791,8 +837,7 @@ class WebApp:
     def assess_loading(self, job_id: str) -> str:
         if job_id not in self.__jobs:
             abort(404)
-        client_ref = self.__jobs[job_id]["client_ref"]
-        record = self.get_record(client_ref) or {"client_ref": client_ref, "name": client_ref}
+        record = self.page_record(self.__jobs[job_id]["client_ref"])
         return render_template("assess_loading.html", job_id=job_id, record=record,
                                ASSESS_STEPS=self._steps())
 

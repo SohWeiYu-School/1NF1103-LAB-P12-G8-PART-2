@@ -110,6 +110,63 @@ def test_a_saved_client_can_be_viewed_and_an_unknown_one_is_not_found(web):
     assert client.get("/client/NO-SUCH-CLIENT").status_code == 404
 
 
+def _flashes(client) -> list[str]:
+    with client.session_transaction() as session:
+        return [text for _, text in session.get("_flashes", [])]
+
+
+def _save_broken_client(application) -> str:
+    """Save a record with an impossible age, which ClientRecord cannot be built from."""
+    record = sample_case()
+    record["career"]["age"] = 5
+    application.clients().save(record)
+    return record["client_ref"]
+
+
+def test_a_saved_client_that_cannot_be_read_is_reported_on_every_client_page(web):
+    application, _, client = web
+    client_ref = _save_broken_client(application)
+    for method, url in (("get", f"/client/{client_ref}"), ("get", f"/client/{client_ref}/edit"),
+                        ("get", f"/find?ref={client_ref}"), ("post", f"/client/{client_ref}/documents"),
+                        ("post", f"/client/{client_ref}/autofill"),
+                        ("get", f"/client/{client_ref}/documents/some-file")):
+        reply = getattr(client, method)(url)
+        assert reply.status_code == 302 and reply.headers["Location"].endswith("/"), url
+        assert any("could not be loaded" in text and "age must be between 18 and 120" in text
+                   for text in _flashes(client))
+        client.get("/")                                             # shows, and so clears, the message
+
+
+def test_editing_a_client_saves_the_changes(web):
+    application, site, client = web
+    application.clients().save(sample_case())
+    fields = _form_fields(site, sample_case())
+    fields["client.name"] = "Daniel K. Tan"
+    reply = client.post(f"/client/{sample_case()['client_ref']}/edit", data=fields)
+    assert reply.status_code == 302, reply.get_data(as_text=True)[:2000]
+    assert application.find_client(sample_case()["client_ref"]).profile.name == "Daniel K. Tan"
+
+
+def test_a_form_that_does_not_make_a_valid_record_is_shown_again_not_saved(web):
+    application, site, client = web
+    fields = _form_fields(site, sample_case())
+    fields["claims.wealth_jump_years"] = "-2"                      # the form itself does not check this one
+    page = client.post("/client/new", data=fields)
+    assert page.status_code == 200
+    assert "could not be saved because a declared figure cannot be negative" in page.get_data(as_text=True)
+    assert application.clients().load() == []
+
+
+def test_an_uploaded_document_is_kept_with_the_client(web):
+    application, _, client = web
+    application.clients().save(sample_case())
+    reply = client.post(f"/client/{sample_case()['client_ref']}/documents", content_type="multipart/form-data",
+                        data={"files": (io.BytesIO(b"payslip"), "payslip.txt")})
+    assert reply.status_code == 302
+    documents = application.find_client(sample_case()["client_ref"]).documents()
+    assert [document["file_name"] for document in documents] == ["payslip.txt"]
+
+
 def test_an_unknown_page_shows_the_error_page(web):
     _, _, client = web
     page = client.get("/no/such/page")
