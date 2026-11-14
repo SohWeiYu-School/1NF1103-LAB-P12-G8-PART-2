@@ -397,11 +397,13 @@ class WebApp:
 
         The AI reply is turned into a client record by DocumentRecordBuilder - the very
         function the command line's "New Client from Documents" uses - so both give the same values
-        (field names, age from the date of birth, wealth split as fractions, oldest job first)."""
+        (field names, age from the date of birth, wealth split as fractions, oldest job first).
+        Raises ValueError if the reading holds a value no client record can have."""
         record, _ = self.__app.record_builder(current_date or self.today()).build(extracted, "")
+        data = record.to_dict()
         if not extracted.get("jobs"):
-            record["career_history"] = []      # the command line's empty "current job" is only there to be asked for
-        values = self.values_from_record(record)
+            data["career_history"] = []        # the command line's empty "current job" is only there to be asked for
+        values = self.values_from_record(data)
         for prefix, title, fields, kind in WebApp.SECTIONS:
             if kind == "list":
                 values[prefix] = [row for row in values[prefix] if any(row.values())]
@@ -502,13 +504,19 @@ class WebApp:
             flash("Document reading is not available right now — please try again later.")
         filled, notes = [], list(warnings)
         if extracted is not None:
-            found = self.extracted_to_values(extracted, self.today())
+            try:
+                found = self.extracted_to_values(extracted, self.today())
+            except ValueError as error:
+                logger.error("WebApp.autofill_form: the AI's reading is not a possible record: %r", error)
+                flash(f"The documents were read, but the details cannot be used because {error}. "
+                      "Nothing was filled in.")
+                return self.show_form(heading, values, [], documents=documents, notes=notes)
             values, filled = self.fill_blanks(values, found)
             notes += extracted.get("notes") or []
             # the same second-look checks the command line shows after reading documents
-            date = self.today()
-            record, _ = self.__app.record_builder(date).build(extracted, "")
-            notes += self.__app.record_builder(date).check(self.__app.record_builder(date).finish(record))
+            builder = self.__app.record_builder(self.today())
+            record, _ = builder.build(extracted, "")
+            notes += builder.check(record)
         if extracted is not None and filled:
             flash(f"Read {len(read)} document(s) and filled {len(filled)} box(es), highlighted in yellow. "
                   "Check every highlighted value before saving.")

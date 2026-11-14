@@ -42,7 +42,7 @@ def cli_record(reply: dict) -> dict:
     for field in builder.missing_fields(record):
         assert field["path"] == ["investments", 2, "income_produced"], field   # the only gap
         record = builder.set_path(record, field["path"], 0)
-    return builder.finish(record)
+    return builder.finish(record).to_dict()
 
 
 def web_record(site: WebApp, reply: dict) -> dict:
@@ -124,7 +124,7 @@ def test_the_case_uses_the_saved_values_without_asking(site):
 
 def test_the_split_matches_the_listed_assets():
     builder = DocumentRecordBuilder(CONFIG, TODAY)
-    record = cli_record(expected_reply())
+    record = ClientRecord.from_dict(cli_record(expected_reply()))
     assert builder.check(record) == []
 
     misread = builder.set_path(record, ["investments", 0, "current_declared_value"], 19000000)

@@ -8,7 +8,7 @@ import pytest
 from app.application.app import App
 from app.application.assessment_runner import AssessmentRunner
 from app.model.client_record import ClientRecord
-from tests import fake_services
+from tests import fake_ai, fake_services
 from tests.logic_fixtures import sample_case
 
 
@@ -218,3 +218,41 @@ def test_the_menu_reports_a_client_that_cannot_be_read_and_carries_on(app, monke
     assert "could not be loaded" in out
     assert "No client found" not in out                         # broken is not the same as missing
     assert "Goodbye." in out
+
+
+def test_a_new_client_is_made_from_a_folder_of_documents(tmp_path, monkeypatch, capsys):
+    """Menu option 2: the AI reads the folder, the officer fills the one gap and saves."""
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    monkeypatch.setattr("app.interface.console_ui.tk", None)          # no file explorer window
+    folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documents", "marcus_lim")
+    with open(folder + "_expected_extract.json", encoding="utf-8") as handle:
+        reading = json.load(handle)
+    app = App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))
+    #       menu  folder  income of asset 3  save  back to the menu  leave
+    _answers(monkeypatch, "2", folder, "0", "1", "3", "8")
+    app.run_menu()
+    assert "Client saved. Reference: CL-" in capsys.readouterr().out
+    saved = app.clients().load()
+    assert len(saved) == 1
+    record = app.find_client(saved[0]["client_ref"])
+    assert record.profile.name == reading["client"]["name"]
+    assert record.investments()[2].income_produced == 0
+    assert len(record.documents()) == len(os.listdir(folder))
+
+
+def test_documents_read_with_an_impossible_value_are_reported_and_nothing_is_saved(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    monkeypatch.setattr("app.interface.console_ui.tk", None)
+    folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documents", "marcus_lim")
+    with open(folder + "_expected_extract.json", encoding="utf-8") as handle:
+        reading = json.load(handle)
+    reading["client"].update(age=12, date_of_birth=None)
+    app = App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))
+    #       menu  folder  type it in yourself?  leave
+    _answers(monkeypatch, "2", folder, "n", "8")
+    app.run_menu()
+    out = capsys.readouterr().out
+    assert "cannot be used because age must be between 18 and 120" in out
+    assert app.clients().load() == []

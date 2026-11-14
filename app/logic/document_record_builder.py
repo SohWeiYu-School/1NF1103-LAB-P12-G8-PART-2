@@ -4,6 +4,7 @@ import copy
 import datetime
 
 from app.logic.case_reader import CaseReader
+from app.model.client_record import ClientRecord
 from app.model.config import Config
 
 
@@ -12,13 +13,14 @@ class DocumentRecordBuilder:
     still missing, checks the record for values that cannot be right, and summarises it
     for the officer to review. Nothing is saved here: the officer confirms every value.
 
+    The record it gives and takes is a ClientRecord; inside, it works on the record's saved
+    layout, where every field has a path (["career_history", 0, "start_year"]).
     It stores the Config (asset names from the policy) and today's date.
     """
 
     SUMMARY_SECTIONS = {"name": "Client", "nationality": "Client", "career": "Client",
                         "career_history": "Career history", "investments": "Assets",
                         "claims": "Financial claims", "sow_declaration": "Source of wealth declaration"}
-    CAREER_JOB_KEYS = ["occupation", "seniority", "industry", "employer_name", "employer_size"]
 
     def __init__(self, config: Config | None = None, today: str = "") -> None:
         self.__config: Config = config or Config({}, {})
@@ -39,12 +41,13 @@ class DocumentRecordBuilder:
     def _blank(self, value) -> bool:
         return value is None or (isinstance(value, str) and not value.strip()) or value == []
 
-    def build(self, extracted: dict, client_ref: str) -> tuple[dict, list[str]]:
+    def build(self, extracted: dict, client_ref: str) -> tuple[ClientRecord, list[str]]:
         """Build a client record (the same layout the New Client form saves) from the AI's
         reading of the documents. Returns (record, paths of the fields that came from the documents).
 
-        Every job, including the current one (end_year None), goes into career_history;
-        finish_document_record then copies the current job into "career".
+        Every job, including the current one (end_year None), goes into career_history, and
+        the current job is copied into "career". Raises ValueError, saying what is wrong, if
+        the reading holds a value no client record can have (an age of 12, a negative price).
         """
         today = self.__today
         client = extracted.get("client") or {}
@@ -73,9 +76,9 @@ class DocumentRecordBuilder:
                 "income_produced": asset.get("income_produced_sgd"),   # the AI gives every amount in SGD
             })
 
-        split = {key: composition.get(key) for key in CaseReader.COMPOSITION_KEYS}
-        if all(isinstance(v, (int, float)) for v in split.values()):
-            split = {key: value / 100 for key, value in split.items()}    # AI gives percentages
+        # The AI gives percentages; a share it did not give stays empty and is asked for.
+        split = {key: composition.get(key) / 100 if self.__is_number(composition.get(key)) else None
+                 for key in CaseReader.COMPOSITION_KEYS}
 
         age = client.get("age") or self._age_from_birth(client.get("date_of_birth"))
         record = {
@@ -101,7 +104,7 @@ class DocumentRecordBuilder:
         }
         found = [".".join(str(part) for part in item["path"])
                  for item in self._required_fields(record) if not self._missing(record, item)]
-        return record, found
+        return ClientRecord.from_dict(self.__finish_layout(record)), found
 
     def get_path(self, record: dict, path: list):
         """The value at path (e.g. ["career_history", 0, "start_year"]), or None if it isn't there."""
@@ -115,14 +118,15 @@ class DocumentRecordBuilder:
                 return None
         return value
 
-    def set_path(self, record: dict, path: list, value) -> dict:
-        """Return a copy of record with the value at path replaced."""
-        new = copy.deepcopy(record)
+    def set_path(self, record: ClientRecord, path: list, value) -> ClientRecord:
+        """Return a copy of record with the value at path replaced. Raises ValueError, saying
+        what is wrong, if the value is not possible there."""
+        new = record.to_dict()
         target = new
         for part in path[:-1]:
             target = target[part]
         target[path[-1]] = value
-        return new
+        return ClientRecord.from_dict(self.__finish_layout(new))
 
     def _field(self, path: list, short: str, kind: str, group: str = "", label: str = "") -> dict:
         """One form field. label is the full question (when asking); short + group are for the summary."""
@@ -194,11 +198,17 @@ class DocumentRecordBuilder:
             return self._blank(value)
         return self._blank(value)
 
-    def missing_fields(self, record: dict) -> list[dict]:
+    def missing_fields(self, record: ClientRecord) -> list[dict]:
         """The required fields still empty (or unusable) after reading the documents, in form order."""
-        return [field for field in self._required_fields(record) if self._missing(record, field)]
+        data = record.to_dict()
+        return [field for field in self._required_fields(data) if self._missing(data, field)]
 
-    def finish(self, record: dict) -> dict:
+    def finish(self, record: ClientRecord) -> ClientRecord:
+        """The record with its current job (the one with no end year, else the last one listed)
+        copied into "career" again - after the officer has edited the jobs."""
+        return ClientRecord.from_dict(self.__finish_layout(record.to_dict()))
+
+    def __finish_layout(self, record: dict) -> dict:
         """Copy the current job (the one with no end year) into "career", and the first job's start year
         into career_start_year - the same layout the New Client form saves."""
         record = copy.deepcopy(record)
@@ -211,8 +221,9 @@ class DocumentRecordBuilder:
         career["career_start_year"] = min(starts) if starts else None
         return record
 
-    def check(self, record: dict) -> list[str]:
+    def check(self, client: ClientRecord) -> list[str]:
         """Things worth a second look in a record filled from documents. Empty list = nothing spotted."""
+        record = client.to_dict()
         today = self.__today
         warnings = []
         this_year = int(today[:4])
@@ -282,12 +293,13 @@ class DocumentRecordBuilder:
             self._field(["claims", "declared_counterparties"], "Known counterparties", "countries"),
         ]
 
-    def summarise(self, record: dict, doc_record: dict) -> list[dict]:
+    def summarise(self, client: ClientRecord, doc_client: ClientRecord) -> list[dict]:
         """One row per field for the officer to check: its value and where it came from.
 
         source: "documents" (read from the documents, unchanged), "edited" (read from the documents,
         then changed by the officer), "entered" (typed by the officer) or "blank".
         """
+        record, doc_record = client.to_dict(), doc_client.to_dict()
         rows = []
         fields = self._required_fields(record) + self._optional_fields(record)
         order = {name: i for i, name in enumerate(DocumentRecordBuilder.SUMMARY_SECTIONS.values())}
@@ -309,16 +321,6 @@ class DocumentRecordBuilder:
                                   row["path"][1] if len(row["path"]) > 2 and isinstance(row["path"][1], int) else -1))
         return rows
 
-    def sync_after_edit(self, before: dict, after: dict) -> dict:
-        """After the officer edits the record, keep "career" and the current job in career_history the same.
-        If the profile screen changed "career", copy that into the current job; otherwise copy the
-        (possibly edited) current job into "career"."""
-        after = copy.deepcopy(after)
-        jobs = after.get("career_history", [])
-        open_jobs = [i for i, job in enumerate(jobs) if job.get("end_year") in (None, "")]
-        changed = any((before.get("career") or {}).get(k) != (after.get("career") or {}).get(k)
-                      for k in DocumentRecordBuilder.CAREER_JOB_KEYS)
-        if changed and open_jobs:
-            for key in DocumentRecordBuilder.CAREER_JOB_KEYS:
-                jobs[open_jobs[-1]][key] = after["career"].get(key)
-        return self.finish(after)
+    @staticmethod
+    def __is_number(value: object) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)

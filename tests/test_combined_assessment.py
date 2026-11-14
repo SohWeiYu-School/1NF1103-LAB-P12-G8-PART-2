@@ -305,7 +305,7 @@ def marcus() -> tuple[dict, dict]:
         reading = json.load(handle)
     builder = DocumentRecordBuilder(CONFIG, datetime.date.today().isoformat())   # assessments are dated today
     record, _ = builder.build(reading, "CL-MARCUS")
-    record = builder.finish(builder.set_path(record, ["investments", 2, "income_produced"], 0))
+    record = builder.finish(builder.set_path(record, ["investments", 2, "income_produced"], 0)).to_dict()
     record["supporting_documents"] = [{"file_name": os.path.basename(path), "file_path": path}
                                       for path in DocumentStore().list_folder(MARCUS)]
     return record, reading

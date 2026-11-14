@@ -204,7 +204,7 @@ class App:
             elif choice == "2":
                 record = self.new_client_from_documents()
                 if record is not None:
-                    self.__assess_saved_answers(record)
+                    self.__assess_if_allowed(record)
             elif choice == "3":
                 self.__client_form.find_existing_client(
                     find_fn=self.find_client, save_fn=self.save_client,
@@ -381,7 +381,7 @@ class App:
             logger.error("App.save_client: could not save the client record %s", record.client_ref)
         return saved
 
-    def new_client_from_documents(self) -> dict | None:
+    def new_client_from_documents(self) -> ClientRecord | None:
         """Read a folder of documents, pre-fill the client, ask for what is missing, show a
         summary to check, then save. Returns the saved record (to assess) or None."""
         # 1. Which folder
@@ -409,14 +409,21 @@ class App:
 
         # 3. Build the record and ask for anything missing
         builder = self.record_builder()
-        document_record, _ = builder.build(extracted, self.__client_form.generate_client_id())
+        client_ref = self.__client_form.generate_client_id()
+        try:
+            document_record, _ = builder.build(extracted, client_ref)
+        except ValueError as error:
+            logger.error("App.new_client_from_documents: the AI's reading is not a possible record: %r", error)
+            self.__ui.show_error(f"The details read from the documents cannot be used because {error}.")
+            if not self.__ui.ask_yes_no("Type the details in yourself?"):
+                return None
+            extracted = {}
+            document_record, _ = builder.build(extracted, client_ref)
         record = document_record
         missing = builder.missing_fields(record)
         self.__ui.show_missing_intro(len(missing))
         for field in missing:
-            record = builder.set_path(record, field["path"], self.__client_form.ask_missing_field(field))
-        record = builder.finish(record)
-        document_record = builder.finish(document_record)
+            record = self.__fill_field(builder, record, field)
 
         # 4. Summary to check, edit until right, then save or discard
         notes = list(extracted.get("notes") or []) + list(warnings)
@@ -428,17 +435,9 @@ class App:
                 self.__ui.show_message("\nClient discarded. Nothing was saved.")
                 return None
             if action == "edit":
-                before = json.loads(json.dumps(record))
-                try:
-                    edited = self.__client_form.edit_existing_client(ClientRecord.from_dict(record),
-                                                                     self.__documents.upload)
-                except ValueError as error:
-                    logger.error("App.new_client_from_documents: record cannot be edited: %r", error)
-                    self.__ui.show_error(f"The record cannot be edited because {error}.")
-                    continue
-                record = builder.sync_after_edit(before, edited.to_dict())
+                record = builder.finish(self.__client_form.edit_existing_client(record, self.__documents.upload))
                 for field in builder.missing_fields(record):
-                    record = builder.set_path(record, field["path"], self.__client_form.ask_missing_field(field))
+                    record = self.__fill_field(builder, record, field)
                 continue
             break
 
@@ -448,20 +447,13 @@ class App:
             if stored is None:
                 self.__ui.show_error(f"Could not keep a copy of {os.path.basename(path)}.")
             else:
-                record.setdefault("supporting_documents", []).append(
-                    {"file_name": os.path.basename(path), "file_path": stored})
-        if not self.__clients.save(record):
+                record.add_document({"file_name": os.path.basename(path), "file_path": stored})
+        if not self.save_client(record):
             self.__ui.show_error("The client could not be saved.")
             return None
-        self.__ui.show_message(f"\nClient saved. Reference: {record['client_ref']} "
-                               f"({len(record.get('supporting_documents', []))} document(s) attached).")
-        try:
-            saved = ClientRecord.from_dict(record)
-        except ValueError as error:
-            logger.error("App.new_client_from_documents: the saved client cannot be read: %r", error)
-            self.__ui.show_error(f"The client was saved, but cannot be shown or assessed because {error}.")
-            return None
-        return record if self.__client_form.ask_after_save(saved) else None
+        self.__ui.show_message(f"\nClient saved. Reference: {record.client_ref} "
+                               f"({len(record.documents())} document(s) attached).")
+        return record if self.__client_form.ask_after_save(record) else None
 
     def read_documents(self, documents: list[dict]) -> tuple[dict | None, list[str]]:
         """Ask the AI to read documents the DocumentStore has opened. Returns (details, warnings)."""
@@ -594,15 +586,14 @@ class App:
         self.__rate_limiter.record("cli")
         self.assess_client_record(record)
 
-    def __assess_saved_answers(self, data: dict) -> None:
-        """Assess a client the form has just saved in the saved layout."""
-        try:
-            record = ClientRecord.from_dict(data)
-        except ValueError as error:
-            logger.error("App: the new client %s cannot be read: %r", data.get("client_ref"), error)
-            self.__ui.show_error(f"The client was saved, but cannot be assessed because {error}.")
-            return
-        self.__assess_if_allowed(record)
+    def __fill_field(self, builder: DocumentRecordBuilder, record: ClientRecord, field: dict) -> ClientRecord:
+        """Ask the officer for one missing detail until the record accepts it."""
+        while True:
+            try:
+                return builder.set_path(record, field["path"], self.__client_form.ask_missing_field(field))
+            except ValueError as error:
+                logger.warning("App: %s was not accepted: %r", field["label"], error)
+                self.__ui.show_error(f"That value cannot be used because {error}. Please try again.")
 
     def __show_step(self, number: int, label: str) -> None:
         self.__ui.show_step(number, len(AssessmentRunner.STEPS), label)
