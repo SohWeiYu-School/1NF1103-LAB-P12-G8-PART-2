@@ -6,6 +6,7 @@ hide empty members
 
 package "Data Manager (app/data)" {
   class AssessmentRepository {
+    --
     +__init__(path : str = ".../ai_assessments.json", key_field : str = "assessment_id")
     +save(record : dict) : bool
     +for_client(client_ref : str) : list[dict]
@@ -89,6 +90,7 @@ package "Data Manager (app/data)" {
     +list_folder(folder : str) : list[str] | None
   }
   class ExcelReader {
+    --
     +__init__(max_chars : int = 40_000)
     +read(file_path : str, file_name : str) : dict
     -__xlsx_text(file_path : str) : str
@@ -128,15 +130,18 @@ package "Data Manager (app/data)" {
     -__pdf_text(file_path : str) : str
   }
   interface Repository {
+    --
     +save(record : dict) : bool
     +load() : list[dict]
     +find(ref : str) : dict | None
   }
   class TextReader {
+    --
     +__init__(max_chars : int = 40_000)
     +read(file_path : str, file_name : str) : dict
   }
   class WordReader {
+    --
     +__init__(max_chars : int = 40_000)
     +read(file_path : str, file_name : str) : dict
     -__docx_text(file_path : str) : str
@@ -479,6 +484,7 @@ package "Logic Manager (app/logic)" {
     -__to_iso(value : str) : str
   }
   class DocumentEvidence {
+    --
     +__init__(policy : dict = {})
     +run(case : dict, ai_data : dict) : dict
     +checks(context : dict) : list[Check]
@@ -512,6 +518,7 @@ package "Logic Manager (app/logic)" {
     -__data_quality() : dict
   }
   class Formatter <<utility>> {
+    --
     +__init__()
     {static} +sgd(value : float) : str
     {static} +add_months(date_text : str, months : int) : str
