@@ -3,17 +3,16 @@
 This file tells AI coding assistants how to behave in this repo.
 Follow these rules to keep the codebase consistent and assessable.
 
-Part 2 of the project is an object-oriented refactor. The target design is the
-UML class diagram (v4). Code is being moved into classes one piece at a time, so
-for a while the old manager files (`app/*_manager.py`) and the new folders exist
-side by side.
+Part 2 of the project is object-oriented. The design is the UML class diagram (v4).
+The old procedural manager files are gone; `tests/test_manager_boundaries.py` fails
+if one comes back or if a manager imports another.
 
 ---
 
 ## 1. Object-Oriented Code (Graded)
 
-**New code goes into classes that match the UML class diagram.**
-No procedural-style code should be left by the end of the refactor.
+**All code goes into classes that match the UML class diagram.**
+The only module-level functions are the AI caller functions in `app/ai/ai_caller.py`.
 
 - Every class has an `__init__`. Every attribute has a type and a default value.
 - A child class calls `super().__init__` with all of the parent's inputs plus its own.
@@ -32,10 +31,10 @@ No procedural-style code should be left by the end of the refactor.
 |---|---|---|
 | `main.py` | Entry point | Picks the AI brand and starts `App`. Nothing else. |
 | `app/application/` | Application | `App`, `AssessmentRunner`. The only place that coordinates the managers. |
-| `app/interface/` | IO Manager | `ConsoleUI`, `ReportView`, `ClientForm`, `CaseBuilder`, `WebApp`, `RateLimiter` |
+| `app/interface/` | IO Manager | `ConsoleUI`, `ReportView`, `ClientForm`, `CaseBuilder`, `WebApp` (and its page templates in `web_templates.py`), `RateLimiter` |
 | `app/ai/` | AI Manager | `AIService` and its children, `ResponseCache`, the AI caller functions |
-| `app/logic/` | Logic Manager | `VerdictEngine`, `Feature` and its children, `Indicator` and its children, the forecast classes |
-| `app/data/` | Data Manager | The repositories, `CloudSync`, `DocumentStore`, the document readers, `ConfigReader` |
+| `app/logic/` | Logic Manager | `VerdictEngine`, `Feature` and its children, `Indicator` and its children, the forecast classes, `CaseReader`, `DocumentRecordBuilder`, `CaseTimeline`, `Formatter` |
+| `app/data/` | Data Manager | The repositories, `CloudSync`, `DocumentStore`, the document readers, `ConfigReader`, `CaseFiles` |
 | `app/model/` | Domain Model | Shared data objects (`ClientRecord`, `Verdict`, `Check`, `Band`, `Config`, ...) |
 
 ---
@@ -98,7 +97,10 @@ def test_something():
     assert result == expected
 ```
 
-When a piece of code moves into a class, its tests move with it in the same commit.
+Each class has its own test file, `tests/test_<group>_<class>.py`, changed in the same
+commit as the class. To stand in for the AI, give the class a made-up caller
+(`tests/fake_ai.caller`) or made-up services (`tests/fake_services.py`); do not patch
+module functions.
 
 ---
 

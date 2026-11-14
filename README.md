@@ -1,6 +1,6 @@
 # Source of Wealth Screening System
 
-A Python CLI tool that helps bank compliance officers screen client Source of Wealth declarations faster and more consistently, using AI-generated career benchmarks to flag red flags without replacing human judgement.
+A Python tool (command line and web app) that helps bank compliance officers screen client Source of Wealth declarations faster and more consistently, using AI-generated career benchmarks to flag red flags without replacing human judgement.
 
 ---
 
@@ -14,7 +14,8 @@ After the Monetary Authority of Singapore fined nine banks a combined S$27.45 mi
 
 The crime scan, the forecast and the benchmark run as **one assessment** and give **one verdict**
 (`PASSED`, `MANUAL_REVIEW`, `RISKY` or `SERIOUS_RISK`) with the reasons behind it. The AI only
-gathers evidence; `logic_manager` makes every decision with fixed rules from `config/policy.json`.
+gathers evidence; the Logic Manager (`app/logic`) makes every decision with fixed rules from
+`config/policy.json`.
 
 All three features test the same set of "possible stories" for the client, the forecast's
 **person types**: T1 is the honest story (his wealth came exactly as declared), T2+ are crime stories.
@@ -37,7 +38,7 @@ All three features test the same set of "possible stories" for the client, the f
  12    Test every story     warning signs per person type; each benchmark failure cross-checked
                             against the forecast ("explained" failures don't count); forecast checks;
                             documents vs declaration (undeclared companies, income, accounts, ...)
- 13    ONE verdict          logic_manager.combined_verdict -> logic_manager.verdict_report
+ 13    ONE verdict          VerdictEngine.decide -> VerdictEngine.report
 ```
 
 **Serious Risk needs two features to agree:** either the honest story can't explain his wealth, a
@@ -48,8 +49,8 @@ in several ways AND another feature agrees. A PEP, or any part that couldn't run
 The client record stays the standard form (what he declared); the documents fill any field the
 declaration leaves empty, and the officer is only asked for what no document contains.
 
-The command line (menu options 1, 2, 4) and the web app (Run Assessment) call the same function,
-`main.run_combined_assessment`, and show the same report: the verdict, next step and next review
+The command line (menu options 1, 2, 4) and the web app (Run Assessment) call the same method,
+`App.assess` (which runs `AssessmentRunner`), and show the same report: the verdict, next step and next review
 date; why; where the checks agree; the benchmark, forecast and crime findings; the documents to
 request; what came back clean. The full evidence is one step away: the command line asks
 "Show the full evidence?", the web page keeps it collapsed.
@@ -60,6 +61,29 @@ listings) from the forecast.
 
 ---
 
+## Architecture (Part 2: object-oriented, UML v4)
+
+The code follows the UML class diagram (v4). There are four managers, a Domain Model they all
+share, and an Application folder that is the only place that coordinates them. **The four managers
+never import each other**; `tests/test_manager_boundaries.py` checks this on the source code.
+
+| Folder | Group | Main classes |
+|---|---|---|
+| `main.py` | Entry point | Chooses the AI brand (`with_fallback(openai_caller(), gemini_caller())`) and starts `App`. Nothing else. |
+| `app/application/` | Application | `App` (creates and keeps every object, decides what happens when a step fails: `CRITICAL_STEPS`), `AssessmentRunner` (runs the steps of one assessment) |
+| `app/interface/` | IO Manager | `ConsoleUI` (every `print()`/`input()`), `ReportView`, `ClientForm`, `CaseBuilder`, `RateLimiter`, `WebApp` (the web front end; it only calls `App`) |
+| `app/ai/` | AI Manager | `AIService` and its children `ResearchAI`, `TypologyAI`, `BenchmarkAI`, `DocumentAI`, `ForecastAI`; `ResponseCache`; the AI caller functions in `ai_caller.py` |
+| `app/logic/` | Logic Manager | `VerdictEngine`; `Feature` and its children `CrimeScan`, `DocumentEvidence`, `Benchmark`, `Forecast`; `Indicator` and its five warning signs; the forecast arithmetic (`MarketModel`, `CareerSavings`, `AssetPath`, `FuturePaths`, `OnboardingAssessor`, `PayCalibrator`); `CaseReader`, `DocumentRecordBuilder`, `CaseTimeline`, `Formatter` |
+| `app/data/` | Data Manager | `Repository` → `JsonRepository` (`ClientRepository`, `AssessmentRepository`) and `DatabaseRepository` (`MongoRepository`); `CloudSync`; `DocumentStore`, `DocumentReaderFactory` and the five `DocumentReader`s; `ConfigReader`; `CaseFiles` |
+| `app/model/` | Domain Model | `ClientRecord` (with `ClientProfile`, `Job`, `Investment`, `Claims`, `Declaration`/`ClaimedSource`, `ReviewStatus`), `Verdict`, `Check`, `Band`, `Config`, `Typology`, `MatchResult`, `ResearchReport` |
+
+**When a step fails** (no connection to the AI, a reply that is not JSON or breaks its schema, a
+missing or damaged file), the class that owns the step returns `None` or an empty result instead of
+raising. `AssessmentRunner` reports the failed step to `App`, and `App` decides: a step in
+`App.CRITICAL_STEPS` stops the assessment; any other step is left out, named in the report as
+"not run", and the assessment carries on (an assessment with a part missing is at least Manual Review).
+
+---
 
 ## Prerequisites
 
@@ -95,16 +119,25 @@ Build the image:
 docker build -t sow-screening .
 ```
 
-Run the app:
+Run the web app (then open http://127.0.0.1:5000):
 ```bash
-docker run -it --env-file .env -v "$(pwd)/data:/app/data" sow-screening
+docker run -it -p 5000:5000 --env-file .env -v "$(pwd)/data:/app/data" sow-screening
+```
+
+Run the command line menu instead:
+```bash
+docker run -it --env-file .env -v "$(pwd)/data:/app/data" sow-screening python main.py
 ```
 
 The `-v` flag mounts your local `data/` folder into the container so saved records and the AI reply cache persist between runs. You only need to rebuild if `requirements.txt` or `Dockerfile` changes.
 
 If you're actively coding and don't want to rebuild Docker every time you change a file, you can run locally instead:
 ```bash
-python main.py
+python main.py                                  # the menu
+python main.py --web                            # the web app
+python main.py --case data/sample/case_001.json # assess one case file
+python main.py --all-samples                    # assess every sample case
+python main.py --all-samples --demo             # the same, with recorded AI replies (no API key)
 ```
 
 ---
@@ -128,10 +161,10 @@ The command line does the same through menu option **2. New Client from Document
 
 How it works — the web app and the command line share every step, so the same documents always give the same client:
 
-1. `data_manager.read_document_for_extraction` reads each file's text (or keeps images and scanned PDFs as they are).
-2. `ai_manager.extract_client_details` sends them to the AI with `app/prompts/document_extract.txt` and checks the reply against `app/schemas/document_extract.schema.json`.
-3. `logic_manager.record_from_documents` turns the reply into a client record (the web app then shows it in the form, and `web_app.fill_blanks` only fills empty boxes).
-4. `logic_manager.check_document_record` lists things worth a second look, shown with the AI's notes.
+1. `DocumentStore` reads each file through the reader `DocumentReaderFactory` picks for its type (text, or images and scanned PDFs kept as they are).
+2. `DocumentAI` sends them to the AI with `app/prompts/document_extract.txt` and checks the reply against `app/schemas/document_extract.schema.json`.
+3. `DocumentRecordBuilder.build` turns the reply into a client record (the web app then shows it in the form, and `WebApp.fill_blanks` only fills empty boxes).
+4. `DocumentRecordBuilder.check` lists things worth a second look, shown with the AI's notes.
 
 The form records what the client **declares** (from the KYC / declaration form). Anything the other documents show that the client did not declare — an offshore company, unexplained payments, a purchase funded differently — is not added to the form; it appears in the **Notes** as "Not declared:", "Conflict:" or "Check:".
 
@@ -154,6 +187,11 @@ python -m pytest tests/
 
 Add `-v` for verbose output (shows each test name) or `-q` for a one-line summary.
 
+Tests are plain pytest functions, one file per class (`tests/test_<group>_<class>.py`). They never
+call a real AI: the AI services are given made-up callers with hard-coded replies (`tests/fake_ai.py`,
+`tests/fake_services.py`), so a connection failure, a reply that is not JSON and a reply that breaks
+its schema are all tested without a network.
+
 ---
 
 ## Project Structure
@@ -161,28 +199,30 @@ Add `-v` for verbose output (shows each test name) or `-q` for a one-line summar
 ```
 1NF1103-LAB-P12-G8/
 ├── app/
+│   ├── application/      # App, AssessmentRunner (the only place that coordinates the managers)
+│   ├── interface/        # IO Manager: ConsoleUI, ReportView, ClientForm, CaseBuilder, RateLimiter,
+│   │                     #   WebApp and its page templates (web_templates.py)
+│   ├── ai/               # AI Manager: AIService and its five children, ResponseCache, ai_caller.py
+│   ├── logic/            # Logic Manager: VerdictEngine, the four Features, Indicators, forecast maths
+│   ├── data/             # Data Manager: repositories, CloudSync, DocumentStore, readers, ConfigReader
+│   ├── model/            # Domain Model: ClientRecord and its parts, Verdict, Check, Band, Config, ...
 │   ├── prompts/          # AI prompt template text files
 │   ├── schemas/          # JSON Schema files for validating AI responses
-│   ├── __init__.py       # Makes app a Python package (do not delete)
-│   ├── ai_manager.py     # AI calls and response caching
-│   ├── data_manager.py   # Saves and loads JSON files
-│   ├── io_manager.py     # All print() and input() calls live here
-│   ├── logic_manager.py  # Scoring and decision logic
-│   ├── utilities.py      # Shared config, cache helpers and AI client
-│   └── web_app.py        # Flask web interface
+│   └── __init__.py       # Makes app a Python package (do not delete)
 ├── config/
-│   └── policy.json       # Risk thresholds and rules
+│   ├── policy.json       # Risk thresholds and rules
+│   └── vocabulary.json   # The code names (signals, documents, crime categories)
 ├── data/
 │   └── sample/           # Synthetic demo cases for testing
 ├── logs/
 │   └── app.log           # All application logs (warnings, errors, AI call info)
-├── tests/                # All test files
+├── tests/                # All test files (one per class, plus the boundary and behaviour tests)
 ├── .dockerignore
 ├── .env.example          # Template showing what variables are needed
 ├── .gitignore
 ├── CLAUDE.md             # Project coding conventions
-├── Dockerfile            # Instructions for building the Docker image
-├── main.py               # Entry point
+├── Dockerfile            # Builds the image; it starts the web app (python main.py --web)
+├── main.py               # Entry point: chooses the AI brand and starts App
 └── requirements.txt      # Python dependencies with pinned versions
 ```
 
