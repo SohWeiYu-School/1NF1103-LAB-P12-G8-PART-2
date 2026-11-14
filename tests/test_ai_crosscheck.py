@@ -21,7 +21,7 @@ import re
 
 import pytest
 
-from app import logic_manager
+from app.logic.career_savings import CareerSavings
 from tests.helpers import CASE_IDS, CROSSCHECK_DIR, load_case, run_from_saved
 
 
@@ -64,7 +64,7 @@ def compare_market_history(forecast: dict, rows: list[dict]) -> list[tuple[bool,
 
 
 def compare_pay(forecast: dict, rows: list[dict]) -> list[tuple[bool, str]]:
-    pay = {(job["position_index"], row["year"]): logic_manager.pay_total(row, "typical")
+    pay = {(job["position_index"], row["year"]): CareerSavings().pay_total(row, "typical")
            for job in forecast["earnings"]["positions"] for row in job["yearly"]}
     results = []
     for row in rows:

@@ -1,6 +1,11 @@
 """Tests for logic_manager indicator check functions and match_typologies."""
 
-from app.logic_manager import match_typologies
+from app.logic.crime_scan import CrimeScan
+
+
+def match_typologies(typologies, declaration, clean_case, policy):
+    """The crime scan's matching, as these tests have always called it."""
+    return CrimeScan(policy).match_typologies(typologies, declaration, clean_case)
 
 
 # ---------------------------------------------------------------------------

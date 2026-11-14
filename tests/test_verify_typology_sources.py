@@ -15,7 +15,11 @@ verify_typology_sources returns (cleaned_typologies, warnings):
     stored in the returned typology dict for display.
 """
 
-from app.logic_manager import verify_typology_sources
+from app.logic.crime_scan import CrimeScan
+
+
+def verify_typology_sources(typologies, clean_research, policy):
+    return CrimeScan(policy).verify_typology_sources(typologies, clean_research)
 
 
 def _sample_policy(max_age=10):

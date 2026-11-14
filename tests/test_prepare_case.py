@@ -1,6 +1,14 @@
 """Tests for logic_manager.prepare_case_for_matching and normalize_declaration_jurisdictions."""
 
-from app.logic_manager import normalize_declaration_jurisdictions, prepare_case_for_matching
+from app.logic.crime_scan import CrimeScan
+
+
+def prepare_case_for_matching(record):
+    return CrimeScan()._prepare_case(record)
+
+
+def normalize_declaration_jurisdictions(declaration):
+    return CrimeScan().normalise_jurisdictions(declaration)
 
 
 def _sample_record(**overrides):

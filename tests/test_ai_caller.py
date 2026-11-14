@@ -164,3 +164,16 @@ def test_a_fallback_chain_answers_for_its_first_caller(monkeypatch):
     chain = with_fallback(openai_caller(model="gpt-test"), gemini_caller(_FakeGemini()))
     assert chain.available() is False            # the main brand has no key
     assert chain.model_name() == "gpt-test"
+
+
+def test_gemini_schema_keeps_field_names_that_look_like_unsupported_keys():
+    schema = {"type": "object", "properties": {"title": {"type": "string", "title": "Report title"}}}
+    assert gemini_schema(schema) == {"type": "object", "properties": {"title": {"type": "string"}}}
+
+
+def test_gemini_schema_can_drop_required_at_every_level():
+    schema = {"type": "object", "required": ["reports"], "properties": {"reports": {
+        "type": "array", "items": {"type": "object", "required": ["url"], "properties": {"url": {"type": "string"}}}}}}
+    cleaned = gemini_schema(schema, {"required"})
+    assert "required" not in cleaned
+    assert "required" not in cleaned["properties"]["reports"]["items"]
