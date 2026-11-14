@@ -16,7 +16,7 @@ class CaseReader:
         self.__today: str = today
 
     @staticmethod
-    def read_amount(text) -> float | None:
+    def read_amount(text: str | int | float | None) -> float | None:
         """'1,650,000', 'S$1.65m', '410k', 30 -> a number; None if it can't be read."""
         if isinstance(text, bool):
             return None
@@ -35,7 +35,7 @@ class CaseReader:
         except ValueError:
             return None
 
-    def read_year(self, text) -> int | None:
+    def read_year(self, text: str | int | float | None) -> int | None:
         value = CaseReader.read_amount(text)
         return int(value) if value is not None and 1900 <= value <= 2100 else None
 

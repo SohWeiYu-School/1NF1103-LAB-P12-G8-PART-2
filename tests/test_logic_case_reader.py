@@ -70,3 +70,11 @@ def test_benchmark_input_gives_the_asset_split_in_whole_percents():
     assert missing == []
     assert (data["property"], data["listed_equities"], data["private_business"], data["cash"]) == (28, 11, 41, 20)
     assert data["declared_net_worth"] == 16500000
+
+
+def test_read_year_accepts_a_number_or_text_as_the_records_hold_both():
+    """Saved records and form answers hold years as text or as numbers, so read_year takes either."""
+    reader = CaseReader()
+    assert reader.read_year("2017") == 2017
+    assert reader.read_year(2017) == 2017
+    assert reader.read_year(None) is None
