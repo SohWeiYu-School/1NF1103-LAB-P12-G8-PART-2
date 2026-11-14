@@ -146,3 +146,9 @@ def test_prompt_version_is_read_from_the_prompt_file():
     service = _Question("fake", None)
     assert service._prompt_version("# prompt_version: research-v3\nText") == "research-v3"
     assert service._prompt_version("No version line") == "unknown"
+
+
+def test_a_failed_question_prints_nothing(capsys):
+    assert _Question("fake", _Replies(None, None)).run(SOURCE) is None
+    out = capsys.readouterr()
+    assert out.out == "" and out.err == ""
