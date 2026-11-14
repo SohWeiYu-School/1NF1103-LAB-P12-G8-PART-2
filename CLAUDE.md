@@ -3,82 +3,108 @@
 This file tells AI coding assistants how to behave in this repo.
 Follow these rules to keep the codebase consistent and assessable.
 
----
-
-## 1. No `class` Keyword (Graded)
-
-**The `class` keyword must not appear anywhere in any `.py` file.**
-
-Use plain `dict` instead of dataclasses, TypedDict, Pydantic models, or Enums.
-Use built-in exceptions instead of custom exception classes.
-Use plain pytest functions instead of `unittest.TestCase`.
+Part 2 of the project is an object-oriented refactor. The target design is the
+UML class diagram (v4). Code is being moved into classes one piece at a time, so
+for a while the old manager files (`app/*_manager.py`) and the new folders exist
+side by side.
 
 ---
 
-## 2. Print/Input Rule (Graded)
+## 1. Object-Oriented Code (Graded)
 
-**All `print()` and `input()` calls must live in `app/io_manager.py` only.**
+**New code goes into classes that match the UML class diagram.**
+No procedural-style code should be left by the end of the refactor.
 
-Other modules must return values — never print directly.
-`main.py` passes return values to `io_manager` functions for display.
+- Every class has an `__init__`. Every attribute has a type and a default value.
+- A child class calls `super().__init__` with all of the parent's inputs plus its own.
+- The class that owns an attribute validates it (in `__init__` or its setter).
+  There is no separate checker class.
+- Private attributes and methods use two leading underscores (`__name`).
+  Protected ones (shared with children) use one (`_name`).
+- A class with no attributes that only runs functions is a leftover: move the work
+  to the class that owns the inputs. `Formatter` (a utility) is the only exception.
 
 ---
 
-## 3. Managers Never Import Each Other
+## 2. Folder Layout
 
-The four managers (`io_manager`, `ai_manager`, `logic_manager`, `data_manager`)
-must never import from each other. All coordination happens in `main.py`.
+| Folder | Group | What lives there |
+|---|---|---|
+| `main.py` | Entry point | Picks the AI brand and starts `App`. Nothing else. |
+| `app/application/` | Application | `App`, `AssessmentRunner`. The only place that coordinates the managers. |
+| `app/interface/` | IO Manager | `ConsoleUI`, `ReportView`, `ClientForm`, `CaseBuilder`, `WebApp`, `RateLimiter` |
+| `app/ai/` | AI Manager | `AIService` and its children, `ResponseCache`, the AI caller functions |
+| `app/logic/` | Logic Manager | `VerdictEngine`, `Feature` and its children, `Indicator` and its children, the forecast classes |
+| `app/data/` | Data Manager | The repositories, `CloudSync`, `DocumentStore`, the document readers, `ConfigReader` |
+| `app/model/` | Domain Model | Shared data objects (`ClientRecord`, `Verdict`, `Check`, `Band`, `Config`, ...) |
+
+---
+
+## 3. Managers Never Import Each Other (Graded)
+
+The four managers (`app/interface`, `app/ai`, `app/logic`, `app/data`) must never
+import from each other, and must never import from `app/application`.
+All coordination happens in `app/application`.
+
+- Any group may import from `app/model`.
+- The one exception is `WebApp`, which calls `App`.
 
 ```python
-# main.py — correct
-from app import io_manager, ai_manager, logic_manager, data_manager
+# app/application/app.py — correct
+from app.ai.research_ai import ResearchAI
+from app.data.client_repository import ClientRepository
 
-# ai_manager.py — WRONG, do not do this
-from app import data_manager
+# app/ai/research_ai.py — WRONG, do not do this
+from app.data.client_repository import ClientRepository
 ```
 
 ---
 
-## 4. `logic_manager` is Pure
+## 4. Print/Input Rule (Graded)
 
-Every function in `app/logic_manager.py` must have no side effects:
-no file access, no network calls, no printing.
-Same inputs always produce the same output.
+**All `print()` and `input()` calls must live in the IO Manager (`ConsoleUI`).**
+
+Other classes return values — never print directly.
 
 ---
 
-## 5. AI Allowlist
+## 5. The Logic Manager is Pure
+
+Classes in `app/logic` do no file access, no network calls and no printing.
+The same inputs always produce the same output.
+
+---
+
+## 6. AI Allowlist
 
 The benchmark AI call must never include the client's declared figures.
 Only these fields may be sent:
 
 ```python
-BENCHMARK_ALLOWED_FIELDS = ["occupation", "industry", "age", "career_start_year", "country"]
+ALLOWED_FIELDS = ["occupation", "industry", "age", "career_start_year", "country"]
 ```
 
 Do not add to this list without team agreement.
 
 ---
 
-## 6. Tests
+## 7. Tests
 
 Use pytest plain functions only — no `unittest.TestCase`.
+Tests use hard-coded sample AI replies; they never call a real AI service.
 
 ```python
 def test_something():
     assert result == expected
 ```
 
+When a piece of code moves into a class, its tests move with it in the same commit.
+
 ---
 
-## 7. Key Files
+## 8. Commits and Branches
 
-| Path | Purpose |
-|---|---|
-| `main.py` | Entry point — imports and calls all four managers |
-| `app/io_manager.py` | All print/input |
-| `app/ai_manager.py` | AI calls, caching, AI boundary enforcement |
-| `app/logic_manager.py` | Pure scoring and decision functions |
-| `app/data_manager.py` | JSON file persistence |
-| `config/policy.json` | Risk thresholds — edit here, not in code |
-| `tests/` | All test files |
+- Never push straight to `main`. Work on a branch (`refactor/...`, `chore/...`,
+  `test/...`, `docs/...`) and merge it.
+- Keep commits small: one class (or one small family of classes) per commit.
+- The tests must pass on every commit.
