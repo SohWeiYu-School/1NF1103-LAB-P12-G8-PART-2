@@ -267,13 +267,19 @@ class ClientRecord:
     # ----- saving and loading ---------------------------------------------------
 
     def to_dict(self) -> dict:
-        """The saved layout every screen reads. "career" is the current job plus the profile."""
+        """The saved layout every screen reads. "career" is the current job plus the profile.
+
+        When career_history holds an open job (no end year), that job is copied into "career".
+        When every listed job has ended, the current job is the one saved in "career" (the
+        command line's New Client form keeps it there and lists only earlier jobs in
+        career_history), so "career" is kept as it was saved. A saved career start year is kept."""
         career = dict(self.__career_extra)
-        job = self.current_job()
-        if job is not None:
-            job_data = job.to_dict()
+        open_jobs = [job for job in self.__career_history if job.is_current()]
+        if open_jobs:
+            job_data = open_jobs[-1].to_dict()
             for key in ClientRecord.CAREER_JOB_KEYS:
                 career[key] = job_data[key]
+        if self.__career_history and career.get("career_start_year") is None:
             career["career_start_year"] = self.career_start_year()
         career["country_of_residence"] = self.__profile.country_of_residence
         career["age"] = self.__profile.age

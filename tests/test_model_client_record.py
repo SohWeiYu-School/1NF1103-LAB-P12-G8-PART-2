@@ -79,6 +79,20 @@ def test_career_in_the_saved_layout_is_the_current_job_plus_the_profile():
                       "career_start_year": 1998, "country_of_residence": "Singapore", "age": 51}
 
 
+def test_a_current_job_kept_only_in_career_survives_a_round_trip():
+    """The command line's New Client form keeps the current job in "career" and lists only the
+    earlier, ended jobs in career_history. Loading and saving must not replace it with the last old job."""
+    career = {"occupation": "COO", "seniority": "C-suite", "industry": "Shipping",
+              "employer_name": "Straits Harbour", "employer_size": "2500", "country_of_residence": "Singapore",
+              "age": 51, "career_start_year": 1996}
+    saved = {"client_ref": "CL-1", "name": "Daniel Tan", "nationality": "Malaysian", "current_date": "2026-09-24",
+             "career": career,
+             "career_history": [{"start_year": 1998, "end_year": 2016, "occupation": "Planner",
+                                 "seniority": "Junior", "industry": "Shipping", "employer_name": "Pacific Crest",
+                                 "employer_size": "5000", "country": "Singapore"}]}
+    assert ClientRecord.from_dict(saved).to_dict()["career"] == career
+
+
 def test_a_clean_record_has_no_problems_or_warnings():
     record = _record()
     assert record.problems() == []
