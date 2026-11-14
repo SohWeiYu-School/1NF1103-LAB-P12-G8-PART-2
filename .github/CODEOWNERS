@@ -1,0 +1,6 @@
+# Code owners for the whole repository.
+# A pull request into main needs an approval from one of these owners
+# (once "Require review from Code Owners" is on in the main ruleset).
+# You can't approve your own PR, so with two owners each one reviews the other's work.
+
+* @SohWeiYu-School @dominictyzSIT

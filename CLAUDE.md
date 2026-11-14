@@ -110,3 +110,52 @@ module functions.
   `test/...`, `docs/...`) and merge it.
 - Keep commits small: one class (or one small family of classes) per commit.
 - The tests must pass on every commit.
+
+---
+
+## 9. Validation and Error Handling (Graded)
+
+Validation and honest error handling are graded priorities in this module.
+
+### Validate every input
+
+- **Every input must be validated:** user input, uploaded files, saved data being
+  loaded, config, and every AI reply (checked against its JSON schema before use).
+- When touching existing code, **check that its validation is correct:** the right
+  limits, the right fields, and nothing missing. New code must validate the data it accepts.
+- Reject impossible values with a clear message saying what is wrong and what is allowed.
+- Setters reject only *impossible* values (e.g. age 18–120, price > 0, values ≥ 0,
+  `payment_method` in the allowed set, shares 0–1). *Consistency* rules go in the
+  `problems()` / `warnings()` lists on `Job`, `Claims` and `ClientRecord`, so auto-fill
+  from documents still works.
+
+### Never crash, never hide an error
+
+**The app must never crash on an error, but it must never act as if there was no error.**
+
+| Situation | Wrong | Right |
+|---|---|---|
+| The JSON file or database can't be read | Return an empty list, so the user sees "no clients" | Raise or return an error, and tell the user "We can't load the client database right now. Please try again later." |
+| An AI step fails (no key, timeout, bad reply) | Skip it and still show PASSED | Mark the step as **not run**. The verdict can't be PASSED, and the user sees "The AI service is not available right now." |
+| Saving fails | Carry on as if it saved | Tell the user it was **not saved** |
+| Any other logic error | Return a default value that looks like a real result | Report that the step failed |
+
+- **Empty and broken are different things.** An empty database means "no records yet".
+  A database error means "something is wrong". Code and user messages must keep them
+  separate. Never use an empty result as an error fallback.
+- Every caught exception is **logged with the real details** (for developers) **and**
+  reported upward, so the orchestrator (`App`) decides what to do. `AssessmentRunner`
+  reports through its `on_failure` callback; `App` checks `CRITICAL_STEPS` and decides.
+
+### What the user sees
+
+- **Be honest that there is a problem, but hide the technical details.**
+
+| Don't show | Do show |
+|---|---|
+| `OPENAI_API_KEY is not set`, or a stack trace | "The AI service is not available right now. Please try again later." |
+| `connection refused: mongodb+srv://...` | "The database has a problem right now. Please come back later." |
+
+- The message must describe the **real kind of problem** (database, AI, file, save).
+  Never say something misleading like "no data found" when the real cause is an error.
+- The real technical error goes to the **log**, not the screen.
