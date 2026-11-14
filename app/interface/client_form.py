@@ -28,9 +28,9 @@ class ClientForm:
     PEP_OPTIONS: list[str] = ["None", "Domestic PEP", "Foreign PEP", "International organisation PEP",
                               "Family member / close associate of a PEP"]
 
-    def __init__(self, ui: ConsoleUI, report_view: ReportView) -> None:
-        self.__ui: ConsoleUI = ui
-        self.__report_view: ReportView = report_view
+    def __init__(self, ui: ConsoleUI | None = None, report_view: ReportView | None = None) -> None:
+        self.__ui: ConsoleUI = ui or ConsoleUI()
+        self.__report_view: ReportView = report_view or ReportView(self.__ui)
 
     def generate_client_id(self) -> str:
         """Generate a unique client reference ID."""
