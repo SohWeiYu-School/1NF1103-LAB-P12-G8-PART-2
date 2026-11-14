@@ -145,3 +145,22 @@ def test_with_fallback_does_not_ask_the_second_caller_when_the_first_answers():
     asked = []
     with_fallback(lambda p, s, o: "reply", lambda p, s, o: asked.append("second"))("Question?", SCHEMA, {})
     assert asked == []
+
+
+def test_a_caller_says_whether_it_can_be_used_and_which_model_it_uses(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPEN_AI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    assert openai_caller().available() is False
+    assert openai_caller(_FakeOpenAI()).available() is True
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    assert openai_caller().available() is True
+    assert openai_caller(model="gpt-test").model_name() == "gpt-test"
+
+
+def test_a_fallback_chain_answers_for_its_first_caller(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPEN_AI_API_KEY", raising=False)
+    chain = with_fallback(openai_caller(model="gpt-test"), gemini_caller(_FakeGemini()))
+    assert chain.available() is False            # the main brand has no key
+    assert chain.model_name() == "gpt-test"
