@@ -119,6 +119,19 @@ class App:
         """Every assessment is dated today (the command line and the web app both use this)."""
         return datetime.now().date().isoformat()
 
+    def forecast_settings(self) -> dict:
+        """The policy's "forecasting" block as the forecast uses it. FORECAST_WEB_SEARCH=on/off in
+        .env overrides web_search, so market figures can be checked online without editing policy.json."""
+        policy = self.__config.policy
+        settings = dict(policy.get("forecasting", {}))
+        switch = str(os.getenv("FORECAST_WEB_SEARCH") or "").strip().lower()
+        if switch in ("on", "true", "yes", "1"):
+            settings["web_search"] = True
+        elif switch in ("off", "false", "no", "0"):
+            settings["web_search"] = False
+        settings["net_worth_documents"] = policy.get("breach_documents", {}).get("NET_WORTH")
+        return settings
+
     def ai_available(self) -> bool:
         """False when the AI caller has no API key: only saved AI replies can then be used."""
         if self.__ai_caller is None:
@@ -492,13 +505,7 @@ class App:
         caller = self.__ai_caller if self.ai_available() else None
         model = getattr(self.__ai_caller, "model_name", lambda: "")() if self.__ai_caller else ""
         cache = self.__response_cache
-        settings = dict(policy.get("forecasting", {}))
-        switch = str(os.getenv("FORECAST_WEB_SEARCH") or "").strip().lower()
-        if switch in ("on", "true", "yes", "1"):        # .env can turn the market web search on or off
-            settings["web_search"] = True
-        elif switch in ("off", "false", "no", "0"):
-            settings["web_search"] = False
-        settings["net_worth_documents"] = policy.get("breach_documents", {}).get("NET_WORTH")
+        settings = self.forecast_settings()
         self.__document_ai: DocumentAI = DocumentAI("ai", caller, model, 0.0, cache)
         return AssessmentRunner(
             self.__config,
