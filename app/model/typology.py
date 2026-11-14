@@ -4,7 +4,7 @@
 class Typology:
     """A known pattern, the warning signs (indicators) that point to it and the reports it cites."""
 
-    def __init__(self, typology_id: str, name: str, indicators: list[dict] | None = None,
+    def __init__(self, typology_id: str = "", name: str = "", indicators: list[dict] | None = None,
                  source_ids: list[str] | None = None) -> None:
         self.__typology_id: str = typology_id
         self.__name: str = name

@@ -19,14 +19,14 @@ class CloudSync:
     new or has changed since the last sync; a state file remembers what was sent.
     """
 
-    def __init__(self, local: Repository, remote: DatabaseRepository,
+    def __init__(self, local: Repository | None = None, remote: DatabaseRepository | None = None,
                  state_path: str = os.path.join(JsonRepository.DATA_DIR, "sync_state.json")) -> None:
-        self.__local: Repository = local
-        self.__remote: DatabaseRepository = remote
+        self.__local: Repository | None = local
+        self.__remote: DatabaseRepository | None = remote
         self.__state_path: str = state_path
 
     def is_online(self) -> bool:
-        return self.__remote.is_online()
+        return self.__local is not None and self.__remote is not None and self.__remote.is_online()
 
     def sync(self) -> dict:
         """Send new and changed records. Returns {"synced", "skipped", "errors"}."""

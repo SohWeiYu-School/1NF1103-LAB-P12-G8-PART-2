@@ -18,8 +18,8 @@ class BenchmarkAI(AIService):
     PROMPT_NAME: str = "benchmark"
     SCHEMA_NAME: str = "benchmark"
 
-    def __init__(self, provider: str, ai_caller: Callable, model: str, temperature: float,
-                 response_cache: ResponseCache | None) -> None:
+    def __init__(self, provider: str = "", ai_caller: Callable | None = None, model: str = "", temperature: float = 0.0,
+                 response_cache: ResponseCache | None = None) -> None:
         super().__init__(provider, ai_caller, model, temperature, response_cache)
 
     def _payload(self, source: dict) -> dict:

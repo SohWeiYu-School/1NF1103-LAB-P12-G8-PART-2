@@ -23,8 +23,8 @@ class TypologyAI(AIService):
     ALLOWED_FIELDS: list[str] = ["occupation", "industry", "age", "career_start_year", "country"]
     REPORT_FIELDS: list[str] = ["report_id", "organisation", "title", "year", "summary", "excerpts"]
 
-    def __init__(self, provider: str, ai_caller: Callable, model: str, temperature: float,
-                 response_cache: ResponseCache | None, max_patterns: int = 5) -> None:
+    def __init__(self, provider: str = "", ai_caller: Callable | None = None, model: str = "", temperature: float = 0.0,
+                 response_cache: ResponseCache | None = None, max_patterns: int = 5) -> None:
         super().__init__(provider, ai_caller, model, temperature, response_cache)
         self.__max_patterns: int = max_patterns
 

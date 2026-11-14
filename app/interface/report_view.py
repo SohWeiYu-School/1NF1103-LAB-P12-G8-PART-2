@@ -39,8 +39,8 @@ class ReportView:
         "SERIOUS_RISK": "SERIOUS RISK",
     }
 
-    def __init__(self, ui: ConsoleUI) -> None:
-        self.__ui: ConsoleUI = ui
+    def __init__(self, ui: ConsoleUI | None = None) -> None:
+        self.__ui: ConsoleUI = ui or ConsoleUI()
 
     def _format_crime_section(self, crime_result: dict, typologies: list, width: int) -> list[str]:
         """Build lines for the structured crime section inside the verdict report."""

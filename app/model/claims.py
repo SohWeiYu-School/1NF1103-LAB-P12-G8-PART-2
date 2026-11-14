@@ -8,9 +8,9 @@ class Claims:
     NO_PEP_VALUES: tuple[str, ...] = ("", "none", "no", "not a pep", "n/a", "na")
     LIQUID_PARTS: tuple[str, ...] = ("listed_equities", "cash")
 
-    def __init__(self, declared_net_worth: float | None, expected_aum: float | None, pep_status: str,
-                 asset_composition: dict | None, wealth_countries: list[str] | None,
-                 declared_counterparties: list[str] | None, biggest_wealth_jump: float | None = None,
+    def __init__(self, declared_net_worth: float | None = None, expected_aum: float | None = None, pep_status: str = "",
+                 asset_composition: dict | None = None, wealth_countries: list[str] | None = None,
+                 declared_counterparties: list[str] | None = None, biggest_wealth_jump: float | None = None,
                  wealth_jump_years: int | None = None, extra: dict | None = None) -> None:
         self.__check_positive(declared_net_worth)
         self.__check_positive(expected_aum)

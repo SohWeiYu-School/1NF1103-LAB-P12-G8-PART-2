@@ -87,8 +87,8 @@ class WebApp:
 
     MAX_UPLOAD_BYTES: int = 40 * 1024 * 1024     # uploads for auto-fill: 40 MB per request
 
-    def __init__(self, app: App) -> None:
-        self.__app: App = app
+    def __init__(self, app: App | None = None) -> None:
+        self.__app: App | None = app
         self.__jobs: dict[str, dict] = {}        # job_id -> {status, step_num, step, result, error, client_ref}
         flask = Flask(__name__)
         flask.secret_key = os.getenv("SECRET_KEY", "dev-only-change-me")

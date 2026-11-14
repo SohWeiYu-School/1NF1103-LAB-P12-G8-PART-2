@@ -8,7 +8,7 @@ class CaseTimeline:
 
     FORECAST_YEARS: int = 4      # how many years after the assessment year are forecast
 
-    def __init__(self, record: dict, forecast_years: int = FORECAST_YEARS) -> None:
+    def __init__(self, record: dict | None = None, forecast_years: int = FORECAST_YEARS) -> None:
         self.__record: dict = record or {}
         self.__forecast_years: int = forecast_years
 

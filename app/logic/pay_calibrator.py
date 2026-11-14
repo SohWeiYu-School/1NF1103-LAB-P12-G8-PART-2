@@ -14,8 +14,8 @@ class PayCalibrator:
     may move an estimate).
     """
 
-    def __init__(self, career_savings: CareerSavings, policy: dict) -> None:
-        self.__career_savings: CareerSavings = career_savings
+    def __init__(self, career_savings: CareerSavings | None = None, policy: dict | None = None) -> None:
+        self.__career_savings: CareerSavings = career_savings or CareerSavings()
         self.__policy: dict = policy or {}
 
     def calibrate(self, case: dict, forecast: dict, documented_pay: list[dict]) -> tuple[dict, list[dict]]:

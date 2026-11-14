@@ -4,9 +4,9 @@
 class Investment:
     """One asset: what it is, where it is, what was paid and what it is declared to be worth."""
 
-    def __init__(self, asset_type: str, country: str, year_acquired: int | None, price_paid: float | None,
-                 current_declared_value: float | None, payment_method: str | None,
-                 income_produced: float | None, extra: dict | None = None) -> None:
+    def __init__(self, asset_type: str = "", country: str = "", year_acquired: int | None = None, price_paid: float | None = None,
+                 current_declared_value: float | None = None, payment_method: str | None = None,
+                 income_produced: float | None = None, extra: dict | None = None) -> None:
         self.__check_year(year_acquired)
         self.__check_amount(price_paid, allow_zero=True)
         self.__check_amount(current_declared_value, allow_zero=True)

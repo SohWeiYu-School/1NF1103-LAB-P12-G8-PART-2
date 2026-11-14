@@ -25,7 +25,7 @@ class ClientRecord:
                                    "supporting_documents", "forecasting_case", "outcome", "routing",
                                    "next_review_date", "last_assessed_on")
 
-    def __init__(self, client_ref: str, name: str, nationality: str, current_date: str,
+    def __init__(self, client_ref: str = "", name: str = "", nationality: str = "", current_date: str = "",
                  country_of_residence: str = "", age: int | None = None) -> None:
         self.__client_ref: str = client_ref
         self.__profile: ClientProfile = ClientProfile(name, nationality, country_of_residence, age)

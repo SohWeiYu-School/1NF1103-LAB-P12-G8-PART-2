@@ -55,25 +55,25 @@ class AssessmentRunner:
     FORECAST_STEP: dict[str, int] = {"step0_declaration": 6, "call1_markets": 7, "call2_earnings": 8,
                                      "call3_types": 9, "call4_events": 10}
 
-    def __init__(self, config: Config, research_ai: ResearchAI, typology_ai: TypologyAI,
-                 benchmark_ai: BenchmarkAI, document_ai: DocumentAI, forecast_ai: ForecastAI,
-                 document_store: DocumentStore, response_cache: ResponseCache) -> None:
-        self.__config: Config = config
-        self.__research_ai: ResearchAI = research_ai
-        self.__typology_ai: TypologyAI = typology_ai
-        self.__benchmark_ai: BenchmarkAI = benchmark_ai
-        self.__document_ai: DocumentAI = document_ai
-        self.__forecast_ai: ForecastAI = forecast_ai
-        self.__document_store: DocumentStore = document_store
-        self.__response_cache: ResponseCache = response_cache
-        policy = config.policy
+    def __init__(self, config: Config | None = None, research_ai: ResearchAI | None = None, typology_ai: TypologyAI | None = None,
+                 benchmark_ai: BenchmarkAI | None = None, document_ai: DocumentAI | None = None, forecast_ai: ForecastAI | None = None,
+                 document_store: DocumentStore | None = None, response_cache: ResponseCache | None = None) -> None:
+        self.__config: Config = config or Config()
+        self.__research_ai: ResearchAI | None = research_ai
+        self.__typology_ai: TypologyAI | None = typology_ai
+        self.__benchmark_ai: BenchmarkAI | None = benchmark_ai
+        self.__document_ai: DocumentAI | None = document_ai
+        self.__forecast_ai: ForecastAI | None = forecast_ai
+        self.__document_store: DocumentStore | None = document_store
+        self.__response_cache: ResponseCache | None = response_cache
+        policy = self.__config.policy
         self.__case_reader: CaseReader = CaseReader()
         self.__crime_scan: CrimeScan = CrimeScan(policy)
         self.__documents: DocumentEvidence = DocumentEvidence(policy)
-        self.__benchmark: Benchmark = Benchmark(policy, config)
-        self.__forecast: Forecast = Forecast(policy, config)
+        self.__benchmark: Benchmark = Benchmark(policy, self.__config)
+        self.__forecast: Forecast = Forecast(policy, self.__config)
         self.__engine: VerdictEngine = VerdictEngine(
-            [self.__crime_scan, self.__documents, self.__benchmark, self.__forecast], config)
+            [self.__crime_scan, self.__documents, self.__benchmark, self.__forecast], self.__config)
 
     def engine(self) -> VerdictEngine:
         return self.__engine

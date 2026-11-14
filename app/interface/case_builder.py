@@ -17,8 +17,8 @@ class CaseBuilder:
     guessing, then checks the finished case against the case schema it was handed.
     """
 
-    def __init__(self, ui: ConsoleUI, case_schema: dict | None = None) -> None:
-        self.__ui: ConsoleUI = ui
+    def __init__(self, ui: ConsoleUI | None = None, case_schema: dict | None = None) -> None:
+        self.__ui: ConsoleUI = ui or ConsoleUI()
         self.__case_schema: dict = case_schema or {}
 
     def validate_case(self, case: object) -> list[str]:

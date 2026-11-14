@@ -7,8 +7,8 @@ class Job:
     KEYS: tuple[str, ...] = ("start_year", "end_year", "occupation", "seniority", "industry",
                              "employer_name", "employer_size", "country")
 
-    def __init__(self, start_year: int | None, end_year: int | None, occupation: str, seniority: str,
-                 industry: str, employer_name: str, employer_size: str, country: str,
+    def __init__(self, start_year: int | None = None, end_year: int | None = None, occupation: str = "", seniority: str = "",
+                 industry: str = "", employer_name: str = "", employer_size: str = "", country: str = "",
                  extra: dict | None = None) -> None:
         self.__check_years(start_year, end_year)
         self.__start_year: int | None = start_year

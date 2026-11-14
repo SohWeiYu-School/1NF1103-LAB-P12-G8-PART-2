@@ -23,8 +23,8 @@ class DocumentAI(AIService):
     MAX_DOCUMENTS: int = 10       # most documents sent in one go (each is a separate message part)
     READABLE_KINDS: tuple[str, ...] = ("text", "image", "pdf")
 
-    def __init__(self, provider: str, ai_caller: Callable, model: str, temperature: float,
-                 response_cache: ResponseCache | None, max_chars: int = 40_000) -> None:
+    def __init__(self, provider: str = "", ai_caller: Callable | None = None, model: str = "", temperature: float = 0.0,
+                 response_cache: ResponseCache | None = None, max_chars: int = 40_000) -> None:
         super().__init__(provider, ai_caller, model, temperature, response_cache)
         self.__max_chars: int = max_chars
 

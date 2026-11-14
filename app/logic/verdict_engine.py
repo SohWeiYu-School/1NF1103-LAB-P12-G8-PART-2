@@ -45,10 +45,10 @@ class VerdictEngine:
     ORIGINAL_BENCHMARK = ["TOTAL_WEALTH", "LIQUIDITY", "COMPOSITION_PROPERTY", "COMPOSITION_EQUITIES",
                           "COMPOSITION_BUSINESS", "COMPOSITION_CASH", "VELOCITY", "COUNTERPARTIES", "JURISDICTION"]
 
-    def __init__(self, features: list[Feature], config: Config) -> None:
-        self.__features: list[Feature] = list(features)
-        self.__config: Config = config
-        self.__policy: dict = config.policy
+    def __init__(self, features: list[Feature] | None = None, config: Config | None = None) -> None:
+        self.__features: list[Feature] = list(features or [])
+        self.__config: Config = config or Config()
+        self.__policy: dict = self.__config.policy
 
     def features(self) -> list[Feature]:
         return list(self.__features)
@@ -214,7 +214,8 @@ class VerdictEngine:
                          the bank he can't fund, a PEP with a public-office crime story that fits, or
                          several unexplained benchmark failures
           MANUAL REVIEW  loose ends: an unexplained benchmark failure, other forecast checks failed,
-                         a borderline result, a PEP, a known pattern on its own, or a part that couldn't run
+                         a borderline result, a PEP, a known pattern on its own, a part that couldn't run,
+                         or nothing ran at all (an assessment that checked nothing is never PASSED)
           "PASSED"         everything else
         """
         policy = self.__policy
@@ -339,6 +340,9 @@ class VerdictEngine:
                     flag(level, f"Known pattern \"{check['label'].split(' [')[0]}\": {check['detail']}.")
         for part in parts.get("not_run", []):
             flag("MANUAL_REVIEW", f"{part} couldn't run, so a person must check what it would have covered.")
+        if not any(parts.get(key) for key in ("forecast", "crime_result", "benchmark_findings", "benchmark_ai")):
+            flag("MANUAL_REVIEW", "None of the forecast, the crime scan or the peer benchmark ran, so nothing "
+                                  "was checked: a person must review him before he can be passed.")
 
         level = max((t[0] for t in triggers), key=lambda lv: Verdict.SEVERITY[lv], default="PASSED")
         reasons = []

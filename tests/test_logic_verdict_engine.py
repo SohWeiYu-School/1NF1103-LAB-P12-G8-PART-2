@@ -93,3 +93,16 @@ def test_the_report_lists_the_verdict_for_the_screen(parts):
     report = engine.report(engine.decide(case, data))
     assert set(report) == {"header", "sections", "evidence", "evidence_titles", "legend"}
     assert report["legend"] == VerdictEngine.REPORT_LEGEND
+
+
+
+def test_a_verdict_where_nothing_ran_is_manual_review_not_passed():
+    verdict = VerdictEngine(_features(), CONFIG).decide(sample_case(), {})
+    assert verdict["verdict"] == "MANUAL_REVIEW"
+    assert any("nothing was checked" in reason["text"] for reason in verdict["reasons"])
+
+
+def test_a_verdict_where_a_feature_ran_does_not_get_the_nothing_ran_reason():
+    case = sample_case()
+    verdict = VerdictEngine(_features(), CONFIG).decide(case, {"forecast": sample_forecast(case)})
+    assert not any("nothing was checked" in reason["text"] for reason in verdict["reasons"])

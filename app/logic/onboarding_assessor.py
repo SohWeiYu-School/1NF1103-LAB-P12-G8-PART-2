@@ -17,10 +17,11 @@ class OnboardingAssessor:
     policy (tolerances and weights) and the Config (country and asset names).
     """
 
-    def __init__(self, future_paths: FuturePaths, policy: dict, config: Config) -> None:
-        self.__future_paths: FuturePaths = future_paths
+    def __init__(self, future_paths: FuturePaths | None = None, policy: dict | None = None,
+                 config: Config | None = None) -> None:
+        self.__future_paths: FuturePaths = future_paths or FuturePaths()
         self.__policy: dict = policy or {}
-        self.__config: Config = config
+        self.__config: Config = config or Config()
 
     def _check_asset_values(self, record: dict, forecast: dict, paths: list[dict], end: int,
                            scale: float = 1.0) -> list[dict]:

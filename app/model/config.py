@@ -8,7 +8,7 @@ class Config:
     hands the contents in here.
     """
 
-    def __init__(self, policy: dict, vocabulary: dict) -> None:
+    def __init__(self, policy: dict | None = None, vocabulary: dict | None = None) -> None:
         self.__policy: dict = policy or {}
         self.__vocabulary: dict = vocabulary or {}
 

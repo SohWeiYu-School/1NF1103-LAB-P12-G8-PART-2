@@ -36,8 +36,8 @@ class ForecastAI(AIService):
     BASELINE_TYPE: str = "T1"                                  # T1 is always "exactly as declared"
     REPORTING_CURRENCY: str = "SGD"
 
-    def __init__(self, provider: str, ai_caller: Callable | None, model: str, temperature: float,
-                 response_cache: ResponseCache | None, forecast_years: int = 4,
+    def __init__(self, provider: str = "", ai_caller: Callable | None = None, model: str = "", temperature: float = 0.0,
+                 response_cache: ResponseCache | None = None, forecast_years: int = 4,
                  settings: dict | None = None, vocabulary: dict | None = None) -> None:
         super().__init__(provider, ai_caller, model, temperature, response_cache)
         self.__forecast_years: int = forecast_years

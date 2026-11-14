@@ -13,8 +13,8 @@ class AssetPath:
     follows, how strongly, its own growth and its income yield.
     """
 
-    def __init__(self, market_model: MarketModel, asset_models: list[dict] | None = None) -> None:
-        self.__market_model: MarketModel = market_model
+    def __init__(self, market_model: MarketModel | None = None, asset_models: list[dict] | None = None) -> None:
+        self.__market_model: MarketModel = market_model or MarketModel()
         self.__asset_models: list[dict] = sorted(asset_models or [], key=lambda model: model["asset_index"])
         self.__paths: list[dict] = []
 

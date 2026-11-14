@@ -10,7 +10,7 @@ class Check:
 
     STATUSES: tuple[str, ...] = ("passed", "failed", "weak", "explained", "skipped", "info")
 
-    def __init__(self, feature: str, check: str, label: str, theme: str, status: str = "passed",
+    def __init__(self, feature: str = "", check: str = "", label: str = "", theme: str = "", status: str = "passed",
                  detail: str = "", explanation: str = "", group: str = "",
                  sources: list[str] | None = None, supports: list[str] | None = None,
                  extra: dict | None = None) -> None:
