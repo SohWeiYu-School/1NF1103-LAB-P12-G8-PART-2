@@ -22,6 +22,9 @@ from typing import Callable
 from jsonschema import Draft202012Validator
 
 from app import utilities
+from app.interface.console_ui import ConsoleUI
+
+_ui = ConsoleUI()     # the one terminal; the functions below pass each call on to it
 
 # The file picker needs tkinter, which isn't installed everywhere (e.g. the Docker image).
 # Without it the app still runs; only choosing files to upload or download is unavailable.
@@ -32,68 +35,36 @@ except ImportError:
     tk = filedialog = None
 
 Ask = Callable[[str], str]
-LINE = "-" * 72
+LINE = ConsoleUI.LINE
 PAYMENT_METHODS = ["cash", "loan", "asset_sale"]
 
 def show_app_menu() -> str:
     """Display the unified main menu and return the user's choice (1-8)."""
-    print("\n========================================")
-    print("     SOURCE OF WEALTH SCREENING SYSTEM")
-    print("========================================")
-    print("1. New Client (type in, then the combined assessment)")
-    print("2. New Client from Documents (auto-fill from a folder of documents)")
-    print("3. Find / Edit Existing Client")
-    print("4. Assess an Existing Client (crime scan + forecast + benchmark -> one verdict)")
-    print("5. List Saved Assessments")
-    print("6. View All Clients")
-    print("7. Manual Sync to Cloud Database")
-    print("8. Quit")
-    while True:
-        choice = input("\nEnter your choice (1-8): ").strip()
-        if choice in ("1", "2", "3", "4", "5", "6", "7", "8"):
-            return choice
-        print("Invalid choice. Please enter 1 to 8.")
+    return _ui.show_app_menu()
 
 def show_message(text: str) -> None:
     #Print an informational message.
-    print(text)
+    return _ui.show_message(text)
 
 def show_error(text: str) -> None:
     #Print an error message.
-    print(f"[ERROR] {text}")
+    return _ui.show_error(text)
 
 def show_ai_unavailable(feature: str = "Assessment") -> None:
-    print(f"{feature} is not available right now — please try again later.")
+    return _ui.show_ai_unavailable(feature)
 
 def show_unexpected_error() -> None:
-    print("An unexpected error occurred — please try again or contact support.")
+    return _ui.show_unexpected_error()
 
 def show_rate_limit_error(seconds_left: int) -> None:
-    print(f"[RATE LIMIT] Assessment already running or recently completed.")
-    print(f"             Please wait {seconds_left} second{'s' if seconds_left != 1 else ''} before starting another assessment.")
+    return _ui.show_rate_limit_error(seconds_left)
 
 def show_sync_result(stats: dict) -> None:
-    cases = stats.get("cases_synced", 0)
-    assessments = stats.get("assessments_synced", 0)
-    skipped = stats.get("skipped", 0)
-    errors = stats.get("errors", [])
-    synced = cases + assessments
-
-    if not errors:
-        print(f"\nSync complete — {cases} case(s) and {assessments} assessment(s) pushed to cloud.")
-        if skipped:
-            print(f"               {skipped} record(s) already up to date — skipped.")
-    elif synced > 0:
-        print(f"\nPartial sync — {cases} case(s) and {assessments} assessment(s) pushed to cloud.")
-        if skipped:
-            print(f"               {skipped} record(s) already up to date — skipped.")
-        print("Some records could not be synced — please try again later or contact your administrator.")
-    else:
-        print("\nSync unsuccessful — please try again later or contact your administrator.")
+    return _ui.show_sync_result(stats)
 
 def show_step(number: int, total: int, label: str) -> None:
     """One progress line of the combined assessment (the web app shows the same steps)."""
-    print(f"  [{number:>2}/{total}] {label}...")
+    return _ui.show_step(number, total, label)
 
 
 REPORT_WIDTH = 96
@@ -408,26 +379,12 @@ def get_supporting_documents(upload_fn=None) -> list:
 def display_section(title: str):
     """Print a formatted section heading."""
 
-    print("\n" + "=" * 60)
-    print(title)
-    print("=" * 60)
+    return _ui.display_section(title)
 
 
 def show_client_list(records: list) -> None:
     """Print a compact table of all saved clients."""
-    if not records:
-        print("\n  No clients saved yet.\n")
-        return
-    W = 68
-    print("\n" + "─" * W)
-    print(f"  {'#':<4}{'Reference':<18}{'Name':<28}Industry")
-    print("─" * W)
-    for i, r in enumerate(records, start=1):
-        ref      = r.get("client_ref", "—")
-        name     = r.get("name") or r.get("client_profile", {}).get("full_name", "—")
-        industry = r.get("career", {}).get("industry") or r.get("client_profile", {}).get("industry", "—")
-        print(f"  {i:<4}{ref:<18}{name:<28}{industry}")
-    print("─" * W + "\n")
+    return _ui.show_client_list(records)
 
 
 FIELD_NAMES = {"expected_aum": "Expected AUM", "pep_status": "PEP Status",
@@ -624,29 +581,11 @@ SOURCE_TAGS = {"documents": "[DOC]   ", "edited": "[EDITED]", "entered": "[YOU] 
 
 def ask_document_folder() -> str | None:
     """Ask which folder holds the client's documents. Returns the folder path, or None to cancel."""
-    print("\n" + "=" * 60)
-    print("              NEW CLIENT FROM DOCUMENTS")
-    print("=" * 60)
-    print("Put the client's documents in one folder (CV, payslips, employment letter, tax notices,")
-    print("bank statements, property papers, KYC form). PDF, Word, Excel, text and images are read.")
-    if tk is not None and ask_yes_no("\nChoose the folder in a file explorer window?"):
-        root = tk.Tk()
-        root.withdraw()
-        folder = filedialog.askdirectory(title="Select the folder with the client's documents")
-        root.destroy()
-        if folder:
-            print(f"Folder: {folder}")
-            return folder
-        print("No folder was chosen.")
-    folder = input("\nFolder path (or press Enter to go back to the menu): ").strip()
-    folder = folder.strip('"').strip("'")          # paths dragged into the terminal come quoted
-    return folder or None
+    return _ui.ask_document_folder()
 
 
 def show_documents_found(paths: list[str]) -> None:
-    print(f"\nFound {len(paths)} document(s):")
-    for path in paths:
-        print(f"  - {os.path.basename(path)}")
+    return _ui.show_documents_found(paths)
 
 
 def ask_missing_field(field: dict):
@@ -685,10 +624,7 @@ def ask_missing_field(field: dict):
 
 
 def show_missing_intro(count: int) -> None:
-    if count:
-        print(f"\n{count} required detail(s) weren't in the documents. Please fill them in:")
-    else:
-        print("\nEvery required detail was found in the documents.")
+    return _ui.show_missing_intro(count)
 
 
 def _summary_value(row: dict) -> str:
@@ -744,8 +680,7 @@ def show_document_summary(rows: list[dict], files: list[str], notes: list[str], 
 
 def ask_document_record_action() -> str:
     """After the summary: 'save', 'edit' or 'discard'."""
-    options = ["Save this client", "Edit something first", "Discard (nothing is saved)"]
-    return ["save", "edit", "discard"][ask_choice("\nIs everything correct?", options)]
+    return _ui.ask_document_record_action()
 
 
 def ask_after_save(record: dict) -> bool:
@@ -1275,235 +1210,106 @@ OUTCOME_LABELS = {
 
 
 def show(text: str = "") -> None:
-    print(text)
+    return _ui.show(text)
 
 
 def money(value: float | None) -> str:
-    return "n/a" if value is None else f"{value:,.0f}"
+    return _ui.money(value)
 
 
 def money_range(values: dict) -> str:
-    return f"{money(values['cautious'])} to {money(values['optimistic'])} (typical {money(values['typical'])})"
+    return _ui.money_range(values)
 
 
 def read_answer(question: str) -> str:
     """The normal way to ask: type into the terminal."""
-    return input(question)
+    return _ui.read_answer(question)
 
 
 def ask_text(question: str, ask: Ask = read_answer, min_length: int = 1) -> str:
-    while True:
-        answer = ask(f"{question}: ").strip()
-        if len(answer) >= min_length:
-            return answer
-        show_error(f"Please enter at least {min_length} character(s).")
+    return _ui.ask_text(question, ask, min_length)
 
 
 def ask_int(question: str, ask: Ask = read_answer, minimum: int | None = None,
             maximum: int | None = None, allow_blank: bool = False) -> int | None:
-    while True:
-        answer = ask(f"{question}: ").strip()
-        if allow_blank and answer == "":
-            return None
-        try:
-            number = int(answer)
-        except ValueError:
-            show_error("Please enter a whole number.")
-            continue
-        if minimum is not None and number < minimum:
-            show_error(f"Please enter {minimum} or more.")
-        elif maximum is not None and number > maximum:
-            show_error(f"Please enter {maximum} or less.")
-        else:
-            return number
+    return _ui.ask_int(question, ask, minimum, maximum, allow_blank)
 
 
 def ask_money(question: str, ask: Ask = read_answer, allow_zero: bool = True) -> float:
-    while True:
-        answer = ask(f"{question}: ").strip().replace(",", "")
-        try:
-            amount = float(answer)
-        except ValueError:
-            show_error("Please enter an amount, e.g. 1500000.")
-            continue
-        if amount < 0 or (amount == 0 and not allow_zero):
-            show_error("Please enter an amount above zero." if not allow_zero else "Amounts can't be negative.")
-            continue
-        return amount
+    return _ui.ask_money(question, ask, allow_zero)
 
 
 def ask_choice(question: str, options: list[str], ask: Ask = read_answer, allow_back: bool = False) -> int | None:
     """Show a numbered list and return the index picked. With allow_back, 0 returns None."""
-    show(question)
-    for number, option in enumerate(options, start=1):
-        show(f"  {number}. {option}")
-    if allow_back:
-        show("  0. Back to the main menu")
-    number = ask_int("Choose a number", ask, 0 if allow_back else 1, len(options))
-    return None if number == 0 else number - 1
+    return _ui.ask_choice(question, options, ask, allow_back)
 
 
 def ask_yes_no(question: str, ask: Ask = read_answer) -> bool:
-    while True:
-        answer = ask(f"{question} (y/n): ").strip().lower()
-        if answer in ("y", "yes"):
-            return True
-        if answer in ("n", "no"):
-            return False
-        show_error("Please answer y or n.")
+    return _ui.ask_yes_no(question, ask)
 
 def ask_year(question: str, minimum: int = 1940, maximum: int | None = None,
              allow_blank: bool = False) -> int | None:
-    maximum = maximum or datetime.date.today().year
-    return ask_int(question, read_answer, minimum, maximum, allow_blank)
+    return _ui.ask_year(question, minimum, maximum, allow_blank)
 
 
 def ask_currency(ask: Ask = read_answer) -> str:
-    while True:
-        code = ask("Currency (3-letter code, e.g. SGD): ").strip().upper()
-        if len(code) == 3 and code.isalpha():
-            return code
-        show_error("Please enter a 3-letter currency code like SGD or USD.")
+    return _ui.ask_currency(ask)
 
 
 def ask_composition(current: dict | None = None) -> dict:
     """Four percentages that must add up to 100. Enter keeps the current value when editing."""
-    labels = [("property", "Property"), ("listed_equities", "Listed Equities"),
-              ("private_business", "Private Business"), ("cash", "Cash")]
-    while True:
-        split = {}
-        for key, label in labels:
-            if current is None:
-                split[key] = ask_money(f"{label} (%)") / 100
-            else:
-                shown = f"{current.get(key, 0) * 100:.0f}"
-                v = input(f"{label} (%) [{shown}]: ").strip().replace(",", "")
-                try:
-                    split[key] = float(v) / 100 if v else current.get(key, 0.0)
-                except ValueError:
-                    show_error("Please enter a number, or press Enter to keep.")
-                    split = None
-                    break
-                if split[key] < 0:
-                    show_error("Percentages can't be negative.")
-                    split = None
-                    break
-        if split is None:
-            continue
-        total = sum(split.values())
-        if abs(total - 1.0) <= 0.005:
-            return split
-        show_error(f"That adds up to {total:.1%}. It must be 100%. Please re-enter.")
+    return _ui.ask_composition(current)
 
 
 def keep_text(label: str, current, min_length: int = 2) -> str:
-    while True:
-        v = input(f"{label} [{current}]: ").strip()
-        if not v:
-            return current
-        if len(v) >= min_length:
-            return v
-        show_error(f"Enter at least {min_length} characters, or press Enter to keep.")
+    return _ui.keep_text(label, current, min_length)
 
 
 def keep_int(label: str, current, minimum: int, maximum: int):
-    while True:
-        v = input(f"{label} [{current}]: ").strip()
-        if not v:
-            return current
-        try:
-            n = int(v)
-        except ValueError:
-            show_error("Please enter a whole number, or press Enter to keep.")
-            continue
-        if minimum <= n <= maximum:
-            return n
-        show_error(f"Please enter a value between {minimum} and {maximum}.")
+    return _ui.keep_int(label, current, minimum, maximum)
 
 
 def keep_money(label: str, current):
-    while True:
-        v = input(f"{label} [{current}]: ").strip().replace(",", "")
-        if not v:
-            return current
-        try:
-            n = float(v)
-        except ValueError:
-            show_error("Please enter an amount like 1500000, or press Enter to keep.")
-            continue
-        if n >= 0:
-            return n
-        show_error("Amounts can't be negative.")
+    return _ui.keep_money(label, current)
 
-LETTERS = " '.-"                    # allowed besides letters: names, nationality, countries
+LETTERS = ConsoleUI.LETTERS
 LABEL   = " '.-&/,()%#0123456789"     # job titles, industries, employers, asset descriptions
 
 
 def _only(text: str, allowed: str) -> bool:
     """Must contain at least one letter, and nothing outside letters + the allowed characters."""
-    return any(c.isalpha() for c in text) and all(c.isalpha() or c in allowed for c in text)
+    return _ui._only(text, allowed)
 
 
 def _words_error(allowed: str) -> str:
-    if allowed == LETTERS:
-        return "Letters only please (spaces, - ' . are fine). No numbers."
-    return "Please enter a proper description. It must contain letters and can't be only numbers."
+    return _ui._words_error(allowed)
 
 
 def ask_words(question: str, allowed: str = LETTERS, min_length: int = 2) -> str:
-    while True:
-        answer = input(f"{question}: ").strip()
-        if len(answer) >= min_length and _only(answer, allowed):
-            return answer
-        show_error(_words_error(allowed))
+    return _ui.ask_words(question, allowed, min_length)
 
 
 def keep_words(label: str, current, allowed: str = LETTERS, min_length: int = 2) -> str:
-    while True:
-        v = input(f"{label} [{current}]: ").strip()
-        if not v:
-            return current
-        if len(v) >= min_length and _only(v, allowed):
-            return v
-        show_error(_words_error(allowed))
+    return _ui.keep_words(label, current, allowed, min_length)
 
 
 def ask_countries(question: str) -> list:
-    while True:
-        items = [c.strip() for c in ask_text(question).split(",") if c.strip()]
-        if items and all(_only(c, LETTERS) for c in items):
-            return items
-        show_error("Enter country names separated by commas, letters only (no numbers).")
+    return _ui.ask_countries(question)
 
-MAX_EMPLOYEES = 10_000_000
+MAX_EMPLOYEES = ConsoleUI.MAX_EMPLOYEES
 
 
 def _parse_count(text: str) -> int | None:
     """'2,500' -> 2500. Returns None for ranges, text, zero or absurdly large numbers."""
-    cleaned = text.strip().replace(",", "")
-    if cleaned.isdigit() and 1 <= int(cleaned) <= MAX_EMPLOYEES:
-        return int(cleaned)
-    return None
+    return _ui._parse_count(text)
 
 
 def ask_count(question: str, ask: Ask = read_answer) -> int:
-    while True:
-        number = _parse_count(ask(f"{question}: "))
-        if number is not None:
-            return number
-        show_error("Please enter the number of employees as a single whole number, e.g. 2500 "
-                   "(no ranges or text).")
+    return _ui.ask_count(question, ask)
 
 
 def keep_count(label: str, current):
-    while True:
-        v = input(f"{label} [{current}]: ").strip()
-        if not v:
-            return current
-        number = _parse_count(v)
-        if number is not None:
-            return number
-        show_error("Please enter a single whole number, e.g. 2500, or press Enter to keep.")
+    return _ui.keep_count(label, current)
 
 
 def validate_case(case: object) -> list[str]:
@@ -1785,15 +1591,11 @@ def case_from_client_record(record: dict, ask: Ask = read_answer) -> dict | None
 
 
 def show_case_problems(where: str, problems: list[str]) -> None:
-    show_error(f"{where} can't be assessed yet:")
-    for problem in problems:
-        show(f"    - {problem}")
-    show("  Fix the client record (Find / Edit Existing Client) and try again.")
+    return _ui.show_case_problems(where, problems)
 
 
 def ask_client_ref(ask: Ask = read_answer) -> str | None:
-    ref = ask_text("Client reference (e.g. CL-1A2B3C4D, 0 to go back)", ask)
-    return None if ref == "0" else ref
+    return _ui.ask_client_ref(ask)
 
 
 # ============================================================================
@@ -1802,10 +1604,7 @@ def ask_client_ref(ask: Ask = read_answer) -> str | None:
 
 def show_ai_progress(results: dict) -> None:
     """One line per AI request: where the reply came from and whether it passed the checks."""
-    for name, result in results.items():
-        source = "saved reply" if result["from_cache"] else f"API, {result['attempts']} attempt(s)"
-        status = "ok" if result["ok"] else "FAILED"
-        show(f"  {name:<40} {source:<20} {status}")
+    return _ui.show_ai_progress(results)
 
 
 def format_onboarding(assessment: dict) -> str:
