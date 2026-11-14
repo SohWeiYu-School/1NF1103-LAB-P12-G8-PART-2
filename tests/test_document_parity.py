@@ -17,6 +17,7 @@ from app.interface.console_ui import ConsoleUI
 from app.interface.web_app import WebApp
 from app.logic.case_reader import CaseReader
 from app.logic.document_record_builder import DocumentRecordBuilder
+from app.model.client_record import ClientRecord
 from tests.logic_fixtures import CONFIG
 
 FOLDER = os.path.join(os.path.dirname(__file__), "documents", "marcus_lim")
@@ -134,7 +135,7 @@ def test_assessments_are_always_dated_today(site, tmp_path):
     today = datetime.date.today().isoformat()
     application = App(None, data_folder=str(tmp_path))
 
-    case, _ = application.read_case(cli_record(expected_reply()))
+    case, _ = application.read_case(ClientRecord.from_dict(cli_record(expected_reply())))
     assert case["current_date"] == today                       # command line: not asked
 
     assert web_record(site, expected_reply())["current_date"] == today   # web form: no date box

@@ -200,11 +200,11 @@ class App:
                 record = self.__client_form.create_new_client(save_fn=self.__clients.save,
                                                              upload_fn=self.__documents.upload)
                 if record is not None:
-                    self.__assess_if_allowed(record)
+                    self.__assess_saved_answers(record)
             elif choice == "2":
                 record = self.new_client_from_documents()
                 if record is not None:
-                    self.__assess_if_allowed(record)
+                    self.__assess_saved_answers(record)
             elif choice == "3":
                 self.__client_form.find_existing_client(
                     find_fn=self.__clients.find, save_fn=self.__clients.save,
@@ -213,7 +213,11 @@ class App:
                 ref = self.__ui.ask_client_ref()
                 if ref is None:
                     continue
-                record = self.__clients.find(ref)
+                try:
+                    record = self.find_client(ref)
+                except ValueError as error:
+                    self.__ui.show_error(str(error))
+                    continue
                 if record is None:
                     self.__ui.show_error(f"No client found with reference {ref}.")
                     continue
@@ -232,13 +236,13 @@ class App:
 
     # ----- assessing ---------------------------------------------------------------------------
 
-    def prepare_case(self, client_record: dict) -> dict | None:
+    def prepare_case(self, record: ClientRecord) -> dict | None:
         """The case to assess, built from a saved client record. The officer is only asked for
         what cannot be read from the record. None if no usable case could be made."""
-        case, missing = CaseReader(self.today()).forecasting_case(client_record)
+        case, missing = self.read_case(record)
         if case is None:
             self.__ui.show_error("Needed before the assessment can run: " + ", ".join(missing))
-            case = self.__case_builder.case_from_client_record(client_record)
+            case = self.__case_builder.case_from_client_record(record.to_dict())
             if case is None:
                 return None
         problems = self.__case_builder.validate_case(case)
@@ -247,10 +251,10 @@ class App:
             return None
         return case
 
-    def read_case(self, client_record: dict) -> tuple[dict | None, list[str]]:
+    def read_case(self, record: ClientRecord) -> tuple[dict | None, list[str]]:
         """(case, []) when the record can be read into a case, otherwise (None, what is missing).
         Nothing is asked and nothing is shown: the web app uses this."""
-        return CaseReader(self.today()).forecasting_case(client_record)
+        return CaseReader(self.today()).forecasting_case(record.to_dict())
 
     def assess(self, case: dict, supporting_documents: list[dict] | None = None,
                on_step: Callable[[int, str], None] | None = None,
@@ -263,18 +267,18 @@ class App:
             on_failure = self.__handle_failure if show_failures else self.__handle_failure_quietly
         return self.__runner.run(case, supporting_documents, on_step, on_failure)
 
-    def assess_client_record(self, client_record: dict) -> dict | None:
+    def assess_client_record(self, record: ClientRecord) -> dict | None:
         """The command line's assessment of a saved client: prepare, run, save, show."""
-        case = self.prepare_case(client_record)
+        case = self.prepare_case(record)
         if case is None:
             return None
         self.__ui.show_message(f"\nAssessing {case['client_ref']}: documents, crime scan, forecast "
                                "and benchmark together.")
-        result = self.assess(case, client_record.get("supporting_documents"), on_step=self.__show_step)
+        result = self.assess(case, record.documents(), on_step=self.__show_step)
         if result is None:
             self.__ui.show_error("The assessment was stopped. Nothing was saved.")
             return None
-        saved = self.save_assessment(result, client_record, on_step=self.__show_step)
+        saved = self.save_assessment(result, record, on_step=self.__show_step)
         self.__report_view.show_verdict_report(result["report"], crime_result=result.get("crime_result"),
                                                typologies=result.get("typologies"))
         if saved:
@@ -283,7 +287,7 @@ class App:
             self.__ui.show_error("Could not save the assessment.")
         return result
 
-    def save_assessment(self, result: dict, client_record: dict | None = None,
+    def save_assessment(self, result: dict, record: ClientRecord | None = None,
                         on_step: Callable[[int, str], None] | None = None) -> str | None:
         """Save the assessment as ONE record, and its outcome on the client record when given.
         Returns the assessment id, or None if it could not be saved."""
@@ -291,9 +295,10 @@ class App:
             on_step(len(AssessmentRunner.STEPS), AssessmentRunner.STEPS[-1])
         case = result["case"]
         verdict = self.__verdict_object(result)
-        if client_record is not None:
-            self.__record_outcome(client_record, verdict, case, result["verdict"].get("assessed_on") or self.today())
-            if not self.__clients.save(client_record):
+        if record is not None:
+            record.review_status.update(verdict.outcome, verdict.next_step, verdict.next_review_date,
+                                        result["verdict"].get("assessed_on") or self.today(), case)
+            if not self.save_client(record):
                 logger.error("App.save_assessment: could not save the client record for %s", verdict.client_ref)
         saved = self.__assessments.save({
             "assessment_id": verdict.assessment_id,
@@ -355,6 +360,26 @@ class App:
         return copied
 
     # ----- clients and records ---------------------------------------------------------------
+
+    def find_client(self, client_ref: str) -> ClientRecord | None:
+        """The saved client with this reference, or None if no client has it.
+        Raises ValueError, saying what is wrong, if the saved record cannot be read."""
+        saved = self.__clients.find(client_ref)
+        if saved is None:
+            return None
+        try:
+            return ClientRecord.from_dict(saved)
+        except (ValueError, TypeError, AttributeError) as error:
+            logger.error("App.find_client: the saved record %s cannot be read: %r", client_ref, error)
+            raise ValueError(f"Client {client_ref} could not be loaded because the saved record is "
+                             f"not valid: {error}.") from error
+
+    def save_client(self, record: ClientRecord) -> bool:
+        """Save the client (replacing the saved record with the same reference). False if not saved."""
+        saved = self.__clients.save(record.to_dict())
+        if not saved:
+            logger.error("App.save_client: could not save the client record %s", record.client_ref)
+        return saved
 
     def new_client_from_documents(self) -> dict | None:
         """Read a folder of documents, pre-fill the client, ask for what is missing, show a
@@ -548,14 +573,24 @@ class App:
                    "App: step failed (%s): %s (%s)", "stopping" if critical else "carrying on", step, reason)
         return not critical
 
-    def __assess_if_allowed(self, client_record: dict) -> None:
+    def __assess_if_allowed(self, record: ClientRecord) -> None:
         """Check the rate limit; if clear, run the assessment."""
         allowed, wait = self.__rate_limiter.check("cli")
         if not allowed:
             self.__ui.show_rate_limit_error(wait)
             return
         self.__rate_limiter.record("cli")
-        self.assess_client_record(client_record)
+        self.assess_client_record(record)
+
+    def __assess_saved_answers(self, data: dict) -> None:
+        """Assess a client the form has just saved in the saved layout."""
+        try:
+            record = ClientRecord.from_dict(data)
+        except ValueError as error:
+            logger.error("App: the new client %s cannot be read: %r", data.get("client_ref"), error)
+            self.__ui.show_error(f"The client was saved, but cannot be assessed because {error}.")
+            return
+        self.__assess_if_allowed(record)
 
     def __show_step(self, number: int, label: str) -> None:
         self.__ui.show_step(number, len(AssessmentRunner.STEPS), label)
@@ -571,20 +606,6 @@ class App:
                 verdict.add_check(Check.from_dict(row))
         verdict.report = result["report"]
         return verdict
-
-    def __record_outcome(self, client_record: dict, verdict: Verdict, case: dict, assessed_on: str) -> None:
-        """Write the outcome onto the client record. The record's ReviewStatus checks the values;
-        a record saved in an older layout that ClientRecord cannot read is updated field by field."""
-        try:
-            record = ClientRecord.from_dict(client_record)
-            record.review_status.update(verdict.outcome, verdict.next_step, verdict.next_review_date,
-                                        assessed_on, case)
-            client_record.update(record.review_status.to_dict())
-        except (ValueError, KeyError, TypeError) as error:
-            logger.warning("App: client record %s is in an older layout (%s); outcome written directly",
-                           verdict.client_ref, repr(error))
-            client_record.update(forecasting_case=case, outcome=verdict.outcome, routing=verdict.next_step,
-                                 next_review_date=verdict.next_review_date, last_assessed_on=assessed_on)
 
     def __configure_logging(self) -> None:
         """Send all logging to logs/app.log. Nothing goes to the console."""

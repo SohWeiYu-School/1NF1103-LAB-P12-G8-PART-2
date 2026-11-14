@@ -9,6 +9,7 @@ import pytest
 
 from app.application.app import App
 from app.interface.web_app import WebApp
+from app.model.client_record import ClientRecord
 from tests import fake_ai, fake_services
 from tests.logic_fixtures import sample_case
 
@@ -130,7 +131,7 @@ def test_an_assessment_runs_in_the_background_and_is_saved(web):
     application, _, client = web
     record = sample_case()
     application.clients().save(record)
-    case, _ = application.read_case(record)
+    case, _ = application.read_case(ClientRecord.from_dict(record))
     fake_services.save_forecast_replies(application.response_cache(), case)
     started = client.post(f"/client/{record['client_ref']}/assess")
     assert started.status_code == 302 and "/assess/loading/" in started.headers["Location"]
@@ -146,11 +147,24 @@ def test_an_assessment_runs_in_the_background_and_is_saved(web):
     assert client.get("/assessments").status_code == 200
 
 
+def test_assessing_a_saved_client_that_cannot_be_read_is_refused_with_a_message(web):
+    application, _, client = web
+    record = sample_case()
+    record["career"]["age"] = 5                                  # impossible: ClientRecord rejects it
+    application.clients().save(record)
+    reply = client.post(f"/client/{record['client_ref']}/assess")
+    assert reply.status_code == 302 and "/assess/loading/" not in reply.headers["Location"]
+    with client.session_transaction() as session:
+        messages = [text for _, text in session.get("_flashes", [])]
+    assert any("could not be loaded" in text for text in messages)
+    assert application.assessments().load() == []
+
+
 def test_a_second_assessment_straight_away_is_rate_limited(web):
     application, _, client = web
     record = sample_case()
     application.clients().save(record)
-    case, _ = application.read_case(record)
+    case, _ = application.read_case(ClientRecord.from_dict(record))
     fake_services.save_forecast_replies(application.response_cache(), case)
     first = client.post(f"/client/{record['client_ref']}/assess")
     _wait_for(client, first.headers["Location"].rsplit("/", 1)[-1])

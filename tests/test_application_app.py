@@ -7,6 +7,7 @@ import pytest
 
 from app.application.app import App
 from app.application.assessment_runner import AssessmentRunner
+from app.model.client_record import ClientRecord
 from tests import fake_services
 from tests.logic_fixtures import sample_case
 
@@ -121,19 +122,20 @@ def test_a_critical_step_that_fails_stops_the_assessment(app, capsys):
 
 
 def test_saving_an_assessment_writes_the_outcome_onto_the_client_record(app):
-    record = sample_case()
-    app.clients().save(record)
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record)
     case, missing = app.read_case(record)
     assert missing == []
     fake_services.save_forecast_replies(app.response_cache(), case)
     result = app.assess(case)
     assessment_id = app.save_assessment(result, record)
-    saved_record = app.clients().find(record["client_ref"])
+    assert record.review_status.outcome == result["verdict"]["verdict"]     # the record passed in is updated
+    saved_record = app.clients().find(record.client_ref)
     assert saved_record["outcome"] == result["verdict"]["verdict"]
     assert saved_record["routing"] == result["verdict"]["next_step"]
     assert saved_record["next_review_date"] == result["verdict"]["next_review_date"]
     saved = app.assessments().find(assessment_id)
-    assert saved["client_ref"] == record["client_ref"]
+    assert saved["client_ref"] == record.client_ref
     assert saved["report"] == result["report"]
 
 
@@ -166,3 +168,53 @@ def test_recorded_replies_never_overwrite_replies_already_saved(app):
     before = app.response_cache().load_raw_replies(case["client_ref"])
     app.use_recorded_replies()
     assert app.response_cache().load_raw_replies(case["client_ref"]) == before
+
+
+def _broken_record() -> dict:
+    """A saved record with an impossible value: ClientRecord cannot be built from it."""
+    record = sample_case()
+    record["career"]["age"] = 5
+    return record
+
+
+def test_find_client_gives_the_saved_client_as_a_client_record(app):
+    app.clients().save(sample_case())
+    record = app.find_client(sample_case()["client_ref"].lower())
+    assert isinstance(record, ClientRecord)
+    assert record.client_ref == sample_case()["client_ref"]
+    assert record.profile.name == sample_case()["name"]
+
+
+def test_find_client_gives_none_when_no_client_has_the_reference(app):
+    assert app.find_client("CL-NOBODY") is None
+
+
+def test_a_saved_client_that_cannot_be_read_is_reported_not_treated_as_missing(app, caplog):
+    app.clients().save(_broken_record())
+    with pytest.raises(ValueError) as error:
+        app.find_client(sample_case()["client_ref"])
+    assert "could not be loaded" in str(error.value) and "age must be between 18 and 120" in str(error.value)
+    assert "App.find_client" in caplog.text                     # the real error is logged
+
+
+def test_save_client_saves_the_record_in_the_saved_layout(app):
+    record = ClientRecord.from_dict(sample_case())
+    assert app.save_client(record) is True
+    saved = app.clients().find(record.client_ref)
+    assert saved == record.to_dict()
+    assert app.find_client(record.client_ref).to_dict() == saved
+
+
+def test_save_client_reports_a_record_that_could_not_be_saved(app, monkeypatch):
+    monkeypatch.setattr(app.clients(), "save", lambda data: False)
+    assert app.save_client(ClientRecord.from_dict(sample_case())) is False
+
+
+def test_the_menu_reports_a_client_that_cannot_be_read_and_carries_on(app, monkeypatch, capsys):
+    app.clients().save(_broken_record())
+    _answers(monkeypatch, "4", sample_case()["client_ref"], "8")
+    app.run_menu()
+    out = capsys.readouterr().out
+    assert "could not be loaded" in out
+    assert "No client found" not in out                         # broken is not the same as missing
+    assert "Goodbye." in out

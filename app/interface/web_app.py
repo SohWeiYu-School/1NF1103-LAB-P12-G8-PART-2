@@ -18,6 +18,7 @@ from werkzeug.wrappers import Response
 from app.application.app import App
 from app.interface.client_form import ClientForm
 from app.interface.web_templates import TEMPLATES
+from app.model.client_record import ClientRecord
 
 logger = logging.getLogger(__name__)
 
@@ -539,7 +540,7 @@ class WebApp:
                                field_errors=field_errors or {}, documents=documents or [],
                                autofilled=autofilled or [], notes=notes or [])
 
-    def _run_assessment_job(self, job_id, record, case):
+    def _run_assessment_job(self, job_id: str, record: ClientRecord, case: dict) -> None:
         """The assessment, in the background: App.assess, the very method the command
         line runs, then the same save."""
         job = self.__jobs[job_id]
@@ -549,7 +550,7 @@ class WebApp:
             job["step"] = label
 
         try:
-            result = self.__app.assess(case, record.get("supporting_documents"), on_step=step, show_failures=False)
+            result = self.__app.assess(case, record.documents(), on_step=step, show_failures=False)
             if result is None:
                 raise RuntimeError("The assessment was stopped because a critical step failed.")
             assessment_id = self.__app.save_assessment(result, record, on_step=step)
@@ -564,7 +565,7 @@ class WebApp:
                 ai_warnings.append("Forecasting")
 
             job["result"] = {
-                "record":        record,
+                "record":        record.to_dict(),       # the page template reads the saved layout
                 "report":        result["report"],
                 "assessment_id": assessment_id,
                 "assessed_at":   datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -576,7 +577,7 @@ class WebApp:
             job["status"] = "done"
         except Exception as exc:
             logging.getLogger(__name__).error("_run_assessment_job %s failed: %s", job_id, repr(exc))
-            logging.exception("Assessment of %s failed", record.get("client_ref"))
+            logging.exception("Assessment of %s failed", record.client_ref)
             job["status"] = "error"
             job["error"] = str(exc)
 
@@ -739,7 +740,11 @@ class WebApp:
         return send_file(io.BytesIO(data), as_attachment=True, download_name=name)
 
     def assess_client(self, client_ref: str) -> Response:
-        record = self.get_record(client_ref)
+        try:
+            record = self.__app.find_client(client_ref)
+        except ValueError as error:
+            flash(f"{error} Please correct it (Edit) before assessing.")
+            return redirect(url_for("view_client", client_ref=client_ref))
         if record is None:
             abort(404)
         if not self.__app.ai_available():
