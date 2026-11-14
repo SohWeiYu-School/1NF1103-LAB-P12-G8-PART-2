@@ -26,3 +26,12 @@ class Formatter:
         first_of_next = datetime.date(year + month // 12, month % 12 + 1, 1)
         last_day = (first_of_next - datetime.timedelta(days=1)).day
         return datetime.date(year, month, min(date.day, last_day)).isoformat()
+
+    @staticmethod
+    def percent(value: float) -> str:
+        """0.256 -> '25.6%'."""
+        try:
+            return f"{value * 100:.1f}%"
+        except Exception:
+            print("could not format percent")
+            return "0.0%"
