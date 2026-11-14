@@ -17,14 +17,14 @@ class FuturePaths:
 
     BASELINE_TYPE: str = "T1"     # T1 is always "his wealth came exactly as declared"
 
-    def __init__(self, market_model: MarketModel, forecast: dict | None = None,
+    def __init__(self, market_model: MarketModel | None = None, forecast: dict | None = None,
                  policy: dict | None = None) -> None:
         self.__forecast: dict = forecast or {}
         self.__policy: dict = policy or {}
-        self.__market_model: MarketModel = market_model
+        self.__market_model: MarketModel = market_model or MarketModel()
         earnings = self.__forecast.get("earnings") or {}
         self.__career_savings: CareerSavings = CareerSavings(earnings)
-        self.__asset_path: AssetPath = AssetPath(market_model, earnings.get("assets"))
+        self.__asset_path: AssetPath = AssetPath(self.__market_model, earnings.get("assets"))
         self.__paths: dict = {}
 
     def career_savings(self) -> CareerSavings:

@@ -45,10 +45,10 @@ class VerdictEngine:
     ORIGINAL_BENCHMARK = ["TOTAL_WEALTH", "LIQUIDITY", "COMPOSITION_PROPERTY", "COMPOSITION_EQUITIES",
                           "COMPOSITION_BUSINESS", "COMPOSITION_CASH", "VELOCITY", "COUNTERPARTIES", "JURISDICTION"]
 
-    def __init__(self, features: list[Feature], config: Config) -> None:
-        self.__features: list[Feature] = list(features)
-        self.__config: Config = config
-        self.__policy: dict = config.policy
+    def __init__(self, features: list[Feature] | None = None, config: Config | None = None) -> None:
+        self.__features: list[Feature] = list(features or [])
+        self.__config: Config = config or Config()
+        self.__policy: dict = self.__config.policy
 
     def features(self) -> list[Feature]:
         return list(self.__features)
