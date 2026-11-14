@@ -42,6 +42,7 @@ from app.logic.pay_calibrator import PayCalibrator
 from app.logic.forecast import Forecast
 from app.logic.crime_scan import CrimeScan
 from app.logic.case_reader import CaseReader
+from app.logic.document_evidence import DocumentEvidence
 from app.model.band import Band
 from app.model.check import Check
 from app.model.config import Config
@@ -1106,28 +1107,7 @@ def document_evidence(extracted: dict | None, files: list[str] | None = None,
     """The AI's reading of every submitted document, cleaned into the documents layer:
     {"files", "documented_pay": [{year, amount, source_file}], "findings": [...], "notes": [...]}.
     Anything the reading left out is just empty, so older readings still work."""
-    policy = policy or utilities.policy()
-    kinds = policy["verdict"]["document_evidence"]
-    evidence = (extracted or {}).get("evidence") or {}
-    pay = []
-    for row in evidence.get("documented_pay") or []:
-        year, amount = _read_year(row.get("year")), _read_amount(row.get("employment_income_sgd"))
-        if year and amount and amount > 0 and year not in [p["year"] for p in pay]:
-            pay.append({"year": year, "amount": amount, "source_file": row.get("source_file")})
-    findings = []
-    for row in evidence.get("findings") or []:
-        kind = row.get("kind") if row.get("kind") in kinds else "other"
-        summary = str(row.get("summary") or "").strip()
-        if not summary:
-            continue
-        findings.append({"kind": kind, "summary": summary, "amount_sgd": _read_amount(row.get("amount_sgd")),
-                         "per": row.get("per"), "counterparty": row.get("counterparty"),
-                         "country": row.get("country"), "source_files": list(row.get("source_files") or [])})
-    order = list(kinds)
-    findings.sort(key=lambda f: (not kinds[f["kind"]]["serious"], order.index(f["kind"])))
-    return {"files": list(files or []), "read": extracted is not None,
-            "documented_pay": sorted(pay, key=lambda p: p["year"]), "findings": findings,
-            "notes": [str(n) for n in (extracted or {}).get("notes") or []]}
+    return DocumentEvidence(policy or utilities.policy())._read(extracted, files)
 
 
 def calibrate_pay(case: dict, forecast: dict, documented_pay: list[dict], policy: dict) -> tuple[dict, list[dict]]:
@@ -1143,29 +1123,7 @@ def calibrate_pay(case: dict, forecast: dict, documented_pay: list[dict], policy
 def document_checks(evidence: dict | None, types: list[dict], policy: dict) -> list[dict]:
     """The documents layer as findings in the shared shape: each fact the declaration leaves out
     or contradicts, and which crime stories it supports."""
-    if not evidence or not evidence.get("files"):
-        return [_check("documents", "NO_DOCUMENTS", "Supporting documents", "pattern", "info",
-                       "No supporting documents were submitted, so nothing was checked against them.")]
-    if not evidence.get("read"):
-        return [_check("documents", "DOCUMENTS_UNREAD", "Supporting documents", "pattern", "skipped",
-                       f"{len(evidence['files'])} document(s) couldn't be read.")]
-    kinds = policy["verdict"]["document_evidence"]
-    checks = []
-    for finding in evidence["findings"]:
-        setting = kinds[finding["kind"]]
-        stories = [t for t in types if t["category"] in setting["supports"]]
-        check = _check("documents", finding["kind"].upper(), setting["label"], setting["theme"],
-                       "failed" if setting["serious"] else "weak", finding["summary"],
-                       ("Supports " + "; ".join(f"{t['type_id']} {t['name']}" for t in stories) + ".") if stories else "",
-                       group="Documents")
-        check["sources"] = finding["source_files"]
-        check["supports"] = setting["supports"]
-        checks.append(check)
-    if not checks:
-        checks.append(_check("documents", "DOCUMENTS_AGREE", "Supporting documents", "pattern", "passed",
-                             f"The {len(evidence['files'])} document(s) agree with his declaration.",
-                             group="Documents"))
-    return checks
+    return DocumentEvidence(policy)._document_checks(evidence, types)
 
 
 def type_patterns(forecast: dict | None, assessment: dict | None, crime_result: dict | None,
