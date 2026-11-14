@@ -32,6 +32,11 @@ import logging
 import re
 
 from app import utilities
+from app.model.band import Band
+from app.model.check import Check
+from app.model.config import Config
+from app.model.research_report import ResearchReport
+from app.model.verdict import Verdict
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -352,8 +357,7 @@ def verify_typology_sources(
                 )
                 continue
             excerpts = report_map[rid].get("excerpts", [])
-            norm_quote = _normalise_text(quote)
-            if any(norm_quote in _normalise_text(e) for e in excerpts):
+            if _report_contains_quote(excerpts, quote):
                 valid_quotes.append({"report_id": rid, "quote": quote})
             else:
                 warnings.append(
@@ -401,16 +405,11 @@ def verify_typology_sources(
     return cleaned, warnings
 
 
-# Normalise text for quote matching — lowercase, collapse whitespace, unify smart quotes and dashes.
-def _normalise_text(text: str) -> str:
-    """Lowercase, collapse whitespace, unify quote marks and dashes for substring matching."""
-    text = text.lower()
-    for ch in '\u201c\u201d':   # " "  → "
-        text = text.replace(ch, '"')
-    for ch in '\u2018\u2019':   # ' '  → '
-        text = text.replace(ch, "'")
-    text = text.replace('\u2013', '-').replace('\u2014', '-')   # en/em dash → -
-    return re.sub(r'\s+', ' ', text).strip()
+# Normalise text for quote matching. ResearchReport (Domain Model) owns the matching;
+# this function stays until verify_typology_sources moves into CrimeScan.
+def _report_contains_quote(excerpts: list[str], quote: str) -> bool:
+    """True if the quote appears in an excerpt, ignoring case, spacing and curly quote marks."""
+    return ResearchReport("", "", excerpts).contains_quote(quote)
 
 
 # Check if a URL's domain is in the trusted sources list (including subdomains).
@@ -806,15 +805,14 @@ def normalize_declaration_jurisdictions(declaration: dict) -> tuple[dict, list[s
 # Forecasting Section (runs after the benchmark)
 # ===========================================================================
 
-PASSED, MANUAL_REVIEW, RISKY, SERIOUS_RISK = "PASSED", "MANUAL_REVIEW", "RISKY", "SERIOUS_RISK"
+PASSED, MANUAL_REVIEW, RISKY, SERIOUS_RISK = Verdict.OUTCOMES
 SEVERITY = {PASSED: 0, MANUAL_REVIEW: 1, RISKY: 2, SERIOUS_RISK: 3}
 
-# Every money result is kept at three levels.
-BANDS = ("cautious", "typical", "optimistic")
-# Which end of an AI range each level uses. For money coming in, cautious = low.
-# For money going out (tax, living costs), cautious = high.
-MONEY_IN = {"cautious": "low", "typical": "typical", "optimistic": "high"}
-MONEY_OUT = {"cautious": "high", "typical": "typical", "optimistic": "low"}
+# Every money result is kept at three levels. The Band class (Domain Model) owns the arithmetic;
+# these names stay until the forecast code moves into its own classes.
+BANDS = Band.LEVELS
+MONEY_IN = Band.MONEY_IN
+MONEY_OUT = Band.MONEY_OUT
 
 
 # ============================================================================
@@ -822,30 +820,29 @@ MONEY_OUT = {"cautious": "high", "typical": "typical", "optimistic": "low"}
 # ============================================================================
 
 def band(cautious: float, typical: float, optimistic: float) -> dict:
-    return {"cautious": round(cautious, 2), "typical": round(typical, 2), "optimistic": round(optimistic, 2)}
+    return Band(cautious, typical, optimistic).to_dict()
 
 
 def zero_band() -> dict:
-    return band(0, 0, 0)
+    return Band().to_dict()
 
 
 def add_bands(first: dict, second: dict) -> dict:
-    return band(*(first[b] + second[b] for b in BANDS))
+    return (Band.from_dict(first) + Band.from_dict(second)).to_dict()
 
 
 def scale_band(values: dict, factor: float) -> dict:
-    return band(*(values[b] * factor for b in BANDS))
+    return (Band.from_dict(values) * factor).to_dict()
 
 
 def sorted_band(three_values: list[float]) -> dict:
     """Three results worked out from the low, typical and high inputs, lowest first."""
-    low, middle, high = sorted(three_values)
-    return band(low, middle, high)
+    return Band.from_values(three_values).to_dict()
 
 
 def range_to_band(ai_range: dict) -> dict:
     """An AI {low, typical, high} range as a cautious/typical/optimistic band."""
-    return band(ai_range["low"], ai_range["typical"], ai_range["high"])
+    return Band.from_range(ai_range).to_dict()
 
 
 def add_months(date_text: str, months: int) -> str:
@@ -860,13 +857,12 @@ def add_months(date_text: str, months: int) -> str:
 
 def same_country(name: str, policy: dict) -> str:
     """Lower-case a country name and map short forms (UAE, Dubai) to one spelling."""
-    text = (name or "").strip().lower()
-    return policy.get("country_aliases", {}).get(text, text)
+    return Config(policy, {}).same_country(name)
 
 
 def category_name(code: str) -> str:
     """'TRADE_BASED_ML' -> its readable name from the vocabulary file."""
-    return utilities.vocabulary().get("crime_categories", {}).get(code, code)
+    return Config({}, utilities.vocabulary()).category_name(code)
 
 
 def enabled_by_text(person_type: dict, record: dict) -> str:
@@ -1909,8 +1905,7 @@ def _sgd(value) -> str:
 def _check(feature: str, check: str, label: str, theme: str, status: str, detail: str,
            explanation: str = "", group: str = "") -> dict:
     """One finding in the shared shape all three features use."""
-    return {"feature": feature, "check": check, "label": label, "theme": theme, "status": status,
-            "detail": detail, "explanation": explanation, "group": group or label}
+    return Check(feature, check, label, theme, status, detail, explanation, group).to_dict()
 
 
 # ---------------------------------------------------------------------------

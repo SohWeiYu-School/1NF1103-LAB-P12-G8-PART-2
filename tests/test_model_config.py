@@ -1,0 +1,34 @@
+"""Config: policy and vocabulary held as one object."""
+
+from app.model.config import Config
+
+POLICY = {"country_aliases": {"uae": "united arab emirates", "hk": "hong kong"}}
+VOCABULARY = {"crime_categories": {"TRADE_BASED_ML": "Trade-based money laundering"}}
+
+
+def test_config_gives_back_what_it_was_given():
+    config = Config(POLICY, VOCABULARY)
+    assert config.policy is POLICY
+    assert config.vocabulary is VOCABULARY
+
+
+def test_category_name_reads_the_vocabulary():
+    assert Config(POLICY, VOCABULARY).category_name("TRADE_BASED_ML") == "Trade-based money laundering"
+
+
+def test_category_name_returns_an_unknown_code_unchanged():
+    assert Config(POLICY, VOCABULARY).category_name("NOT_A_CODE") == "NOT_A_CODE"
+
+
+def test_same_country_maps_short_forms_to_one_spelling():
+    config = Config(POLICY, VOCABULARY)
+    assert config.same_country(" UAE ") == "united arab emirates"
+    assert config.same_country("HK") == "hong kong"
+
+
+def test_same_country_lower_cases_names_with_no_short_form():
+    assert Config(POLICY, VOCABULARY).same_country("Singapore") == "singapore"
+
+
+def test_same_country_copes_with_an_empty_name():
+    assert Config({}, {}).same_country(None) == ""
