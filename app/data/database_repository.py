@@ -14,7 +14,8 @@ class DatabaseRepository(Repository):
     """A repository backed by a database. It knows what to store and when; its children
     know how to talk to one kind of database (connect, write, read, store a file)."""
 
-    def __init__(self, collection_name: str, key_field: str, uri: str) -> None:
+    def __init__(self, collection_name: str = "", key_field: str = "", uri: str = "") -> None:
+        super().__init__()
         self._collection_name: str = collection_name
         self._key_field: str = key_field
         self._uri: str = uri or ""

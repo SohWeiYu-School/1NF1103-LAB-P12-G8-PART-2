@@ -18,7 +18,8 @@ class JsonRepository(Repository):
 
     DATA_DIR: str = os.path.join(ROOT_DIR, "data", "local database")
 
-    def __init__(self, path: str, key_field: str) -> None:
+    def __init__(self, path: str = "", key_field: str = "") -> None:
+        super().__init__()
         self._path: str = path
         self._key_field: str = key_field
 

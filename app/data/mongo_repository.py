@@ -18,7 +18,7 @@ class MongoRepository(DatabaseRepository):
     DB_NAME: str = "sow_risk_db"
     TIMEOUT_MS: int = 2000
 
-    def __init__(self, collection_name: str, key_field: str, uri: str) -> None:
+    def __init__(self, collection_name: str = "", key_field: str = "", uri: str = "") -> None:
         super().__init__(collection_name, key_field, uri)
         self.__client: MongoClient | None = None
 
