@@ -52,8 +52,8 @@ def test_the_assessment_list_shows_one_line_per_assessment():
 
 
 def test_showing_a_client_record_prints_through_the_console(capsys):
-    _view().display_client_record({"client_ref": "SOW-1", "name": "Daniel Tan", "nationality": "Malaysian",
-                                   "career": {"occupation": "COO"}, "career_history": [], "investments": [],
-                                   "claims": {}, "sow_declaration": "Salary savings."})
+    assert _view().display_client_record({"client_ref": "SOW-1", "name": "Daniel Tan", "nationality": "Malaysian",
+                                          "career": {"occupation": "COO"}, "career_history": [], "investments": [],
+                                          "claims": {}, "sow_declaration": "Salary savings."}) is None
     out = capsys.readouterr().out
     assert "Daniel Tan" in out and "SOW-1" in out

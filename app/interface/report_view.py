@@ -158,7 +158,7 @@ class ReportView:
             return f"{value:,}"
         return str(value)
 
-    def display_client_record(self, record: dict):
+    def display_client_record(self, record: dict) -> None:
         """Display all information collected for the client."""
 
         self.__ui.display_section("CLIENT INFORMATION REVIEW")
