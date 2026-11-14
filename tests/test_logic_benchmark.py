@@ -1,7 +1,7 @@
 """Benchmark: the benchmark feature."""
 
 from app.logic.benchmark import Benchmark
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.model.check import Check
 from tests import fake_ai
 from tests.logic_fixtures import CONFIG, POLICY, sample_case
@@ -18,7 +18,7 @@ def _feature():
 
 
 def test_benchmark_is_a_feature():
-    assert isinstance(_feature(), Feature)
+    assert isinstance(_feature(), RiskAnalysis)
     assert Benchmark.NAME == "benchmark"
 
 

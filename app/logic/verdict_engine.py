@@ -3,7 +3,7 @@
 from app.logic.benchmark import Benchmark
 from app.logic.case_timeline import CaseTimeline
 from app.logic.crime_scan import CrimeScan
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.logic.formatter import Formatter
 from app.logic.future_paths import FuturePaths
 from app.model.check import Check
@@ -45,15 +45,15 @@ class VerdictEngine:
     ORIGINAL_BENCHMARK = ["TOTAL_WEALTH", "LIQUIDITY", "COMPOSITION_PROPERTY", "COMPOSITION_EQUITIES",
                           "COMPOSITION_BUSINESS", "COMPOSITION_CASH", "VELOCITY", "COUNTERPARTIES", "JURISDICTION"]
 
-    def __init__(self, features: list[Feature] | None = None, config: Config | None = None) -> None:
-        self.__features: list[Feature] = list(features or [])
+    def __init__(self, features: list[RiskAnalysis] | None = None, config: Config | None = None) -> None:
+        self.__features: list[RiskAnalysis] = list(features or [])
         self.__config: Config = config or Config()
         self.__policy: dict = self.__config.policy
 
-    def features(self) -> list[Feature]:
+    def features(self) -> list[RiskAnalysis]:
         return list(self.__features)
 
-    def _feature(self, name: str) -> Feature | None:
+    def _feature(self, name: str) -> RiskAnalysis | None:
         """The feature with this NAME, or None if the engine was not given one."""
         return next((feature for feature in self.__features if feature.NAME == name), None)
 

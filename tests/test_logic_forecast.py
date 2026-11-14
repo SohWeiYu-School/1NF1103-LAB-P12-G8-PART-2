@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.logic.forecast import Forecast
 from app.model.check import Check
 from tests.logic_fixtures import CONFIG, POLICY, sample_case, sample_forecast
@@ -19,7 +19,7 @@ def ran():
 
 
 def test_forecast_is_a_feature():
-    assert isinstance(Forecast(POLICY, CONFIG), Feature)
+    assert isinstance(Forecast(POLICY, CONFIG), RiskAnalysis)
     assert Forecast.NAME == "forecast"
 
 

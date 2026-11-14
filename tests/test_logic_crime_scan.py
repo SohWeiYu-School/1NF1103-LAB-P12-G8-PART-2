@@ -1,7 +1,7 @@
 """CrimeScan: the crime scan feature and the warning signs it owns."""
 
 from app.logic.crime_scan import CrimeScan
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.model.check import Check
 from app.model.declaration import Declaration
 from tests import fake_ai
@@ -16,7 +16,7 @@ NAMED = {"sources": [{"source_id": "S1", "source_type": "salary", "counterparty"
 
 
 def test_crime_scan_is_a_feature():
-    assert isinstance(CrimeScan(POLICY), Feature)
+    assert isinstance(CrimeScan(POLICY), RiskAnalysis)
     assert CrimeScan.NAME == "crime"
 
 

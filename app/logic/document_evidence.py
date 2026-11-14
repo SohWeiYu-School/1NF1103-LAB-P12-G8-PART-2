@@ -1,11 +1,11 @@
 """DocumentEvidence: what the client's own documents show."""
 
 from app.logic.case_reader import CaseReader
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.model.check import Check
 
 
-class DocumentEvidence(Feature):
+class DocumentEvidence(RiskAnalysis):
     """The documents feature. It cleans the AI's reading of the submitted documents into
     documented pay (which later corrects the forecast) and findings (income, payments and
     names the documents show), and turns the findings into Checks.

@@ -1,7 +1,7 @@
 """DocumentEvidence: the documents feature."""
 
 from app.logic.document_evidence import DocumentEvidence
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.model.check import Check
 from tests.logic_fixtures import POLICY
 
@@ -24,7 +24,7 @@ def _run(reading=READING, files=FILES):
 
 
 def test_document_evidence_is_a_feature():
-    assert isinstance(DocumentEvidence(POLICY), Feature)
+    assert isinstance(DocumentEvidence(POLICY), RiskAnalysis)
     assert DocumentEvidence.NAME == "documents"
 
 

@@ -1,7 +1,7 @@
 """Forecast: could the money add up under each person type?"""
 
 from app.logic.case_timeline import CaseTimeline
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.logic.formatter import Formatter
 from app.logic.future_paths import FuturePaths
 from app.logic.market_model import MarketModel
@@ -12,7 +12,7 @@ from app.model.check import Check
 from app.model.config import Config
 
 
-class Forecast(Feature):
+class Forecast(RiskAnalysis):
     """The forecast feature. From the AI's forecast (markets, pay, assets, person types,
     events) it works out, with arithmetic only, whether the declared wealth fits the honest
     type or a crime type, how stable that answer is, what to watch and which documents

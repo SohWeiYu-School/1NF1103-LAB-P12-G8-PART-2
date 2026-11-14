@@ -1,12 +1,12 @@
-"""Feature: what the four parts of an assessment share."""
+"""RiskAnalysis: what the four parts of an assessment share."""
 
 import pytest
 
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.model.check import Check
 
 
-class _Sample(Feature):
+class _Sample(RiskAnalysis):
     """A small feature for these tests."""
 
     NAME = "sample"
@@ -26,11 +26,11 @@ CASE = {"claims": {"declared_net_worth": 500, "biggest_wealth_jump": 3_000_000, 
 
 def test_the_abstract_feature_cannot_be_created():
     with pytest.raises(TypeError):
-        Feature()
+        RiskAnalysis()
 
 
 def test_a_child_that_leaves_out_checks_cannot_be_created():
-    class _Half(Feature):
+    class _Half(RiskAnalysis):
         def run(self, case, ai_data):
             return {}
     with pytest.raises(TypeError):

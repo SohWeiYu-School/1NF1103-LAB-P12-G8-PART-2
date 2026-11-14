@@ -3,14 +3,14 @@
 import re
 
 from app.logic.case_timeline import CaseTimeline
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.logic.formatter import Formatter
 from app.logic.market_model import MarketModel
 from app.model.check import Check
 from app.model.config import Config
 
 
-class Benchmark(Feature):
+class Benchmark(RiskAnalysis):
     """The benchmark feature. It compares what the client declared with what the AI says a
     typical person with his career would have: total wealth, liquidity, the asset mix, the
     speed of his biggest wealth jump, his counterparties and his countries.

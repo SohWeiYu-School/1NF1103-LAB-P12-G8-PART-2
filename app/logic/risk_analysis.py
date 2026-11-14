@@ -1,11 +1,11 @@
-"""Feature: one part of the assessment that produces checks for the verdict."""
+"""RiskAnalysis: one part of the assessment that produces checks for the verdict."""
 
 from abc import ABC, abstractmethod
 
 from app.model.check import Check
 
 
-class Feature(ABC):
+class RiskAnalysis(ABC):
     """The parent of the four parts of an assessment: the crime scan, the document evidence,
     the benchmark and the forecast.
 

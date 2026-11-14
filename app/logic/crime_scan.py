@@ -2,7 +2,7 @@
 
 import logging
 
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.logic.indicator import (CounterpartyUnnamed, GiftOrInheritanceUnnamed, Indicator,
                                  RelatedPartyTransaction, SourceContradictsOccupation, UnvaluedSource)
 from app.model.check import Check
@@ -12,7 +12,7 @@ from app.model.research_report import ResearchReport
 logger = logging.getLogger(__name__)
 
 
-class CrimeScan(Feature):
+class CrimeScan(RiskAnalysis):
     """The crime scan feature. It trusts nothing the AI found until it has checked it: a
     research report must come from a trusted site, and a typology's quotes must really be
     in the reports it cites. It then runs its five Indicators (the warning signs) on the

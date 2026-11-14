@@ -33,7 +33,7 @@ The only module-level functions are the AI caller functions in `app/ai/ai_caller
 | `app/application/` | Application | `App`, `AssessmentRunner`. The only place that coordinates the managers. |
 | `app/interface/` | IO Manager | `ConsoleUI`, `ReportView`, `ClientForm`, `CaseBuilder`, `WebApp` (and its page templates in `web_templates.py`), `RateLimiter` |
 | `app/ai/` | AI Manager | `AIService` and its children, `ResponseCache`, the AI caller functions |
-| `app/logic/` | Logic Manager | `VerdictEngine`, `Feature` and its children, `Indicator` and its children, the forecast classes, `CaseReader`, `DocumentRecordBuilder`, `CaseTimeline`, `Formatter` |
+| `app/logic/` | Logic Manager | `VerdictEngine`, `RiskAnalysis` and its children, `Indicator` and its children, the forecast classes, `CaseReader`, `DocumentRecordBuilder`, `CaseTimeline`, `Formatter` |
 | `app/data/` | Data Manager | The repositories, `CloudSync`, `DocumentStore`, the document readers, `ConfigReader`, `CaseFiles` |
 | `app/model/` | Domain Model | Shared data objects (`ClientRecord`, `Verdict`, `Check`, `Band`, `Config`, ...) |
 

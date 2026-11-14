@@ -5,7 +5,7 @@ import pytest
 from app.logic.benchmark import Benchmark
 from app.logic.crime_scan import CrimeScan
 from app.logic.document_evidence import DocumentEvidence
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.logic.forecast import Forecast
 from app.logic.verdict_engine import VerdictEngine
 from app.model.check import Check
@@ -33,7 +33,7 @@ def test_the_engine_keeps_the_features_it_was_handed():
     features = _features()
     engine = VerdictEngine(features, CONFIG)
     assert engine.features() == features
-    assert all(isinstance(feature, Feature) for feature in engine.features())
+    assert all(isinstance(feature, RiskAnalysis) for feature in engine.features())
 
 
 def test_decide_gives_one_outcome_with_checks_from_every_feature(parts):
@@ -59,8 +59,8 @@ def test_a_feature_the_engine_was_not_given_adds_no_findings(parts):
     assert verdict["forecast"]
 
 
-class _AlwaysFails(Feature):
-    """A made-up benchmark, to show the engine treats any Feature the same way."""
+class _AlwaysFails(RiskAnalysis):
+    """A made-up benchmark, to show the engine treats any RiskAnalysis the same way."""
 
     NAME = "benchmark"
 
