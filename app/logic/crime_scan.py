@@ -22,30 +22,6 @@ class CrimeScan(Feature):
     The crime scan creates and owns its Indicators (composition).
     """
 
-    NAME: str = "crime"
-
-    def __init__(self, policy: dict | None = None) -> None:
-        super().__init__(policy)
-        self.__indicators: list[Indicator] = [
-            GiftOrInheritanceUnnamed(self._policy), CounterpartyUnnamed(self._policy),
-            SourceContradictsOccupation(self._policy), UnvaluedSource(self._policy),
-            RelatedPartyTransaction(self._policy)]
-
-    def run(self, case: dict, ai_data: dict) -> dict:
-        """Match the typologies against the client. ai_data is {"typology_response", "declaration"}."""
-        self._results = self._assess(case, ai_data.get("typology_response"), ai_data.get("declaration"))
-        return self._results
-
-    def checks(self, context: dict) -> list[Check]:
-        """The crime scan's findings. context holds crime_result, research, typologies, types, forecast_ran."""
-        return self._as_checks(self._crime_checks(
-            context.get("crime_result"), context.get("research"), context.get("typologies"),
-            context.get("types") or [], context.get("forecast_ran", True)))
-
-    def flags(self, declaration: Declaration) -> list[str]:
-        """The names of the warning signs that fire for this declaration."""
-        return [indicator.NAME for indicator in self.__indicators if indicator.fires(declaration)]
-
     _COUNTRY_TO_ISO = {
         "singapore": "SG",
         "malaysia": "MY",
@@ -119,6 +95,30 @@ class CrimeScan(Feature):
                    "related_party_transaction": "money from a related party",
                    "source_contradicts_occupation": "a source that doesn't fit his job",
                    "unvalued_source_present": "a source with no amount"}
+
+    NAME: str = "crime"
+
+    def __init__(self, policy: dict | None = None) -> None:
+        super().__init__(policy)
+        self.__indicators: list[Indicator] = [
+            GiftOrInheritanceUnnamed(self._policy), CounterpartyUnnamed(self._policy),
+            SourceContradictsOccupation(self._policy), UnvaluedSource(self._policy),
+            RelatedPartyTransaction(self._policy)]
+
+    def run(self, case: dict, ai_data: dict) -> dict:
+        """Match the typologies against the client. ai_data is {"typology_response", "declaration"}."""
+        self._results = self._assess(case, ai_data.get("typology_response"), ai_data.get("declaration"))
+        return self._results
+
+    def checks(self, context: dict) -> list[Check]:
+        """The crime scan's findings. context holds crime_result, research, typologies, types, forecast_ran."""
+        return self._as_checks(self._crime_checks(
+            context.get("crime_result"), context.get("research"), context.get("typologies"),
+            context.get("types") or [], context.get("forecast_ran", True)))
+
+    def flags(self, declaration: Declaration) -> list[str]:
+        """The names of the warning signs that fire for this declaration."""
+        return [indicator.NAME for indicator in self.__indicators if indicator.fires(declaration)]
 
     def verify_research(self, research: dict) -> tuple[dict, list[str]]:
         """Filter research reports by grounding, domain trust, and uniqueness.
