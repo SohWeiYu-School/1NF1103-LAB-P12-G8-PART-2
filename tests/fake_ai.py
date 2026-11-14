@@ -169,7 +169,8 @@ def caller(research_reply: dict | None = "default", typologies_reply: dict | Non
     """A made-up AI caller to hand to App, as main.py hands it a real one. It answers each
     AI service with a hard-coded reply, picked by the schema the service sends.
     Pass None for a reply to make that service get no answer (like a failed connection).
-    The forecast is not answered here: it uses the replies saved with save_forecast_replies."""
+    The forecast is not answered here: it uses the replies saved with save_forecast_replies.
+    call.asked lists (which reply, the options sent) for every question, in order."""
     replies = {
         "reports": research() if research_reply == "default" else research_reply,
         "sector_typologies": typologies() if typologies_reply == "default" else typologies_reply,
@@ -182,9 +183,9 @@ def caller(research_reply: dict | None = "default", typologies_reply: dict | Non
         keys = (schema or {}).get("required") or list((schema or {}).get("properties", {}))
         for key, reply in replies.items():
             if key in keys:
-                asked.append(key)
+                asked.append((key, dict(options or {})))
                 return None if reply is None else json.dumps(reply)
-        asked.append("other")
+        asked.append(("other", dict(options or {})))
         return None
 
     call.available = lambda: True
