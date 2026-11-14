@@ -8,10 +8,10 @@ managers never import each other's work, everything is passed through here.
     python main.py --all-samples            assess every sample case in the forecasting format
     python main.py --all-samples --demo     the same, using the recorded AI replies in tests/golden
                                             (for machines with no API key, e.g. CI)
+    python main.py --web                    the web app (http://127.0.0.1:5000)
 
-ONE assessment, shared with the web app (app/web_app.py calls run_combined_assessment and
-save_combined_assessment below, so the command line and the web app give the same verdict
-and the same report):
+ONE assessment, shared with the web app (both run App.assess, so the command line and the
+web app give the same verdict and the same report):
 
     The client record -> the case (logic_manager.forecasting_case; the CLI asks for anything missing)
      1    Documents           every supporting document is read: what they SHOW (the documents layer),
@@ -40,6 +40,8 @@ _BASE = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(_BASE, ".env"))  # read .env before ai_manager reads its settings
 
 from app import ai_manager, data_manager, io_manager, logic_manager, utilities  # noqa: E402
+from app.ai.ai_caller import gemini_caller, openai_caller, with_fallback  # noqa: E402
+from app.application.app import App  # noqa: E402
 from app.application.assessment_runner import AssessmentRunner  # noqa: E402
 from app.model.config import Config  # noqa: E402
 
@@ -386,6 +388,8 @@ def run_menu() -> None:
 
 
 def main(arguments: list[str]) -> int:
+    if "--web" in arguments:      # the web app is started through App, with the AI brand chosen here
+        return App(with_fallback(openai_caller(), gemini_caller())).start(["--web"])
     _configure_logging()
     problems = utilities.config_problems()
     if problems:

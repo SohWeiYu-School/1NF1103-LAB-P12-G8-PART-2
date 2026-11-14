@@ -199,7 +199,7 @@ class CaseBuilder:
         self.__ui.show(f"Preparing {record.get('client_ref')} for the forecasting assessment")
         self.__ui.show(ConsoleUI.LINE)
 
-        # The assessment is always dated today - the web app does the same (web_app.assess_client).
+        # The assessment is always dated today - the web app does the same (WebApp.assess_client).
         current_date = datetime.date.today().isoformat()
         self.__ui.show(f"Assessment date: {current_date} (today)")
         this_year = int(current_date[:4])
