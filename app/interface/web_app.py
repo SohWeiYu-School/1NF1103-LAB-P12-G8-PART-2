@@ -109,6 +109,8 @@ class WebApp:
         flask.add_url_rule('/assess/loading/<job_id>', endpoint='assess_loading', view_func=self.assess_loading)
         flask.add_url_rule('/assess/poll/<job_id>', endpoint='assess_poll', view_func=self.assess_poll)
         flask.add_url_rule('/assess/result/<job_id>', endpoint='assess_result', view_func=self.assess_result)
+        flask.add_url_rule('/assessment/<assessment_id>/archive', endpoint='archive_assessment', view_func=self.archive_assessment, methods=['POST'])
+        flask.add_url_rule('/assessment/<assessment_id>/restore', endpoint='restore_assessment', view_func=self.restore_assessment, methods=['POST'])
         flask.add_url_rule('/assessments', endpoint='list_assessments_view', view_func=self.list_assessments_view)
         flask.add_url_rule('/sync', endpoint='sync_to_cloud', view_func=self.sync_to_cloud, methods=['POST'])
         flask.register_error_handler(404, self.handle_404)
@@ -629,10 +631,35 @@ class WebApp:
         record = self.get_record(client_ref)
         if record is None:
             abort(404)
-        assessments = self.__app.assessments().for_client(client_ref)
+        show_archived = request.args.get("archived") == "1"
+        repository = self.__app.assessments()
+        assessments = repository.for_client(client_ref, include_archived=show_archived)
+        archived_count = (len(repository.for_client(client_ref, include_archived=True))
+                          - len(repository.for_client(client_ref)))
         return render_template("client_view.html", record=record,
                                values=self.values_from_record(record), SECTIONS=WebApp.SECTIONS,
-                               assessments=assessments)
+                               assessments=assessments, show_archived=show_archived,
+                               archived_count=archived_count)
+
+    def archive_assessment(self, assessment_id):
+        saved = self.__app.assessments().find(assessment_id)
+        if saved is None:
+            abort(404)
+        if self.__app.assessments().archive(saved["assessment_id"], request.form.get("reason", "").strip()):
+            flash("Assessment archived. It is hidden from the lists, not deleted.")
+        return redirect(url_for("view_client", client_ref=saved["client_ref"]))
+
+    def restore_assessment(self, assessment_id):
+        saved = self.__app.assessments().find(assessment_id)
+        if saved is None:
+            abort(404)
+        repository = self.__app.assessments()
+        if repository.restore(saved["assessment_id"]):
+            flash("Assessment restored.")
+        client_ref = saved["client_ref"]
+        still_archived = (len(repository.for_client(client_ref, include_archived=True))
+                          - len(repository.for_client(client_ref)))
+        return redirect(url_for("view_client", client_ref=client_ref, **({"archived": "1"} if still_archived else {})))
 
     def view_assessment(self, assessment_id):
         saved = self.__app.assessments().find(assessment_id)
@@ -810,7 +837,10 @@ class WebApp:
                            benchmark=r.get("benchmark"))
 
     def list_assessments_view(self):
-        return render_template("assessments.html", assessments=self.__app.assessments().load())
+        repository = self.__app.assessments()
+        shown = repository.query("")
+        return render_template("assessments.html", assessments=shown,
+                               archived_count=len(repository.load()) - len(shown))
 
     def sync_to_cloud(self):
         stats = self.__app.sync_to_cloud()

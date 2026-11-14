@@ -317,15 +317,17 @@ VIEW = """{% extends "base.html" %}
   <a class="button secondary" href="{{ url_for('home') }}" style="color:var(--muted); border-color:var(--line)">← Back</a>
 </div>
 
-{% if assessments %}
+{% if assessments or archived_count %}
 <div class="panel" style="margin-bottom:20px">
   <h2>Assessment History</h2>
-  <table>
+  <table style="table-layout:fixed">
+    <colgroup><col style="width:17%"><col style="width:15%"><col style="width:34%"><col style="width:12%"><col style="width:22%"></colgroup>
     {% for a in assessments %}
-    <tr>
+    {% set is_archived = a.get('archive_log') and a['archive_log'][-1].get('action') == 'archived' %}
+    <tr{% if is_archived %} style="opacity:.55"{% endif %}>
       <td>{{ a.get('assessed_at', '')[:10] }}</td>
       <td>{{ a.get('assessed_at', '')[11:16] }} UTC</td>
-      <td>{{ (a.get('outcome') or (a.get('assessment') or {}).get('outcome') or '—').replace('_', ' ') }}</td>
+      <td>{{ (a.get('outcome') or (a.get('assessment') or {}).get('outcome') or '—').replace('_', ' ') }}{% if is_archived %} (archived){% endif %}</td>
       <td>
         {% if a.get('assessment_id') %}
         <a href="{{ url_for('view_assessment', assessment_id=a.get('assessment_id')) }}">View</a>
@@ -333,9 +335,21 @@ VIEW = """{% extends "base.html" %}
         <span class="muted">—</span>
         {% endif %}
       </td>
+      <td>
+        {% if a.get('assessment_id') %}
+        <form method="post" action="{{ url_for('restore_assessment' if is_archived else 'archive_assessment', assessment_id=a.get('assessment_id')) }}" style="margin:0">
+          <button type="submit" class="secondary">{{ 'Restore' if is_archived else 'Archive' }}</button>
+        </form>
+        {% endif %}
+      </td>
     </tr>
     {% endfor %}
   </table>
+  {% if show_archived %}
+  <p style="margin:12px 0 0"><a href="{{ url_for('view_client', client_ref=record.get('client_ref', '')) }}">Hide archived</a></p>
+  {% elif archived_count %}
+  <p style="margin:12px 0 0"><a href="{{ url_for('view_client', client_ref=record.get('client_ref', ''), archived='1') }}">Show archived ({{ archived_count }})</a></p>
+  {% endif %}
 </div>
 {% endif %}
  
@@ -545,7 +559,9 @@ ASSESSMENTS = """{% extends "base.html" %}
   <a class="button secondary" href="{{ url_for('home') }}">Back to clients</a>
 </div>
 <div class="panel">
-  {% if not assessments %}
+  {% if not assessments and archived_count %}
+    <p class="muted">All {{ archived_count }} assessment(s) are archived. Open a client and click Show archived to see them.</p>
+  {% elif not assessments %}
     <p class="muted">No assessments saved yet. Open a client and click Run Assessment.</p>
   {% else %}
   <table>
