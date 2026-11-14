@@ -90,3 +90,15 @@ def test_messages_and_errors_are_printed(capsys):
 @pytest.mark.parametrize("value, text", [(1650000, "1,650,000"), (0, "0")])
 def test_money_is_written_the_same_way_everywhere(value, text):
     assert ConsoleUI().money(value) == text
+
+
+@pytest.mark.parametrize("typed, number", [("1,650,000", 1650000.0), ("S$1.65m", 1650000.0), ("410k", 410000.0)])
+def test_read_number_understands_the_ways_people_type_money(typed, number):
+    assert ConsoleUI().read_number(typed) == pytest.approx(number)
+
+
+def test_read_number_and_read_year_give_none_for_what_cannot_be_read():
+    ui = ConsoleUI()
+    assert ui.read_number("a lot") is None
+    assert ui.read_year("2017") == 2017
+    assert ui.read_year("17") is None

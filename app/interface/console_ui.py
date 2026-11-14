@@ -24,6 +24,7 @@ class ConsoleUI:
 
     LINE = "-" * 72
     LETTERS = " '.-"                    # allowed besides letters: names, nationality, countries
+    LABEL   = " '.-&/,()%#0123456789"     # job titles, industries, employers, asset descriptions
     MAX_EMPLOYEES = 10_000_000
 
     def __init__(self) -> None:
@@ -377,3 +378,24 @@ class ConsoleUI:
             source = "saved reply" if result["from_cache"] else f"API, {result['attempts']} attempt(s)"
             status = "ok" if result["ok"] else "FAILED"
             self.show(f"  {name:<40} {source:<20} {status}")
+
+    def read_number(self, text: object) -> float | None:
+        """Read an amount typed in the form: '1,650,000', 'S$1.65m', '2.5 million', '410k'. None if unreadable."""
+        if isinstance(text, (int, float)):
+            return float(text)
+        cleaned = str(text or "").strip().lower().replace(",", "").replace(" ", "")
+        for prefix in ("sgd", "s$", "$"):
+            cleaned = cleaned.removeprefix(prefix)
+        multiplier = 1.0
+        for suffix, factor in (("million", 1e6), ("mil", 1e6), ("m", 1e6), ("k", 1e3), ("%", 1.0)):
+            if cleaned.endswith(suffix):
+                cleaned, multiplier = cleaned[: -len(suffix)], factor
+                break
+        try:
+            return float(cleaned) * multiplier
+        except ValueError:
+            return None
+
+    def read_year(self, text: object) -> int | None:
+        value = self.read_number(text)
+        return int(value) if value is not None and 1900 <= value <= 2100 else None
