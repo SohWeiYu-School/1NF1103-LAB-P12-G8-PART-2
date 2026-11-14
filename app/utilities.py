@@ -15,6 +15,7 @@ from openai import OpenAI
 
 from app.ai.response_cache import ResponseCache
 from app.data.config_reader import ConfigReader
+from app.interface.rate_limiter import RateLimiter
 from app.logic.case_timeline import CaseTimeline
 from app.logic.market_model import MarketModel
 
@@ -356,28 +357,22 @@ def cache_write(key: str, data: dict, kind: str | None = None) -> None:
 # Assessment rate limit — one assessment per cooldown window per user
 # ---------------------------------------------------------------------------
 
-_rate_limit_store: dict[str, float] = {}  # user_key -> timestamp of last assessment
+_rate_limiter: RateLimiter | None = None     # RateLimiter (IO Manager) remembers each user's last assessment
+
+
+def rate_limiter() -> RateLimiter:
+    """The one RateLimiter for this run, built from assessment_rate_limit in policy.json."""
+    global _rate_limiter
+    if _rate_limiter is None:
+        _rate_limiter = RateLimiter(policy().get("assessment_rate_limit", {}))
+    return _rate_limiter
 
 
 def check_rate_limit(user_key: str) -> tuple[bool, int]:
-    """Check whether user_key is allowed to start a new assessment.
-
-    Reads assessment_rate_limit from policy.json.
-    Returns (True, 0) if allowed, or (False, seconds_remaining) if still in cooldown.
-    """
-    config = policy().get("assessment_rate_limit", {})
-    if not config.get("enabled", True):
-        return True, 0
-    cooldown = int(config.get("cooldown_seconds", 60))
-    last = _rate_limit_store.get(user_key)
-    if last is None:
-        return True, 0
-    elapsed = time.time() - last
-    if elapsed >= cooldown:
-        return True, 0
-    return False, int(cooldown - elapsed) + 1
+    """(True, 0) if user_key may start an assessment, or (False, seconds_remaining) if still in cooldown."""
+    return rate_limiter().check(user_key)
 
 
 def record_assessment(user_key: str) -> None:
     """Record that user_key has just started an assessment (starts the cooldown clock)."""
-    _rate_limit_store[user_key] = time.time()
+    rate_limiter().record(user_key)
