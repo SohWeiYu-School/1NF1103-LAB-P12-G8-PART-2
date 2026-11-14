@@ -1,7 +1,6 @@
 """CrimeScan: is a crime story a known pattern for his industry, and did its warning signs fire?"""
 
 import logging
-from urllib.parse import urlparse
 
 from app.logic.feature import Feature
 from app.logic.indicator import (CounterpartyUnnamed, GiftOrInheritanceUnnamed, Indicator,
@@ -277,7 +276,7 @@ class CrimeScan(Feature):
 
     def _domain_is_trusted(self, url: str, trusted_domains: list[str]) -> bool:
         """Return True if the URL's domain matches or is a subdomain of a trusted domain."""
-        netloc = urlparse(url).netloc.lower()
+        netloc = ResearchReport("", url).domain()
         for td in trusted_domains:
             if netloc == td or netloc.endswith("." + td):
                 return True
