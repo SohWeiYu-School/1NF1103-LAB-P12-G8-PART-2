@@ -102,3 +102,14 @@ def test_read_number_and_read_year_give_none_for_what_cannot_be_read():
     assert ui.read_number("a lot") is None
     assert ui.read_year("2017") == 2017
     assert ui.read_year("17") is None
+
+
+def test_keep_money_keeps_the_current_value_on_enter_and_reads_a_new_amount(monkeypatch):
+    """keep_money returns the current value unchanged on Enter (callers pass a number or ""),
+    and a float when a new amount is typed."""
+    typed = iter(["", "", "1,500,000"])
+    monkeypatch.setattr("builtins.input", lambda question="": next(typed))
+    ui = ConsoleUI()
+    assert ui.keep_money("Price paid", 250000.0) == 250000.0
+    assert ui.keep_money("Price paid", "") == ""
+    assert ui.keep_money("Price paid", "") == 1500000.0
