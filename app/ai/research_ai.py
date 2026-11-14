@@ -24,8 +24,8 @@ class ResearchAI(AIService):
     ALLOWED_FIELDS: list[str] = ["industry", "country"]
     ATTEMPTS: int = 1
 
-    def __init__(self, provider: str, ai_caller: Callable, model: str, temperature: float,
-                 response_cache: ResponseCache | None, max_reports: int = 8, max_excerpts: int = 5) -> None:
+    def __init__(self, provider: str = "", ai_caller: Callable | None = None, model: str = "", temperature: float = 0.0,
+                 response_cache: ResponseCache | None = None, max_reports: int = 8, max_excerpts: int = 5) -> None:
         super().__init__(provider, ai_caller, model, temperature, response_cache)
         self.__max_reports: int = max_reports
         self.__max_excerpts: int = max_excerpts
