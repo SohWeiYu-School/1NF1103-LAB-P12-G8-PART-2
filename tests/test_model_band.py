@@ -33,3 +33,13 @@ def test_band_survives_a_round_trip_through_a_dict():
 def test_money_in_and_money_out_use_opposite_ends_of_a_range():
     assert Band.MONEY_IN["cautious"] == "low"
     assert Band.MONEY_OUT["cautious"] == "high"
+
+
+def test_the_dict_helpers_do_the_same_arithmetic_in_the_saved_layout():
+    one, two = Band(1, 2, 3).to_dict(), Band(10, 20, 30).to_dict()
+    assert Band.add(one, two) == (Band(1, 2, 3) + Band(10, 20, 30)).to_dict()
+    assert Band.scale(two, 0.5) == Band(5, 10, 15).to_dict()
+    assert Band.zero() == Band().to_dict()
+    assert Band.as_dict(1, 2, 3) == one
+    assert Band.ordered([3, 1, 2]) == one
+    assert Band.from_ai({"low": 1, "typical": 2, "high": 3}) == one

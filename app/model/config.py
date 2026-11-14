@@ -28,3 +28,11 @@ class Config:
         """Lower-case a country name and map short forms (UAE, Dubai) to one spelling."""
         text = (name or "").strip().lower()
         return self.__policy.get("country_aliases", {}).get(text, text)
+
+    def asset_category(self, asset_type: str) -> str:
+        """property / listed_equities / private_business / other, by the policy's keyword lists."""
+        text = (asset_type or "").lower()
+        for category, keywords in self.__policy["asset_categories"].items():
+            if any(word in text for word in keywords):
+                return category
+        return "other"

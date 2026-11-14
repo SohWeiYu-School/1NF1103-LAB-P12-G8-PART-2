@@ -1,0 +1,532 @@
+"""VerdictEngine: one verdict from every feature's checks."""
+
+from app.logic.benchmark import Benchmark
+from app.logic.case_timeline import CaseTimeline
+from app.logic.crime_scan import CrimeScan
+from app.logic.feature import Feature
+from app.logic.formatter import Formatter
+from app.logic.future_paths import FuturePaths
+from app.model.check import Check
+from app.model.config import Config
+from app.model.verdict import Verdict
+
+
+class VerdictEngine:
+    """Combines the features' checks into one verdict and one report.
+
+    The engine is handed a list of Features and the Config. It gathers findings by
+    calling checks() on each feature in the same way, whichever child class it is
+    (polymorphism). The features are made elsewhere and can exist without the engine
+    (aggregation). A feature the engine was not given simply adds no findings.
+
+    The ladder it applies (the numbers are in the policy's "verdict" block) is described
+    on decide().
+    """
+
+    VERDICT_LABELS = {"PASSED": "PASSED", "MANUAL_REVIEW": "MANUAL REVIEW", "RISKY": "RISKY", "SERIOUS_RISK": "SERIOUS RISK"}
+    THEMES = {
+        "wealth":    "Wealth too high for his career",
+        "purchases": "Purchases he couldn't afford",
+        "people":    "Unknown or unnamed people giving money",
+        "countries": "Money from risky or unexpected countries",
+        "sources":   "Sources that don't match his job",
+        "pattern":   "Matches a known crime pattern",
+    }
+    MARKS = {"failed": "fail", "weak": "weak", "explained": "explained", "passed": "pass", "skipped": "skip", "info": "info"}
+    REPORT_LEGEND = [
+        {"mark": "fail", "symbol": "\u2717", "meaning": "counts towards the verdict"},
+        {"mark": "explained", "symbol": "~", "meaning": "failed, but another feature explains it"},
+        {"mark": "weak", "symbol": "!", "meaning": "loose end"},
+        {"mark": "pass", "symbol": "\u2713", "meaning": "clean"},
+        {"mark": "skip", "symbol": "-", "meaning": "couldn't run"},
+        {"mark": "info", "symbol": "\u2022", "meaning": "information"},
+    ]
+    _ROUTINE_NOTES = ("converted to", "renumbered", "kept first")
+    ORIGINAL_BENCHMARK = ["TOTAL_WEALTH", "LIQUIDITY", "COMPOSITION_PROPERTY", "COMPOSITION_EQUITIES",
+                          "COMPOSITION_BUSINESS", "COMPOSITION_CASH", "VELOCITY", "COUNTERPARTIES", "JURISDICTION"]
+
+    def __init__(self, features: list[Feature], config: Config) -> None:
+        self.__features: list[Feature] = list(features)
+        self.__config: Config = config
+        self.__policy: dict = config.policy
+
+    def features(self) -> list[Feature]:
+        return list(self.__features)
+
+    def _feature(self, name: str) -> Feature | None:
+        """The feature with this NAME, or None if the engine was not given one."""
+        return next((feature for feature in self.__features if feature.NAME == name), None)
+
+    def _rows(self, name: str, context: dict) -> list[dict]:
+        """One feature's checks in their saved layout. A feature the engine was not given has none."""
+        feature = self._feature(name)
+        return [check.to_dict() for check in feature.checks(context)] if feature else []
+
+    def _row(self, feature: str, check: str, label: str, theme: str, status: str, detail: str,
+             explanation: str = "", group: str = "") -> dict:
+        """One finding the engine adds itself, in the saved layout."""
+        return Check(feature, check, label, theme, status, detail, explanation, group).to_dict()
+
+    def _is_pep(self, case: dict) -> bool:
+        """True if the client is a politically exposed person (anything but the policy's "no" values)."""
+        status = str(case.get("claims", {}).get("pep_status") or "").strip().lower()
+        return status not in self.__policy["verdict"]["no_pep_values"]
+
+    def _type_patterns(self, forecast: dict | None, assessment: dict | None, crime_result: dict | None,
+                      typologies: list[dict] | None) -> list[dict]:
+        """One row per crime person type: does its money fit (forecast), which researched pattern it
+        was built from, and how many of that pattern's warning signs fired (crime scan)."""
+        if not forecast or not assessment:
+            return []
+        matches = {m["typology_id"]: m for m in (crime_result or {}).get("match_results", [])}
+        by_id = {t.get("typology_id"): t for t in typologies or []}
+        fits = {row["type_id"]: row for row in assessment.get("types", [])}
+        rows = []
+        for person_type in forecast["types"]["person_types"]:
+            type_id = person_type["type_id"]
+            if type_id == FuturePaths.BASELINE_TYPE:
+                continue
+            fit = fits.get(type_id, {})
+            typology_id = person_type.get("typology_id")
+            if typology_id not in by_id:   # older replies: link by category, as ai_manager.link_typologies does
+                typology_id = next((t.get("typology_id") for t in typologies or []
+                                    if t.get("crime_category") == person_type.get("category")), None)
+            match = matches.get(typology_id, {})
+            typology = by_id.get(typology_id, {})
+            rows.append({
+                "type_id": type_id, "name": person_type["name"], "category": person_type["category"],
+                "category_name": self.__config.category_name(person_type["category"]),
+                "fits": bool(fit.get("fits")), "fit_score": fit.get("fit_score"),
+                "route_years": fit.get("route_years", ""), "enabled_by": fit.get("enabled_by", ""),
+                "typology_id": typology_id, "typology_name": typology.get("name"),
+                "match": match.get("category") if match else None,
+                "fired": list(match.get("core_fired", [])) + list(match.get("supporting_fired", [])) if match else [],
+                "quote": (typology.get("source_quotes") or [{}])[0] if typology else {},
+                "source_ids": typology.get("source_ids", []),
+            })
+        return rows
+
+    def describe_piece(self, case: dict, piece: str | None) -> str:
+        """A forecast piece's name in words: 'call2_earnings.asset.0' -> 'asset 1 (Property - Condo, Bishan)'."""
+        piece = piece or ""
+        parts = piece.split(".")
+        assets, jobs = case.get("investments", []), CaseTimeline(case).positions()
+        if len(parts) == 3 and parts[1] == "asset" and parts[2].isdigit() and int(parts[2]) < len(assets):
+            return f"asset {int(parts[2]) + 1} ({assets[int(parts[2])].get('asset_type', 'asset')})"
+        if len(parts) == 3 and parts[1] == "position" and parts[2].isdigit() and int(parts[2]) < len(jobs):
+            job = jobs[int(parts[2])]
+            return f"the pay for job {int(parts[2]) + 1} ({job.get('occupation')} at {job.get('employer_name')})"
+        names = {"step0_declaration": "reading the declaration", "call1_markets.list": "choosing the markets",
+                 "call2_earnings.future_pay": "his future pay", "call3_types.list": "the list of person types",
+                 "call4_events.list": "the future events"}
+        if piece in names:
+            return names[piece]
+        if len(parts) == 3 and parts[0] == "call1_markets":
+            return f"the {parts[2]} market figures"
+        if len(parts) == 3 and parts[0].startswith("call3_types"):
+            return f"how person type {parts[2]} behaves"
+        if len(parts) == 3 and parts[0].startswith("call4_events"):
+            return f"how person type {parts[2]} reacts to events"
+        return piece or "an early step"
+
+    def _agreement(self, checks: list[dict]) -> list[dict]:
+        """Group the findings that count (failed, or a crime warning sign) by theme, most agreement first."""
+        themes: dict = {}
+        for check in checks:
+            if check["status"] not in ("failed", "weak"):
+                continue
+            if check["feature"] == "crime" and check.get("signs"):
+                keys = {CrimeScan.SIGN_THEMES.get(sign, "pattern") for sign in check["signs"]}
+                if check["status"] == "failed":
+                    keys.add("pattern")
+            elif check["status"] == "failed":
+                keys = {check["theme"]}
+            else:
+                continue
+            for key in keys:
+                entry = themes.setdefault(key, {"theme": key, "title": VerdictEngine.THEMES[key], "features": [], "lines": []})
+                if check["feature"] not in entry["features"]:
+                    entry["features"].append(check["feature"])
+                detail = check["detail"]
+                if check["feature"] == "crime" and key != "pattern":   # only the warning signs of this theme
+                    detail = "warning signs fired: " + ", ".join(
+                        CrimeScan.SIGN_LABELS.get(sign, sign) for sign in check["signs"] if CrimeScan.SIGN_THEMES.get(sign) == key)
+                entry["lines"].append(f"{check['feature'].capitalize()}: {check['label']} - {detail}")
+                entry.setdefault("short", []).append(f"{check['feature'].capitalize()}: {check['label']}")
+        order = list(VerdictEngine.THEMES)
+        return sorted(themes.values(), key=lambda t: (-len(t["features"]), order.index(t["theme"])))
+
+    def _documents(self, assessment: dict | None, bench: list[dict], crime: list[dict], typologies: list[dict] | None,
+                   case: dict, docs: list[dict] | None = None) -> list[dict]:
+        """Documents to ask for: first for what his own documents contradict, then the forecast's (failed
+        checks, then the ones that rule out the most stories), the benchmark's failed checks, and the
+        matched patterns' typical documents."""
+        policy = self.__policy
+        names = self.__config.vocabulary.get("document_codes", {})
+        settings = policy["verdict"]
+        wanted, seen = [], set()
+
+        def add(document: str, reason: str) -> None:
+            key = document.strip().lower()
+            if key and key not in seen:
+                seen.add(key)
+                wanted.append({"document": document, "reason": reason})
+
+        kinds = settings["document_evidence"]
+        for check in docs or []:
+            if check["status"] in ("failed", "weak") and check["check"].lower() in kinds:
+                for code in kinds[check["check"].lower()]["documents"]:
+                    if code in names:
+                        add(names[code], f"His documents show: {check['label'].lower()}")
+        for document in (assessment or {}).get("documents", []):
+            add(document["document"], document["reason"])
+        for check in bench:
+            if check["status"] != "failed":
+                continue
+            rule = "COMPOSITION" if check["check"].startswith("COMPOSITION") else check["check"]
+            for code in settings["benchmark_documents"].get(rule, []):
+                if code in names:
+                    add(names[code], f"Benchmark check failed: {check['label'].lower()}")
+        by_id = {t.get("typology_id"): t for t in typologies or []}
+        for check in crime:
+            if check["check"] == "TYPOLOGY" and check["status"] in ("failed", "weak"):
+                name = check["label"].split(" [")[0]
+                for document in by_id.get(check["typology_id"], {}).get("typical_documents", []):
+                    add(document, f"Matches the known pattern: {name}")
+        return wanted[:settings["max_documents"]]
+
+    def decide(self, case: dict, parts: dict) -> dict:
+        """ONE verdict from the crime scan, the benchmark and the forecast.
+
+        parts: research, typologies (verified list), crime_result, declaration (forecast Step 0),
+               benchmark_input, benchmark_ai, benchmark_findings, forecast, forecast_assessment,
+               markets (Call 1, even if the forecast stopped later), evidence (the documents layer),
+               pay_adjustments (calibrate_pay), failed_step, not_run, notes
+
+        The ladder (config/policy.json "verdict" holds the numbers):
+          SERIOUS RISK   the honest story can't explain his wealth AND a crime story can AND another
+                         feature agrees (its warning signs fired, his documents support it, or a
+                         benchmark failure the forecast can't explain); OR his documents contradict his
+                         declaration in several ways AND another feature agrees. One feature alone can
+                         never reach Serious Risk.
+          "RISKY"          the honest story fails or only works at the optimistic edge, a purchase he
+                         couldn't afford, a crime story that fits whose warning signs fired, money for
+                         the bank he can't fund, a PEP with a public-office crime story that fits, or
+                         several unexplained benchmark failures
+          MANUAL REVIEW  loose ends: an unexplained benchmark failure, other forecast checks failed,
+                         a borderline result, a PEP, a known pattern on its own, or a part that couldn't run
+          "PASSED"         everything else
+        """
+        policy = self.__policy
+        settings = policy["verdict"]
+        forecast, assessment = parts.get("forecast"), parts.get("forecast_assessment")
+        honest = None
+        if forecast and assessment:
+            honest = self._feature("forecast").honest_numbers(case, forecast, assessment)
+        types = self._type_patterns(forecast, assessment, parts.get("crime_result"), parts.get("typologies"))
+        evidence = parts.get("evidence")
+        docs = self._rows("documents", {"evidence": evidence, "types": types})
+        for t in types:                                 # which of his documents support each crime story
+            t["documents"] = [c["label"] for c in docs if c["status"] == "failed" and t["category"] in c.get("supports", [])]
+        bench = self._rows("benchmark", {
+            "case": case, "bench_input": parts.get("benchmark_input"), "ai_data": parts.get("benchmark_ai"),
+            "findings": parts.get("benchmark_findings"), "honest": honest, "assessment": assessment,
+            "declaration": parts.get("declaration"), "markets": parts.get("markets"), "types": types})
+        fore = self._rows("forecast", {
+            "case": case, "assessment": assessment, "honest": honest, "types": types,
+            "failed_step": parts.get("failed_step"),
+            "unmodelled": (forecast or {}).get("earnings", {}).get("fallback_assets")})
+        for adjusted in reversed(parts.get("pay_adjustments") or []):
+            fore.insert(1, self._row("forecast", "PAY_FROM_DOCUMENTS", "Pay taken from his documents", "wealth", "info",
+                                  f"The AI estimated {Formatter.sgd(adjusted['ai_pay'])} for {adjusted['year']}; "
+                                  f"{adjusted['source_file'] or 'his documents'} shows {Formatter.sgd(adjusted['documented_pay'])}, "
+                                  f"so his pay as {adjusted['job']} was scaled x{adjusted['ratio']:g} for every year of that job."))
+        crime = self._rows("crime", {
+            "crime_result": parts.get("crime_result"), "research": parts.get("research"),
+            "typologies": parts.get("typologies"), "types": types, "forecast_ran": forecast is not None})
+        checks = bench + fore + crime + docs
+
+        triggers: list[tuple[str, str]] = []           # (level, reason)
+
+        def flag(level: str, reason: str) -> None:
+            triggers.append((level, reason))
+
+        unexplained = [c for c in bench if c["status"] == "failed" and c.get("independent")]
+        fitting = [t for t in types if t["fits"]]
+        backed = [t for t in fitting if t["match"] in CrimeScan.FULL_MATCH]
+        contradicted = [c for c in docs if c["status"] == "failed"]
+
+        if honest:
+            t1 = honest["t1"]
+            if not t1["fits"]:
+                agrees = ([f"{t['type_id']}'s warning signs fired ({CrimeScan.MATCH_LABELS[t['match']]} match)" for t in backed]
+                          + [f"his documents support {t['type_id']} ({', '.join(t['documents']).lower()})"
+                             for t in fitting if t["documents"]]
+                          + [f"the benchmark's {c['label'].lower()} check failed and the forecast can't explain it"
+                             for c in unexplained])
+                if fitting and agrees:
+                    flag("SERIOUS_RISK", "The honest story can't explain his wealth, a crime story can ("
+                         + "; ".join(f"{t['type_id']} {t['name']}" for t in fitting) + "), and another check agrees: "
+                         + "; ".join(agrees[:3]) + ".")
+                elif fitting:
+                    flag("RISKY", "The honest story can't explain his wealth and a crime story can ("
+                         + "; ".join(f"{t['type_id']} {t['name']}" for t in fitting)
+                         + "), but no other check agrees yet.")
+                else:
+                    flag("RISKY", "No story explains his wealth: neither the honest story nor any crime story reaches "
+                         f"{Formatter.sgd(case['claims']['declared_net_worth'])}.")
+            elif not t1["fits_at_typical"]:
+                flag("RISKY", "The honest story only reaches his declared wealth at its optimistic edge.")
+            for check in fore:
+                if check["check"] == "AFFORDABILITY" and check["status"] == "failed":
+                    flag("RISKY", f"He couldn't have afforded the {check['label'].split(':')[0]}: {check['detail']}.")
+            for t in backed:
+                flag("RISKY", f"{t['type_id']} {t['name']} fits his money AND its researched pattern's warning signs "
+                            f"fired ({CrimeScan.MATCH_LABELS[t['match']]} match).")
+            if assessment["borderline"]:
+                flag("MANUAL_REVIEW", "The result is borderline: it changes when every forecast moves 10%.")
+            other = [c for c in fore if c["status"] == "failed"
+                     and c["check"] in ("ASSET_VALUE", "ASSET_INCOME", "JURISDICTION", "UNQUANTIFIED_SOURCE", "WEALTH_JUMP")]
+            if other:
+                flag("MANUAL_REVIEW", f"{len(other)} forecast check(s) failed: "
+                     + "; ".join(c["label"] for c in other[:4])
+                     + (f"; and {len(other) - 4} more." if len(other) > 4 else "."))
+
+        # What his own documents show against what he declared
+        if contradicted:
+            found = "; ".join(c["label"].lower() for c in contradicted)
+            others = []
+            if honest and not honest["t1"]["fits"]:
+                others.append("the honest story can't explain his wealth")
+            elif honest and not honest["t1"]["fits_at_typical"]:
+                others.append("the honest story only reaches his wealth at its optimistic edge")
+            others += [f"{t['type_id']} {t['name']} fits his money" for t in fitting]
+            others += [f"the crime scan matched \"{c['label'].split(' [')[0]}\"" for c in crime
+                       if c["check"] == "TYPOLOGY" and c["status"] == "failed"]
+            others += [f"the benchmark's {c['label'].lower()} check failed" for c in unexplained]
+            others += [f"he couldn't have afforded the {c['label'].split(':')[0]}" for c in fore
+                       if c["check"] == "AFFORDABILITY" and c["status"] == "failed"]
+            if len(contradicted) >= settings["min_serious_document_findings"] and others:
+                flag("SERIOUS_RISK", f"His documents contradict his declaration ({len(contradicted)} findings: {found}), "
+                                   "and another check agrees: " + "; ".join(others[:3]) + ".")
+            else:
+                flag("RISKY", f"His documents contradict his declaration: {found}.")
+        loose = [c for c in docs if c["status"] == "weak"]
+        if loose:
+            flag("MANUAL_REVIEW", "His documents show things to check: " + "; ".join(c["label"].lower() for c in loose) + ".")
+
+        if any(c["check"] == "AUM_FUNDING" and c["status"] == "failed" for c in bench):
+            flag("RISKY", "He plans to bring more money to the bank than his cash and shares can fund.")
+        if self._is_pep(case):
+            pep_types = [t for t in fitting if t["category"] in settings["pep_crime_categories"]]
+            if pep_types:
+                flag("RISKY", "He is a PEP and a public-office crime story fits his money ("
+                     + "; ".join(f"{t['type_id']} {t['name']}" for t in pep_types) + ").")
+            else:
+                flag("MANUAL_REVIEW", f"He is a PEP ({case['claims']['pep_status']}): a KYC officer must review him.")
+        counted = [c for c in unexplained if c["check"] != "AUM_FUNDING"]      # AUM has its own rule above
+        if len(counted) >= settings["unexplained_benchmark_for_risky"]:
+            flag("RISKY", f"{len(counted)} benchmark checks failed that the forecast can't explain: "
+                 + ", ".join(c["label"].lower() for c in counted) + ".")
+        elif counted:
+            flag("MANUAL_REVIEW", "Benchmark check(s) failed that the forecast can't explain: "
+                 + ", ".join(c["label"].lower() for c in counted) + ".")
+        built = {t["typology_id"] for t in fitting if t["typology_id"]}
+        for check in crime:
+            if check["check"] == "TYPOLOGY" and check.get("match") not in (None, "no_match"):
+                level = settings["pattern_alone"].get(check["match"], "PASSED")
+                if level != "PASSED" and check["typology_id"] not in built:
+                    flag(level, f"Known pattern \"{check['label'].split(' [')[0]}\": {check['detail']}.")
+        for part in parts.get("not_run", []):
+            flag("MANUAL_REVIEW", f"{part} couldn't run, so a person must check what it would have covered.")
+
+        level = max((t[0] for t in triggers), key=lambda lv: Verdict.SEVERITY[lv], default="PASSED")
+        reasons = []
+        for trigger_level, reason in sorted(triggers, key=lambda t: -Verdict.SEVERITY[t[0]]):
+            if reason not in [r["text"] for r in reasons]:
+                reasons.append({"level": trigger_level, "text": reason})
+        summary = reasons[0]["text"] if reasons else "Every check came back clean or was explained by another feature."
+
+        # Next review: by the verdict, sooner if the forecast says two stories can be told apart earlier
+        current = case["current_date"]
+        review = Formatter.add_months(current, policy["review_interval_months"][level])
+        for watch in (assessment or {}).get("watch_dates", []):
+            if "told apart" in watch["what"] and current < watch["date"] < review:
+                review = watch["date"]
+
+        groups: dict = {}
+        for check in bench + fore + docs:
+            groups.setdefault((check["feature"], check["group"]), []).append(check["status"])
+        clean = [group for (feature, group), statuses in groups.items()
+                 if statuses and all(s == "passed" for s in statuses)]
+
+        return {
+            "client_ref": case["client_ref"],
+            "name": case.get("name", ""),
+            "assessed_on": current,
+            "policy_version": policy["policy_version"],
+            "verdict": level,
+            "verdict_label": VerdictEngine.VERDICT_LABELS[level],
+            "next_step": policy["routing"][level],
+            "next_review_date": review,
+            "summary": summary,
+            "reasons": reasons,
+            "agreement": self._agreement(checks),
+            "benchmark": bench,
+            "forecast": fore,
+            "crime": crime,
+            "document_findings": docs,
+            "types": types,
+            "documents": (self._documents(assessment, bench, crime, parts.get("typologies"), case, docs)
+                          if level != "PASSED" else []),
+            "clean": clean,
+            "not_run": list(parts.get("not_run", [])),
+            "notes": list(parts.get("notes", [])),
+            "evidence": self._evidence(case, parts, assessment, honest),
+        }
+
+    def _evidence(self, case: dict, parts: dict, assessment: dict | None, honest: dict | None) -> list[dict]:
+        """The detail behind the verdict, shown under "Full evidence"."""
+        sections = []
+        evidence = parts.get("evidence") or {}
+        if evidence.get("files"):
+            lines = [f"Read: {', '.join(evidence['files'])}"]
+            lines += [f"Pay shown for {p['year']}: {Formatter.sgd(p['amount'])} ({p['source_file'] or 'documents'})"
+                      for p in evidence.get("documented_pay", [])]
+            lines += [f"{f['summary']} ({', '.join(f['source_files'])})" for f in evidence.get("findings", [])]
+            if not evidence.get("findings"):            # the findings already say what the notes say
+                lines += [f"Reader's note: {note}" for note in evidence.get("notes", [])]
+            sections.append({"title": "What his documents show", "lines": lines})
+        reports = (parts.get("research") or {}).get("reports", [])
+        sections.append({"title": "Research reports", "lines": [
+            f"[{r.get('report_id', '?')}] {r.get('organisation', '')}{' (' + str(r['year']) + ')' if r.get('year') else ''}"
+            f" - {r.get('title', '')}" for r in reports] or ["No research reports were found."]})
+        typology_lines = []
+        for t in parts.get("typologies") or []:
+            typology_lines.append(f"{t.get('name')} ({self.__config.category_name(t.get('crime_category', ''))})")
+            if t.get("description"):
+                typology_lines.append(f"    {t['description']}")
+        sections.append({"title": "Sector typologies", "lines": typology_lines or ["No verified typologies."]})
+        if assessment and honest:
+            sections.append({"title": "Person types", "lines": [
+                f"{row['type_id']} {row['name']} - {'fits' if row['fits'] else 'does not fit'} "
+                f"(fit {row['fit_score']:.2f}); wealth today "
+                f"{Formatter.sgd(row['wealth_now']['cautious'])} to {Formatter.sgd(row['wealth_now']['optimistic'])}; route {row['route']}"
+                for row in assessment["types"]]})
+            documented = {p["year"]: p for p in evidence.get("documented_pay", [])}
+            rows = honest["savings_rows"]
+            shown = [row for i, row in enumerate(rows) if i % 5 == 0 or i == len(rows) - 1 or row["year"] in documented]
+            sections.append({"title": "Career savings (typical, every 5 years)", "lines": [
+                f"{row['year']}: pay {Formatter.sgd(row['total_pay']['typical'])}"
+                + (f" (documents show {Formatter.sgd(documented[row['year']]['amount'])})" if row["year"] in documented else "")
+                + f", saved {Formatter.sgd(row['saved']['typical'])}, savings so far {Formatter.sgd(row['savings']['typical'])}"
+                for row in shown]})
+            events = {}
+            for row in assessment["event_impacts"]:
+                events.setdefault((row["year"], row["event_id"], row["event"], row["chance"]), []).append(
+                    f"{row['type_id']} {'+' if row['impact'] >= 0 else ''}{Formatter.sgd(row['impact'])}")
+            sections.append({"title": "Future events and how each story's 2030 wealth would change", "lines": [
+                f"{year} {name} ({chance:.0%} chance): " + ", ".join(impacts)
+                for (year, event_id, name, chance), impacts in sorted(events.items())] or ["No events."]})
+            sections.append({"title": "When the stories can be told apart", "lines": [
+                f"T1 and {d['type_id']}: " + (f"from {d['distinguishable_from']}" if d["distinguishable_from"]
+                                             else "not within the forecast years (his wealth alone won't tell them apart)")
+                for d in assessment["divergence"]] or ["No crime stories to tell apart."]})
+            names = self.__config.vocabulary.get("signal_codes", {})
+            sections.append({"title": "Normal account activity next year (honest story)", "lines": [
+                f"{names.get(code, code)}: up to {Formatter.sgd(r['amount_max'])} a year"
+                + (f" in up to {r['count_max']:g} payments" if r["count_max"] >= 2 else "")
+                for code, r in assessment["monitoring_ranges"].items()] or ["None forecast."]})
+            quality = assessment["data_quality"]
+            sections.append({"title": "Data quality", "lines": [
+                f"{quality['market_figures']} market figures, {quality['unverified_share']:.0%} from AI memory "
+                "(not checked online) or missing."] + [f"Gap: {gap}" for gap in quality["data_gaps"]]})
+            sections.append({"title": "Stability test (the forecast's own result)", "lines": [
+                f"Forecasts {shift}: {VerdictEngine.VERDICT_LABELS.get(outcome, outcome)}"
+                for shift, outcome in assessment["stability"].items()]})
+        warnings = list(dict.fromkeys(n for n in parts.get("notes", [])
+                                      if not any(word in n.lower() for word in VerdictEngine._ROUTINE_NOTES)))
+        if warnings:
+            sections.append({"title": "Warnings from the run", "lines": warnings})
+        return sections
+
+    def _items(self, checks: list[dict], statuses: tuple) -> list[dict]:
+        return [{"mark": VerdictEngine.MARKS[c["status"]], "text": f"{c['label']}: {c['detail']}",
+                 "sub": [c["explanation"]] if c["explanation"] else []}
+                for c in checks if c["status"] in statuses and not c.get("optional")]
+
+    def _benchmark_items(self, checks: list[dict]) -> list[dict]:
+        """The benchmark section: the 9 original checks every time (passed, failed, explained or not
+        run, each with its numbers), then any of the newer checks that failed or need a look."""
+        by_rule = {c["check"]: c for c in checks}
+        items = []
+        for rule in VerdictEngine.ORIGINAL_BENCHMARK:
+            check = by_rule.get(rule)
+            if check is None:
+                items.append({"mark": "skip", "text": f"{Benchmark.BENCHMARK_LABELS[rule]}: couldn't run - the peer benchmark "
+                                                      "didn't finish, so this wasn't compared with peers.", "sub": []})
+                continue
+            items.append({"mark": VerdictEngine.MARKS[check["status"]], "text": f"{check['label']}: {check['detail']}",
+                          "sub": [check["explanation"]] if check["explanation"] else []})
+        newer = [c for c in checks if c["check"] not in VerdictEngine.ORIGINAL_BENCHMARK and c["check"] != "PEER_BENCHMARK"]
+        return items + self._items(newer, ("failed", "explained", "weak", "skipped"))
+
+    def report(self, verdict: dict) -> dict:
+        """The report as plain data: a header, short sections of marked lines, and the full evidence.
+        io_manager prints it and the web app's template shows it, so both give exactly the same content.
+
+        The benchmark section always lists its 9 original checks, passed or not. The other sections show
+        only what matters: failures, what another feature explained, loose ends and what couldn't run;
+        their passed checks are listed under "What came back clean"."""
+        level_marks = {"SERIOUS_RISK": "fail", "RISKY": "fail", "MANUAL_REVIEW": "weak", "PASSED": "pass"}
+        why = [{"mark": level_marks[r["level"]], "text": f"[{VerdictEngine.VERDICT_LABELS[r['level']]}] {r['text']}", "sub": []}
+               for r in verdict["reasons"]] or [{"mark": "pass", "text": verdict["summary"], "sub": []}]
+        why += [{"mark": "fail", "text": f"Checks agree - {a['title']} ({len(a['features'])} features: "
+                                         f"{', '.join(a['features'])})",
+                 "sub": ["; ".join(dict.fromkeys(a.get("short", a["lines"])))]}
+                for a in verdict["agreement"] if len(a["features"]) > 1]
+
+        forecast = self._items(verdict["forecast"], ("failed", "weak", "explained", "skipped"))
+        forecast += [{"mark": "info", "text": f"{c['label']}: {c['detail']}", "sub": []} for c in verdict["forecast"]
+                     if c["check"] == "PAY_FROM_DOCUMENTS"
+                     or (c["check"] == "CRIME_STORY" and c["detail"].startswith("Fits"))]
+        forecast += [{"mark": "pass", "text": f"{c['label']}: {c['detail']}", "sub": []} for c in verdict["forecast"]
+                     if c["check"] == "STABILITY" and c["status"] == "passed"]
+        crime = self._items(verdict["crime"], ("failed", "weak", "skipped"))
+        documents = self._items(verdict["document_findings"], ("failed", "weak", "skipped", "info", "passed"))
+        for item, check in zip(documents, [c for c in verdict["document_findings"]
+                                           if c["status"] in ("failed", "weak", "skipped", "info", "passed")]):
+            if check.get("sources"):
+                item["sub"] = item["sub"] + [f"From: {', '.join(check['sources'])}"]
+
+        sections = [
+            {"title": "Why", "items": why},
+            {"title": "Benchmark - compared with peers in the same economy",
+             "items": self._benchmark_items(verdict["benchmark"])},
+            {"title": "Forecast - what it predicted",
+             "items": forecast or [{"mark": "pass", "text": "Every forecast check passed.", "sub": []}]},
+            {"title": "Crime - known patterns for his industry",
+             "items": crime or [{"mark": "pass", "text": "No known pattern matched his declaration.", "sub": []}]},
+            {"title": "Documents - what his papers show", "items": documents},
+            {"title": "Documents to request", "items": [
+                {"mark": "info", "text": f"{n}. {d['document']}", "sub": [d["reason"]]}
+                for n, d in enumerate(verdict["documents"], 1)]
+             or [{"mark": "pass", "text": "None.", "sub": []}]},
+            {"title": "What came back clean", "items": [{"mark": "pass", "text": group, "sub": []}
+                                                        for group in verdict["clean"]]
+             or [{"mark": "info", "text": "Nothing came back fully clean.", "sub": []}]},
+        ]
+        if verdict["not_run"]:
+            sections.append({"title": "Could not run", "items": [{"mark": "skip", "text": part, "sub": []}
+                                                                 for part in verdict["not_run"]]})
+        return {
+            "header": {"client_ref": verdict["client_ref"], "name": verdict["name"],
+                       "assessed_on": verdict["assessed_on"], "verdict": verdict["verdict"],
+                       "verdict_label": verdict["verdict_label"], "next_step": verdict["next_step"],
+                       "next_review_date": verdict["next_review_date"], "summary": verdict["summary"],
+                       "policy_version": verdict["policy_version"]},
+            "sections": sections,
+            "evidence": verdict["evidence"],
+            "evidence_titles": [part["title"] for part in verdict["evidence"]],
+            "legend": VerdictEngine.REPORT_LEGEND,
+        }

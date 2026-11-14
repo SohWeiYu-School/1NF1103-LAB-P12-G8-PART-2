@@ -1,0 +1,66 @@
+"""Feature: one part of the assessment that produces checks for the verdict."""
+
+from abc import ABC, abstractmethod
+
+from app.model.check import Check
+
+
+class Feature(ABC):
+    """The parent of the four parts of an assessment: the crime scan, the document evidence,
+    the benchmark and the forecast.
+
+    Every feature does the same two things. run() works out its results from the case and
+    the AI's data. checks() turns those results into Checks in the one shape the verdict
+    reads. The VerdictEngine is handed a list of features and treats them all alike, so a
+    new feature can be added without changing the engine.
+    """
+
+    NAME: str = "feature"
+
+    def __init__(self, policy: dict | None = None) -> None:
+        self._policy: dict = policy or {}
+        self._results: dict = {}
+
+    @abstractmethod
+    def run(self, case: dict, ai_data: dict) -> dict:
+        """Work out this feature's results. They are also kept in self._results."""
+
+    @abstractmethod
+    def checks(self, context: dict) -> list[Check]:
+        """This feature's findings, in the shape every feature shares."""
+
+    def _check(self, check: str, label: str, theme: str, status: str, detail: str,
+               explanation: str = "", group: str = "",
+               sources: list[str] | None = None, supports: list[str] | None = None) -> Check:
+        """One finding of this feature."""
+        return Check(self.NAME, check, label, theme, status, detail, explanation, group, sources, supports)
+
+    def _jump_years(self, case: dict) -> tuple[float | None, int | None]:
+        """His biggest wealth jump and the number of years it took, as declared.
+        (None, None) if he declared none."""
+        claims = case.get("claims", {})
+        jump, years = claims.get("biggest_wealth_jump"), claims.get("wealth_jump_years")
+        if not isinstance(jump, (int, float)) or jump <= 0 or not isinstance(years, (int, float)) or years <= 0:
+            return None, None
+        return float(jump), max(1, round(years))
+
+    def _row(self, feature: str, check: str, label: str, theme: str, status: str, detail: str,
+             explanation: str = "", group: str = "") -> dict:
+        """One finding in its saved layout (a dict), which the report and the verdict rules read."""
+        return Check(feature, check, label, theme, status, detail, explanation, group).to_dict()
+
+    def _as_checks(self, rows: list[dict]) -> list[Check]:
+        """Findings in their saved layout as Check objects."""
+        return [Check.from_dict(row) for row in rows]
+
+    def _best_honest_jump(self, honest: dict, years: int) -> tuple[float, int, int]:
+        """The most the honest story's wealth rose over any `years`-long stretch: (gain, first, last)."""
+        by_year = honest["by_year"]
+        first_year, last_year = honest["start"], honest["end"]
+        years = max(1, min(years, last_year - first_year + 1))
+        best = None
+        for last in range(first_year + years - 1, last_year + 1):
+            gain = by_year[last]["optimistic"] - by_year[last - years]["optimistic"]
+            if best is None or gain > best[0]:
+                best = (gain, last - years + 1, last)
+        return best
