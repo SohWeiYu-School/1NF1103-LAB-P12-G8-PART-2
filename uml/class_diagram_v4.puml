@@ -255,7 +255,7 @@ package "IO Manager (app/interface)" {
     +download_document(client_ref : str, file_id : str) : Response
     +assess_client(client_ref : str) : Response
     +assess_loading(job_id : str) : str
-    +assess_poll(job_id : str) : Response
+    +assess_poll(job_id : str) : dict
     +assess_result(job_id : str) : str | Response
     +view_assessment(assessment_id : str) : str
     +list_assessments_view() : str

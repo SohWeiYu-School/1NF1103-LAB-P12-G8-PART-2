@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `df6cf97` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `798594e` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -1071,7 +1071,7 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `_is_stored_document()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:460` (app/interface/web_app.py:460)
 - [ ] `_run_assessment_job()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:542` (app/interface/web_app.py:542)
 - [ ] `_same_entry()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:409` (app/interface/web_app.py:409)
-- [ ] `_steps()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:848` (app/interface/web_app.py:848)
+- [ ] `_steps()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:849` (app/interface/web_app.py:849)
 - [ ] `autofill_form()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:490` (app/interface/web_app.py:490)
 - [ ] `build_record()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:215` (app/interface/web_app.py:215)
 - [ ] `check_record()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:386` (app/interface/web_app.py:386)
@@ -1082,8 +1082,8 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `flash_unexpected_error()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:531` (app/interface/web_app.py:531)
 - [ ] `flask()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:120` (app/interface/web_app.py:120)
 - [ ] `get_record()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:518` (app/interface/web_app.py:518)
-- [ ] `handle_404()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:838` (app/interface/web_app.py:838)
-- [ ] `handle_exception()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:841` (app/interface/web_app.py:841)
+- [ ] `handle_404()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:839` (app/interface/web_app.py:839)
+- [ ] `handle_exception()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:842` (app/interface/web_app.py:842)
 - [ ] `pending_documents()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:464` (app/interface/web_app.py:464)
 - [ ] `read_amount()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:205` (app/interface/web_app.py:205)
 - [ ] `read_year()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:197` (app/interface/web_app.py:197)
