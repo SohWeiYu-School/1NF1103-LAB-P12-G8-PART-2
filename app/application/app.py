@@ -132,8 +132,11 @@ class App:
             --case FILE             assess one case file
             --all-samples           assess every sample case
             --demo                  use the recorded AI replies in tests/golden (no API key needed)
+            --web                   start the web app instead of the menu
         """
         self.__configure_logging()
+        if "--web" in arguments:
+            return self.start_web()
         problems = self.__config_reader.problems()
         if problems:
             for problem in problems:
@@ -163,6 +166,13 @@ class App:
             logger.exception("Unexpected error in the command line app")
             self.__ui.show_unexpected_error()
             return 1
+
+    def start_web(self, host: str = "", port: int = 0) -> int:
+        """Start the web app. HOST and PORT in .env set where it listens (default 127.0.0.1:5000)."""
+        from app.interface.web_app import WebApp    # imported here: WebApp itself imports App
+        self.__configure_logging()
+        WebApp(self).run(host or os.getenv("HOST") or "127.0.0.1", port or int(os.getenv("PORT") or 5000))
+        return 0
 
     def run_menu(self) -> None:
         """Show the main menu until the officer chooses to leave."""
@@ -227,10 +237,14 @@ class App:
 
     def assess(self, case: dict, supporting_documents: list[dict] | None = None,
                on_step: Callable[[int, str], None] | None = None,
-               on_failure: Callable[[str, str], bool] | None = None) -> dict | None:
+               on_failure: Callable[[str, str], bool] | None = None,
+               show_failures: bool = True) -> dict | None:
         """Run one assessment. Returns the result, or None if a critical step failed.
-        on_failure defaults to App's own rule (CRITICAL_STEPS)."""
-        return self.__runner.run(case, supporting_documents, on_step, on_failure or self.__handle_failure)
+        on_failure defaults to App's own rule (CRITICAL_STEPS). show_failures=False keeps
+        failed steps off the terminal (the web app shows them in the report instead)."""
+        if on_failure is None:
+            on_failure = self.__handle_failure if show_failures else self.__handle_failure_quietly
+        return self.__runner.run(case, supporting_documents, on_step, on_failure)
 
     def assess_client_record(self, client_record: dict) -> dict | None:
         """The command line's assessment of a saved client: prepare, run, save, show."""
@@ -404,9 +418,21 @@ class App:
             logger.info(warning)
         return extracted, warnings
 
-    def record_builder(self) -> DocumentRecordBuilder:
-        """A DocumentRecordBuilder dated today. A new one is made for each record."""
-        return DocumentRecordBuilder(self.__config, self.today())
+    def record_builder(self, date: str = "") -> DocumentRecordBuilder:
+        """A DocumentRecordBuilder for one record, dated today unless another date is given."""
+        return DocumentRecordBuilder(self.__config, date or self.today())
+
+    def new_client_ref(self) -> str:
+        """A new, unused client reference."""
+        return self.__client_form.generate_client_id()
+
+    def validate_case(self, case: object) -> list[str]:
+        """Everything wrong with a case. [] means it can be assessed."""
+        return self.__case_builder.validate_case(case)
+
+    def read_amount(self, text: object) -> float | None:
+        """'1,650,000', 'S$1.65m', '410k' -> a number; None if it cannot be read."""
+        return CaseReader.read_amount(text)
 
     def list_assessments(self) -> None:
         """List saved assessments (filtered by outcome) and optionally open one."""
@@ -493,6 +519,13 @@ class App:
         logger.warning("App: step failed, carrying on without it: %s (%s)", step, reason)
         self.__ui.show_message(f"   ! {step} could not be completed and is left out: {reason}")
         return True
+
+    def __handle_failure_quietly(self, step: str, reason: str) -> bool:
+        """The same decision as __handle_failure, written to the log only."""
+        critical = step in App.CRITICAL_STEPS
+        logger.log(logging.ERROR if critical else logging.WARNING,
+                   "App: step failed (%s): %s (%s)", "stopping" if critical else "carrying on", step, reason)
+        return not critical
 
     def __assess_if_allowed(self, client_record: dict) -> None:
         """Check the rate limit; if clear, run the assessment."""
