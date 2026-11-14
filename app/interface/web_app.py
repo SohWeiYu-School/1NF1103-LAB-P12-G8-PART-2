@@ -9,7 +9,7 @@ import tempfile
 import threading
 import uuid
 
-from flask import (Flask, abort, flash, jsonify, redirect, render_template,
+from flask import (Flask, abort, flash, redirect, render_template,
                    request, send_file, url_for)
 from jinja2 import DictLoader
 from werkzeug.utils import secure_filename
@@ -783,16 +783,17 @@ class WebApp:
         return render_template("assess_loading.html", job_id=job_id, record=record,
                                ASSESS_STEPS=self._steps())
 
-    def assess_poll(self, job_id: str) -> Response:
+    def assess_poll(self, job_id: str) -> dict:
+        """The job's progress. Flask sends a returned dict to the browser as JSON."""
         if job_id not in self.__jobs:
-            return jsonify({"status": "error", "error": "Job not found."})
+            return {"status": "error", "error": "Job not found."}
         job = self.__jobs[job_id]
-        return jsonify({
+        return {
             "status":   job["status"],
             "step_num": job["step_num"],
             "step":     job["step"],
             "error":    job.get("error"),
-        })
+        }
 
     def assess_result(self, job_id: str) -> str | Response:
         if job_id not in self.__jobs:
