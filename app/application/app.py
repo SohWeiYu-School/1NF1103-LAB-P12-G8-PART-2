@@ -1,5 +1,6 @@
 """App: creates every object of the system and coordinates them."""
 
+import copy
 import json
 import logging
 import os
@@ -299,6 +300,7 @@ class App:
             "kind": "onboarding",
             "assessed_at": verdict.assessed_at,
             "outcome": verdict.outcome,
+            "case": copy.deepcopy(case),
             "verdict": result["verdict"],
             "report": verdict.report,
             "crime_scan": {"research": result["research"], "typologies": result["typology_response"],
