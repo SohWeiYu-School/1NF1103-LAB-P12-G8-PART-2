@@ -11,6 +11,14 @@ package "Data Manager (app/data)" {
     +for_client(client_ref : str) : list[dict]
     +query(outcome : str) : list[dict]
   }
+  class CaseFiles {
+    -__folder : str = ".../data/sample"
+    --
+    +__init__(folder : str = os.path.join(ROOT_DIR, "data", "sample"))
+    +list_samples() : list[str]
+    +load(path : str, default : object = None) : object
+    +is_forecasting_case(case : object) : bool
+  }
   class ClientRepository {
     +OLD_ASSET_KEYS : dict = {...} «const»
     --
@@ -350,6 +358,7 @@ package "Application (app/application)" {
     -__client_form : ClientForm = None
     -__case_builder : CaseBuilder = None
     -__case_reader : CaseReader = None
+    -__case_files : CaseFiles = None
     -__limiter : RateLimiter = None
     -__clients : Repository = None
     -__assessments : Repository = None
@@ -383,7 +392,7 @@ package "Application (app/application)" {
   }
   class AssessmentRunner {
     -__ai : dict[str, AIService] = {}
-    -__features : list[Feature] = []
+    -__features : list[RiskAnalysis] = []
     -__verdict_engine : VerdictEngine = None
     -__config : Config = None
     +STEPS : list[str] = [...] «const»
@@ -435,6 +444,18 @@ package "Logic Manager (app/logic)" {
     +forecasting_case(record : dict) : tuple[dict, list]
     {static} +read_amount(text : str) : float | None
     {static} +read_year(text : str) : int | None
+  }
+  class CaseTimeline {
+    -__record : dict = {}
+    -__forecast_years : int = 4
+    +FORECAST_YEARS : int = 4 «const»
+    --
+    +__init__(record : dict | None = None, forecast_years : int = FORECAST_YEARS)
+    +positions() : list[dict]
+    +current_year() : int
+    +career_years() : tuple[int, int]
+    +position_end(position : dict) : int
+    +future_years() : list[int]
   }
   class CounterpartyUnnamed {
     +NAME : str = "counterparty_unnamed" «const»
@@ -583,7 +604,7 @@ package "Logic Manager (app/logic)" {
     +fires(declaration : Declaration) : bool
   }
   class VerdictEngine {
-    -__features : list[Feature] = []
+    -__features : list[RiskAnalysis] = []
     -__config : Config = None
     +VERDICT_LABELS : dict = {...} «const»
     +MATCH_LABELS : dict = {...} «const»
@@ -591,7 +612,7 @@ package "Logic Manager (app/logic)" {
     +MARKS : dict = {...} «const»
     +REPORT_LEGEND : list = [...] «const»
     --
-    +__init__(features : list[Feature], config : Config)
+    +__init__(features : list[RiskAnalysis], config : Config)
     +combine(case : dict, results : dict) : Verdict
     +describe_piece(case : dict, piece : str) : str
     -__build_context(case : dict, results : dict) : dict
@@ -822,6 +843,7 @@ AIService -- ResponseCache : caches in
 App *-- "0..*" CloudSync
 App *-- "1" AssessmentRunner
 App *-- "1" CaseBuilder
+App *-- "1" CaseFiles
 App *-- "1" CaseReader
 App *-- "1" ClientForm
 App *-- "1" Config
@@ -890,11 +912,13 @@ Forecast *-- "1" PayCalibrator
 Forecast -- Config : reads names
 Forecast --|> RiskAnalysis
 Forecast ..> Band : uses
+Forecast ..> CaseTimeline : creates
 ForecastAI --|> AIService
 ForecastAI ..> Declaration : creates
 FuturePaths *-- "1" AssetPath
 FuturePaths *-- "1" CareerSavings
 FuturePaths ..> Band : uses
+FuturePaths ..> CaseTimeline : creates
 FuturePaths ..> MarketModel : uses
 GiftOrInheritanceUnnamed --|> Indicator
 ImageReader --|> DocumentReader
@@ -921,6 +945,7 @@ TypologyAI --|> AIService
 UnvaluedSource --|> Indicator
 Verdict o-- "0..*" Check
 VerdictEngine -- Config : reads policy
+VerdictEngine ..> CaseTimeline : creates
 VerdictEngine ..> Check : uses
 VerdictEngine ..> Verdict : creates
 VerdictEngine o-- "1..*" RiskAnalysis

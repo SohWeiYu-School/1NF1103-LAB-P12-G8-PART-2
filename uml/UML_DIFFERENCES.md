@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `d17983e` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `c80d478` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -12,65 +12,23 @@ Checked code at commit `d17983e` against `uml/class_diagram_v4.puml`, which is c
 
 | Stage | What | Items | Mostly fixed in |
 |---|---|---|---|
-| 1 | Structure: classes and inheritance | 8 | Code + UML |
+| 1 | Structure: classes and inheritance | 0 | Code + UML |
 | 2 | Graded code rules: types and `__init__` | 40 | Code |
-| 3 | Same member, different details | 215 | Decide per item |
+| 3 | Same member, different details | 222 | Decide per item |
 | 4 | In UML, missing in code | 44 | Decide per item |
-| 5 | In code, missing from UML | 388 | UML |
+| 5 | In code, missing from UML | 390 | UML |
 | 6 | Minor: defaults the UML doesn't show | 56 | UML |
-| | **Total** | **751** | |
+| | **Total** | **752** | |
 
 Pairs where only the underscores differ (`__x` in UML, `_x` in code) are merged into one item in stage 3, so the total is lower than the raw count of differences.
 
-## Stage 1: Structure: classes and inheritance (8)
+## Stage 1: Structure: classes and inheritance (0)
 
 Fix first, because every later stage depends on the class names being right.
 
 How to fix: **Code:** rename `Feature` to `RiskAnalysis` (file, class, imports, tests). **UML:** change `list[Feature]` to `list[RiskAnalysis]` in `AssessmentRunner` and `VerdictEngine`, and add `CaseFiles` and `CaseTimeline`, which exist in code.
 
-### Benchmark (1)
-
-**`Benchmark`**
-
-- [ ] parent class differs. UML: `['RiskAnalysis']` · code: `['Feature']` (app/logic/benchmark.py:13)
-
-### Crime Scan (1)
-
-**`CrimeScan`**
-
-- [ ] parent class differs. UML: `['RiskAnalysis']` · code: `['Feature']` (app/logic/crime_scan.py:15)
-
-### Data (1)
-
-**`CaseFiles`**
-
-- [ ] in code, not in UML. UML: `—` · code: `app/data/case_files.py:12` (—)
-
-### Document Evidence (1)
-
-**`DocumentEvidence`**
-
-- [ ] parent class differs. UML: `['RiskAnalysis']` · code: `['Feature']` (app/logic/document_evidence.py:8)
-
-### Forecast (1)
-
-**`Forecast`**
-
-- [ ] parent class differs. UML: `['RiskAnalysis']` · code: `['Feature']` (app/logic/forecast.py:15)
-
-### Shared core (3)
-
-**`CaseTimeline`**
-
-- [ ] in code, not in UML. UML: `—` · code: `app/logic/case_timeline.py:4` (—)
-
-**`Feature`**
-
-- [ ] in code, not in UML. UML: `—` · code: `app/logic/feature.py:8` (—)
-
-**`RiskAnalysis`**
-
-- [ ] in UML, not in code. UML: `app/logic` · code: `—` (—)
+**Done.** Nothing left in this stage.
 
 ## Stage 2: Graded code rules: types and `__init__` (40)
 
@@ -161,7 +119,7 @@ How to fix: **Code:** add the missing type hints, and create every attribute in 
 - [ ] `list_assessments_view` has no return type in code. UML: `str` · code: `—` (app/interface/web_app.py:812)
 - [ ] `sync_to_cloud` has no return type in code. UML: `str` · code: `—` (app/interface/web_app.py:815)
 
-## Stage 3: Same member, different details (215)
+## Stage 3: Same member, different details (222)
 
 Both sides have it, but the signature, type, visibility, static or abstract marker, or constant value differs.
 
@@ -385,7 +343,7 @@ How to fix: Decide per item. If the code is the better design, update the UML. I
 - [ ] `calibrate` parameters differ. UML: `+calibrate(case : dict, documented_pay : dict) : list` · code: `(case, forecast, documented_pay)` (app/logic/pay_calibrator.py:21)
 - [ ] `calibrate` return type differs. UML: `list` · code: `tuple[dict, list[dict]]` (app/logic/pay_calibrator.py:21)
 
-### Shared core (97)
+### Shared core (104)
 
 **`AIService`**
 
@@ -524,6 +482,16 @@ How to fix: Decide per item. If the code is the better design, update the UML. I
 - [ ] `get` parameters differ. UML: `+get(kind : str, payload : dict, model : str) : dict | None` · code: `(kind, payload, model, prompt_version)` (app/ai/response_cache.py:33)
 - [ ] `__key` parameters differ. UML: `-__key(kind : str, payload : dict, model : str) : str` · code: `(kind, payload, model, prompt_version)` (app/ai/response_cache.py:98)
 
+**`RiskAnalysis`**
+
+- [ ] `__init__` parameter `policy` type differs. UML: `dict` · code: `dict | None` (app/logic/risk_analysis.py:20)
+- [ ] `__init__` parameter `policy` default differs. UML: `{}` · code: `None` (app/logic/risk_analysis.py:20)
+- [ ] `_check` parameter `sources` type differs. UML: `list[str]` · code: `list[str] | None` (app/logic/risk_analysis.py:32)
+- [ ] `_check` parameter `sources` default differs. UML: `[]` · code: `None` (app/logic/risk_analysis.py:32)
+- [ ] `_check` parameter `supports` type differs. UML: `list[str]` · code: `list[str] | None` (app/logic/risk_analysis.py:32)
+- [ ] `_check` parameter `supports` default differs. UML: `[]` · code: `None` (app/logic/risk_analysis.py:32)
+- [ ] `_jump_years` return type differs. UML: `list[int]` · code: `tuple[float | None, int | None]` (app/logic/risk_analysis.py:38)
+
 **`Verdict`**
 
 - [ ] `__init__` parameter `notes` type differs. UML: `list[str]` · code: `list[str] | None` (app/model/verdict.py:17)
@@ -537,7 +505,7 @@ How to fix: Decide per item. If the code is the better design, update the UML. I
 - [ ] `__agreement` (UML) is `_agreement` in code: visibility (underscores) differs. UML: `-__agreement(checks : list[Check]) : dict` · code: app/logic/verdict_engine.py:132
 - [ ] `__type_patterns` (UML) is `_type_patterns` in code: visibility (underscores) differs. UML: `-__type_patterns(results : dict) : list` · code: app/logic/verdict_engine.py:75
 - [ ] `__evidence` (UML) is `_evidence` in code: visibility (underscores) differs. UML: `-__evidence(case : dict, results : dict) : dict` · code: app/logic/verdict_engine.py:392
-- [ ] `__init__` parameter `features` type differs. UML: `list[Feature]` · code: `list[Feature] | None` (app/logic/verdict_engine.py:48)
+- [ ] `__init__` parameter `features` type differs. UML: `list[RiskAnalysis]` · code: `list[RiskAnalysis] | None` (app/logic/verdict_engine.py:48)
 - [ ] `__init__` parameter `config` type differs. UML: `Config` · code: `Config | None` (app/logic/verdict_engine.py:48)
 - [ ] `describe_piece` parameter `piece` type differs. UML: `str` · code: `str | None` (app/logic/verdict_engine.py:109)
 
@@ -597,7 +565,7 @@ How to fix: Either the work was done under another name (then update the UML), o
 **`AssessmentRunner`**
 
 - [ ] `__ai` missing in code (__init__). UML: `-__ai : dict[str, AIService] = {}` · code: `—` (app/application/assessment_runner.py:24)
-- [ ] `__features` missing in code (__init__). UML: `-__features : list[Feature] = []` · code: `—` (app/application/assessment_runner.py:24)
+- [ ] `__features` missing in code (__init__). UML: `-__features : list[RiskAnalysis] = []` · code: `—` (app/application/assessment_runner.py:24)
 - [ ] `__verdict_engine` missing in code (__init__). UML: `-__verdict_engine : VerdictEngine = None` · code: `—` (app/application/assessment_runner.py:24)
 - [ ] `__run_ai_steps()` missing in code. UML: `-__run_ai_steps(case : dict) : dict` · code: `—` (app/application/assessment_runner.py:24)
 
@@ -644,7 +612,7 @@ How to fix: Either the work was done under another name (then update the UML), o
 - [ ] `start()` missing in code. UML: `+start(host : str = "0.0.0.0", port : int = 5000) : None` · code: `—` (app/interface/web_app.py:24)
 - [ ] `__run_in_background()` missing in code. UML: `-__run_in_background(job_id : str, record : ClientRecord) : None` · code: `—` (app/interface/web_app.py:24)
 
-## Stage 5: In code, missing from UML (388)
+## Stage 5: In code, missing from UML (390)
 
 The code grew past the diagram, mostly helper methods and constants.
 
@@ -896,7 +864,7 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `_check_declared_sources()` exists in code but not in UML. UML: `—` · code: `app/logic/onboarding_assessor.py:100` (app/logic/onboarding_assessor.py:100)
 - [ ] `_fit_for_type()` exists in code but not in UML. UML: `—` · code: `app/logic/onboarding_assessor.py:119` (app/logic/onboarding_assessor.py:119)
 
-### Shared core (227)
+### Shared core (229)
 
 **`AIService`**
 
@@ -917,7 +885,6 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 
 **`App`**
 
-- [ ] `__case_files` exists in code but not in UML. UML: `—` · code: `CaseFiles = CaseFiles(os.path.join(root, 'data', 'sample'))` (app/application/app.py:85)
 - [ ] `__cloud_syncs` exists in code but not in UML. UML: `—` · code: `list[CloudSync] = [CloudSync(self.__clients, MongoRepository(App.CLIENT_COLLECTION, 'client_ref', uri), state_path), CloudSync(self.__assessments, MongoReposito…` (app/application/app.py:88)
 - [ ] `__config_reader` exists in code but not in UML. UML: `—` · code: `ConfigReader = ConfigReader(os.path.join(root, 'config'))` (app/application/app.py:74)
 - [ ] `__rate_limiter` exists in code but not in UML. UML: `—` · code: `RateLimiter = RateLimiter(policy.get('assessment_rate_limit', {}))` (app/application/app.py:106)
@@ -1128,6 +1095,12 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `__read()` exists in code but not in UML. UML: `—` · code: `app/ai/response_cache.py:88` (app/ai/response_cache.py:88)
 - [ ] `key()` exists in code but not in UML. UML: `—` · code: `app/ai/response_cache.py:29` (app/ai/response_cache.py:29)
 - [ ] `path_for()` exists in code but not in UML. UML: `—` · code: `app/ai/response_cache.py:55` (app/ai/response_cache.py:55)
+
+**`RiskAnalysis`**
+
+- [ ] `_as_checks()` exists in code but not in UML. UML: `—` · code: `app/logic/risk_analysis.py:52` (app/logic/risk_analysis.py:52)
+- [ ] `_best_honest_jump()` exists in code but not in UML. UML: `—` · code: `app/logic/risk_analysis.py:56` (app/logic/risk_analysis.py:56)
+- [ ] `_row()` exists in code but not in UML. UML: `—` · code: `app/logic/risk_analysis.py:47` (app/logic/risk_analysis.py:47)
 
 **`Verdict`**
 
