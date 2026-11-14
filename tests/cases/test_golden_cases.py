@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-from app import logic_manager
+from app.logic.crime_scan import CrimeScan
 
 _GOLDEN_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -22,13 +22,18 @@ def _load_golden_cases():
     return cases
 
 
+def _assess_typology_case(case_input, typology_response, declaration, policy):
+    """The crime scan's matching for one golden case."""
+    return CrimeScan(policy).run(case_input, {"typology_response": typology_response, "declaration": declaration})
+
+
 @pytest.mark.parametrize(
     "case",
     _load_golden_cases(),
     ids=lambda c: c["_path"],
 )
 def test_golden_case(case):
-    result = logic_manager.assess_typology_case(
+    result = _assess_typology_case(
         case["case_input"],
         case["benchmark"],
         case["declaration"],

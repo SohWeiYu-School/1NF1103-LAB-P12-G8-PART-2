@@ -12,7 +12,7 @@ trade-based laundering story through his current job that would explain much mor
 
 import json
 
-from app import utilities
+from app.logic.case_timeline import CaseTimeline
 
 
 def _r(low: float, typical: float, high: float) -> dict:
@@ -62,9 +62,9 @@ def benchmark(expected_wealth: float = 2_400_000) -> dict:
 
 def forecast_replies(case: dict, pay_scale: float = 1.0, crime_money: float = 400_000) -> dict:
     """{piece_name: raw JSON text} for every forecast piece of this case."""
-    start, end = utilities.career_years(case)
-    future = utilities.future_years(case)
-    jobs = utilities.career_positions(case)
+    start, end = CaseTimeline(case).career_years()
+    future = CaseTimeline(case).future_years()
+    jobs = CaseTimeline(case).positions()
     assets = case.get("investments", [])
     replies = {}
 
@@ -100,7 +100,7 @@ def forecast_replies(case: dict, pay_scale: float = 1.0, crime_money: float = 40
         }
 
     for index, job in enumerate(jobs):
-        first, last = int(job["start_year"]), utilities.position_end(job, end)
+        first, last = int(job["start_year"]), CaseTimeline(case).position_end(job)
         base = 60_000 * (1 + index) * pay_scale
         replies[f"call2_earnings.position.{index}"] = {"position_index": index, "yearly": [
             {"year": y, "base_pay": _r(base * 0.8, base, base * 1.2), "bonus": _r(0, base * 0.2, base * 0.4),
