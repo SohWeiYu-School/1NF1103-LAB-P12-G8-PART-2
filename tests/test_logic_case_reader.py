@@ -55,3 +55,18 @@ def test_a_record_with_gaps_lists_what_is_missing_instead_of_guessing():
 def test_the_same_record_always_gives_the_same_case():
     reader = CaseReader("2026-10-14")
     assert reader.forecasting_case(sample_case()) == reader.forecasting_case(sample_case())
+
+
+def test_crime_scan_input_holds_only_what_the_crime_scan_may_see():
+    data = CaseReader().crime_scan_input(sample_case())
+    assert set(data) == {"client_ref", "occupation", "industry", "age", "career_start_year", "country",
+                         "country_of_residence", "declaration_text"}
+    assert "declared_net_worth" not in data
+
+
+def test_benchmark_input_gives_the_asset_split_in_whole_percents():
+    case = sample_case()
+    data, missing = CaseReader().benchmark_input(case, CaseReader().crime_scan_input(case))
+    assert missing == []
+    assert (data["property"], data["listed_equities"], data["private_business"], data["cash"]) == (28, 11, 41, 20)
+    assert data["declared_net_worth"] == 16500000

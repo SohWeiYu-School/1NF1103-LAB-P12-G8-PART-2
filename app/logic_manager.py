@@ -1,40 +1,29 @@
 """
-logic_manager.py - the logic layer: every calculation and every decision.
+logic_manager.py - the old function names of the logic layer.
 
-The sections run in this order for a new client:
+The work now lives in the classes in app/logic (the Logic Manager):
+    VerdictEngine                          one verdict from every feature's checks
+    Feature                                the abstract parent of the four features:
+      CrimeScan, DocumentEvidence,
+      Benchmark, Forecast
+    Indicator and its five children        the warning signs the crime scan looks for
+    MarketModel, CareerSavings, AssetPath,
+    FuturePaths, OnboardingAssessor,
+    PayCalibrator                          the forecast arithmetic
+    CaseReader, DocumentRecordBuilder      reading records and building them from documents
+    Formatter, CaseTimeline                small helpers
 
-    1. Benchmark          run_benchmark: declared figures vs the AI's single expected
-                          values (total wealth, liquidity, composition) -> PASS / FAIL
-    2. Sector Crime Scan  decide_outcome, build_document_requests, assess_typology_case
-    3. Forecasting        (runs after the benchmark)
-       Onboarding (assess_onboarding):
-         Types: T1 is the honest person; T2+ are standard crime categories (trade-based money
-         laundering, sanctions evasion, ...) each tied to the job/asset/source that enables it.
-         1. Back-test every type: build each type's wealth, year by year, from the forecasts
-         2. Fit score per type: does his declared wealth, asset values and purchases fit it?
-         3. Affordability per type: could he have paid for each purchase that year?
-         4. Checks that don't depend on the type: asset values, asset income, countries,
-            declared sources with no amount
-         5. Stability test: re-run the decision with every forecast 10% lower and higher
-         6. Forward paths, event impacts, divergence dates, monitoring ranges,
-            ranked documents, next review date
+The functions below only build one of those classes and call it, so main.py, the
+web app and the older tests keep working while the rest of the refactor is done.
+This file is deleted once App calls the classes directly.
 
-The forecasting section calls no AI: it only does arithmetic on the forecasts and decides
-with fixed rules from config/policy.json, so the same forecast and the same client always
-give the same answer.
-
-Outcomes: PASSED, MANUAL_REVIEW, RISKY, SERIOUS_RISK.
+Everything here is pure: no file access, no network, no printing.
 """
 
 import logging
 
 from app import utilities
-from app.logic.formatter import Formatter
-from app.logic.market_model import MarketModel
 from app.logic.career_savings import CareerSavings
-from app.logic.asset_path import AssetPath
-from app.logic.future_paths import FuturePaths
-from app.logic.onboarding_assessor import OnboardingAssessor
 from app.logic.pay_calibrator import PayCalibrator
 from app.logic.forecast import Forecast
 from app.logic.crime_scan import CrimeScan
@@ -44,7 +33,6 @@ from app.logic.benchmark import Benchmark
 from app.logic.verdict_engine import VerdictEngine
 from app.logic.document_record_builder import DocumentRecordBuilder
 from app.model.band import Band
-from app.model.check import Check
 from app.model.config import Config
 from app.model.verdict import Verdict
 
@@ -62,59 +50,16 @@ LIMITS = Benchmark.LIMITS
 # ---------------------------------------------------------------------------
 
 
-def calculate_total_wealth(client_data, ai_data):
-
-    return Benchmark()._total_wealth(client_data, ai_data)
-
-
-def calculate_liquidity(client_data, ai_data):
-
-    return Benchmark()._liquidity(client_data, ai_data)
-
-
 _COMPOSITION_PARTS = Benchmark._COMPOSITION_PARTS
 
 
-def calculate_composition(client_data, ai_data):
-    return Benchmark()._composition(client_data, ai_data)
-
-
-def calculate_velocity(client_data, ai_data):
-    return Benchmark()._velocity(client_data, ai_data)
-
-def calculate_counterparties(declared, expected):
-    return Benchmark()._counterparties(declared, expected)
-
 #=============================================================================#
-def clean_country(country):
-    return Benchmark()._clean_country(country)
-
-def calculate_jurisdiction(declared, expected):
-    return Benchmark()._jurisdiction(declared, expected)
 
 
 def crime_scan_input(record: dict) -> dict:
     """The crime scan input from a saved client record (used by both the CLI and the web app).
     Raises KeyError if the record has no career or no source of wealth declaration."""
-    career = record["career"]
-    sow = record["sow_declaration"]
-    return {
-        "client_ref":           record["client_ref"],
-        "occupation":           career["occupation"],
-        "industry":             career["industry"],
-        "age":                  utilities.whole_number(career["age"]),
-        "career_start_year":    utilities.whole_number(career["career_start_year"]),
-        "country":              career["country_of_residence"],
-        "country_of_residence": career["country_of_residence"],
-        "declaration_text":     sow if isinstance(sow, str) else (sow or {}).get("declaration_text", ""),
-    }
-
-
-def _whole_percent(value) -> int | None:
-    """A share of wealth as a whole-number percent: 0.45 (stored fraction) or 45 -> 45."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return round(value * 100) if value <= 1.0 else round(value)
+    return CaseReader().crime_scan_input(record)
 
 
 def benchmark_input(record: dict, case_input: dict) -> tuple[dict, list[str]]:
@@ -122,25 +67,7 @@ def benchmark_input(record: dict, case_input: dict) -> tuple[dict, list[str]]:
     so the same client always gets the same benchmark. Composition is in whole percents (45 = 45%),
     the unit run_benchmark and the benchmark prompt expect.
     Returns (input, names of the required values that are missing)."""
-    claims = record.get("claims") or {}
-    split = claims.get("asset_composition") or {}
-    worth = claims.get("declared_net_worth")
-    jump = claims.get("biggest_wealth_jump")
-    data = {
-        **case_input,
-        "declared_net_worth":      utilities.whole_number(worth),
-        "listed_equities":         _whole_percent(split.get("listed_equities")),
-        "cash":                    _whole_percent(split.get("cash")),
-        "property":                _whole_percent(split.get("property")),
-        "private_business":        _whole_percent(split.get("private_business")),
-        "biggest_wealth_jump":     float(jump) if isinstance(jump, (int, float)) else None,
-        "wealth_jump_years":       float(claims.get("wealth_jump_years") or 0.0),
-        "declared_counterparties": list(claims.get("declared_counterparties") or []),
-        "declared_countries":      list(claims.get("wealth_countries") or []),
-    }
-    missing = [key for key in ("declared_net_worth", "listed_equities", "cash", "property", "private_business")
-               if data[key] is None]
-    return data, missing
+    return CaseReader().benchmark_input(record, case_input)
 
 
 def run_benchmark(client_data: dict, ai_data: dict, policy: dict | None = None):
@@ -228,16 +155,6 @@ def assess_typology_case(
 # These functions keep their old names until match_typologies moves into CrimeScan.
 
 
-
-
-
-
-
-
-
-
-
-
 # Map fired indicator counts to a severity category.
 
 
@@ -254,7 +171,6 @@ def match_typologies(
     Returns a list of match result dicts, one per typology.
     """
     return CrimeScan(policy).match_typologies(typologies, declaration, clean_case)
-
 
 
 # ---------------------------------------------------------------------------
@@ -321,77 +237,10 @@ MONEY_OUT = Band.MONEY_OUT
 # Small helpers
 # ============================================================================
 
-def band(cautious: float, typical: float, optimistic: float) -> dict:
-    return Band(cautious, typical, optimistic).to_dict()
-
-
-def zero_band() -> dict:
-    return Band().to_dict()
-
-
-def add_bands(first: dict, second: dict) -> dict:
-    return (Band.from_dict(first) + Band.from_dict(second)).to_dict()
-
-
-def scale_band(values: dict, factor: float) -> dict:
-    return (Band.from_dict(values) * factor).to_dict()
-
-
-def sorted_band(three_values: list[float]) -> dict:
-    """Three results worked out from the low, typical and high inputs, lowest first."""
-    return Band.from_values(three_values).to_dict()
-
-
-def range_to_band(ai_range: dict) -> dict:
-    """An AI {low, typical, high} range as a cautious/typical/optimistic band."""
-    return Band.from_range(ai_range).to_dict()
-
-
-def add_months(date_text: str, months: int) -> str:
-    """'2026-09-24' + 3 months = '2026-12-24' (the day is clipped to the month's length)."""
-    return Formatter.add_months(date_text, months)
-
-
-def same_country(name: str, policy: dict) -> str:
-    """Lower-case a country name and map short forms (UAE, Dubai) to one spelling."""
-    return Config(policy, {}).same_country(name)
-
-
-def category_name(code: str) -> str:
-    """'TRADE_BASED_ML' -> its readable name from the vocabulary file."""
-    return Config({}, utilities.vocabulary()).category_name(code)
-
-
-
-
-def asset_category(asset_type: str, policy: dict) -> str:
-    """property / listed_equities / private_business, by keyword lookup."""
-    text = (asset_type or "").lower()
-    for category, keywords in policy["asset_categories"].items():
-        if any(word in text for word in keywords):
-            return category
-    return "other"
-
 
 # ============================================================================
 # 1. Markets (from Call 1)
 # ============================================================================
-
-def market_history(forecast: dict) -> dict:
-    """{market_id: {year: % change or None}}"""
-    return MarketModel(forecast).history()
-
-
-def market_outlook(forecast: dict) -> dict:
-    """{market_id: {year: {scenario: {low, typical, high}}}}"""
-    return MarketModel(forecast).outlook()
-
-
-def scenario_chances(forecast: dict) -> dict:
-    """{year: {scenario: share}} with the shares adding up to exactly 1."""
-    return MarketModel(forecast).scenario_chances()
-
-
 
 
 # ============================================================================
@@ -402,140 +251,24 @@ def pay_total(pay: dict, level: str) -> float:
     return CareerSavings().pay_total(pay, level)
 
 
-def career_savings(forecast: dict, start: int, end: int) -> list[dict]:
-    """Year by year: total pay, after tax, living costs, saved, growth and savings so far."""
-    return CareerSavings(forecast["earnings"]).rows(start, end)
-
-
 # ============================================================================
 # 3. Assets (Call 2 behaviour + Call 1 markets)
 # ============================================================================
-
-
-
-def all_asset_paths(record: dict, forecast: dict, last_year: int, scenario: str,
-                    shocks: dict | None = None) -> list[dict]:
-    assets = AssetPath(MarketModel(forecast), forecast["earnings"]["assets"])
-    return assets.build(record, last_year, scenario, shocks)
-
-
-def income_up_to(path: dict, year: int) -> dict:
-    """Total income an asset produced up to and including a year."""
-    return AssetPath(MarketModel()).income_up_to(path, year)
 
 
 # ============================================================================
 # 4. Wealth of every type, past years (back-test)
 # ============================================================================
 
-def extra_money_up_to(behaviour: dict, year: int) -> dict:
-    """A type's extra money (Call 3) added up to and including a year."""
-    return FuturePaths(MarketModel()).extra_money_up_to(behaviour, year)
-
-
-def honest_wealth(record: dict, savings_rows: list[dict], paths: list[dict], year: int) -> dict:
-    """Wealth of the as-declared version: savings + gain on each asset + its income so far."""
-    return FuturePaths(MarketModel()).honest_wealth(record, savings_rows, paths, year)
-
-
-def type_wealth_now(record: dict, forecast: dict, savings_rows: list[dict], paths: list[dict]) -> dict:
-    """{type_id: wealth band today} = honest wealth + that type's extra money so far."""
-    return FuturePaths(MarketModel(forecast), forecast).type_wealth_now(record, savings_rows, paths)
-
 
 # ============================================================================
 # 5. Onboarding checks
 # ============================================================================
 
-def check_asset_values(record: dict, forecast: dict, paths: list[dict], end: int,
-                       policy: dict, scale: float = 1.0) -> list[dict]:
-    """Is each declared asset value within what its markets explain?"""
-    return OnboardingAssessor(FuturePaths(MarketModel(forecast), forecast, policy), policy, Config(policy, {}))._check_asset_values(record, forecast, paths, end, scale)
-
-
-def check_asset_income(record: dict, paths: list[dict], end: int, policy: dict,
-                       scale: float = 1.0) -> list[dict]:
-    """Is each asset's declared income within what an asset of that value normally pays?"""
-    return OnboardingAssessor(FuturePaths(MarketModel()), policy, Config(policy, {}))._check_asset_income(record, paths, end, scale)
-
-
-def check_affordability(record: dict, savings_rows: list[dict], paths: list[dict], behaviour: dict,
-                        policy: dict, scale: float = 1.0) -> list[dict]:
-    """For one type: could he pay the cash part of each purchase from what he had that year?"""
-    return OnboardingAssessor(FuturePaths(MarketModel()), policy, Config(policy, {}))._check_affordability(record, savings_rows, paths, behaviour, scale)
-
-
-def check_jurisdictions(record: dict, forecast: dict, policy: dict) -> dict:
-    """Countries he named with nothing behind them, and linked countries on a risk list."""
-    return OnboardingAssessor(FuturePaths(MarketModel(forecast), forecast, policy), policy, Config(policy, {}))._check_jurisdictions(record, forecast)
-
-
-def check_declared_sources(forecast: dict, policy: dict) -> list[dict]:
-    """Declared sources with no amount and no job or asset behind them (e.g. 'some advisory work').
-    Salary, bonuses and savings are explained by the career forecast, so they don't count."""
-    return OnboardingAssessor(FuturePaths(MarketModel(forecast), forecast, policy), policy, Config(policy, {}))._check_declared_sources(forecast)
-
-
-def fit_for_type(type_id: str, wealth_now: dict, affordability: list[dict], asset_checks: list[dict],
-                 declared: float, policy: dict, scale: float = 1.0) -> dict:
-    """How well his declared figures fit one type. Fit score 0-1."""
-    return OnboardingAssessor(FuturePaths(MarketModel()), policy, Config(policy, {}))._fit_for_type(type_id, wealth_now, affordability, asset_checks, declared, scale)
-
-
-def decide_onboarding(fits: dict, t1_affordability_breach: bool, other_failures: list[str]) -> str:
-    """The onboarding rule. fits = {type_id: fit result}."""
-    return OnboardingAssessor(FuturePaths(MarketModel()), {}, Config({}, {}))._decide_onboarding(fits, t1_affordability_breach, other_failures)
-
-
-def stable_outcome(outcome: str, outcomes_when_shifted: dict) -> tuple[str, bool]:
-    """If moving the forecasts 10% changes the answer, the case is borderline and a person
-    must look at it, so it goes to at least Manual Review."""
-    return OnboardingAssessor(FuturePaths(MarketModel()), {}, Config({}, {})).stable_outcome(outcome, outcomes_when_shifted)
-
-
-def evaluate(record: dict, forecast: dict, savings_rows: list[dict], paths: list[dict],
-             policy: dict, scale: float = 1.0) -> dict:
-    """Run every onboarding check with all money forecasts multiplied by `scale`."""
-    return OnboardingAssessor(FuturePaths(MarketModel(forecast), forecast, policy), policy, Config(policy, {})).evaluate(record, forecast, savings_rows, paths, scale)
-
 
 # ============================================================================
 # 6. The future: forward paths, events, divergence
 # ============================================================================
-
-def forward_paths(record: dict, forecast: dict, savings_rows: list[dict], scenario: str,
-                  shocks: dict | None = None, event_changes: dict | None = None) -> dict:
-    """
-    Wealth of every type for the current year and each forecast year in one scenario.
-    event_changes = {type_id: (year, extra money change)} adds an event reaction.
-    """
-    return FuturePaths(MarketModel(forecast), forecast).forward_paths(record, savings_rows, scenario, shocks, event_changes)
-
-
-def expected_paths(record: dict, forecast: dict, savings_rows: list[dict]) -> dict:
-    """Each type's wealth path weighted by the AI's chance of each scenario."""
-    return FuturePaths(MarketModel(forecast), forecast).expected_paths(record, savings_rows)
-
-
-def event_impacts(record: dict, forecast: dict, savings_rows: list[dict]) -> list[dict]:
-    """For each event and type: change in 2030 wealth if it happens, and weighted by its chance."""
-    return FuturePaths(MarketModel(forecast), forecast).event_impacts(record, savings_rows)
-
-
-def divergence_years(paths: dict) -> list[dict]:
-    """First forecast year each type's range stops overlapping the as-declared type's range."""
-    return FuturePaths(MarketModel()).divergence_years(paths)
-
-
-def monitoring_ranges(forecast: dict, year: int, policy: dict) -> dict:
-    """What normal account activity looks like next year, from the as-declared type's signals."""
-    return FuturePaths(MarketModel(forecast), forecast, policy).monitoring_ranges(year)
-
-
-
-
-
-
 
 
 # ============================================================================
@@ -558,8 +291,6 @@ def assess_onboarding(record: dict, forecast: dict, policy: dict | None = None) 
 COMPOSITION_KEYS = CaseReader.COMPOSITION_KEYS
 
 
-
-
 def record_from_documents(extracted: dict, client_ref: str, today: str) -> tuple[dict, list[str]]:
     """Build a client record (the same layout the New Client form saves) from the AI's
     reading of the documents. Returns (record, paths of the fields that came from the documents).
@@ -570,24 +301,9 @@ def record_from_documents(extracted: dict, client_ref: str, today: str) -> tuple
     return DocumentRecordBuilder(today=today).build(extracted, client_ref)
 
 
-def get_path(record: dict, path: list):
-    """The value at path (e.g. ["career_history", 0, "start_year"]), or None if it isn't there."""
-    return DocumentRecordBuilder().get_path(record, path)
-
-
 def set_path(record: dict, path: list, value) -> dict:
     """Return a copy of record with the value at path replaced."""
     return DocumentRecordBuilder().set_path(record, path, value)
-
-
-
-
-
-
-
-
-
-
 
 
 def missing_client_fields(record: dict) -> list[dict]:
@@ -604,10 +320,6 @@ def finish_document_record(record: dict) -> dict:
 def check_document_record(record: dict, today: str, policy: dict | None = None) -> list[str]:
     """Things worth a second look in a record filled from documents. Empty list = nothing spotted."""
     return DocumentRecordBuilder(Config(policy or {}, {}), today).check(record)
-
-
-
-
 
 
 SUMMARY_SECTIONS = DocumentRecordBuilder.SUMMARY_SECTIONS
@@ -669,36 +381,12 @@ COMPOSITION_RULES = Benchmark.COMPOSITION_RULES
 # Status of one check: failed (counts), weak (a loose end), explained (failed on its own, but
 # another feature explains it, so it doesn't count), passed, skipped (couldn't run), info.
 
-def _sgd(value) -> str:
-    """12345.6 -> 'S$12,346'. Anything that isn't a number -> 'n/a'."""
-    return Formatter.sgd(value)
-
-
-def _check(feature: str, check: str, label: str, theme: str, status: str, detail: str,
-           explanation: str = "", group: str = "") -> dict:
-    """One finding in the shared shape all three features use."""
-    return Check(feature, check, label, theme, status, detail, explanation, group).to_dict()
-
 
 # ---------------------------------------------------------------------------
 # 1. The client record -> the forecasting case (the same for the CLI and the web app)
 # ---------------------------------------------------------------------------
 
 _PRESENT_WORDS = CaseReader._PRESENT_WORDS
-
-
-def _read_amount(text) -> float | None:
-    """'1,650,000', 'S$1.65m', '410k', 30 -> a number; None if it can't be read."""
-    return CaseReader.read_amount(text)
-
-
-def _read_year(text) -> int | None:
-    return CaseReader().read_year(text)
-
-
-def _read_payment(text) -> str | None:
-    """'Cash', 'mortgage', 'bank loan', 'sold my flat' -> cash / loan / asset_sale."""
-    return CaseReader()._read_payment(text)
 
 
 def forecasting_case(record: dict, today: str) -> tuple[dict | None, list[str]]:
@@ -757,45 +445,14 @@ def calibrate_pay(case: dict, forecast: dict, documented_pay: list[dict], policy
     return PayCalibrator(CareerSavings(), policy).calibrate(case, forecast, documented_pay)
 
 
-def document_checks(evidence: dict | None, types: list[dict], policy: dict) -> list[dict]:
-    """The documents layer as findings in the shared shape: each fact the declaration leaves out
-    or contradicts, and which crime stories it supports."""
-    return DocumentEvidence(policy)._document_checks(evidence, types)
-
-
-
-
 # ---------------------------------------------------------------------------
 # 3. The honest story's numbers (shared by the benchmark cross-checks and the forecast checks)
 # ---------------------------------------------------------------------------
-
-def honest_numbers(case: dict, forecast: dict, assessment: dict, policy: dict) -> dict:
-    """T1's fit, wealth today, liquid wealth, wealth by year and peak pay."""
-    return Forecast(policy, Config(policy, utilities.vocabulary())).honest_numbers(case, forecast, assessment)
-
-
-
-
-
-
-
-
-
-
-def is_pep(case: dict, policy: dict) -> bool:
-    return Benchmark(policy, Config(policy, {})).is_pep(case)
 
 
 # ---------------------------------------------------------------------------
 # 4. The checks of each feature, in the shared shape (with the cross-checks)
 # ---------------------------------------------------------------------------
-
-def benchmark_checks(case: dict, bench_input: dict | None, ai_data: dict | None, findings: list[dict] | None,
-                     honest: dict | None, assessment: dict | None, declaration: dict | None,
-                     markets: dict | None, types: list[dict], policy: dict) -> list[dict]:
-    """The peer benchmark's checks, each cross-checked against the forecast: a failure the
-    honest forecast explains is marked "explained" and doesn't count towards the verdict."""
-    return Benchmark(policy, Config(policy, {}))._benchmark_checks(case, bench_input, ai_data, findings, honest, assessment, declaration, markets, types)
 
 
 def describe_piece(case: dict, piece: str | None) -> str:
@@ -803,26 +460,9 @@ def describe_piece(case: dict, piece: str | None) -> str:
     return VerdictEngine([], Config(utilities.policy(), utilities.vocabulary())).describe_piece(case, piece)
 
 
-def forecast_checks(case: dict, assessment: dict | None, honest: dict | None, types: list[dict],
-                    failed_step: str | None, policy: dict, unmodelled: list[dict] | None = None) -> list[dict]:
-    """The forecast's checks in the shared shape, plus the two new ones (wealth jump, liquid wealth).
-    failed_step: why the forecast stopped, in words (if it did)."""
-    return Forecast(policy)._forecast_checks(case, assessment, honest, types, failed_step, unmodelled)
-
-
-def crime_checks(crime_result: dict | None, research: dict | None, typologies: list[dict] | None,
-                 types: list[dict], forecast_ran: bool) -> list[dict]:
-    """The crime scan's patterns in the shared shape: how well each one matches, and which
-    person type was built from it."""
-    return CrimeScan()._crime_checks(crime_result, research, typologies, types, forecast_ran)
-
-
 # ---------------------------------------------------------------------------
 # 5. One verdict
 # ---------------------------------------------------------------------------
-
-
-
 
 
 def combined_verdict(case: dict, parts: dict, policy: dict | None = None) -> dict:
@@ -857,8 +497,6 @@ def combined_verdict(case: dict, parts: dict, policy: dict | None = None) -> dic
 _ROUTINE_NOTES = VerdictEngine._ROUTINE_NOTES
 
 
-
-
 # ---------------------------------------------------------------------------
 # 6. The report (the command line prints it, the web app shows it: the same text)
 # ---------------------------------------------------------------------------
@@ -868,12 +506,8 @@ MARKS = VerdictEngine.MARKS
 REPORT_LEGEND = VerdictEngine.REPORT_LEGEND
 
 
-
-
 # The benchmark's 9 original checks: always shown in the report, passed or not, in this order
 ORIGINAL_BENCHMARK = VerdictEngine.ORIGINAL_BENCHMARK
-
-
 
 
 def verdict_report(verdict: dict) -> dict:

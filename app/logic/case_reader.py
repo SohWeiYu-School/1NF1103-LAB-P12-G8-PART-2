@@ -189,3 +189,57 @@ class CaseReader:
         }
         missing = list(dict.fromkeys(missing))
         return (None, missing) if missing else (case, [])
+
+    def crime_scan_input(self, record: dict) -> dict:
+        """The crime scan input from a saved client record (used by both the CLI and the web app).
+        Raises KeyError if the record has no career or no source of wealth declaration."""
+        career = record["career"]
+        sow = record["sow_declaration"]
+        return {
+            "client_ref":           record["client_ref"],
+            "occupation":           career["occupation"],
+            "industry":             career["industry"],
+            "age":                  self._whole_number(career["age"]),
+            "career_start_year":    self._whole_number(career["career_start_year"]),
+            "country":              career["country_of_residence"],
+            "country_of_residence": career["country_of_residence"],
+            "declaration_text":     sow if isinstance(sow, str) else (sow or {}).get("declaration_text", ""),
+        }
+
+    def _whole_percent(self, value) -> int | None:
+        """A share of wealth as a whole-number percent: 0.45 (stored fraction) or 45 -> 45."""
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return round(value * 100) if value <= 1.0 else round(value)
+
+    def benchmark_input(self, record: dict, case_input: dict) -> tuple[dict, list[str]]:
+        """The benchmark's input built from a saved client record - the CLI and the web app both use this,
+        so the same client always gets the same benchmark. Composition is in whole percents (45 = 45%),
+        the unit run_benchmark and the benchmark prompt expect.
+        Returns (input, names of the required values that are missing)."""
+        claims = record.get("claims") or {}
+        split = claims.get("asset_composition") or {}
+        worth = claims.get("declared_net_worth")
+        jump = claims.get("biggest_wealth_jump")
+        data = {
+            **case_input,
+            "declared_net_worth":      self._whole_number(worth),
+            "listed_equities":         self._whole_percent(split.get("listed_equities")),
+            "cash":                    self._whole_percent(split.get("cash")),
+            "property":                self._whole_percent(split.get("property")),
+            "private_business":        self._whole_percent(split.get("private_business")),
+            "biggest_wealth_jump":     float(jump) if isinstance(jump, (int, float)) else None,
+            "wealth_jump_years":       float(claims.get("wealth_jump_years") or 0.0),
+            "declared_counterparties": list(claims.get("declared_counterparties") or []),
+            "declared_countries":      list(claims.get("wealth_countries") or []),
+        }
+        missing = [key for key in ("declared_net_worth", "listed_equities", "cash", "property", "private_business")
+                   if data[key] is None]
+        return data, missing
+
+    def _whole_number(self, value: object) -> int | None:
+        """'16,500,000' / '30%' / 30 -> a whole number, or None if it can't be read."""
+        try:
+            return int(float(str(value).replace(",", "").replace("%", "").strip()))
+        except (TypeError, ValueError):
+            return None
