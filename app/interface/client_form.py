@@ -637,19 +637,16 @@ class ClientForm:
             self.__ui.show_error(f"The changes could not be kept because {error}. The record is unchanged.")
             return record
 
-    def find_existing_client(self, find_fn=None, load_fn=None, save_fn=None, download_fn=None, upload_fn=None):
-        """Find, display, edit and manage an existing client from local records.
-        find_fn gives a ClientRecord or None (and raises ValueError if the saved record cannot be
-        read); save_fn is given the edited ClientRecord."""
-
-        self.__ui.show("\n=== Existing Client ===")
-
+    def pick_client(self, find_fn: Callable[[str], ClientRecord | None] | None = None) -> ClientRecord | None:
+        """Ask for a client reference and look the client up with find_fn. Returns the ClientRecord,
+        or None if the officer went back, no client has that reference, or the saved record cannot
+        be read (find_fn raises ValueError saying why). The officer is told which of these it was."""
         client_ref = self.__ui.read_answer(
             "Enter client reference (0 to go back): "
         ).strip()
 
         if client_ref == "0":
-            return
+            return None
 
         self.__ui.show("\nSearching saved clients...")
 
@@ -658,11 +655,43 @@ class ClientForm:
         except ValueError as error:      # the client exists, but the saved record cannot be read
             self.__ui.show_error(str(error))
             self.__ui.read_answer("\nPress Enter to return to the main menu...")
-            return
+            return None
 
         if client_record is None:
             self.__ui.show(f"\nNo client found with reference: {client_ref}")
             self.__ui.read_answer("\nPress Enter to return to the main menu...")
+            return None
+        return client_record
+
+    def ask_document_folder(self) -> str | None:
+        """Ask which folder holds the client's documents. Returns the folder path, or None to cancel."""
+        self.__ui.show("\n" + "=" * 60)
+        self.__ui.show("              NEW CLIENT FROM DOCUMENTS")
+        self.__ui.show("=" * 60)
+        self.__ui.show("Put the client's documents in one folder (CV, payslips, employment letter, tax notices,")
+        self.__ui.show("bank statements, property papers, KYC form). PDF, Word, Excel, text and images are read.")
+        if tk is not None and self.__ui.ask_yes_no("\nChoose the folder in a file explorer window?"):
+            root = tk.Tk()
+            root.withdraw()
+            folder = filedialog.askdirectory(title="Select the folder with the client's documents")
+            root.destroy()
+            if folder:
+                self.__ui.show(f"Folder: {folder}")
+                return folder
+            self.__ui.show("No folder was chosen.")
+        folder = self.__ui.read_answer("\nFolder path (or press Enter to go back to the menu): ").strip()
+        folder = folder.strip('"').strip("'")          # paths dragged into the terminal come quoted
+        return folder or None
+
+    def find_existing_client(self, find_fn=None, load_fn=None, save_fn=None, download_fn=None, upload_fn=None):
+        """Find, display, edit and manage an existing client from local records.
+        find_fn gives a ClientRecord or None (and raises ValueError if the saved record cannot be
+        read); save_fn is given the edited ClientRecord."""
+
+        self.__ui.show("\n=== Existing Client ===")
+
+        client_record = self.pick_client(find_fn)
+        if client_record is None:
             return
 
         self.__ui.show("\nClient found!")

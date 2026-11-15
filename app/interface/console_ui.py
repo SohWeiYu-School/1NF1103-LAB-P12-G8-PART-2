@@ -4,11 +4,6 @@ import datetime
 import os
 from typing import Callable
 
-try:                                  # the file and folder pickers need a desktop; servers have none
-    import tkinter as tk
-    from tkinter import filedialog
-except ImportError:
-    tk = filedialog = None
 
 class ConsoleUI:
     """The terminal. Every print() and input() of the command line app is in this class,
@@ -119,26 +114,6 @@ class ConsoleUI:
             industry = r.get("career", {}).get("industry") or r.get("client_profile", {}).get("industry", "—")
             self.__write(f"  {i:<4}{ref:<18}{name:<28}{industry}")
         self.__write("─" * W + "\n")
-
-    def ask_document_folder(self) -> str | None:
-        """Ask which folder holds the client's documents. Returns the folder path, or None to cancel."""
-        self.__write("\n" + "=" * 60)
-        self.__write("              NEW CLIENT FROM DOCUMENTS")
-        self.__write("=" * 60)
-        self.__write("Put the client's documents in one folder (CV, payslips, employment letter, tax notices,")
-        self.__write("bank statements, property papers, KYC form). PDF, Word, Excel, text and images are read.")
-        if tk is not None and self.ask_yes_no("\nChoose the folder in a file explorer window?"):
-            root = tk.Tk()
-            root.withdraw()
-            folder = filedialog.askdirectory(title="Select the folder with the client's documents")
-            root.destroy()
-            if folder:
-                self.__write(f"Folder: {folder}")
-                return folder
-            self.__write("No folder was chosen.")
-        folder = self.__read("\nFolder path (or press Enter to go back to the menu): ").strip()
-        folder = folder.strip('"').strip("'")          # paths dragged into the terminal come quoted
-        return folder or None
 
     def show_documents_found(self, paths: list[str]) -> None:
         self.__write(f"\nFound {len(paths)} document(s):")

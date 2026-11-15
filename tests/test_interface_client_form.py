@@ -160,3 +160,43 @@ def test_a_previous_job_needs_an_end_year_so_it_cannot_replace_the_current_job(m
     career = record.to_dict()["career"]
     assert career["occupation"] == "Chief Operating Officer" and career["employer_name"] == "Straits Harbour"
     assert [job.end_year for job in record.jobs()] == [2010]
+
+
+def test_pick_client_gives_the_record_find_fn_returns(monkeypatch, capsys):
+    _type(monkeypatch, "CL-1")
+    record = ClientRecord.from_dict(sample_case())
+    asked = []
+    picked = _form().pick_client(lambda ref: asked.append(ref) or record)
+    assert picked is record and asked == ["CL-1"]
+    assert "Searching saved clients..." in capsys.readouterr().out
+
+
+def test_pick_client_gives_none_when_the_officer_goes_back(monkeypatch):
+    _type(monkeypatch, "0")
+    assert _form().pick_client(lambda ref: 1 / 0) is None      # never looked up
+
+
+def test_pick_client_says_when_no_client_has_that_reference(monkeypatch, capsys):
+    _type(monkeypatch, "CL-9", "")
+    assert _form().pick_client(lambda ref: None) is None
+    assert "No client found with reference: CL-9" in capsys.readouterr().out
+
+
+def test_pick_client_says_when_the_saved_record_cannot_be_read(monkeypatch, capsys):
+    def unreadable(ref):
+        raise ValueError("Client CL-1 could not be loaded.")
+    _type(monkeypatch, "CL-1", "")
+    assert _form().pick_client(unreadable) is None
+    assert "Client CL-1 could not be loaded." in capsys.readouterr().out
+
+
+def test_ask_document_folder_gives_the_typed_path_without_quotes(monkeypatch):
+    monkeypatch.setattr("app.interface.client_form.tk", None)       # no file explorer window
+    _type(monkeypatch, '"/tmp/client docs"')
+    assert _form().ask_document_folder() == "/tmp/client docs"
+
+
+def test_ask_document_folder_gives_none_when_the_officer_goes_back(monkeypatch):
+    monkeypatch.setattr("app.interface.client_form.tk", None)
+    _type(monkeypatch, "")
+    assert _form().ask_document_folder() is None

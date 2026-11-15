@@ -295,7 +295,7 @@ def test_a_new_client_is_made_from_a_folder_of_documents(tmp_path, monkeypatch, 
     """Menu option 2: the AI reads the folder, the officer fills the one gap and saves."""
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MONGODB_URI", "")
-    monkeypatch.setattr("app.interface.console_ui.tk", None)          # no file explorer window
+    monkeypatch.setattr("app.interface.client_form.tk", None)          # no file explorer window
     folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documents", "marcus_lim")
     with open(folder + "_expected_extract.json", encoding="utf-8") as handle:
         reading = json.load(handle)
@@ -315,7 +315,7 @@ def test_a_new_client_is_made_from_a_folder_of_documents(tmp_path, monkeypatch, 
 def test_documents_read_with_an_impossible_value_are_reported_and_nothing_is_saved(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MONGODB_URI", "")
-    monkeypatch.setattr("app.interface.console_ui.tk", None)
+    monkeypatch.setattr("app.interface.client_form.tk", None)
     folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documents", "marcus_lim")
     with open(folder + "_expected_extract.json", encoding="utf-8") as handle:
         reading = json.load(handle)

@@ -412,7 +412,7 @@ class App:
         summary to check, then save. Returns the saved record (to assess) or None."""
         # 1. Which folder
         while True:
-            folder = self.__ui.ask_document_folder()
+            folder = self.__client_form.ask_document_folder()
             if folder is None:
                 return None
             paths = self.__documents.list_folder(folder)
