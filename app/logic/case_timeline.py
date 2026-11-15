@@ -9,6 +9,10 @@ class CaseTimeline:
     FORECAST_YEARS: int = 4      # how many years after the assessment year are forecast
 
     def __init__(self, record: dict | None = None, forecast_years: int = FORECAST_YEARS) -> None:
+        if record is not None and not isinstance(record, dict):
+            raise ValueError(f"a case timeline's record must be a dict (or None), not {type(record).__name__}")
+        if isinstance(forecast_years, bool) or not isinstance(forecast_years, int) or forecast_years < 1:
+            raise ValueError(f"the number of forecast years must be a whole number of 1 or more, not {forecast_years!r}")
         self.__record: dict = record or {}
         self.__forecast_years: int = forecast_years
 
