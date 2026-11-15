@@ -64,7 +64,7 @@ Code changed to match the diagram:
 - ConsoleUI is handed its `read`/`write` functions, and its helpers are private.
 - `keep_money` keeps an empty amount as `None` (CLAUDE.md §9).
 - `ask_money` refuses zero unless the caller allows it.
-- ClientForm and CaseBuilder helpers are private.
+- ClientForm's helpers and CaseBuilder's four listed helpers are private (CaseBuilder's other `_` helpers are a stage 5 item).
 - ReportView is handed its `width`, RateLimiter its cooldown, and WebApp its RateLimiter.
 - App's case and documents screens are private, and `App.today` is static.
 - `AssessmentRunner.run` names its parameter `files`.
@@ -80,7 +80,7 @@ Everything below is the diagram being corrected:
 | ConsoleUI | `money`, `money_range` | `value : float \| None`; `values : dict` (not `Band`) | **T**: forecast rows pass `None`; the range is given as a dict |
 | ConsoleUI | `+keep_countries(...)` | added | **B**: replaces ClientForm reaching into ConsoleUI's private `__only` |
 | ClientForm | `__init__` | `+ report_view` | **T**: App hands in the shared ReportView |
-| ClientForm | `create_new_client`, `edit_existing_client` | `+ save_fn`, `+ upload_fn` | **R**: ClientForm (IO Manager) may not import the Data Manager or App (§3), so App passes these functions in |
+| ClientForm | `create_new_client`, `edit_existing_client` | `+ save_fn`, `+ upload_fn` (`edit_existing_client` takes only `upload_fn`) | **R**: ClientForm (IO Manager) may not import the Data Manager or App (§3), so App passes these functions in |
 | ClientForm | `__edit_*_record(record)` | `record : dict` | **T**: they edit the answers dict, which is checked as a whole afterwards |
 | ClientForm | `__ask_job` | `+ previous : bool = False` | **T**: a previous job must have an end year (the R1 data-loss fix) |
 | CaseBuilder | `__init__` and its 4 helpers | real parameters (`case_schema`, year limits, `allow_zero`) | **T**: `validate_case` needs the schema; jobs and assets have different date limits |
@@ -99,4 +99,6 @@ Everything below is the diagram being corrected:
 
 Layout: the IO Manager boxes grew, so the right-hand column was re-stacked and `CaseBuilder` moved under
 `RateLimiter` (left column) to stay inside its folder. `RateLimiter` was widened so its `__init__` line isn't cut
-off. Connector bends were re-levelled, and multiplicity labels were moved out of grown boxes and back beside their lines.
+off, and multiplicity labels were moved out of grown boxes. **Not finished (found by the independent review):** some
+connectors around the IO Manager and Application boxes now run through boxes, and three "1" labels are away from their
+lines. This is follow-up #31, the first task of the next session.
