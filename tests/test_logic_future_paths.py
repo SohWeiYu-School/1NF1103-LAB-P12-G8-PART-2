@@ -88,3 +88,14 @@ def test_monitoring_ranges_come_from_the_honest_types_signals(setup):
     ranges = paths.monitoring_ranges(2027)
     signal = forecast["types"]["behaviour"]["T1"]["signals"][0]
     assert ranges[signal["signal_code"]]["amount_max"] == round(signal["amount_per_year"]["high"] * (1 + tolerance))
+
+
+@pytest.mark.parametrize("args, message", [
+    (({"markets": {}},), "market model must be a MarketModel"),
+    ((None, [1]), "forecast must be a dict"),
+    ((None, None, "policy"), "policy must be a dict"),
+    ((None, {"earnings": [1]}), "earnings must be a dict"),
+])
+def test_future_paths_reject_wrong_typed_inputs(args, message):
+    with pytest.raises(ValueError, match=message):
+        FuturePaths(*args)
