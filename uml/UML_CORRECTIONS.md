@@ -102,3 +102,18 @@ Layout: the IO Manager boxes grew, so the right-hand column was re-stacked and `
 off, and multiplicity labels were moved out of grown boxes. **Not finished (found by the independent review):** some
 connectors around the IO Manager and Application boxes now run through boxes, and three "1" labels are away from their
 lines. This is follow-up #31, the first task of the next session.
+
+## Layout fix after stage 3 batch B (follow-up #31)
+
+No member text changed. Connectors that ran through boxes after earlier stages now take right-angled routes through
+the gaps between columns. A new automatic check (`layout_check.py`) finds lines through boxes, overlaps, cut-off text and
+labels inside boxes, and reports 0. Its fixes:
+- WebApp↔App, App→ConsoleUI and CaseBuilder→ConsoleUI use the gap between the two IO columns.
+- CaseBuilder→ClientRecord and ReportView→Verdict drop below the boxes first.
+- App→Config and App→ResponseCache leave App below AssessmentRunner.
+- `CaseFiles` moved 100 px right, off the DocumentReaderFactory→DocumentReader line.
+- The Indicator→Declaration bend moved below CaseReader.
+- The original WebApp→ClientRecord diagonal is replaced by a route over the top and down the right.
+- `VerdictEngine` was widened so its `__init__` fits.
+- The App→CaseBuilder line is vertical.
+- Three "1" labels sit beside their lines again.
