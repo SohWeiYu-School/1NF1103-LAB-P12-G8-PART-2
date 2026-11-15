@@ -129,6 +129,16 @@ def test_saving_an_assessment_writes_the_outcome_onto_the_client_record(app):
     assert saved["client_ref"] == record["client_ref"]
     assert saved["report"] == result["report"]
 
+def test_a_saved_assessment_keeps_the_client_info_it_was_based_on(app):
+    record = sample_case()
+    app.clients().save(record)
+    case, _ = app.read_case(record)
+    fake_services.save_forecast_replies(app.response_cache(), case)
+    result = app.assess(case)
+    assessment_id = app.save_assessment(result, record)
+    assert app.assessments().find(assessment_id)["case"] == json.loads(json.dumps(case))
+    app.clients().save({**record, "name": "Renamed Client"})
+    assert app.assessments().find(assessment_id)["case"]["name"] == record["name"]
 
 def test_the_menu_can_list_clients_and_leave(app, monkeypatch, capsys):
     app.clients().save(sample_case())
