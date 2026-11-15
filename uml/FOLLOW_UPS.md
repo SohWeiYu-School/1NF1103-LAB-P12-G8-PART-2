@@ -23,6 +23,12 @@ because they are outside that step's scope. Each needs its own small fix later.
 | 16 | R3 review | The web result page stamps its own `datetime.now()` instead of `verdict.assessed_at`, so the shown time can differ slightly from the saved one | `app/interface/web_app.py:598` | Consistency nit |
 | 17 | R3 review | `Verdict` gained `explanation`, `details()`, `EXPLANATION_KEYS`, `CHECK_GROUPS`, which the UML box doesn't show | `app/model/verdict.py` | UML update (stage 5) |
 | 18 | R3 review | `AssessmentRunner.run` returns a result dict carrying the Verdict (the UML says `: Verdict`), because App saves research, typologies, crime/benchmark/forecast results that a Verdict doesn't hold | `app/application/assessment_runner.py` | UML correction (stage 3/7) |
+| 19 | R4 review | **Fix first (new in R4):** `CrimeScan.__warnings` is shared state on the one runner; two web assessments at the same time can reset each other's warnings between `verify_*` and `warnings()`, losing or swapping crime-scan notes between clients | `app/logic/crime_scan.py:238`, `app/application/assessment_runner.py:133-149` | Concurrency risk |
+| 20 | R4 review | Duplicate `typology_id`s (schema allows them) make every id-based lookup show the last typology's quote/description under both matches; reading `match.typology` would fix it | `crime_scan.py:544`, `verdict_engine.py` `_type_patterns`/`_documents`, `report_view.py`, `web_app.py` | Risk (existed before R4) |
+| 21 | R4 review | An empty quote `""` counts as verified (and can make a typology corroborated); the schema has no `minLength` on `quote` | `app/logic/crime_scan.py`, typology schema | Risk (existed before R4) |
+| 22 | R4 review | The golden harness builds its failure message with `mr['typology_id']`, which would raise TypeError on a real failure and hide it; use `mr.typology.typology_id` | `tests/cases/test_golden_cases.py:46` | Test nit |
+| 23 | R4 review | `CrimeScan._prepare_case` is dead code (only its own tests call it); the unreadable-typology warning embeds the raw ValueError text | `crime_scan.py:385, 305, 477` | Nit |
+| 24 | R4 review | The model classes gained fields/methods beyond their UML boxes (ResearchReport, Typology, MatchResult; CrimeScan `warnings()`, `read_typologies`) | `app/model/*.py`, `crime_scan.py` | UML update (stage 5) |
 
 Fixed straight away (not listed above): the R1 review's two bugs, (a) "changes could not be kept" followed by
 "Changes saved successfully" in `find_existing_client`, and (b) an open "previous" job replacing the current
