@@ -72,7 +72,7 @@ package "Data Manager (app/data)" {
   }
   class DocumentReaderFactory {
     -__max_chars : int = 40_000
-    +READER_TYPES : dict[str, type] = {".pdf": PdfReader, ...} «const»
+    +READER_TYPES : dict[str, type[DocumentReader]] = {".pdf": PdfReader, ...} «const»
     --
     +__init__(max_chars : int = 40_000)
     +create(file_name : str) : DocumentReader | None
@@ -151,11 +151,10 @@ package "Data Manager (app/data)" {
 package "IO Manager (app/interface)" {
   class CaseBuilder {
     -__ui : ConsoleUI = None
-    -__today : str = ""
     --
     +__init__(ui : ConsoleUI | None = None, case_schema : dict | None = None)
-    +build(record : ClientRecord, missing : list[str]) : dict | None
-    +show_case_problems(where : str, problems : list) : None
+    +build(record : ClientRecord) : dict | None
+    +show_case_problems(where : str, problems : list[str]) : None
     -__jobs_from_record(record : ClientRecord, this_year : int) : list[dict]
     -__assets_from_record(record : ClientRecord, first_year : int, this_year : int) : list[dict]
     -__number_or_ask(value : object, question : str, allow_zero : bool = True) : float
@@ -163,12 +162,13 @@ package "IO Manager (app/interface)" {
   }
   class ClientForm {
     -__ui : ConsoleUI = None
-    +SOURCE_TAGS : dict = {...} «const»
+    +PAYMENT_METHODS : list[str] = [...] «const»
+    +PEP_OPTIONS : list[str] = [...] «const»
     --
     +__init__(ui : ConsoleUI | None = None, report_view : ReportView | None = None)
     +create_new_client(save_fn : Callable[[ClientRecord], bool] | None = None, upload_fn : Callable[[str], str | None] | None = None) : ClientRecord | None
     +edit_existing_client(record : ClientRecord, upload_fn : Callable[[str], str | None] | None = None) : ClientRecord
-    +pick_client(records : list[dict]) : ClientRecord | None
+    +pick_client(find_fn : Callable[[str], ClientRecord | None] | None = None) : ClientRecord | None
     +generate_client_id() : str
     +ask_document_folder() : str | None
     -__ask_job(previous : bool = False) : dict
@@ -184,8 +184,6 @@ package "IO Manager (app/interface)" {
     +LINE : str = "-" * 72 «const»
     +LETTERS : str = " '.-" «const»
     +MAX_EMPLOYEES : int = 10_000_000 «const»
-    +PAYMENT_METHODS : list[str] = [...] «const»
-    +PEP_OPTIONS : list[str] = [...] «const»
     --
     +__init__(read : Callable[[str], str] | None = None, write : Callable[[str], None] | None = None)
     +show(text : str) : None
@@ -226,6 +224,7 @@ package "IO Manager (app/interface)" {
     +FIELD_NAMES : dict = {...} «const»
     +OUTCOME_LABELS : dict = {...} «const»
     +MIN_WIDTH : int = 20 «const»
+    +SOURCE_TAGS : dict = {...} «const»
     --
     +__init__(ui : ConsoleUI | None = None, width : int = REPORT_WIDTH)
     +show_verdict_report(verdict : Verdict, ask_for_evidence : bool = True, crime_result : dict | None = None, typologies : list[Typology] | None = None) : None
@@ -245,7 +244,7 @@ package "IO Manager (app/interface)" {
     -__jobs : dict[str, dict] = {}
     --
     +__init__(app : App | None = None, limiter : RateLimiter | None = None)
-    +start(host : str = "0.0.0.0", port : int = 5000) : None
+    +start(host : str = "127.0.0.1", port : int = 5000, debug : bool = False) : None
     +home() : str
     +find() : Response
     +new_client() : str | Response
@@ -262,7 +261,7 @@ package "IO Manager (app/interface)" {
     +view_assessment(assessment_id : str) : str
     +list_assessments_view() : str
     +sync_to_cloud() : Response
-    -__run_in_background(job_id : str, record : ClientRecord) : None
+    -__run_in_background(job_id : str, record : ClientRecord, case : dict) : None
   }
 }
 
@@ -315,12 +314,11 @@ package "AI Manager (app/ai)" {
     -__forecast_types(record : dict, declaration : Declaration, markets : dict, earnings : dict, cache : dict, results : dict, typologies : list[dict] | None = None) : dict | None
     -__forecast_events(record : dict, markets : dict, types : dict, cache : dict, results : dict) : dict | None
     -__check_declaration(data : dict, job_count : int, asset_count : int) : list[str]
-    -__check_markets(data : dict) : list[str]
-    -__check_pay(data : dict) : list[str]
+    -__check_markets(data : dict, forecast_years : list[int]) : list[str]
+    -__check_pay(data : dict, forecast_years : list[int]) : list[str]
     -__check_asset_model(data : dict, index : int, years : list[int], market_ids : set) : list[str]
     -__check_person_types(data : dict, record : dict, source_records : list[ClaimedSource]) : list[str]
     -__check_events(data : dict, forecast_years : list[int], market_ids : set) : list[str]
-    -__repair(data : dict, errors : list[str]) : dict
   }
   class ResearchAI {
     -__max_reports : int = 8
@@ -364,7 +362,6 @@ package "Application (app/application)" {
     -__report_view : ReportView = None
     -__client_form : ClientForm = None
     -__case_builder : CaseBuilder = None
-    -__case_reader : CaseReader = None
     -__case_files : CaseFiles = None
     -__limiter : RateLimiter = None
     -__clients : Repository = None
@@ -387,9 +384,8 @@ package "Application (app/application)" {
     +client_assessments(client_ref : str) : list[dict]
     +find_assessment(assessment_id : str) : dict | None
     +list_assessments() : None
-    +upload_document(record : ClientRecord, file_path : str) : dict | None
+    +upload_document(file_path : str) : str | None
     +download_document(file_id : str, output_path : str) : bool
-    +autofill_from_documents(paths : list[str]) : tuple[ClientRecord, list[str]]
     +sync_to_cloud() : dict
     {static} +today() : str
     -__new_client_from_documents() : ClientRecord | None
@@ -398,15 +394,12 @@ package "Application (app/application)" {
     -__handle_failure(step : str, error : str) : bool
   }
   class AssessmentRunner {
-    -__ai : dict[str, AIService] = {}
-    -__features : list[RiskAnalysis] = []
     -__verdict_engine : VerdictEngine = None
     -__config : Config = None
     +STEPS : tuple[str, ...] = (...) «const»
     --
     +__init__(config : Config | None = None, research_ai : ResearchAI | None = None, typology_ai : TypologyAI | None = None, benchmark_ai : BenchmarkAI | None = None, document_ai : DocumentAI | None = None, forecast_ai : ForecastAI | None = None, document_store : DocumentStore | None = None, response_cache : ResponseCache | None = None)
     +run(case : dict, files : list[dict] | None = None, on_step : Callable[[int, str], None] | None = None, on_failure : Callable[[str, str], bool] | None = None) : dict | None
-    -__run_ai_steps(case : dict) : dict
   }
 }
 
@@ -473,6 +466,7 @@ package "Logic Manager (app/logic)" {
   class CrimeScan {
     -__indicators : list[Indicator] = []
     -__COUNTRY_TO_ISO : dict = {...} «const»
+    +MATCH_LABELS : dict = {...} «const»
     --
     +__init__(policy : dict | None = None)
     +run(case : dict, ai_data : dict) : dict
@@ -492,7 +486,6 @@ package "Logic Manager (app/logic)" {
     +checks(context : dict) : list[Check]
   }
   class DocumentRecordBuilder {
-    -__client_ref : str = ""
     -__today : str = ""
     -__policy : dict = {}
     --
@@ -616,7 +609,6 @@ package "Logic Manager (app/logic)" {
     -__features : list[RiskAnalysis] = []
     -__config : Config = None
     +VERDICT_LABELS : dict = {...} «const»
-    +MATCH_LABELS : dict = {...} «const»
     +THEMES : dict = {...} «const»
     +MARKS : dict = {...} «const»
     +REPORT_LEGEND : list = [...] «const»
@@ -625,7 +617,7 @@ package "Logic Manager (app/logic)" {
     +combine(case : dict, results : dict) : Verdict
     +describe_piece(case : dict, piece : str | None) : str
     -__build_context(case : dict, results : dict) : dict
-    -__collect_checks(context : dict) : list[Check]
+    -__collect_checks(context : dict) : dict[str, list[Check]]
     -__report(verdict : Verdict) : dict
     -__agreement(checks : list[Check]) : list[dict]
     -__type_patterns(forecast : dict | None, assessment : dict | None, crime_result : dict | None, typologies : list[Typology] | None) : list[dict]

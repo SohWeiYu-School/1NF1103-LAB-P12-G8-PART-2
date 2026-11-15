@@ -149,3 +149,37 @@ Everything below is the diagram being corrected:
 | Benchmark | six rule helpers | real return types (`float`, `list[dict]`, a tuple, `list[str]`); parameters `client_data`/`ai_data` | **T** for the return types: the diagram's `: dict` was wrong for all six. **B** for the parameter names on private helpers; the code's types were added to match |
 
 Layout: the Logic Manager boxes grew. `FuturePaths` was widened, `AssetPath` and `CareerSavings` moved down 40 px, and the lines out of FuturePaths, Benchmark→Config and ForecastAI→Declaration were re-routed around the grown boxes. `UnvaluedSource` and `JsonRepository` were widened, and two multiplicity labels (CrimeScan→Indicator, Verdict→Check) sit next to their target box again. `layout_check` reports 0.
+
+## Stage 4: in the diagram, missing in the code (2026-11-15): 26 diagram edits
+
+Code changed to match the diagram (24 of the 36 items):
+- Renamed to the diagram's names: `App.__limiter`, `__syncs`, `__maybe_assess`; `AssessmentRunner.__verdict_engine`; `RateLimiter.__last_run`; `WebApp.start`, `__run_in_background`; `CaseBuilder.build` (was `case_from_client_record`); `ForecastAI.__check_markets`, `__check_pay` (were `_check_markets_list`, `_check_future_pay`).
+- New constants: `ConfigReader.FILE_NAMES`, `DocumentReaderFactory.READER_TYPES`.
+- New thin methods on App, each with a test: `client_assessments`, `find_assessment`, `upload_document`, `download_document`. WebApp and ClientForm now call them.
+- Code extracted into the diagram's methods: `VerdictEngine.__build_context`, `__collect_checks`; `ClientForm.pick_client`.
+- Moved to the class the diagram names: `CaseBuilder.show_case_problems` and `ClientForm.ask_document_folder` (from ConsoleUI), and `ReportView.show_client_list`, `show_ai_progress` and `__display_section` (from ConsoleUI).
+
+Everything below is the diagram being corrected:
+
+| Class | Member | Correction | Reason |
+|---|---|---|---|
+| App | `-__case_reader` | removed | **T**: a CaseReader holds the assessment date. A stored one would keep yesterday's date in the long-running web server, so App makes one per case |
+| CaseBuilder, DocumentRecordBuilder | `-__today`, `-__client_ref` | removed | **R**: the date and the client are per call. These objects are shared by web threads (CLAUDE.md §5; stage 3 C+D) |
+| AssessmentRunner | `-__ai : dict[str, AIService]`, `-__features : list[RiskAnalysis]` | removed | **T**: the runner calls methods that only exist on each service and analysis, so it keeps them as separate typed attributes (stage 3 batch B) |
+| AssessmentRunner | `-__run_ai_steps(case)` | removed | **T**: the AI calls are interleaved with the logic steps under the crime-scan and forecast locks, and share the step and failure callbacks. One block would change the order or the callbacks |
+| ForecastAI | `-__repair(data, errors)` | removed | **T**: there is no single repair step. Each of the four repairs takes its own inputs and runs before its check, not from an error list |
+| ForecastAI | `__check_markets`, `__check_pay` | `+ forecast_years : list[int]` | **T**: the checks compare the reply's years with the forecast years |
+| App | `+autofill_from_documents(paths)` | removed | **T**: reading the documents is interleaved with the officer's choices (type it in when the AI is down, retry with a blank record, fill missing fields), so there is no non-interactive part to extract. The work is in `__new_client_from_documents`, `read_documents` and `record_builder` |
+| App | `upload_document` | `(file_path : str) : str \| None` | **T**: the document is kept before the record exists (new-client form), and the caller stores the returned document id |
+| CaseBuilder | `build` | `(record : ClientRecord)`, without `missing` | **T**: App shows the missing fields before it calls `build`; they are not an input to building the case |
+| CaseBuilder | `show_case_problems` | `problems : list[str]` | **B**: element type |
+| ClientForm | `pick_client` | `(find_fn : Callable[[str], ClientRecord \| None] \| None = None)` | **R**: it asks for a reference and looks it up. ClientForm can't import the Data Manager (§3), so App passes the lookup in |
+| ClientForm, ConsoleUI | `PAYMENT_METHODS`, `PEP_OPTIONS` | moved to ClientForm | **B**: ConsoleUI never uses them. ClientForm asks with them, CaseBuilder reads `ClientForm.PAYMENT_METHODS`, and WebApp's form reads `ClientForm.PEP_OPTIONS` |
+| ClientForm → ReportView | `SOURCE_TAGS` | moved to ReportView | **T**: only ReportView uses it, and ReportView can't import ClientForm (ClientForm already imports ReportView) |
+| VerdictEngine → CrimeScan | `MATCH_LABELS` | moved to CrimeScan | **T**: CrimeScan uses it itself, and VerdictEngine already imports CrimeScan, so CrimeScan can't import VerdictEngine |
+| VerdictEngine | `__collect_checks` | `: dict[str, list[Check]]` | **T**: `combine()` needs the benchmark, forecast, crime and document checks as separate groups |
+| DocumentReaderFactory | `READER_TYPES` | `dict[str, type[DocumentReader]]` | **B**: exact type |
+| WebApp | `start` | `host = "127.0.0.1"`, `+ debug : bool = False` | **R**: `"0.0.0.0"` would open the server to the whole network (§9 security); `debug` is passed to Flask for local runs |
+| WebApp | `__run_in_background` | `+ case : dict` | **T**: the case is built (and checked) in the request before the thread starts, so problems are shown to the user straight away |
+
+Layout: `Indicator` moved down 40 px under the grown CrimeScan box. The CrimeScan→Declaration and CaseBuilder→ClientRecord lines were re-routed, and the "5" label was moved. `layout_check` reports 0.

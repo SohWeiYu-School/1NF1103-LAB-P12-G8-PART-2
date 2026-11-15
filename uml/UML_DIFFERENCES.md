@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `0fc4f96` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `1d3ecbb` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -14,7 +14,7 @@ Checked code at commit `0fc4f96` against `uml/class_diagram_v4.puml`, which is c
 
 **What was compared:** class presence, kind, package and parent; attribute name, visibility, type and starting value; `{get}` / `{get, set}` properties; «const» name, type and value; method name, visibility, parameters (names, order, types, defaults), return type, «static», abstract; every relationship's kind, direction, verb and multiplicity; class-to-class links in the code that have no UML line; module-level functions (only `app/ai/ai_caller.py`: ✅); the main.py note.
 
-**Not checked (can't be, statically):** method behaviour; 21 values the UML shortens with `...` (listed at the end).
+**Not checked (can't be, statically):** method behaviour; 25 values the UML shortens with `...` (listed at the end).
 
 **Area** is the feature area of the class, to help split the work. It is a best guess, so confirm it with the team. Don't change a teammate's files without asking them.
 
@@ -24,12 +24,12 @@ Checked code at commit `0fc4f96` against `uml/class_diagram_v4.puml`, which is c
 |---|---|---|---|
 | 1 | Structure: classes and inheritance | 0 | Code + UML |
 | 2 | Graded code rules: types and `__init__` | 0 | Code |
-| 3 | Same member, different details | 11 | Decide per item |
-| 4 | In UML, missing in code | 12 | Decide per item |
-| 5 | In code, missing from UML | 470 | UML |
+| 3 | Same member, different details | 0 | Decide per item |
+| 4 | In UML, missing in code | 0 | Decide per item |
+| 5 | In code, missing from UML | 466 | UML |
 | 6 | Minor: default and starting values | 75 | UML |
 | 7 | Relationships (arrows, verbs, multiplicities) and the main.py note | 42 | Mostly UML |
-| | **Total** | **610** | |
+| | **Total** | **583** | |
 
 Pairs where only the underscores differ (`__x` in UML, `_x` in code) are merged into one item in stage 3, so the total is lower than the raw count of differences.
 
@@ -49,99 +49,23 @@ How to fix: **Code:** add the missing type hints, and create every attribute in 
 
 **Done.** Nothing left in this stage.
 
-## Stage 3: Same member, different details (11)
+## Stage 3: Same member, different details (0)
 
 Both sides have it, but the signature, type, visibility, static or abstract marker, or constant value differs.
 
 How to fix: Decide per item. If the code is the better design, update the UML. If the code breaks the design, fix the code.
 
-### Document Evidence (1)
+**Done.** Nothing left in this stage.
 
-**`DocumentReaderFactory`**
-
-- [ ] constant `READER_TYPES` type differs. UML: `dict[str, type]` · code: `dict[str, type[DocumentReader]]` (app/data/document_reader_factory.py:9)
-
-### Forecast (2)
-
-**`ForecastAI`**
-
-- [ ] `__check_markets` parameters differ. UML: `-__check_markets(data : dict) : list[str]` · code: `(data, forecast_years)` (app/ai/forecast_ai.py:338)
-- [ ] `__check_pay` parameters differ. UML: `-__check_pay(data : dict) : list[str]` · code: `(data, forecast_years)` (app/ai/forecast_ai.py:384)
-
-### Shared core (8)
-
-**`App`**
-
-- [ ] `upload_document` parameters differ. UML: `+upload_document(record : ClientRecord, file_path : str) : dict | None` · code: `(file_path)` (app/application/app.py:540)
-- [ ] `upload_document` return type differs. UML: `dict | None` · code: `str | None` (app/application/app.py:540)
-
-**`CaseBuilder`**
-
-- [ ] `build` parameters differ. UML: `+build(record : ClientRecord, missing : list[str]) : dict | None` · code: `(record)` (app/interface/case_builder.py:191)
-- [ ] `show_case_problems` parameter `problems` type differs. UML: `list` · code: `list[str]` (app/interface/case_builder.py:184)
-
-**`ClientForm`**
-
-- [ ] `pick_client` parameters differ. UML: `+pick_client(records : list[dict]) : ClientRecord | None` · code: `(find_fn)` (app/interface/client_form.py:640)
-
-**`VerdictEngine`**
-
-- [ ] `__collect_checks` return type differs. UML: `list[Check]` · code: `dict[str, list[Check]]` (app/logic/verdict_engine.py:214)
-
-**`WebApp`**
-
-- [ ] `start` parameters differ. UML: `+start(host : str = "0.0.0.0", port : int = 5000) : None` · code: `(host, port, debug)` (app/interface/web_app.py:131)
-- [ ] `__run_in_background` parameters differ. UML: `-__run_in_background(job_id : str, record : ClientRecord) : None` · code: `(job_id, record, case)` (app/interface/web_app.py:576)
-
-## Stage 4: In UML, missing in code (12)
+## Stage 4: In UML, missing in code (0)
 
 The diagram promises something the code doesn't have.
 
 How to fix: Either the work was done under another name (then update the UML), or it was dropped (then remove it from the UML or build it).
 
-### Document Evidence (1)
+**Done.** Nothing left in this stage.
 
-**`DocumentRecordBuilder`**
-
-- [ ] `__client_ref` missing in code (__init__). UML: `-__client_ref : str = ""` · code: `—` (app/logic/document_record_builder.py:11)
-
-### Forecast (1)
-
-**`ForecastAI`**
-
-- [ ] `__repair()` missing in code. UML: `-__repair(data : dict, errors : list[str]) : dict` · code: `—` (app/ai/forecast_ai.py:19)
-
-### Shared core (10)
-
-**`App`**
-
-- [ ] `__case_reader` missing in code (__init__). UML: `-__case_reader : CaseReader = None` · code: `—` (app/application/app.py:44)
-- [ ] `autofill_from_documents()` missing in code. UML: `+autofill_from_documents(paths : list[str]) : tuple[ClientRecord, list[str]]` · code: `—` (app/application/app.py:44)
-
-**`AssessmentRunner`**
-
-- [ ] `__ai` missing in code (__init__). UML: `-__ai : dict[str, AIService] = {}` · code: `—` (app/application/assessment_runner.py:27)
-- [ ] `__features` missing in code (__init__). UML: `-__features : list[RiskAnalysis] = []` · code: `—` (app/application/assessment_runner.py:27)
-- [ ] `__run_ai_steps()` missing in code. UML: `-__run_ai_steps(case : dict) : dict` · code: `—` (app/application/assessment_runner.py:27)
-
-**`CaseBuilder`**
-
-- [ ] `__today` missing in code (__init__). UML: `-__today : str = ""` · code: `—` (app/interface/case_builder.py:12)
-
-**`ClientForm`**
-
-- [ ] constant `SOURCE_TAGS` missing in code. UML: `+SOURCE_TAGS : dict = {...} «const»` · code: `—` (app/interface/client_form.py:22)
-
-**`ConsoleUI`**
-
-- [ ] constant `PAYMENT_METHODS` missing in code. UML: `+PAYMENT_METHODS : list[str] = [...] «const»` · code: `—` (app/interface/console_ui.py:8)
-- [ ] constant `PEP_OPTIONS` missing in code. UML: `+PEP_OPTIONS : list[str] = [...] «const»` · code: `—` (app/interface/console_ui.py:8)
-
-**`VerdictEngine`**
-
-- [ ] constant `MATCH_LABELS` missing in code. UML: `+MATCH_LABELS : dict = {...} «const»` · code: `—` (app/logic/verdict_engine.py:15)
-
-## Stage 5: In code, missing from UML (470)
+## Stage 5: In code, missing from UML (466)
 
 The code grew past the diagram, mostly helper methods and constants.
 
@@ -167,13 +91,12 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `_cache_payload()` exists in code but not in UML. UML: `—` · code: `app/ai/benchmark_ai.py:36` (app/ai/benchmark_ai.py:36)
 - [ ] `_fill_prompt()` exists in code but not in UML. UML: `—` · code: `app/ai/benchmark_ai.py:30` (app/ai/benchmark_ai.py:30)
 
-### Crime Scan (78)
+### Crime Scan (77)
 
 **`CrimeScan`**
 
 - [ ] `__warnings` exists in code but not in UML. UML: `—` · code: `list[str] = []` (app/logic/crime_scan.py:108)
 - [ ] class-level `FULL_MATCH` exists in code but not in UML. UML: `—` · code: `('critical', 'high', 'medium')` (app/logic/crime_scan.py:17)
-- [ ] class-level `MATCH_LABELS` exists in code but not in UML. UML: `—` · code: `{'critical': 'CRITICAL', 'high': 'HIGH', 'medium': 'MEDIUM', 'partial': 'PARTIAL', 'weak_signal': 'WEAK', 'no_match': 'NO MATCH'}` (app/logic/crime_scan.py:17)
 - [ ] class-level `NAME` exists in code but not in UML. UML: `—` · code: `str = 'crime'` (app/logic/crime_scan.py:17)
 - [ ] class-level `SIGN_LABELS` exists in code but not in UML. UML: `—` · code: `{'gift_or_inheritance_unnamed': 'gift or inheritance from someone unnamed', 'counterparty_unnamed': 'money from unnamed people', 'related_party_transaction': 'm…` (app/logic/crime_scan.py:17)
 - [ ] class-level `SIGN_THEMES` exists in code but not in UML. UML: `—` · code: `{'gift_or_inheritance_unnamed': 'people', 'counterparty_unnamed': 'people', 'related_party_transaction': 'people', 'source_contradicts_occupation': 'sources', '…` (app/logic/crime_scan.py:17)
@@ -442,7 +365,7 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `_check_declared_sources()` exists in code but not in UML. UML: `—` · code: `app/logic/onboarding_assessor.py:100` (app/logic/onboarding_assessor.py:100)
 - [ ] `_fit_for_type()` exists in code but not in UML. UML: `—` · code: `app/logic/onboarding_assessor.py:119` (app/logic/onboarding_assessor.py:119)
 
-### Shared core (263)
+### Shared core (260)
 
 **`AIService`**
 
@@ -599,8 +522,6 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 **`ClientForm`**
 
 - [ ] `__report_view` exists in code but not in UML. UML: `—` · code: `ReportView = report_view or ReportView(self.__ui)` (app/interface/client_form.py:39)
-- [ ] class-level `PAYMENT_METHODS` exists in code but not in UML. UML: `—` · code: `['cash', 'loan', 'asset_sale']` (app/interface/client_form.py:22)
-- [ ] class-level `PEP_OPTIONS` exists in code but not in UML. UML: `—` · code: `list[str] = ['None', 'Domestic PEP', 'Foreign PEP', 'International organisation PEP', 'Family member / close associate of a PEP']` (app/interface/client_form.py:22)
 - [ ] `add_asset_record()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:423` (app/interface/client_form.py:423)
 - [ ] `add_career_record()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:380` (app/interface/client_form.py:380)
 - [ ] `add_supporting_documents()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:520` (app/interface/client_form.py:520)
@@ -687,7 +608,6 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 **`ReportView`**
 
 - [ ] class-level `REPORT_WIDTH` exists in code but not in UML. UML: `—` · code: `96` (app/interface/report_view.py:12)
-- [ ] class-level `SOURCE_TAGS` exists in code but not in UML. UML: `—` · code: `{'documents': '[DOC]   ', 'edited': '[EDITED]', 'entered': '[YOU]   ', 'blank': '[ -- ]  '}` (app/interface/report_view.py:12)
 - [ ] class-level `_CRIME_CATEGORY_LABEL` exists in code but not in UML. UML: `—` · code: `{'critical': 'CRITICAL MATCH', 'high': 'HIGH MATCH', 'medium': 'MEDIUM MATCH', 'partial': 'PARTIAL MATCH', 'weak_signal': 'WEAK SIGNAL', 'no_match': 'NO MATCH'}` (app/interface/report_view.py:12)
 - [ ] class-level `_CRIME_INDICATOR_LABEL` exists in code but not in UML. UML: `—` · code: `{'counterparty_unnamed': 'Money from unnamed counterparty', 'gift_or_inheritance_unnamed': 'Gift or inheritance from unnamed person', 'source_contradicts_occupa…` (app/interface/report_view.py:12)
 - [ ] class-level `_CRIME_SECTION_TITLE` exists in code but not in UML. UML: `—` · code: `'Crime - known patterns for his industry'` (app/interface/report_view.py:12)
@@ -1035,7 +955,7 @@ Real class-to-class links in the code with no UML line between the two classes. 
 
 - [ ] The note on `App` says `caller = with_fallback(openai_caller(OpenAI()), gemini_caller(genai.Client()))` then `App(caller)`, but `main.py:22` is `App(with_fallback(openai_caller(), gemini_caller()))`: no `caller` variable, and the callers take no arguments. Fix in UML.
 
-## Appendix: values shortened with `...` (not checked, 21)
+## Appendix: values shortened with `...` (not checked, 25)
 
-`AssessmentRunner.STEPS`, `Band.MONEY_IN`, `Band.MONEY_OUT`, `Benchmark.BENCHMARK_LABELS`, `Benchmark.COMPOSITION_RULES`, `BenchmarkAI.ALLOWED_FIELDS`, `CaseFiles.__folder`, `CaseReader.__PRESENT_WORDS`, `ClientRepository.OLD_ASSET_KEYS`, `CloudSync.__state_path`, `CrimeScan.__COUNTRY_TO_ISO`, `DocumentReaderFactory.READER_TYPES`, `ImageReader.IMAGE_TYPES`, `JsonRepository.DATA_DIR`, `RelatedPartyTransaction.__KEYWORDS`, `ReportView.FIELD_NAMES`, `ReportView.OUTCOME_LABELS`, `VerdictEngine.MARKS`, `VerdictEngine.REPORT_LEGEND`, `VerdictEngine.THEMES`, `VerdictEngine.VERDICT_LABELS`
+`AssessmentRunner.STEPS`, `Band.MONEY_IN`, `Band.MONEY_OUT`, `Benchmark.BENCHMARK_LABELS`, `Benchmark.COMPOSITION_RULES`, `BenchmarkAI.ALLOWED_FIELDS`, `CaseFiles.__folder`, `CaseReader.__PRESENT_WORDS`, `ClientForm.PAYMENT_METHODS`, `ClientForm.PEP_OPTIONS`, `ClientRepository.OLD_ASSET_KEYS`, `CloudSync.__state_path`, `CrimeScan.MATCH_LABELS`, `CrimeScan.__COUNTRY_TO_ISO`, `DocumentReaderFactory.READER_TYPES`, `ImageReader.IMAGE_TYPES`, `JsonRepository.DATA_DIR`, `RelatedPartyTransaction.__KEYWORDS`, `ReportView.FIELD_NAMES`, `ReportView.OUTCOME_LABELS`, `ReportView.SOURCE_TAGS`, `VerdictEngine.MARKS`, `VerdictEngine.REPORT_LEGEND`, `VerdictEngine.THEMES`, `VerdictEngine.VERDICT_LABELS`
 
