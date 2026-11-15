@@ -426,6 +426,15 @@ ASSESS_RESULT = """{% extends "base.html" %}
   <a class="button secondary" href="{{ url_for('view_client', client_ref=record.get('client_ref', '')) }}">Back to client</a>
 </div>
 
+{% if archive %}
+<div class="msg" style="display:flex; justify-content:space-between; align-items:center; gap:12px">
+  <span>This assessment is archived{% if archive.get('at') %} (since {{ archive['at'][:10] }}){% endif %}{% if archive.get('reason') %}: {{ archive['reason'] }}{% endif %}. It is hidden from the lists but kept as a record.</span>
+  <form method="post" action="{{ url_for('restore_assessment', assessment_id=assessment_id) }}" style="margin:0">
+    <button type="submit" class="secondary">Restore</button>
+  </form>
+</div>
+{% endif %}
+
 {% if report %}
 {% set h = report['header'] %}
 {% set colour = COLORS.get(h['verdict'], '#333') %}

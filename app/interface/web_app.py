@@ -582,13 +582,14 @@ class WebApp:
             job["error"] = str(exc)
 
     def show_report(self, record: dict, report: dict | None, assessed_at: str = "", assessment_id: str | None = None,
-                    crime_result=None, typologies=None, benchmark=None):
+                    crime_result=None, typologies=None, benchmark=None, archive: dict | None = None):
         """The assessment page: the same report the command line prints (VerdictEngine.report)."""
         symbols = {entry["mark"]: entry["symbol"] for entry in (report or {}).get("legend", [])}
         typologies_by_id = {t.get("typology_id"): t for t in (typologies or [])}
         return render_template("assess_result.html", record=record, report=report, symbols=symbols,
                                assessed_at=assessed_at, assessment_id=assessment_id,
-                               crime_result=crime_result, typologies_by_id=typologies_by_id, benchmark=benchmark)
+                               crime_result=crime_result, typologies_by_id=typologies_by_id, benchmark=benchmark,
+                               archive=archive)
 
     def home(self):
         return render_template("home.html", clients=self.__app.clients().load())
@@ -668,9 +669,11 @@ class WebApp:
         record = self.get_record(saved["client_ref"]) or {"client_ref": saved["client_ref"], "name": saved["client_ref"]}
         typologies = (saved.get("crime_scan") or {}).get("typologies", {})
         typology_list = typologies.get("sector_typologies") if isinstance(typologies, dict) else None
+        archive_log = saved.get("archive_log") or []
+        archive = archive_log[-1] if self.__app.assessments().is_archived(saved) else None
         return self.show_report(record, saved.get("report"), saved.get("assessed_at", ""), assessment_id,
                            crime_result=saved.get("crime_result"), typologies=typology_list,
-                           benchmark=saved.get("benchmark"))
+                           benchmark=saved.get("benchmark"), archive=archive)
 
     def edit_client(self, client_ref):
         old = self.get_record(client_ref)
