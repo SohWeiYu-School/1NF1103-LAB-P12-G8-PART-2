@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `32c1d90` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `10496f6` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -337,14 +337,14 @@ How to fix: Decide per item. If the code is the better design, update the UML. I
 **`ClientForm`**
 
 - [ ] `__ask_job` (UML) is `_ask_job` in code: visibility (underscores) differs. UML: `-__ask_job() : dict` · code: app/interface/client_form.py:68
-- [ ] `__ask_asset` (UML) is `_ask_asset` in code: visibility (underscores) differs. UML: `-__ask_asset() : dict` · code: app/interface/client_form.py:91
-- [ ] `__get_claims` (UML) is `get_claims` in code: visibility (underscores) differs. UML: `-__get_claims() : dict` · code: app/interface/client_form.py:123
-- [ ] `__edit_career_record` (UML) is `edit_career_record` in code: visibility (underscores) differs. UML: `-__edit_career_record(record : ClientRecord) : None` · code: app/interface/client_form.py:379
-- [ ] `__edit_asset_record` (UML) is `edit_asset_record` in code: visibility (underscores) differs. UML: `-__edit_asset_record(record : ClientRecord) : None` · code: app/interface/client_form.py:422
-- [ ] `__edit_sow_declaration` (UML) is `edit_sow_declaration` in code: visibility (underscores) differs. UML: `-__edit_sow_declaration(record : ClientRecord) : None` · code: app/interface/client_form.py:507
+- [ ] `__ask_asset` (UML) is `_ask_asset` in code: visibility (underscores) differs. UML: `-__ask_asset() : dict` · code: app/interface/client_form.py:96
+- [ ] `__get_claims` (UML) is `get_claims` in code: visibility (underscores) differs. UML: `-__get_claims() : dict` · code: app/interface/client_form.py:128
+- [ ] `__edit_career_record` (UML) is `edit_career_record` in code: visibility (underscores) differs. UML: `-__edit_career_record(record : ClientRecord) : None` · code: app/interface/client_form.py:384
+- [ ] `__edit_asset_record` (UML) is `edit_asset_record` in code: visibility (underscores) differs. UML: `-__edit_asset_record(record : ClientRecord) : None` · code: app/interface/client_form.py:427
+- [ ] `__edit_sow_declaration` (UML) is `edit_sow_declaration` in code: visibility (underscores) differs. UML: `-__edit_sow_declaration(record : ClientRecord) : None` · code: app/interface/client_form.py:512
 - [ ] `__init__` parameters differ. UML: `+__init__(ui : ConsoleUI)` · code: `(ui, report_view)` (app/interface/client_form.py:36)
-- [ ] `create_new_client` parameters differ. UML: `+create_new_client() : ClientRecord | None` · code: `(save_fn, upload_fn)` (app/interface/client_form.py:219)
-- [ ] `edit_existing_client` parameters differ. UML: `+edit_existing_client(record : ClientRecord) : ClientRecord` · code: `(client, upload_fn)` (app/interface/client_form.py:533)
+- [ ] `create_new_client` parameters differ. UML: `+create_new_client() : ClientRecord | None` · code: `(save_fn, upload_fn)` (app/interface/client_form.py:224)
+- [ ] `edit_existing_client` parameters differ. UML: `+edit_existing_client(record : ClientRecord) : ClientRecord` · code: `(client, upload_fn)` (app/interface/client_form.py:538)
 
 **`ClientRecord`**
 
@@ -918,20 +918,20 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `__report_view` exists in code but not in UML. UML: `—` · code: `ReportView = report_view or ReportView(self.__ui)` (app/interface/client_form.py:38)
 - [ ] class-level `PAYMENT_METHODS` exists in code but not in UML. UML: `—` · code: `['cash', 'loan', 'asset_sale']` (app/interface/client_form.py:21)
 - [ ] class-level `PEP_OPTIONS` exists in code but not in UML. UML: `—` · code: `list[str] = ['None', 'Domestic PEP', 'Foreign PEP', 'International organisation PEP', 'Family member / close associate of a PEP']` (app/interface/client_form.py:21)
-- [ ] `add_asset_record()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:416` (app/interface/client_form.py:416)
-- [ ] `add_career_record()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:373` (app/interface/client_form.py:373)
-- [ ] `add_supporting_documents()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:516` (app/interface/client_form.py:516)
-- [ ] `ask_after_save()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:334` (app/interface/client_form.py:334)
-- [ ] `ask_missing_field()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:300` (app/interface/client_form.py:300)
-- [ ] `edit_asset_composition()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:476` (app/interface/client_form.py:476)
-- [ ] `edit_client_declarations()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:484` (app/interface/client_form.py:484)
-- [ ] `edit_client_profile()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:347` (app/interface/client_form.py:347)
-- [ ] `find_existing_client()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:634` (app/interface/client_form.py:634)
-- [ ] `get_career_history()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:81` (app/interface/client_form.py:81)
+- [ ] `add_asset_record()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:421` (app/interface/client_form.py:421)
+- [ ] `add_career_record()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:378` (app/interface/client_form.py:378)
+- [ ] `add_supporting_documents()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:521` (app/interface/client_form.py:521)
+- [ ] `ask_after_save()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:339` (app/interface/client_form.py:339)
+- [ ] `ask_missing_field()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:305` (app/interface/client_form.py:305)
+- [ ] `edit_asset_composition()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:481` (app/interface/client_form.py:481)
+- [ ] `edit_client_declarations()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:489` (app/interface/client_form.py:489)
+- [ ] `edit_client_profile()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:352` (app/interface/client_form.py:352)
+- [ ] `find_existing_client()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:640` (app/interface/client_form.py:640)
+- [ ] `get_career_history()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:86` (app/interface/client_form.py:86)
 - [ ] `get_client_profile()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:45` (app/interface/client_form.py:45)
-- [ ] `get_investments()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:114` (app/interface/client_form.py:114)
-- [ ] `get_sow_declaration()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:153` (app/interface/client_form.py:153)
-- [ ] `get_supporting_documents()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:157` (app/interface/client_form.py:157)
+- [ ] `get_investments()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:119` (app/interface/client_form.py:119)
+- [ ] `get_sow_declaration()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:158` (app/interface/client_form.py:158)
+- [ ] `get_supporting_documents()` exists in code but not in UML. UML: `—` · code: `app/interface/client_form.py:162` (app/interface/client_form.py:162)
 
 **`ClientProfile`**
 
