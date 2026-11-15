@@ -78,3 +78,10 @@ def test_a_file_that_cannot_be_read_stops_save(tmp_path):
     with pytest.raises(OSError):
         repository.load()
     assert repository.save({"client_ref": "SOW-1"}) is False
+
+
+def test_query_skips_an_older_record_whose_assessment_part_is_not_a_dict(tmp_path):
+    path = tmp_path / "ai_assessments.json"
+    path.write_text('[{"assessment_id": "A1", "client_ref": "CL-1", "assessment": "old text"},'
+                    ' {"assessment_id": "A2", "client_ref": "CL-1", "outcome": "PASSED"}]', encoding="utf-8")
+    assert [r["assessment_id"] for r in _repository(tmp_path).query("PASSED")] == ["A2"]

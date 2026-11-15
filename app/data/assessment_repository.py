@@ -42,4 +42,10 @@ class AssessmentRepository(JsonRepository):
         if not outcome:
             return records
         return [record for record in records
-                if (record.get("outcome") or (record.get("assessment") or {}).get("outcome")) == outcome]
+                if (record.get("outcome") or AssessmentRepository.__old_outcome(record)) == outcome]
+
+    @staticmethod
+    def __old_outcome(record: dict) -> str | None:
+        """The outcome an older record keeps inside "assessment" (None if that part is not a dict)."""
+        old = record.get("assessment")
+        return old.get("outcome") if isinstance(old, dict) else None
