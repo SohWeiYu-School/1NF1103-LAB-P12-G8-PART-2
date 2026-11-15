@@ -448,7 +448,8 @@ class VerdictEngine:
             f" - {r.title}" for r in reports] or ["No research reports were found."]})
         typology_lines = []
         for t in results.get("typologies") or []:
-            typology_lines.append(f"{t.name} ({self.__config.category_name(t.crime_category)})")
+            unchecked = "" if t.verified else " (not checked against research)"
+            typology_lines.append(f"{t.name} ({self.__config.category_name(t.crime_category)}){unchecked}")
             if t.description:
                 typology_lines.append(f"    {t.description}")
         sections.append({"title": "Sector typologies", "lines": typology_lines or ["No verified typologies."]})

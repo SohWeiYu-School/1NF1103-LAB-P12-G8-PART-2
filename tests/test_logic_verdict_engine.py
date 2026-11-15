@@ -285,6 +285,17 @@ def test_with_no_research_the_evidence_says_no_reports_were_found(parts):
     assert evidence["Sector typologies"] == ["No verified typologies."]
 
 
+def test_a_typology_that_was_not_checked_against_research_says_so_in_the_evidence(parts):
+    case, data = parts
+    scan = CrimeScan(POLICY)
+    unchecked = scan.read_typologies(fake_ai.typologies()["sector_typologies"])
+    verdict = VerdictEngine(_features(), CONFIG).combine(case, {**data, "reports": None, "typologies": unchecked})
+    evidence = {part["title"]: part["lines"] for part in verdict.explanation["evidence"]}
+    first = evidence["Sector typologies"][0]
+    assert first == (f"{unchecked[0].name} ({CONFIG.category_name(unchecked[0].crime_category)})"
+                     " (not checked against research)")
+
+
 def test_the_verdict_engine_rejects_wrong_typed_features_and_config():
     with pytest.raises(ValueError, match="features must be a list"):
         VerdictEngine("crime scan")
