@@ -77,3 +77,11 @@ def test_a_related_party_fires(counterparty):
 
 def test_an_unrelated_company_does_not_fire():
     assert not RelatedPartyTransaction().fires(_declaration({"counterparty": "Meridian Harbour Bank"}))
+
+
+def test_every_sign_rejects_a_policy_that_is_not_a_dict():
+    for sign in (GiftOrInheritanceUnnamed, CounterpartyUnnamed, SourceContradictsOccupation,
+                 UnvaluedSource, RelatedPartyTransaction):
+        with pytest.raises(ValueError, match="policy must be a dict"):
+            sign(["not", "a", "dict"])
+        assert sign(None) is not None and sign({}) is not None
