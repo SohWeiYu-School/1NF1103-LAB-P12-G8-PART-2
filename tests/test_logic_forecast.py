@@ -86,3 +86,10 @@ def test_the_economy_brief_holds_market_changes_but_nothing_about_the_client(ran
     assert "Container shipping" in text
     assert "16500000" not in text and "Daniel" not in text
     assert feature.economy_brief(None) is None
+
+
+def test_the_forecast_rejects_a_config_that_is_not_a_config_and_a_policy_that_is_not_a_dict():
+    with pytest.raises(ValueError, match="config must be a Config"):
+        Forecast(POLICY, {"policy": POLICY})
+    with pytest.raises(ValueError, match="policy must be a dict"):
+        Forecast(["policy"])
