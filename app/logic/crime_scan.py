@@ -23,7 +23,7 @@ class CrimeScan(RiskAnalysis):
     The crime scan creates and owns its Indicators (composition).
     """
 
-    __COUNTRY_TO_ISO = {
+    __COUNTRY_TO_ISO: dict[str, str] = {
         "singapore": "SG",
         "malaysia": "MY",
         "hong kong": "HK",
@@ -84,14 +84,14 @@ class CrimeScan(RiskAnalysis):
         "cyprus": "CY",
         "malta": "MT",
     }
-    FULL_MATCH = ("critical", "high", "medium")
-    WEAK_MATCH = ("partial", "weak_signal")
+    FULL_MATCH: tuple[str, ...] = ("critical", "high", "medium")
+    WEAK_MATCH: tuple[str, ...] = ("partial", "weak_signal")
     MATCH_LABELS: dict[str, str] = {"critical": "CRITICAL", "high": "HIGH", "medium": "MEDIUM", "partial": "PARTIAL",
                                     "weak_signal": "WEAK", "no_match": "NO MATCH"}
-    SIGN_THEMES = {"gift_or_inheritance_unnamed": "people", "counterparty_unnamed": "people",
+    SIGN_THEMES: dict[str, str] = {"gift_or_inheritance_unnamed": "people", "counterparty_unnamed": "people",
                    "related_party_transaction": "people", "source_contradicts_occupation": "sources",
                    "unvalued_source_present": "sources"}
-    SIGN_LABELS = {"gift_or_inheritance_unnamed": "gift or inheritance from someone unnamed",
+    SIGN_LABELS: dict[str, str] = {"gift_or_inheritance_unnamed": "gift or inheritance from someone unnamed",
                    "counterparty_unnamed": "money from unnamed people",
                    "related_party_transaction": "money from a related party",
                    "source_contradicts_occupation": "a source that doesn't fit his job",
@@ -371,7 +371,7 @@ class CrimeScan(RiskAnalysis):
         warnings.append(f"Unknown country '{stripped}' — could not convert to ISO-2.")
         return stripped
 
-    def _safe_int(self, value, default=None):
+    def _safe_int(self, value: int | float | str | None, default: int | None = None) -> int | None:
         """Convert value to int if possible. Returns default on None or failure. Pure."""
         if value is None:
             return default
