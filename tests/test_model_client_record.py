@@ -127,7 +127,7 @@ def test_the_claims_problems_are_the_records_problems():
     record = _record()
     record.set_claims({"declared_net_worth": None, "pep_status": "  "})
     problems = record.problems()
-    assert "Declared net worth is missing." in problems
+    assert "Declared net worth is missing: enter an amount greater than 0." in problems
     assert any("The PEP question is not answered" in problem for problem in problems)
 
 

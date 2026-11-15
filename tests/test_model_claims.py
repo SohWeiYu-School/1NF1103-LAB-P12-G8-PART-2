@@ -73,7 +73,7 @@ def test_a_split_that_does_not_add_up_is_a_problem():
 
 
 def test_missing_net_worth_is_a_problem():
-    assert "Declared net worth is missing." in _claims(declared_net_worth=None).problems()
+    assert "Declared net worth is missing: enter an amount greater than 0." in _claims(declared_net_worth=None).problems()
 
 
 def test_expecting_to_place_more_than_he_has_is_a_warning():
@@ -88,3 +88,10 @@ def test_to_dict_keeps_the_saved_layout():
     assert data["asset_composition"] == SPLIT
     assert data["wealth_jump_years"] == 3
     assert _claims(asset_composition=None).to_dict()["asset_composition"] is None
+
+
+def test_the_problems_say_what_to_enter_and_do_not_assume_the_clients_gender():
+    problems = _claims(declared_net_worth=None, pep_status="").problems()
+    assert "Declared net worth is missing: enter an amount greater than 0." in problems
+    assert any("which kind of PEP the client is" in problem for problem in problems)
+    assert not any(" he " in problem for problem in problems)

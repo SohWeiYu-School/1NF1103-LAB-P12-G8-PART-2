@@ -98,7 +98,7 @@ def test_a_client_record_lists_its_claim_problems_to_fix(capsys):
     _view().display_client_record(record)
     out = capsys.readouterr().out
     assert "TO FIX" in out
-    assert "The PEP question is not answered" in out and "Declared net worth is missing." in out
+    assert "The PEP question is not answered" in out and "Declared net worth is missing: enter an amount greater than 0." in out
 
 
 def test_a_complete_client_record_shows_nothing_to_fix(capsys):

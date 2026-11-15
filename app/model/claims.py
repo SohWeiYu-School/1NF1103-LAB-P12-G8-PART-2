@@ -107,10 +107,10 @@ class Claims:
         """What stops these claims being used. Empty list = nothing."""
         problems = []
         if self.__declared_net_worth is None:
-            problems.append("Declared net worth is missing.")
+            problems.append("Declared net worth is missing: enter an amount greater than 0.")
         if not str(self.__pep_status or "").strip():
             problems.append("The PEP question is not answered. Answer \"None\" if the client is not a "
-                            "politically exposed person, or say which kind of PEP he is.")
+                            "politically exposed person, or say which kind of PEP the client is.")
         shares = [share for share in self.__asset_composition.values() if isinstance(share, (int, float))]
         if shares and abs(sum(shares) - 1.0) > 0.01:
             problems.append(f"The asset split adds up to {sum(shares):.0%}, not 100%.")
