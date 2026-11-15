@@ -59,3 +59,33 @@ def test_checks_are_stamped_benchmark_and_cover_total_wealth():
 def test_pep_status_follows_the_policy():
     assert _feature().is_pep({"claims": {"pep_status": "Domestic PEP"}}) is True
     assert _feature().is_pep({"claims": {"pep_status": "None"}}) is False
+
+
+def _benchmark_checks(**claims):
+    feature = _feature()
+    findings = feature.run({}, {"benchmark_input": BENCH_INPUT, "benchmark_ai": fake_ai.benchmark()})["findings"]
+    case = sample_case()
+    case["claims"].update(claims)
+    return {check.check: check for check in feature.checks(
+        {"case": case, "bench_input": BENCH_INPUT, "ai_data": fake_ai.benchmark(), "findings": findings})}
+
+
+def test_every_benchmark_check_says_whether_it_is_independent_evidence():
+    checks = _benchmark_checks()
+    assert checks["TOTAL_WEALTH"].extra("independent") is True        # from peers
+    assert checks["UNEXPLAINED_GAP"].extra("independent") is False    # the forecast's story seen again
+    assert checks["PEP_STATUS"].extra("independent") is False
+    assert list(checks["TOTAL_WEALTH"].to_dict())[-2:] == ["independent", "optional"]
+
+
+def test_money_he_cannot_fund_by_his_own_figures_is_independent():
+    assert _benchmark_checks(expected_aum=50_000_000)["AUM_FUNDING"].failed()
+    assert _benchmark_checks(expected_aum=50_000_000)["AUM_FUNDING"].extra("independent") is True
+    assert _benchmark_checks(expected_aum=5_000_000)["AUM_FUNDING"].extra("independent") is False
+
+
+def test_a_missing_wealth_jump_is_an_optional_skipped_check():
+    checks = _benchmark_checks()
+    jump = checks["JUMP_VS_ECONOMY"]
+    assert (jump.status, jump.extra("optional")) == ("skipped", True)
+    assert checks["TOTAL_WEALTH"].extra("optional") is False
