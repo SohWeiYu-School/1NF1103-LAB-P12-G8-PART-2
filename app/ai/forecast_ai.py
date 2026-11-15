@@ -386,6 +386,22 @@ class ForecastAI(AIService):
         return self._years_errors("future pay", [row["year"] for row in data["yearly"]], forecast_years)
 
 
+    def __check_markets(self, data: dict, forecast_years: list[int], market_id: str | None = None,
+                        history_years: list[int] | None = None) -> list[str]:
+        """Call 1's checks in one place. Without a market_id, data is the list of relevant markets;
+        with one, data is that market's history and outlook (history_years are its past years)."""
+        if market_id is None:
+            return self._check_markets_list(data, forecast_years)
+        return self._check_market_series(data, market_id, history_years or [], forecast_years)
+
+    def __check_pay(self, data: dict, years: list[int], index: int | None = None) -> list[str]:
+        """Call 2's pay checks in one place. With an index, data is the pay of that job over its
+        years; without one, data is the future pay over the forecast years."""
+        if index is None:
+            return self._check_future_pay(data, years)
+        return self._check_position_pay(data, index, years)
+
+
     def __check_asset_model(self, data: dict, index: int, years: list[int], market_ids: set) -> list[str]:
         """Call 2 asset: follows known markets, and its numbers sit inside the sense limits."""
         settings = self._settings()
@@ -874,7 +890,7 @@ class ForecastAI(AIService):
         listing = self._ask(name, "markets_list", values,
                                   {"client": self._client_facts(record),
                                    "claimed_sources": declaration.to_dict()["claimed_sources"]},
-                                  "markets_list", lambda data: self._check_markets_list(data, years),
+                                  "markets_list", lambda data: self.__check_markets(data, years),
                                   cache.get(name), web_search)
         results[name] = listing
         if not listing["ok"]:
@@ -889,7 +905,7 @@ class ForecastAI(AIService):
                                     {**values, "market_id": market_id, "market_name": market["name"],
                                      "indicator": market["indicator"]},
                                     {"market": market, "client": self._client_facts(record)}, "market_series",
-                                    lambda data, m=market_id: self._check_market_series(data, m, list(range(start, end + 1)), years),
+                                    lambda data, m=market_id: self.__check_markets(data, years, m, list(range(start, end + 1))),
                                     cache.get(name), web_search)
             results[name] = piece
             if not piece["ok"]:
@@ -918,7 +934,7 @@ class ForecastAI(AIService):
                                      "markets": self._markets_brief(markets),
                                      "market_changes": self._market_changes(markets, first, last)},
                                     "position_pay",
-                                    lambda data, i=index, y=list(range(first, last + 1)): self._check_position_pay(data, i, y),
+                                    lambda data, i=index, y=list(range(first, last + 1)): self.__check_pay(data, y, i),
                                     cache.get(name))
             results[name] = piece
             if not piece["ok"]:
@@ -932,7 +948,7 @@ class ForecastAI(AIService):
         piece = self._ask(name, "future_pay", {"forecast_years": self._years_text(years)},
                                 {"recent_pay_typical": earlier_pay[-3:], "client": self._client_facts(record),
                                  "markets": self._markets_brief(markets), "market_outlooks": self._market_outlooks(markets)},
-                                "future_pay", lambda data: self._check_future_pay(data, years), cache.get(name))
+                                "future_pay", lambda data: self.__check_pay(data, years), cache.get(name))
         results[name] = piece
         if not piece["ok"]:
             return None
