@@ -65,7 +65,7 @@ class ClientForm:
                   "country_of_residence": residence, "age": age, "career_start_year": start}
         return {"name": name, "nationality": nationality, "career": career}
 
-    def _ask_job(self, previous: bool = False) -> dict:
+    def __ask_job(self, previous: bool = False) -> dict:
         """One job. A previous job must have an end year: the current job is asked for in the
         profile, so an open "previous" job would replace it when the record is saved."""
         start_year = self.__ui.ask_year("Start year")
@@ -89,11 +89,11 @@ class ClientForm:
         prompt = "\nDoes the client have a previous job to add?"
         while self.__ui.ask_yes_no(prompt):
             self.__ui.show("\n=== Previous Job ===")
-            career_history.append(self._ask_job(previous=True))
+            career_history.append(self.__ask_job(previous=True))
             prompt = "\nAdd another previous job?"
         return career_history
 
-    def _ask_asset(self) -> dict:
+    def __ask_asset(self) -> dict:
         asset_type  = self.__ui.ask_words("Asset type (e.g. Property, Shares)", ConsoleUI.LABEL)
         description = self.__ui.ask_words("Description", ConsoleUI.LABEL)
         country     = self.__ui.ask_words("Country")
@@ -121,11 +121,11 @@ class ClientForm:
         prompt = "\nDoes the client have any investments or assets?"
         while self.__ui.ask_yes_no(prompt):
             self.__ui.show("\n=== Investment / Asset ===")
-            investments.append(self._ask_asset())
+            investments.append(self.__ask_asset())
             prompt = "\nAdd another investment or asset?"
         return investments
 
-    def get_claims(self) -> dict:
+    def __get_claims(self) -> dict:
         """Collect financial claims and asset composition."""
         self.__ui.show("\n=== Financial Claims ===")
         declared_net_worth = self.__ui.ask_money("Declared net worth (SGD)", allow_zero=False)
@@ -239,7 +239,7 @@ class ClientForm:
         profile_data         = self.get_client_profile()
         career_history       = self.get_career_history()
         investments          = self.get_investments()
-        claims               = self.get_claims()
+        claims               = self.__get_claims()
         sow_declaration      = self.get_sow_declaration()
         supporting_documents = self.get_supporting_documents(upload_fn)
 
@@ -378,10 +378,10 @@ class ClientForm:
     def add_career_record(self, record):
         """Add a job to career_history."""
         self.__ui.show("\n=== Add Career Record ===")
-        record.setdefault("career_history", []).append(self._ask_job())
+        record.setdefault("career_history", []).append(self.__ask_job())
         self.__ui.show("\nCareer record added.")
 
-    def edit_career_record(self, record):
+    def __edit_career_record(self, record: dict) -> None:
         """Edit a job in career_history."""
         careers = record.get("career_history", [])
         if not careers:
@@ -421,10 +421,10 @@ class ClientForm:
     def add_asset_record(self, record):
         """Add an entry to investments."""
         self.__ui.show("\n=== Add Investment / Asset ===")
-        record.setdefault("investments", []).append(self._ask_asset())
+        record.setdefault("investments", []).append(self.__ask_asset())
         self.__ui.show("\nAsset added.")
 
-    def edit_asset_record(self, record):
+    def __edit_asset_record(self, record: dict) -> None:
         """Edit an entry in investments."""
         assets = record.get("investments", [])
         if not assets:
@@ -506,7 +506,7 @@ class ClientForm:
 
         self.__ui.show("\nClaims updated.")
 
-    def edit_sow_declaration(self, record):
+    def __edit_sow_declaration(self, record: dict) -> None:
         """Edit the Source of Wealth declaration string."""
         self.__ui.show("\n=== Edit Source of Wealth Declaration ===")
         current = record.get("sow_declaration", "")
@@ -532,12 +532,12 @@ class ClientForm:
             f"\n{len(new_documents)} document(s) added."
         )
 
-    def edit_existing_client(self, client: ClientRecord, upload_fn=None) -> ClientRecord:
+    def edit_existing_client(self, record: ClientRecord, upload_fn=None) -> ClientRecord:
         """Allow the user to edit or add information to an existing client. Returns the edited
         record as a new ClientRecord. If the changes do not make a valid record, it says why and
         returns the SAME object it was given, unchanged, so the caller knows not to save."""
 
-        record = client.to_dict()     # the answers are edited in the saved layout, then checked as a whole
+        answers = record.to_dict()     # the answers are edited in the saved layout, then checked as a whole
 
         while True:
 
@@ -560,7 +560,7 @@ class ClientForm:
 
             if choice == "1":
 
-                self.edit_client_profile(record)
+                self.edit_client_profile(answers)
 
             elif choice == "2":
 
@@ -572,10 +572,10 @@ class ClientForm:
                 ).strip()
 
                 if career_choice == "1":
-                    self.edit_career_record(record)
+                    self.__edit_career_record(answers)
 
                 elif career_choice == "2":
-                    self.add_career_record(record)
+                    self.add_career_record(answers)
 
                 else:
                     self.__ui.show("Invalid choice.")
@@ -590,29 +590,29 @@ class ClientForm:
                 ).strip()
 
                 if asset_choice == "1":
-                    self.edit_asset_record(record)
+                    self.__edit_asset_record(answers)
 
                 elif asset_choice == "2":
-                    self.add_asset_record(record)
+                    self.add_asset_record(answers)
 
                 else:
                     self.__ui.show("Invalid choice.")
 
             elif choice == "4":
 
-                self.edit_asset_composition(record)
+                self.edit_asset_composition(answers)
 
             elif choice == "5":
 
-                self.edit_client_declarations(record)
+                self.edit_client_declarations(answers)
 
             elif choice == "6":
 
-                self.edit_sow_declaration(record)
+                self.__edit_sow_declaration(answers)
 
             elif choice == "7":
 
-                self.add_supporting_documents(record, upload_fn)
+                self.add_supporting_documents(answers, upload_fn)
 
             elif choice == "8":
 
@@ -627,12 +627,12 @@ class ClientForm:
                 break
 
         try:
-            return ClientRecord.from_dict(record)
+            return ClientRecord.from_dict(answers)
         except ValueError as error:
             logger.error("ClientForm.edit_existing_client: the edited record %s is not valid: %r",
-                         client.client_ref, error)
+                         record.client_ref, error)
             self.__ui.show_error(f"The changes could not be kept because {error}. The record is unchanged.")
-            return client
+            return record
 
     def find_existing_client(self, find_fn=None, load_fn=None, save_fn=None, download_fn=None, upload_fn=None):
         """Find, display, edit and manage an existing client from local records.

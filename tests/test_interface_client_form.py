@@ -66,6 +66,16 @@ def test_enter_on_an_empty_amount_keeps_it_empty_and_a_typed_amount_is_kept(monk
     assert edited.claims.declared_net_worth is None
 
 
+def test_a_career_record_is_edited_and_enter_keeps_the_declaration(monkeypatch):
+    #       career  edit  first  start  end  title  seniority  industry  employer  size     country  again
+    _type(monkeypatch, "2", "1", "1", "", "", "", "", "", "", "3,000", "", "y",
+          # declaration: Enter keeps it   stop
+          "6", "", "n")
+    edited = _form().edit_existing_client(ClientRecord.from_dict(sample_case()))
+    assert edited.to_dict()["career_history"][0]["employer_size"] == 3000
+    assert edited.sow_declaration == sample_case()["sow_declaration"]
+
+
 def test_a_client_whose_saved_record_cannot_be_read_is_reported(monkeypatch, capsys):
     def find(client_ref):
         raise ValueError(f"Client {client_ref} could not be loaded because age must be between 18 and 120.")
