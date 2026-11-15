@@ -224,7 +224,7 @@ package "IO Manager (app/interface)" {
     +FIELD_NAMES : dict = {...} «const»
     +OUTCOME_LABELS : dict = {...} «const»
     +MIN_WIDTH : int = 20 «const»
-    +SOURCE_TAGS : dict = {...} «const»
+    +SOURCE_TAGS : dict[str, str] = {...} «const»
     --
     +__init__(ui : ConsoleUI | None = None, width : int = REPORT_WIDTH)
     +show_verdict_report(verdict : Verdict, ask_for_evidence : bool = True, crime_result : dict | None = None, typologies : list[Typology] | None = None) : None
@@ -466,7 +466,7 @@ package "Logic Manager (app/logic)" {
   class CrimeScan {
     -__indicators : list[Indicator] = []
     -__COUNTRY_TO_ISO : dict = {...} «const»
-    +MATCH_LABELS : dict = {...} «const»
+    +MATCH_LABELS : dict[str, str] = {...} «const»
     --
     +__init__(policy : dict | None = None)
     +run(case : dict, ai_data : dict) : dict

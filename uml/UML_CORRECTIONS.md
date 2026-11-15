@@ -163,23 +163,25 @@ Everything below is the diagram being corrected:
 
 | Class | Member | Correction | Reason |
 |---|---|---|---|
-| App | `-__case_reader` | removed | **T**: a CaseReader holds the assessment date. A stored one would keep yesterday's date in the long-running web server, so App makes one per case |
+| App | `-__case_reader` | removed | **T**: a CaseReader holds the assessment date. A stored one would keep yesterday's date in the long-running web server, so App makes one per case. The `App *-- CaseReader` line still shows ownership; it becomes a dependency in stage 7 (relationships) |
 | CaseBuilder, DocumentRecordBuilder | `-__today`, `-__client_ref` | removed | **R**: the date and the client are per call. These objects are shared by web threads (CLAUDE.md §5; stage 3 C+D) |
-| AssessmentRunner | `-__ai : dict[str, AIService]`, `-__features : list[RiskAnalysis]` | removed | **T**: the runner calls methods that only exist on each service and analysis, so it keeps them as separate typed attributes (stage 3 batch B) |
+| AssessmentRunner | `-__ai : dict[str, AIService]`, `-__features : list[RiskAnalysis]` | removed | **T**: the runner calls methods that only exist on each analysis (`verify_research`, `read_typologies`, `calibrate_pay`, `economy_brief`, ...), so the analyses are separate typed attributes. The AI services only need `run()`, but each takes a different input at a fixed point in the steps, so they are separate typed attributes too (stage 3 batch B) |
 | AssessmentRunner | `-__run_ai_steps(case)` | removed | **T**: the AI calls are interleaved with the logic steps under the crime-scan and forecast locks, and share the step and failure callbacks. One block would change the order or the callbacks |
 | ForecastAI | `-__repair(data, errors)` | removed | **T**: there is no single repair step. Each of the four repairs takes its own inputs and runs before its check, not from an error list |
 | ForecastAI | `__check_markets`, `__check_pay` | `+ forecast_years : list[int]` | **T**: the checks compare the reply's years with the forecast years |
-| App | `+autofill_from_documents(paths)` | removed | **T**: reading the documents is interleaved with the officer's choices (type it in when the AI is down, retry with a blank record, fill missing fields), so there is no non-interactive part to extract. The work is in `__new_client_from_documents`, `read_documents` and `record_builder` |
+| App | `+autofill_from_documents(paths)` | removed | **T**: the callers need more than `(ClientRecord, list[str])`. The CLI needs the AI's raw reading for its notes, and must tell "AI unavailable" apart from "the reading is not a possible record" to offer typing it in. The web form fills form fields from the raw reading, not a ClientRecord. The work is done by `read_documents` and `record_builder().build` |
 | App | `upload_document` | `(file_path : str) : str \| None` | **T**: the document is kept before the record exists (new-client form), and the caller stores the returned document id |
 | CaseBuilder | `build` | `(record : ClientRecord)`, without `missing` | **T**: App shows the missing fields before it calls `build`; they are not an input to building the case |
 | CaseBuilder | `show_case_problems` | `problems : list[str]` | **B**: element type |
-| ClientForm | `pick_client` | `(find_fn : Callable[[str], ClientRecord \| None] \| None = None)` | **R**: it asks for a reference and looks it up. ClientForm can't import the Data Manager (§3), so App passes the lookup in |
+| ClientForm | `pick_client` | `(find_fn : Callable[[str], ClientRecord \| None] \| None = None)` | **T**: the officer types a client reference; there is no pick-from-a-list screen. Loading every record to choose one would change what the user sees. App passes the lookup in (ClientForm can't import the Data Manager, §3) |
 | ClientForm, ConsoleUI | `PAYMENT_METHODS`, `PEP_OPTIONS` | moved to ClientForm | **B**: ConsoleUI never uses them. ClientForm asks with them, CaseBuilder reads `ClientForm.PAYMENT_METHODS`, and WebApp's form reads `ClientForm.PEP_OPTIONS` |
-| ClientForm → ReportView | `SOURCE_TAGS` | moved to ReportView | **T**: only ReportView uses it, and ReportView can't import ClientForm (ClientForm already imports ReportView) |
-| VerdictEngine → CrimeScan | `MATCH_LABELS` | moved to CrimeScan | **T**: CrimeScan uses it itself, and VerdictEngine already imports CrimeScan, so CrimeScan can't import VerdictEngine |
+| ClientForm → ReportView | `SOURCE_TAGS` | moved to ReportView, `dict[str, str]` | **T**: only ReportView uses it, and ReportView can't import ClientForm (ClientForm already imports ReportView) |
+| VerdictEngine → CrimeScan | `MATCH_LABELS` | moved to CrimeScan, `dict[str, str]` | **T**: CrimeScan uses it itself, and VerdictEngine already imports CrimeScan, so CrimeScan can't import VerdictEngine |
 | VerdictEngine | `__collect_checks` | `: dict[str, list[Check]]` | **T**: `combine()` needs the benchmark, forecast, crime and document checks as separate groups |
 | DocumentReaderFactory | `READER_TYPES` | `dict[str, type[DocumentReader]]` | **B**: exact type |
-| WebApp | `start` | `host = "127.0.0.1"`, `+ debug : bool = False` | **R**: `"0.0.0.0"` would open the server to the whole network (§9 security); `debug` is passed to Flask for local runs |
+| WebApp | `start` | `host = "127.0.0.1"`, `+ debug : bool = False` | **T**: `"0.0.0.0"` is an unsafe default that opens the server to the whole network; the container sets its host explicitly. `debug` is passed to Flask for local runs |
 | WebApp | `__run_in_background` | `+ case : dict` | **T**: the case is built (and checked) in the request before the thread starts, so problems are shown to the user straight away |
+
+After the review: DocumentReaderFactory reads `READER_TYPES` directly (it kept an unchanged copy), `SOURCE_TAGS` and `MATCH_LABELS` are typed, and the `show_ai_progress` tests moved to ReportView's test file.
 
 Layout: `Indicator` moved down 40 px under the grown CrimeScan box. The CrimeScan→Declaration and CaseBuilder→ClientRecord lines were re-routed, and the "5" label was moved. `layout_check` reports 0.

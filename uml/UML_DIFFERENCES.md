@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `1d3ecbb` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `6ae3b75` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -26,9 +26,9 @@ Checked code at commit `1d3ecbb` against `uml/class_diagram_v4.puml`, which is c
 | 2 | Graded code rules: types and `__init__` | 0 | Code |
 | 3 | Same member, different details | 0 | Decide per item |
 | 4 | In UML, missing in code | 0 | Decide per item |
-| 5 | In code, missing from UML | 466 | UML |
+| 5 | In code, missing from UML | 465 | UML |
 | 6 | Minor: default and starting values | 75 | UML |
-| 7 | Relationships (arrows, verbs, multiplicities) and the main.py note | 42 | Mostly UML |
+| 7 | Relationships (arrows, verbs, multiplicities) and the main.py note | 43 | Mostly UML |
 | | **Total** | **583** | |
 
 Pairs where only the underscores differ (`__x` in UML, `_x` in code) are merged into one item in stage 3, so the total is lower than the raw count of differences.
@@ -65,7 +65,7 @@ How to fix: Either the work was done under another name (then update the UML), o
 
 **Done.** Nothing left in this stage.
 
-## Stage 5: In code, missing from UML (466)
+## Stage 5: In code, missing from UML (465)
 
 The code grew past the diagram, mostly helper methods and constants.
 
@@ -213,7 +213,7 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 
 - [ ] `__init__()` exists in code but not in UML. UML: `—` · code: `app/data/repository.py:10` (app/data/repository.py:10)
 
-### Document Evidence (31)
+### Document Evidence (30)
 
 **`DocumentAI`**
 
@@ -234,10 +234,6 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 **`DocumentReader`**
 
 - [ ] `_text_result()` exists in code but not in UML. UML: `—` · code: `app/data/document_reader.py:30` (app/data/document_reader.py:30)
-
-**`DocumentReaderFactory`**
-
-- [ ] `__readers` exists in code but not in UML. UML: `—` · code: `dict[str, type[DocumentReader]] = dict(DocumentReaderFactory.READER_TYPES)` (app/data/document_reader_factory.py:23)
 
 **`DocumentRecordBuilder`**
 
@@ -888,9 +884,9 @@ How to fix: **UML:** add or correct the `= value`. Where the code is computed, d
 
 - [ ] `__flask` starts with a different value. UML: `Flask(__name__)` · code: `flask` (app/interface/web_app.py:124)
 
-## Stage 7: Relationships (42)
+## Stage 7: Relationships (43)
 
-106 of 114 UML arrows are confirmed in the code. The script and the independent reviewer agreed on every verdict below.
+105 of 114 UML arrows are confirmed in the code. The script and the independent reviewer agreed on every verdict below.
 
 How to fix: mostly **UML** (redraw an arrow, change a verb or multiplicity, add missing arrows). Where an arrow shows a model class but the code passes a plain `dict`, the team has to decide: either the diagram drops the arrow, or the code starts using the model class (a bigger change).
 
@@ -899,6 +895,10 @@ How to fix: mostly **UML** (redraw an arrow, change a verb or multiplicity, add 
 - [ ] `App *-- "1" CaseReader`: only uses it in methods, does not store it (dependency) (app/application/app.py:263 (used in method in read_case))
 - [ ] `App ..> ConfigReader : creates`: stores it in an attribute (association/composition, not a passing dependency) (app/application/app.py:74 self.__config_reader = ConfigReader(os.path.join(root, 'config')))
 - [ ] `FuturePaths ..> MarketModel : uses`: stores it in an attribute (association/composition, not a passing dependency) (app/logic/future_paths.py:24 self.__market_model = market_model or MarketModel())
+
+### Wrong verb (1)
+
+- [ ] `DocumentReaderFactory ..> DocumentReader : creates`: never creates one, only uses it (verb should be 'uses') (app/data/document_reader_factory.py:24 (used in method in create))
 
 ### Wrong multiplicity (2)
 
