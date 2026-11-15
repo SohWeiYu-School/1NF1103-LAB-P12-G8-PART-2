@@ -386,5 +386,5 @@ The review found every added member and every line faithful to the code. Its fix
 - The main.py note is drawn above the lines that pass under it, so its text is readable.
 - The Indicator family is a single clean tree: each child joins one trunk on its left, which leads up to Indicator.
   The DocumentEvidence → CaseReader composition now goes straight down, so it no longer seems to merge with that trunk.
-- Open question for Marcus: `Repository` is drawn as `«interface»`, but it has an `__init__` (CLAUDE.md §1), so strictly
-  it is an abstract class (follow-up #53).
+- `Repository` stays `«interface»` (Marcus, follow-up #53): it stores nothing and only lists `save`/`load`/`find`; its
+  empty `__init__` is there only for CLAUDE.md §1. No diagram change.
