@@ -14,8 +14,8 @@ with open(SCHEMA_PATH, encoding="utf-8") as _handle:
     SCHEMA = json.load(_handle)
 
 
-def _builder():
-    return CaseBuilder(ConsoleUI(), SCHEMA)
+def _builder(read=None):
+    return CaseBuilder(ConsoleUI(read=read), SCHEMA)
 
 
 def _never_ask(question: str) -> str:
@@ -44,7 +44,7 @@ def test_a_job_that_ends_before_it_starts_is_a_problem():
 
 
 def test_a_complete_record_becomes_a_case_without_asking_anything(capsys):
-    case = _builder().case_from_client_record(ClientRecord.from_dict(sample_case()), _never_ask)
+    case = _builder(_never_ask).case_from_client_record(ClientRecord.from_dict(sample_case()))
     assert case is not None
     assert case["client_ref"] == sample_case()["client_ref"]
     assert _builder().validate_case(case) == []
@@ -62,7 +62,7 @@ def test_a_current_job_kept_only_in_career_is_added_and_only_its_start_year_is_a
         asked.append(question)
         return str(current["start_year"])
 
-    case = _builder().case_from_client_record(ClientRecord.from_dict(saved), ask)
+    case = _builder(ask).case_from_client_record(ClientRecord.from_dict(saved))
     assert len(asked) == 1 and "Year started as" in asked[0]
     assert case["career_history"][-1]["occupation"] == saved["career"]["occupation"]
     assert case["career_history"][-1]["end_year"] is None

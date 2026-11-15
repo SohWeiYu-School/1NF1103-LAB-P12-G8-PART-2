@@ -1,15 +1,12 @@
 """CaseBuilder: turns a saved client record into a case, asking for whatever is missing."""
 
 import datetime
-from typing import Callable
 
 from jsonschema import Draft202012Validator
 
 from app.interface.client_form import ClientForm
 from app.interface.console_ui import ConsoleUI
 from app.model.client_record import ClientRecord
-
-Ask = Callable[[str], str]
 
 
 class CaseBuilder:
@@ -64,43 +61,43 @@ class CaseBuilder:
             return "cash"
         return None
 
-    def _number_or_ask(self, value: object, question: str, ask: Ask, allow_zero: bool = True) -> float:
+    def _number_or_ask(self, value: object, question: str, allow_zero: bool = True) -> float:
         number = self.__ui.read_number(value)
         if number is not None and number >= 0 and (allow_zero or number > 0):
             return number
         if str(value or "").strip():
             self.__ui.show_error(f"Couldn't read '{value}' as an amount.")
-        return self.__ui.ask_money(question, ask, allow_zero=allow_zero)
+        return self.__ui.ask_money(question, allow_zero=allow_zero)
 
-    def _year_or_ask(self, value: object, question: str, ask: Ask, minimum: int | None = None,
+    def _year_or_ask(self, value: object, question: str, minimum: int | None = None,
                      maximum: int | None = None) -> int:
         year = self.__ui.read_year(value)
         if year is not None and (minimum is None or year >= minimum) and (maximum is None or year <= maximum):
             return year
-        return self.__ui.ask_int(question, ask, minimum, maximum)
+        return self.__ui.ask_int(question, minimum, maximum)
 
-    def _text_or_ask(self, value: object, question: str, ask: Ask) -> str:
+    def _text_or_ask(self, value: object, question: str) -> str:
         text = str(value or "").strip()
-        return text if text else self.__ui.ask_text(question, ask)
+        return text if text else self.__ui.ask_text(question)
 
-    def _jobs_from_record(self, record: ClientRecord, this_year: int, ask: Ask) -> list[dict]:
+    def _jobs_from_record(self, record: ClientRecord, this_year: int) -> list[dict]:
         """Career history entries plus the current job from career dict."""
         career = record.to_dict()["career"]
         jobs = []
         for number, entry in enumerate([job.to_dict() for job in record.jobs()], start=1):
             label = f"Job {number} ({entry.get('occupation') or 'no title'})"
-            start = self._year_or_ask(entry.get("start_year"), f"{label}: start year", ask, 1900, this_year)
+            start = self._year_or_ask(entry.get("start_year"), f"{label}: start year", 1900, this_year)
             end_text = str(entry.get("end_year") or "").strip().lower()
             end = None if end_text in ("", "present", "now", "current", "-", "none") else \
-                self._year_or_ask(entry.get("end_year"), f"{label}: end year", ask, start, this_year)
+                self._year_or_ask(entry.get("end_year"), f"{label}: end year", start, this_year)
             jobs.append({
                 "start_year":    start, "end_year": end,
-                "occupation":    self._text_or_ask(entry.get("occupation"),    f"{label}: job title", ask),
-                "seniority":     self._text_or_ask(entry.get("seniority"),     f"{label}: seniority", ask),
-                "industry":      self._text_or_ask(entry.get("industry"),      f"{label}: industry", ask),
-                "employer_name": self._text_or_ask(entry.get("employer_name"), f"{label}: employer", ask),
-                "employer_size": self._text_or_ask(entry.get("employer_size"), f"{label}: employer size", ask),
-                "country":       self._text_or_ask(entry.get("country"),       f"{label}: country", ask),
+                "occupation":    self._text_or_ask(entry.get("occupation"),    f"{label}: job title"),
+                "seniority":     self._text_or_ask(entry.get("seniority"),     f"{label}: seniority"),
+                "industry":      self._text_or_ask(entry.get("industry"),      f"{label}: industry"),
+                "employer_name": self._text_or_ask(entry.get("employer_name"), f"{label}: employer"),
+                "employer_size": self._text_or_ask(entry.get("employer_size"), f"{label}: employer size"),
+                "country":       self._text_or_ask(entry.get("country"),       f"{label}: country"),
             })
         jobs.sort(key=lambda job: job["start_year"])
 
@@ -112,14 +109,14 @@ class CaseBuilder:
                 "start_year": self.__ui.ask_int(
                     f"  Year started as {career.get('occupation') or 'current role'} "
                     f"at {career.get('employer_name') or 'current employer'}",
-                    ask, earliest, this_year),
+                    earliest, this_year),
                 "end_year":      None,
-                "occupation":    self._text_or_ask(career.get("occupation"),           "  Current job title", ask),
-                "seniority":     self._text_or_ask(career.get("seniority"),            "  Current seniority", ask),
-                "industry":      self._text_or_ask(career.get("industry"),             "  Current industry", ask),
-                "employer_name": self._text_or_ask(career.get("employer_name"),        "  Current employer", ask),
-                "employer_size": self._text_or_ask(career.get("employer_size"),        "  Current employer size", ask),
-                "country":       self._text_or_ask(career.get("country_of_residence"), "  Country of current job", ask),
+                "occupation":    self._text_or_ask(career.get("occupation"),           "  Current job title"),
+                "seniority":     self._text_or_ask(career.get("seniority"),            "  Current seniority"),
+                "industry":      self._text_or_ask(career.get("industry"),             "  Current industry"),
+                "employer_name": self._text_or_ask(career.get("employer_name"),        "  Current employer"),
+                "employer_size": self._text_or_ask(career.get("employer_size"),        "  Current employer size"),
+                "country":       self._text_or_ask(career.get("country_of_residence"), "  Country of current job"),
             })
         return jobs
 
@@ -130,7 +127,7 @@ class CaseBuilder:
                 return value
         return None
 
-    def _assets_from_record(self, record: ClientRecord, first_year: int, this_year: int, ask: Ask) -> list[dict]:
+    def _assets_from_record(self, record: ClientRecord, first_year: int, this_year: int) -> list[dict]:
         """Investments still held, amounts in SGD. Sold assets are excluded."""
         investments = []
         for number, entry in enumerate([asset.to_dict() for asset in record.investments()], start=1):
@@ -148,22 +145,22 @@ class CaseBuilder:
             yearly_income = self._first_filled(entry.get("income_produced"), entry.get("yearly_income"))
             method = self._payment_method(entry.get("payment_method"))
             if method is None:
-                method = ClientForm.PAYMENT_METHODS[self.__ui.ask_choice(f"{name}: how was it paid for?", ClientForm.PAYMENT_METHODS, ask)]
+                method = ClientForm.PAYMENT_METHODS[self.__ui.ask_choice(f"{name}: how was it paid for?", ClientForm.PAYMENT_METHODS)]
             investments.append({
                 "asset_type":             name,
-                "country":                self._text_or_ask(entry.get("country"), f"{name}: country", ask),
-                "year_acquired":          self._year_or_ask(entry.get("year_acquired"), f"{name}: year bought", ask, first_year, this_year),
+                "country":                self._text_or_ask(entry.get("country"), f"{name}: country"),
+                "year_acquired":          self._year_or_ask(entry.get("year_acquired"), f"{name}: year bought", first_year, this_year),
                 "price_paid":             self._number_or_ask(entry.get("price_paid") if in_sgd else None,
-                                                         f"{name}: price paid (SGD)", ask, allow_zero=False),
+                                                         f"{name}: price paid (SGD)", allow_zero=False),
                 "current_declared_value": self._number_or_ask(current_value if in_sgd else None,
-                                                         f"{name}: current value (SGD)", ask),
+                                                         f"{name}: current value (SGD)"),
                 "payment_method":         method,
                 "income_produced":        self._number_or_ask((yearly_income or "0") if in_sgd else None,
-                                                         f"{name}: yearly income (SGD, 0 if none)", ask),
+                                                         f"{name}: yearly income (SGD, 0 if none)"),
             })
         return investments
 
-    def _composition_from_record(self, record: ClientRecord, ask: Ask) -> dict:
+    def _composition_from_record(self, record: ClientRecord) -> dict:
         """Asset composition as fractions (0.60 = 60%). Asks if missing or doesn't add up."""
         typed = record.claims.asset_composition if record.claims is not None else {}
         split = {key: self.__ui.read_number(typed.get(key)) for key in ("property", "listed_equities", "private_business", "cash")}
@@ -177,21 +174,20 @@ class CaseBuilder:
         self.__ui.show_error("The asset composition is missing or doesn't add up to 100%.")
         while True:
             self.__ui.show("\nHow the client says his wealth is split (percent)")
-            split = {key: self.__ui.ask_money(f"  {label} %", ask) / 100
+            split = {key: self.__ui.ask_money(f"  {label} %") / 100
                      for key, label in [("property", "Property"), ("listed_equities", "Listed shares"),
                                         ("private_business", "Private business"), ("cash", "Cash")]}
             if 0.95 <= sum(split.values()) <= 1.05:
                 return split
             self.__ui.show_error(f"That adds up to {sum(split.values()):.0%}. Please make it 100%.")
 
-    def case_from_client_record(self, record: ClientRecord, ask: Ask | None = None) -> dict | None:
+    def case_from_client_record(self, record: ClientRecord) -> dict | None:
         """Build the forecasting case from a saved client record.
 
         Reads the record in its saved layout. The officer is asked only for
         what's missing or unreadable.
         Returns None if the case fails validation.
         """
-        ask = ask or self.__ui.read_answer
         if record is None:
             return None
         saved      = record.to_dict()
@@ -206,49 +202,49 @@ class CaseBuilder:
         self.__ui.show(f"Assessment date: {current_date} (today)")
         this_year = int(current_date[:4])
 
-        age  = int(self._number_or_ask(career.get("age"), "Age", ask, allow_zero=False))
-        jobs = self._jobs_from_record(record, this_year, ask)
+        age  = int(self._number_or_ask(career.get("age"), "Age", allow_zero=False))
+        jobs = self._jobs_from_record(record, this_year)
         first_year = jobs[0]["start_year"]
         current    = jobs[-1]
 
         case = {
             "client_ref":   record.client_ref,
             "current_date": current_date,
-            "name":         self._text_or_ask(record.profile.name,        "Client name", ask),
-            "nationality":  self._text_or_ask(record.profile.nationality, "Nationality", ask),
+            "name":         self._text_or_ask(record.profile.name,        "Client name"),
+            "nationality":  self._text_or_ask(record.profile.nationality, "Nationality"),
             "career": {
                 "occupation":           current["occupation"],
                 "seniority":            current["seniority"],
                 "industry":             current["industry"],
                 "employer_name":        current["employer_name"],
                 "employer_size":        current["employer_size"],
-                "country_of_residence": self._text_or_ask(career.get("country_of_residence"), "Country of residence", ask),
+                "country_of_residence": self._text_or_ask(career.get("country_of_residence"), "Country of residence"),
                 "age":                  age,
                 "career_start_year":    first_year,
             },
             "career_history": jobs,
-            "investments":    self._assets_from_record(record, first_year, this_year, ask),
+            "investments":    self._assets_from_record(record, first_year, this_year),
             "claims": {
                 "declared_net_worth": self._number_or_ask(claims.get("declared_net_worth"),
-                                                     "Declared net worth (SGD)", ask, allow_zero=False),
+                                                     "Declared net worth (SGD)", allow_zero=False),
                 "expected_aum":       self._number_or_ask(claims.get("expected_aum"),
-                                                     "Expected AUM (SGD)", ask, allow_zero=False),
-                "asset_composition":  self._composition_from_record(record, ask),
+                                                     "Expected AUM (SGD)", allow_zero=False),
+                "asset_composition":  self._composition_from_record(record),
                 "wealth_countries":   claims.get("wealth_countries")
                                       or [c.strip() for c in self.__ui.ask_text(
-                                          "Countries his wealth came from (comma separated)", ask
+                                          "Countries his wealth came from (comma separated)"
                                       ).split(",") if c.strip()],
-                "pep_status":         self._text_or_ask(claims.get("pep_status"), "PEP status (e.g. None)", ask),
+                "pep_status":         self._text_or_ask(claims.get("pep_status"), "PEP status (e.g. None)"),
                 # not needed by the forecast, but the benchmark uses them (logic_manager.forecasting_case keeps them too)
                 "biggest_wealth_jump":     self.__ui.read_number(claims.get("biggest_wealth_jump")),
                 "wealth_jump_years":       self.__ui.read_number(claims.get("wealth_jump_years")),
                 "declared_counterparties": list(claims.get("declared_counterparties") or []),
             },
-            "sow_declaration": self._text_or_ask(record.sow_declaration, "Source of wealth declaration", ask),
+            "sow_declaration": self._text_or_ask(record.sow_declaration, "Source of wealth declaration"),
         }
         if len(case["sow_declaration"]) < 50:
             self.__ui.show_error("The source of wealth declaration is too short (50 characters minimum).")
-            case["sow_declaration"] = self.__ui.ask_text("Source of wealth declaration (one paragraph)", ask, min_length=50)
+            case["sow_declaration"] = self.__ui.ask_text("Source of wealth declaration (one paragraph)", min_length=50)
 
         problems = self.validate_case(case)
         if problems:

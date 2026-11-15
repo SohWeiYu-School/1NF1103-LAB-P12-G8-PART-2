@@ -10,9 +10,6 @@ try:                                  # the file and folder pickers need a deskt
 except ImportError:
     tk = filedialog = None
 
-Ask = Callable[[str], str]
-
-
 class ConsoleUI:
     """The terminal. Every print() and input() of the command line app is in this class,
     so no other class talks to the terminal directly: they ask the ConsoleUI to show
@@ -27,45 +24,55 @@ class ConsoleUI:
     LABEL   = " '.-&/,()%#0123456789"     # job titles, industries, employers, asset descriptions
     MAX_EMPLOYEES = 10_000_000
 
-    def __init__(self) -> None:
+    def __init__(self, read: Callable[[str], str] | None = None,
+                 write: Callable[[str], None] | None = None) -> None:
+        """read asks one question and returns the answer typed; write shows one line. Both
+        default to the terminal (input and print). They are looked up when used, not here, so a
+        test that replaces builtins.input still answers an App's ConsoleUI."""
+        if read is not None and not callable(read):
+            raise ValueError("read must be a function that asks a question and returns the answer")
+        if write is not None and not callable(write):
+            raise ValueError("write must be a function that shows a line of text")
+        self.__read: Callable[[str], str] = read if read is not None else (lambda question: input(question))
+        self.__write: Callable[[str], None] = write if write is not None else (lambda text: print(text))
         self.__width: int = len(ConsoleUI.LINE)
 
     def show_app_menu(self) -> str:
         """Display the unified main menu and return the user's choice (1-8)."""
-        print("\n========================================")
-        print("     SOURCE OF WEALTH SCREENING SYSTEM")
-        print("========================================")
-        print("1. New Client (type in, then the combined assessment)")
-        print("2. New Client from Documents (auto-fill from a folder of documents)")
-        print("3. Find / Edit Existing Client")
-        print("4. Assess an Existing Client (crime scan + forecast + benchmark -> one verdict)")
-        print("5. List Saved Assessments")
-        print("6. View All Clients")
-        print("7. Manual Sync to Cloud Database")
-        print("8. Quit")
+        self.__write("\n========================================")
+        self.__write("     SOURCE OF WEALTH SCREENING SYSTEM")
+        self.__write("========================================")
+        self.__write("1. New Client (type in, then the combined assessment)")
+        self.__write("2. New Client from Documents (auto-fill from a folder of documents)")
+        self.__write("3. Find / Edit Existing Client")
+        self.__write("4. Assess an Existing Client (crime scan + forecast + benchmark -> one verdict)")
+        self.__write("5. List Saved Assessments")
+        self.__write("6. View All Clients")
+        self.__write("7. Manual Sync to Cloud Database")
+        self.__write("8. Quit")
         while True:
-            choice = input("\nEnter your choice (1-8): ").strip()
+            choice = self.__read("\nEnter your choice (1-8): ").strip()
             if choice in ("1", "2", "3", "4", "5", "6", "7", "8"):
                 return choice
-            print("Invalid choice. Please enter 1 to 8.")
+            self.__write("Invalid choice. Please enter 1 to 8.")
 
     def show_message(self, text: str) -> None:
         #Print an informational message.
-        print(text)
+        self.__write(text)
 
     def show_error(self, text: str) -> None:
         #Print an error message.
-        print(f"[ERROR] {text}")
+        self.__write(f"[ERROR] {text}")
 
     def show_ai_unavailable(self, feature: str = "Assessment") -> None:
-        print(f"{feature} is not available right now — please try again later.")
+        self.__write(f"{feature} is not available right now — please try again later.")
 
     def show_unexpected_error(self) -> None:
-        print("An unexpected error occurred — please try again or contact support.")
+        self.__write("An unexpected error occurred — please try again or contact support.")
 
     def show_rate_limit_error(self, seconds_left: int) -> None:
-        print(f"[RATE LIMIT] Assessment already running or recently completed.")
-        print(f"             Please wait {seconds_left} second{'s' if seconds_left != 1 else ''} before starting another assessment.")
+        self.__write(f"[RATE LIMIT] Assessment already running or recently completed.")
+        self.__write(f"             Please wait {seconds_left} second{'s' if seconds_left != 1 else ''} before starting another assessment.")
 
     def show_sync_result(self, stats: dict) -> None:
         cases = stats.get("cases_synced", 0)
@@ -75,74 +82,74 @@ class ConsoleUI:
         synced = cases + assessments
 
         if not errors:
-            print(f"\nSync complete — {cases} case(s) and {assessments} assessment(s) pushed to cloud.")
+            self.__write(f"\nSync complete — {cases} case(s) and {assessments} assessment(s) pushed to cloud.")
             if skipped:
-                print(f"               {skipped} record(s) already up to date — skipped.")
+                self.__write(f"               {skipped} record(s) already up to date — skipped.")
         elif synced > 0:
-            print(f"\nPartial sync — {cases} case(s) and {assessments} assessment(s) pushed to cloud.")
+            self.__write(f"\nPartial sync — {cases} case(s) and {assessments} assessment(s) pushed to cloud.")
             if skipped:
-                print(f"               {skipped} record(s) already up to date — skipped.")
-            print("Some records could not be synced — please try again later or contact your administrator.")
+                self.__write(f"               {skipped} record(s) already up to date — skipped.")
+            self.__write("Some records could not be synced — please try again later or contact your administrator.")
         else:
-            print("\nSync unsuccessful — please try again later or contact your administrator.")
+            self.__write("\nSync unsuccessful — please try again later or contact your administrator.")
 
     def show_step(self, number: int, total: int, label: str) -> None:
         """One progress line of the combined assessment (the web app shows the same steps)."""
-        print(f"  [{number:>2}/{total}] {label}...")
+        self.__write(f"  [{number:>2}/{total}] {label}...")
 
     def display_section(self, title: str):
         """Print a formatted section heading."""
 
-        print("\n" + "=" * 60)
-        print(title)
-        print("=" * 60)
+        self.__write("\n" + "=" * 60)
+        self.__write(title)
+        self.__write("=" * 60)
 
     def show_client_list(self, records: list) -> None:
         """Print a compact table of all saved clients."""
         if not records:
-            print("\n  No clients saved yet.\n")
+            self.__write("\n  No clients saved yet.\n")
             return
         W = 68
-        print("\n" + "─" * W)
-        print(f"  {'#':<4}{'Reference':<18}{'Name':<28}Industry")
-        print("─" * W)
+        self.__write("\n" + "─" * W)
+        self.__write(f"  {'#':<4}{'Reference':<18}{'Name':<28}Industry")
+        self.__write("─" * W)
         for i, r in enumerate(records, start=1):
             ref      = r.get("client_ref", "—")
             name     = r.get("name") or r.get("client_profile", {}).get("full_name", "—")
             industry = r.get("career", {}).get("industry") or r.get("client_profile", {}).get("industry", "—")
-            print(f"  {i:<4}{ref:<18}{name:<28}{industry}")
-        print("─" * W + "\n")
+            self.__write(f"  {i:<4}{ref:<18}{name:<28}{industry}")
+        self.__write("─" * W + "\n")
 
     def ask_document_folder(self) -> str | None:
         """Ask which folder holds the client's documents. Returns the folder path, or None to cancel."""
-        print("\n" + "=" * 60)
-        print("              NEW CLIENT FROM DOCUMENTS")
-        print("=" * 60)
-        print("Put the client's documents in one folder (CV, payslips, employment letter, tax notices,")
-        print("bank statements, property papers, KYC form). PDF, Word, Excel, text and images are read.")
+        self.__write("\n" + "=" * 60)
+        self.__write("              NEW CLIENT FROM DOCUMENTS")
+        self.__write("=" * 60)
+        self.__write("Put the client's documents in one folder (CV, payslips, employment letter, tax notices,")
+        self.__write("bank statements, property papers, KYC form). PDF, Word, Excel, text and images are read.")
         if tk is not None and self.ask_yes_no("\nChoose the folder in a file explorer window?"):
             root = tk.Tk()
             root.withdraw()
             folder = filedialog.askdirectory(title="Select the folder with the client's documents")
             root.destroy()
             if folder:
-                print(f"Folder: {folder}")
+                self.__write(f"Folder: {folder}")
                 return folder
-            print("No folder was chosen.")
-        folder = input("\nFolder path (or press Enter to go back to the menu): ").strip()
+            self.__write("No folder was chosen.")
+        folder = self.__read("\nFolder path (or press Enter to go back to the menu): ").strip()
         folder = folder.strip('"').strip("'")          # paths dragged into the terminal come quoted
         return folder or None
 
     def show_documents_found(self, paths: list[str]) -> None:
-        print(f"\nFound {len(paths)} document(s):")
+        self.__write(f"\nFound {len(paths)} document(s):")
         for path in paths:
-            print(f"  - {os.path.basename(path)}")
+            self.__write(f"  - {os.path.basename(path)}")
 
     def show_missing_intro(self, count: int) -> None:
         if count:
-            print(f"\n{count} required detail(s) weren't in the documents. Please fill them in:")
+            self.__write(f"\n{count} required detail(s) weren't in the documents. Please fill them in:")
         else:
-            print("\nEvery required detail was found in the documents.")
+            self.__write("\nEvery required detail was found in the documents.")
 
     def ask_document_record_action(self) -> str:
         """After the summary: 'save', 'edit' or 'discard'."""
@@ -150,7 +157,7 @@ class ConsoleUI:
         return ["save", "edit", "discard"][self.ask_choice("\nIs everything correct?", options)]
 
     def show(self, text: str = "") -> None:
-        print(text)
+        self.__write(text)
 
     def money(self, value: float | None) -> str:
         return "n/a" if value is None else f"{value:,.0f}"
@@ -159,22 +166,20 @@ class ConsoleUI:
         return f"{self.money(values['cautious'])} to {self.money(values['optimistic'])} (typical {self.money(values['typical'])})"
 
     def read_answer(self, question: str) -> str:
-        """The normal way to ask: type into the terminal."""
-        return input(question)
+        """Ask one question and return what was typed (the terminal unless a read function was handed in)."""
+        return self.__read(question)
 
-    def ask_text(self, question: str, ask: Ask | None = None, min_length: int = 1) -> str:
-        ask = ask or self.read_answer
+    def ask_text(self, question: str, min_length: int = 1) -> str:
         while True:
-            answer = ask(f"{question}: ").strip()
+            answer = self.read_answer(f"{question}: ").strip()
             if len(answer) >= min_length:
                 return answer
             self.show_error(f"Please enter at least {min_length} character(s).")
 
-    def ask_int(self, question: str, ask: Ask | None = None, minimum: int | None = None,
-                maximum: int | None = None, allow_blank: bool = False) -> int | None:
-        ask = ask or self.read_answer
+    def ask_int(self, question: str, minimum: int | None = None, maximum: int | None = None,
+                allow_blank: bool = False) -> int | None:
         while True:
-            answer = ask(f"{question}: ").strip()
+            answer = self.read_answer(f"{question}: ").strip()
             if allow_blank and answer == "":
                 return None
             try:
@@ -189,10 +194,9 @@ class ConsoleUI:
             else:
                 return number
 
-    def ask_money(self, question: str, ask: Ask | None = None, allow_zero: bool = True) -> float:
-        ask = ask or self.read_answer
+    def ask_money(self, question: str, allow_zero: bool = True) -> float:
         while True:
-            answer = ask(f"{question}: ").strip().replace(",", "")
+            answer = self.read_answer(f"{question}: ").strip().replace(",", "")
             try:
                 amount = float(answer)
             except ValueError:
@@ -203,21 +207,19 @@ class ConsoleUI:
                 continue
             return amount
 
-    def ask_choice(self, question: str, options: list[str], ask: Ask | None = None, allow_back: bool = False) -> int | None:
+    def ask_choice(self, question: str, options: list[str], allow_back: bool = False) -> int | None:
         """Show a numbered list and return the index picked. With allow_back, 0 returns None."""
-        ask = ask or self.read_answer
         self.show(question)
         for number, option in enumerate(options, start=1):
             self.show(f"  {number}. {option}")
         if allow_back:
             self.show("  0. Back to the main menu")
-        number = self.ask_int("Choose a number", ask, 0 if allow_back else 1, len(options))
+        number = self.ask_int("Choose a number", 0 if allow_back else 1, len(options))
         return None if number == 0 else number - 1
 
-    def ask_yes_no(self, question: str, ask: Ask | None = None) -> bool:
-        ask = ask or self.read_answer
+    def ask_yes_no(self, question: str) -> bool:
         while True:
-            answer = ask(f"{question} (y/n): ").strip().lower()
+            answer = self.read_answer(f"{question} (y/n): ").strip().lower()
             if answer in ("y", "yes"):
                 return True
             if answer in ("n", "no"):
@@ -227,12 +229,11 @@ class ConsoleUI:
     def ask_year(self, question: str, minimum: int = 1940, maximum: int | None = None,
                  allow_blank: bool = False) -> int | None:
         maximum = maximum or datetime.date.today().year
-        return self.ask_int(question, self.read_answer, minimum, maximum, allow_blank)
+        return self.ask_int(question, minimum, maximum, allow_blank)
 
-    def ask_currency(self, ask: Ask | None = None) -> str:
-        ask = ask or self.read_answer
+    def ask_currency(self) -> str:
         while True:
-            code = ask("Currency (3-letter code, e.g. SGD): ").strip().upper()
+            code = self.read_answer("Currency (3-letter code, e.g. SGD): ").strip().upper()
             if len(code) == 3 and code.isalpha():
                 return code
             self.show_error("Please enter a 3-letter currency code like SGD or USD.")
@@ -248,7 +249,7 @@ class ConsoleUI:
                     split[key] = self.ask_money(f"{label} (%)") / 100
                 else:
                     shown = f"{current.get(key, 0) * 100:.0f}"
-                    v = input(f"{label} (%) [{shown}]: ").strip().replace(",", "")
+                    v = self.__read(f"{label} (%) [{shown}]: ").strip().replace(",", "")
                     try:
                         split[key] = float(v) / 100 if v else current.get(key, 0.0)
                     except ValueError:
@@ -268,7 +269,7 @@ class ConsoleUI:
 
     def keep_text(self, label: str, current, min_length: int = 2) -> str:
         while True:
-            v = input(f"{label} [{current}]: ").strip()
+            v = self.__read(f"{label} [{current}]: ").strip()
             if not v:
                 return current
             if len(v) >= min_length:
@@ -277,7 +278,7 @@ class ConsoleUI:
 
     def keep_int(self, label: str, current, minimum: int, maximum: int):
         while True:
-            v = input(f"{label} [{current}]: ").strip()
+            v = self.__read(f"{label} [{current}]: ").strip()
             if not v:
                 return current
             try:
@@ -291,7 +292,7 @@ class ConsoleUI:
 
     def keep_money(self, label: str, current: float | str) -> float | str:
         while True:
-            v = input(f"{label} [{current}]: ").strip().replace(",", "")
+            v = self.__read(f"{label} [{current}]: ").strip().replace(",", "")
             if not v:
                 return current
             try:
@@ -314,14 +315,14 @@ class ConsoleUI:
 
     def ask_words(self, question: str, allowed: str = LETTERS, min_length: int = 2) -> str:
         while True:
-            answer = input(f"{question}: ").strip()
+            answer = self.__read(f"{question}: ").strip()
             if len(answer) >= min_length and self._only(answer, allowed):
                 return answer
             self.show_error(self._words_error(allowed))
 
     def keep_words(self, label: str, current, allowed: str = LETTERS, min_length: int = 2) -> str:
         while True:
-            v = input(f"{label} [{current}]: ").strip()
+            v = self.__read(f"{label} [{current}]: ").strip()
             if not v:
                 return current
             if len(v) >= min_length and self._only(v, allowed):
@@ -342,10 +343,9 @@ class ConsoleUI:
             return int(cleaned)
         return None
 
-    def ask_count(self, question: str, ask: Ask | None = None) -> int:
-        ask = ask or self.read_answer
+    def ask_count(self, question: str) -> int:
         while True:
-            number = self._parse_count(ask(f"{question}: "))
+            number = self._parse_count(self.read_answer(f"{question}: "))
             if number is not None:
                 return number
             self.show_error("Please enter the number of employees as a single whole number, e.g. 2500 "
@@ -353,7 +353,7 @@ class ConsoleUI:
 
     def keep_count(self, label: str, current):
         while True:
-            v = input(f"{label} [{current}]: ").strip()
+            v = self.__read(f"{label} [{current}]: ").strip()
             if not v:
                 return current
             number = self._parse_count(v)
@@ -367,9 +367,8 @@ class ConsoleUI:
             self.show(f"    - {problem}")
         self.show("  Fix the client record (Find / Edit Existing Client) and try again.")
 
-    def ask_client_ref(self, ask: Ask | None = None) -> str | None:
-        ask = ask or self.read_answer
-        ref = self.ask_text("Client reference (e.g. CL-1A2B3C4D, 0 to go back)", ask)
+    def ask_client_ref(self) -> str | None:
+        ref = self.ask_text("Client reference (e.g. CL-1A2B3C4D, 0 to go back)")
         return None if ref == "0" else ref
 
     def show_ai_progress(self, results: dict) -> None:

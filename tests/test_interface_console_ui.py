@@ -21,46 +21,46 @@ def _answers(*typed):
 
 def test_a_wrong_answer_is_asked_again_with_the_reason(capsys):
     ask = _answers("maybe", "", "Y")
-    assert ConsoleUI().ask_yes_no("Save this client?", ask) is True
+    assert ConsoleUI(read=ask).ask_yes_no("Save this client?") is True
     assert len(ask.asked) == 3
     assert capsys.readouterr().out.count("[ERROR] Please answer y or n.") == 2
 
 
 def test_ask_int_rejects_text_and_numbers_out_of_range(capsys):
     ask = _answers("abc", "200", "51")
-    assert ConsoleUI().ask_int("Age", ask, 18, 120) == 51
+    assert ConsoleUI(read=ask).ask_int("Age", 18, 120) == 51
     assert capsys.readouterr().out.count("[ERROR]") == 2
 
 
 def test_ask_int_may_be_left_blank_only_when_allowed():
-    assert ConsoleUI().ask_int("End year", _answers(""), 1940, 2026, allow_blank=True) is None
-    assert ConsoleUI().ask_int("Age", _answers("", "30"), 18, 120) == 30
+    assert ConsoleUI(read=_answers("")).ask_int("End year", 1940, 2026, allow_blank=True) is None
+    assert ConsoleUI(read=_answers("", "30")).ask_int("Age", 18, 120) == 30
 
 
 def test_ask_money_accepts_commas_and_rejects_negatives(capsys):
-    assert ConsoleUI().ask_money("Price paid", _answers("a lot", "-5", "1,650,000")) == 1650000.0
+    assert ConsoleUI(read=_answers("a lot", "-5", "1,650,000")).ask_money("Price paid") == 1650000.0
     out = capsys.readouterr().out
     assert "Please enter an amount, e.g. 1500000." in out
     assert "Amounts can't be negative." in out
 
 
 def test_ask_money_can_refuse_zero():
-    assert ConsoleUI().ask_money("Net worth", _answers("0", "5"), allow_zero=False) == 5.0
+    assert ConsoleUI(read=_answers("0", "5")).ask_money("Net worth", allow_zero=False) == 5.0
 
 
 def test_ask_text_needs_a_minimum_length():
-    assert ConsoleUI().ask_text("Declaration", _answers("  ", "short", "long enough"), min_length=6) == "long enough"
+    assert ConsoleUI(read=_answers("  ", "short", "long enough")).ask_text("Declaration", min_length=6) == "long enough"
 
 
 def test_ask_choice_returns_the_position_picked(capsys):
-    ui = ConsoleUI()
-    assert ui.ask_choice("Payment method", ["cash", "loan", "asset_sale"], _answers("9", "2")) == 1
+    ui = ConsoleUI(read=_answers("9", "2"))
+    assert ui.ask_choice("Payment method", ["cash", "loan", "asset_sale"]) == 1
     out = capsys.readouterr().out
     assert "  1. cash" in out and "  3. asset_sale" in out
 
 
 def test_ask_choice_with_back_returns_none_for_zero():
-    assert ConsoleUI().ask_choice("Menu", ["a", "b"], _answers("0"), allow_back=True) is None
+    assert ConsoleUI(read=_answers("0")).ask_choice("Menu", ["a", "b"], allow_back=True) is None
 
 
 def test_keep_text_keeps_the_current_value_on_a_blank_answer(monkeypatch):
@@ -74,9 +74,25 @@ def test_keep_text_takes_a_new_value(monkeypatch):
     assert ConsoleUI().keep_text("Name", "Daniel Tan") == "Daniel Tan Wei Ming"
 
 
-def test_with_no_ask_function_the_terminal_is_used(monkeypatch):
+def test_with_no_read_function_the_terminal_is_used(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda question: "y")
     assert ConsoleUI().ask_yes_no("Continue?") is True
+
+
+def test_a_handed_in_read_and_write_replace_the_terminal(capsys):
+    """Every question goes through read and every line through write: nothing reaches the terminal."""
+    shown = []
+    ui = ConsoleUI(read=_answers("n"), write=shown.append)
+    assert ui.ask_yes_no("Continue?") is False
+    ui.show_error("Could not save.")
+    assert shown == ["[ERROR] Could not save."]
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize("given", [{"read": "y"}, {"write": 42}])
+def test_read_and_write_must_be_functions(given):
+    with pytest.raises(ValueError, match="must be a function"):
+        ConsoleUI(**given)
 
 
 def test_messages_and_errors_are_printed(capsys):
