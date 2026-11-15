@@ -266,7 +266,7 @@ class AssessmentRunner:
         if text.startswith("reply failed checks"):
             return "the AI's reply could not be used, so this step did not run"
         if text.startswith("no AI service") or text.startswith("the AI request failed"):
-            return "the AI service is not available right now, please try again later"
+            return "the AI service is not available right now"
         if text.startswith("could not prepare the request"):
             return "a file this step needs could not be read, so this step did not run"
         return "this step could not be completed"

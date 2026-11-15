@@ -243,7 +243,7 @@ def test_a_forecast_reply_that_fails_its_checks_is_shown_as_plain_words_and_logg
 
 def test_a_missing_ai_service_is_shown_as_plain_words(tmp_path):
     reason, notes, verdict = _forecast_stop_reason(tmp_path, None)
-    assert "the AI service is not available right now, please try again later" in reason
+    assert "the AI service is not available right now" in reason and "," not in reason
     sentence = next(note for note in notes if note.startswith("The forecast stopped at"))
     assert ".)" not in sentence and ")." in sentence and ". ." not in sentence      # reads cleanly, no double stops
     assert "OPENAI_API_KEY" not in reason + " ".join(notes) + str(verdict.report)
