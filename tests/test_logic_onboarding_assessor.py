@@ -104,9 +104,22 @@ def test_no_type_explaining_him_is_risky():
     assert _outcome(100_000_000) == "RISKY"
 
 
-def test_honest_only_at_the_optimistic_edge_or_an_unaffordable_purchase_is_risky():
+def test_honest_only_at_the_optimistic_edge_is_risky():
     assert _outcome(16_500_000) == "RISKY"              # T1 fits, but not at the typical wealth
     assert _outcome(10_000_000, clean=True) == "RISKY"
+
+
+def test_an_unaffordable_purchase_is_risky_even_when_the_honest_type_fits():
+    case = sample_case()
+    case["claims"]["declared_net_worth"] = 2_000_000
+    case["claims"]["wealth_countries"] = ["Singapore"]
+    case["investments"] = [{"asset_type": "Residential property", "country": "Singapore", "year_acquired": 2000,
+                            "price_paid": 5_000_000, "current_declared_value": 1_000_000,
+                            "payment_method": "cash", "income_produced": 0}]   # cash he could not have had in 2000
+    result = _evaluate(case, declaration=Declaration.from_dict({"claimed_sources": []}))
+    assert result["fits"]["T1"]["fits_at_typical"] is True
+    assert result["t1_affordability_breach"] is True
+    assert result["outcome"] == "RISKY"
 
 
 def test_other_failed_checks_mean_manual_review_and_a_clean_case_passes():
