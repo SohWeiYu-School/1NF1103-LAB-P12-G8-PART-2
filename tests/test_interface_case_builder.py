@@ -66,3 +66,26 @@ def test_a_current_job_kept_only_in_career_is_added_and_only_its_start_year_is_a
     assert len(asked) == 1 and "Year started as" in asked[0]
     assert case["career_history"][-1]["occupation"] == saved["career"]["occupation"]
     assert case["career_history"][-1]["end_year"] is None
+
+
+def test_an_empty_amount_and_year_are_asked_for_and_must_be_possible(capsys):
+    """A saved asset with no price and no year: the officer is asked for both, and an impossible
+    answer (zero price, a year before his career) is asked again."""
+    saved = sample_case()
+    saved["investments"][0]["price_paid"] = None
+    saved["investments"][0]["year_acquired"] = None
+    name = saved["investments"][0]["asset_type"]
+    first_year = min(job["start_year"] for job in saved["career_history"])
+    answers = {f"{name}: year bought": [str(first_year - 1), str(first_year + 1)],
+               f"{name}: price paid (SGD)": ["0", "1,650,000"]}
+    asked = []
+
+    def ask(question: str) -> str:
+        asked.append(question)
+        return answers[question.rstrip(": ")].pop(0)
+
+    case = _builder(ask).case_from_client_record(ClientRecord.from_dict(saved))
+    assert case["investments"][0]["year_acquired"] == first_year + 1
+    assert case["investments"][0]["price_paid"] == 1_650_000
+    assert len(asked) == 4
+    assert capsys.readouterr().out.count("[ERROR]") == 2

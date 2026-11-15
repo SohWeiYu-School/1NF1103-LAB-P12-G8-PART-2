@@ -61,7 +61,7 @@ class CaseBuilder:
             return "cash"
         return None
 
-    def _number_or_ask(self, value: object, question: str, allow_zero: bool = True) -> float:
+    def __number_or_ask(self, value: object, question: str, allow_zero: bool = True) -> float:
         number = self.__ui.read_number(value)
         if number is not None and number >= 0 and (allow_zero or number > 0):
             return number
@@ -69,7 +69,7 @@ class CaseBuilder:
             self.__ui.show_error(f"Couldn't read '{value}' as an amount.")
         return self.__ui.ask_money(question, allow_zero=allow_zero)
 
-    def _year_or_ask(self, value: object, question: str, minimum: int | None = None,
+    def __year_or_ask(self, value: object, question: str, minimum: int | None = None,
                      maximum: int | None = None) -> int:
         year = self.__ui.read_year(value)
         if year is not None and (minimum is None or year >= minimum) and (maximum is None or year <= maximum):
@@ -80,16 +80,16 @@ class CaseBuilder:
         text = str(value or "").strip()
         return text if text else self.__ui.ask_text(question)
 
-    def _jobs_from_record(self, record: ClientRecord, this_year: int) -> list[dict]:
+    def __jobs_from_record(self, record: ClientRecord, this_year: int) -> list[dict]:
         """Career history entries plus the current job from career dict."""
         career = record.to_dict()["career"]
         jobs = []
         for number, entry in enumerate([job.to_dict() for job in record.jobs()], start=1):
             label = f"Job {number} ({entry.get('occupation') or 'no title'})"
-            start = self._year_or_ask(entry.get("start_year"), f"{label}: start year", 1900, this_year)
+            start = self.__year_or_ask(entry.get("start_year"), f"{label}: start year", 1900, this_year)
             end_text = str(entry.get("end_year") or "").strip().lower()
             end = None if end_text in ("", "present", "now", "current", "-", "none") else \
-                self._year_or_ask(entry.get("end_year"), f"{label}: end year", start, this_year)
+                self.__year_or_ask(entry.get("end_year"), f"{label}: end year", start, this_year)
             jobs.append({
                 "start_year":    start, "end_year": end,
                 "occupation":    self._text_or_ask(entry.get("occupation"),    f"{label}: job title"),
@@ -127,7 +127,7 @@ class CaseBuilder:
                 return value
         return None
 
-    def _assets_from_record(self, record: ClientRecord, first_year: int, this_year: int) -> list[dict]:
+    def __assets_from_record(self, record: ClientRecord, first_year: int, this_year: int) -> list[dict]:
         """Investments still held, amounts in SGD. Sold assets are excluded."""
         investments = []
         for number, entry in enumerate([asset.to_dict() for asset in record.investments()], start=1):
@@ -149,13 +149,13 @@ class CaseBuilder:
             investments.append({
                 "asset_type":             name,
                 "country":                self._text_or_ask(entry.get("country"), f"{name}: country"),
-                "year_acquired":          self._year_or_ask(entry.get("year_acquired"), f"{name}: year bought", first_year, this_year),
-                "price_paid":             self._number_or_ask(entry.get("price_paid") if in_sgd else None,
+                "year_acquired":          self.__year_or_ask(entry.get("year_acquired"), f"{name}: year bought", first_year, this_year),
+                "price_paid":             self.__number_or_ask(entry.get("price_paid") if in_sgd else None,
                                                          f"{name}: price paid (SGD)", allow_zero=False),
-                "current_declared_value": self._number_or_ask(current_value if in_sgd else None,
+                "current_declared_value": self.__number_or_ask(current_value if in_sgd else None,
                                                          f"{name}: current value (SGD)"),
                 "payment_method":         method,
-                "income_produced":        self._number_or_ask((yearly_income or "0") if in_sgd else None,
+                "income_produced":        self.__number_or_ask((yearly_income or "0") if in_sgd else None,
                                                          f"{name}: yearly income (SGD, 0 if none)"),
             })
         return investments
@@ -202,8 +202,8 @@ class CaseBuilder:
         self.__ui.show(f"Assessment date: {current_date} (today)")
         this_year = int(current_date[:4])
 
-        age  = int(self._number_or_ask(career.get("age"), "Age", allow_zero=False))
-        jobs = self._jobs_from_record(record, this_year)
+        age  = int(self.__number_or_ask(career.get("age"), "Age", allow_zero=False))
+        jobs = self.__jobs_from_record(record, this_year)
         first_year = jobs[0]["start_year"]
         current    = jobs[-1]
 
@@ -223,11 +223,11 @@ class CaseBuilder:
                 "career_start_year":    first_year,
             },
             "career_history": jobs,
-            "investments":    self._assets_from_record(record, first_year, this_year),
+            "investments":    self.__assets_from_record(record, first_year, this_year),
             "claims": {
-                "declared_net_worth": self._number_or_ask(claims.get("declared_net_worth"),
+                "declared_net_worth": self.__number_or_ask(claims.get("declared_net_worth"),
                                                      "Declared net worth (SGD)", allow_zero=False),
-                "expected_aum":       self._number_or_ask(claims.get("expected_aum"),
+                "expected_aum":       self.__number_or_ask(claims.get("expected_aum"),
                                                      "Expected AUM (SGD)", allow_zero=False),
                 "asset_composition":  self._composition_from_record(record),
                 "wealth_countries":   claims.get("wealth_countries")
