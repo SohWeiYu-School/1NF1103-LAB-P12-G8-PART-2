@@ -54,6 +54,17 @@ def test_checks_are_check_objects_in_the_shared_shape(ran):
     assert "NET_WORTH_FIT" in [check.check for check in checks]
 
 
+def test_forecast_checks_keep_their_groups_and_carry_no_extra_details(ran):
+    case, _, feature, assessment, honest = ran
+    types = [{"type_id": "T2", "name": "Trade mis-invoicing", "fits": True, "fit_score": 0.8, "route_years": ""}]
+    checks = feature.checks({"case": case, "assessment": assessment, "honest": honest, "types": types})
+    story = next(check for check in checks if check.check == "CRIME_STORY")
+    assert (story.label, story.status, story.group) == ("T2 Trade mis-invoicing", "info", "Crime stories")
+    assert story.detail == "Fits his money (fit 0.80)"
+    assert next(check for check in checks if check.check == "NET_WORTH_FIT").group == "Honest story (T1)"
+    assert all(list(check.to_dict()) == list(Check.FIELDS[:8]) for check in checks)
+
+
 def test_a_forecast_that_stopped_gives_one_skipped_check():
     checks = Forecast(POLICY, CONFIG).checks({"case": sample_case(), "assessment": None, "honest": None,
                                               "failed_step": "the list of person types"})
