@@ -71,3 +71,12 @@ def test_applying_the_same_documents_twice_changes_nothing_more():
     once, _ = _calibrate(documented)
     _, again = _calibrate(documented, once)
     assert again == []
+
+
+@pytest.mark.parametrize("args, message", [
+    (({"positions": []},), "career savings must be a CareerSavings"),
+    ((None, "policy"), "policy must be a dict"),
+])
+def test_the_pay_calibrator_rejects_wrong_typed_inputs(args, message):
+    with pytest.raises(ValueError, match=message):
+        PayCalibrator(*args)
