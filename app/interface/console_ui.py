@@ -263,7 +263,7 @@ class ConsoleUI:
         """Must contain at least one letter, and nothing outside letters + the allowed characters."""
         return any(c.isalpha() for c in text) and all(c.isalpha() or c in allowed for c in text)
 
-    def _words_error(self, allowed: str) -> str:
+    def __words_error(self, allowed: str) -> str:
         if allowed == ConsoleUI.LETTERS:
             return "Letters only please (spaces, - ' . are fine). No numbers."
         return "Please enter a proper description. It must contain letters and can't be only numbers."
@@ -273,7 +273,7 @@ class ConsoleUI:
             answer = self.__read(f"{question}: ").strip()
             if len(answer) >= min_length and self.__only(answer, allowed):
                 return answer
-            self.show_error(self._words_error(allowed))
+            self.show_error(self.__words_error(allowed))
 
     def keep_words(self, label: str, current, allowed: str = LETTERS, min_length: int = 2) -> str:
         while True:
@@ -282,7 +282,7 @@ class ConsoleUI:
                 return current
             if len(v) >= min_length and self.__only(v, allowed):
                 return v
-            self.show_error(self._words_error(allowed))
+            self.show_error(self.__words_error(allowed))
 
     def ask_countries(self, question: str) -> list:
         while True:
