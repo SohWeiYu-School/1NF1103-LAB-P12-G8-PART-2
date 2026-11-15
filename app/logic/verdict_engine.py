@@ -79,7 +79,7 @@ class VerdictEngine:
         was built from, and how many of that pattern's warning signs fired (crime scan)."""
         if not forecast or not assessment:
             return []
-        matches = {m["typology_id"]: m for m in (crime_result or {}).get("match_results", [])}
+        matches = {m.typology.typology_id: m for m in (crime_result or {}).get("match_results", [])}
         by_id = {t.typology_id: t for t in typologies or []}
         fits = {row["type_id"]: row for row in assessment.get("types", [])}
         rows = []
@@ -92,7 +92,7 @@ class VerdictEngine:
             if typology_id not in by_id:   # older replies: link by category, as ai_manager.link_typologies does
                 typology_id = next((t.typology_id for t in typologies or []
                                     if t.crime_category == person_type.get("category")), None)
-            match = matches.get(typology_id, {})
+            match = matches.get(typology_id)
             typology = by_id.get(typology_id)
             rows.append({
                 "type_id": type_id, "name": person_type["name"], "category": person_type["category"],
@@ -100,8 +100,8 @@ class VerdictEngine:
                 "fits": bool(fit.get("fits")), "fit_score": fit.get("fit_score"),
                 "route_years": fit.get("route_years", ""), "enabled_by": fit.get("enabled_by", ""),
                 "typology_id": typology_id, "typology_name": typology.name if typology else None,
-                "match": match.get("category") if match else None,
-                "fired": list(match.get("core_fired", [])) + list(match.get("supporting_fired", [])) if match else [],
+                "match": match.category if match else None,
+                "fired": match.fired() if match else [],
                 "quote": (typology.source_quotes or [{}])[0] if typology else {},
                 "source_ids": typology.cited_report_ids() if typology else [],
             })
@@ -203,7 +203,8 @@ class VerdictEngine:
         """ONE Verdict from the crime scan, the benchmark, the forecast and the documents.
 
         results: reports (the trusted ResearchReports; None if the research did not run),
-                 typologies (the Typology objects), crime_result, declaration (forecast Step 0),
+                 typologies (the Typology objects), crime_result (CrimeScan.run: its match_results are
+                 MatchResult objects), declaration (forecast Step 0),
                  benchmark_input, benchmark_ai, benchmark_findings, forecast, forecast_assessment,
                  markets (Call 1, even if the forecast stopped later), evidence (the documents layer),
                  pay_adjustments (calibrate_pay), failed_step, not_run, notes, and the

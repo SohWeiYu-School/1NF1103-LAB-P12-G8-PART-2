@@ -8,6 +8,7 @@ import pytest
 from app.application.app import App
 from app.application.assessment_runner import AssessmentRunner
 from app.model.client_record import ClientRecord
+from app.model.match_result import MatchResult
 from tests import fake_ai, fake_services
 from tests.logic_fixtures import sample_case
 
@@ -315,3 +316,22 @@ def test_documents_read_with_an_impossible_value_are_reported_and_nothing_is_sav
     out = capsys.readouterr().out
     assert "cannot be used because age must be between 18 and 120" in out
     assert app.clients().load() == []
+
+
+def test_the_crime_result_is_saved_in_the_match_layout(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    application = App(fake_ai.caller(), data_folder=str(tmp_path))
+    record = ClientRecord.from_dict(sample_case())
+    application.save_client(record)
+    case, _ = application.read_case(record)
+    fake_services.save_forecast_replies(application.response_cache(), case)
+    result = application.assess(case)
+    matches = result["crime_result"]["match_results"]
+    assert matches and all(isinstance(match, MatchResult) for match in matches)       # objects in the middle
+    saved = application.assessments().find(application.save_assessment(result, record))
+    assert saved["crime_result"] == {**result["crime_result"], "match_results": [m.to_dict() for m in matches]}
+    assert list(saved["crime_result"]["match_results"][0]) == [
+        "typology_id", "name", "source_ids", "breached", "category", "core_indicators", "core_fired",
+        "supporting_indicators", "supporting_fired", "typical_documents"]
+    assert saved["crime_scan"]["typologies"] == result["typology_response"]           # the reply, as it came

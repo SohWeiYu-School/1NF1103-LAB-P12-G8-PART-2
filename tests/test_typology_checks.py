@@ -2,6 +2,7 @@
 
 from app.logic.crime_scan import CrimeScan
 from app.model.declaration import Declaration
+from app.model.match_result import MatchResult
 from app.model.typology import Typology
 
 
@@ -67,7 +68,7 @@ def test_gift_unnamed_fires_on_unnamed_inheritance():
         [_typology("t1", [{"indicator": "gift_or_inheritance_unnamed", "weight": "core"}])],
         decl, _clean_case(), _policy(),
     )
-    assert results[0]["breached"] is True
+    assert results[0].breached is True
 
 
 def test_gift_unnamed_fires_on_unnamed_gift():
@@ -76,7 +77,7 @@ def test_gift_unnamed_fires_on_unnamed_gift():
         [_typology("t1", [{"indicator": "gift_or_inheritance_unnamed", "weight": "core"}])],
         decl, _clean_case(), _policy(),
     )
-    assert results[0]["breached"] is True
+    assert results[0].breached is True
 
 
 def test_gift_unnamed_does_not_fire_when_counterparty_named():
@@ -85,7 +86,7 @@ def test_gift_unnamed_does_not_fire_when_counterparty_named():
         [_typology("t1", [{"indicator": "gift_or_inheritance_unnamed", "weight": "core"}])],
         decl, _clean_case(), _policy(),
     )
-    assert results[0]["breached"] is False
+    assert results[0].breached is False
 
 
 def test_gift_unnamed_does_not_fire_on_employment():
@@ -95,7 +96,7 @@ def test_gift_unnamed_does_not_fire_on_employment():
         [_typology("t1", [{"indicator": "gift_or_inheritance_unnamed", "weight": "core"}])],
         decl, _clean_case(), _policy(),
     )
-    assert results[0]["breached"] is False
+    assert results[0].breached is False
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +109,7 @@ def test_counterparty_unnamed_fires_at_limit():
         [_typology("t1", [{"indicator": "counterparty_unnamed", "weight": "core"}])],
         decl, _clean_case(), _policy(limit=1),
     )
-    assert results[0]["breached"] is True
+    assert results[0].breached is True
 
 
 def test_counterparty_unnamed_does_not_fire_below_limit():
@@ -117,7 +118,7 @@ def test_counterparty_unnamed_does_not_fire_below_limit():
         [_typology("t1", [{"indicator": "counterparty_unnamed", "weight": "core"}])],
         decl, _clean_case(), _policy(limit=1),
     )
-    assert results[0]["breached"] is False
+    assert results[0].breached is False
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +131,7 @@ def test_source_contradicts_occupation_fires_when_flagged():
         [_typology("t1", [{"indicator": "source_contradicts_occupation", "weight": "core"}])],
         decl, _clean_case(), _policy(),
     )
-    assert results[0]["breached"] is True
+    assert results[0].breached is True
 
 
 def test_source_contradicts_occupation_does_not_fire_when_not_flagged():
@@ -139,7 +140,7 @@ def test_source_contradicts_occupation_does_not_fire_when_not_flagged():
         [_typology("t1", [{"indicator": "source_contradicts_occupation", "weight": "core"}])],
         decl, _clean_case(), _policy(),
     )
-    assert results[0]["breached"] is False
+    assert results[0].breached is False
 
 
 # ---------------------------------------------------------------------------
@@ -152,7 +153,7 @@ def test_unvalued_source_fires_when_amount_null():
         [_typology("t1", [{"indicator": "unvalued_source_present", "weight": "core"}])],
         decl, _clean_case(), _policy(),
     )
-    assert results[0]["breached"] is True
+    assert results[0].breached is True
 
 
 def test_unvalued_source_does_not_fire_when_amounts_present():
@@ -161,7 +162,7 @@ def test_unvalued_source_does_not_fire_when_amounts_present():
         [_typology("t1", [{"indicator": "unvalued_source_present", "weight": "core"}])],
         decl, _clean_case(), _policy(),
     )
-    assert results[0]["breached"] is False
+    assert results[0].breached is False
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +175,7 @@ def test_related_party_fires_on_friend_keyword():
         [_typology("t1", [{"indicator": "related_party_transaction", "weight": "core"}])],
         decl, _clean_case(), _policy(),
     )
-    assert results[0]["breached"] is True
+    assert results[0].breached is True
 
 
 def test_related_party_does_not_fire_on_named_company():
@@ -183,7 +184,7 @@ def test_related_party_does_not_fire_on_named_company():
         [_typology("t1", [{"indicator": "related_party_transaction", "weight": "core"}])],
         decl, _clean_case(), _policy(),
     )
-    assert results[0]["breached"] is False
+    assert results[0].breached is False
 
 
 # ---------------------------------------------------------------------------
@@ -202,8 +203,8 @@ def test_all_core_fire_gives_breach():
         {"indicator": "source_contradicts_occupation", "weight": "core"},
     ])
     results = match_typologies([typ], decl, _clean_case(), _policy())
-    assert results[0]["breached"] is True
-    assert set(results[0]["core_fired"]) == {"gift_or_inheritance_unnamed", "source_contradicts_occupation"}
+    assert results[0].breached is True
+    assert set(results[0].core_fired) == {"gift_or_inheritance_unnamed", "source_contradicts_occupation"}
 
 
 def test_partial_core_fire_no_breach():
@@ -214,7 +215,7 @@ def test_partial_core_fire_no_breach():
         {"indicator": "source_contradicts_occupation", "weight": "core"},
     ])
     results = match_typologies([typ], decl, _clean_case(), _policy())
-    assert results[0]["breached"] is False
+    assert results[0].breached is False
 
 
 def test_supporting_indicators_do_not_affect_breach():
@@ -225,8 +226,8 @@ def test_supporting_indicators_do_not_affect_breach():
         {"indicator": "counterparty_unnamed", "weight": "supporting"},
     ])
     results = match_typologies([typ], decl, _clean_case(), _policy(limit=99))
-    assert results[0]["breached"] is True
-    assert results[0]["supporting_fired"] == []
+    assert results[0].breached is True
+    assert results[0].supporting_fired == []
 
 
 def test_multiple_typologies_mixed_results():
@@ -235,5 +236,23 @@ def test_multiple_typologies_mixed_results():
     typ2 = _typology("t2", [{"indicator": "counterparty_unnamed", "weight": "core"}])
     results = match_typologies([typ1, typ2], decl, _clean_case(), _policy())
     # gift with no counterparty → both fire
-    assert results[0]["breached"] is True
-    assert results[1]["breached"] is True
+    assert results[0].breached is True
+    assert results[1].breached is True
+
+
+def test_each_result_is_a_match_result_holding_its_typology():
+    decl = _decl(_src(source_type="gift", counterparty=None, amount_sgd=None))
+    typ = _typology("t1", [{"indicator": "gift_or_inheritance_unnamed", "weight": "core"},
+                           {"indicator": "unvalued_source_present", "weight": "supporting"},
+                           {"indicator": "related_party_transaction", "weight": "supporting"}])
+    result = match_typologies([typ], decl, _clean_case(), _policy())[0]
+    assert isinstance(result, MatchResult)
+    assert isinstance(result.typology, Typology) and result.typology.typology_id == "t1"
+    assert result.typology.to_dict() == {**typ, "crime_category": ""}       # the whole typology, not just its id
+    assert (result.category, result.core_fired, result.supporting_fired) == (
+        "high", ["gift_or_inheritance_unnamed"], ["unvalued_source_present"])
+    assert result.to_dict() == {
+        "typology_id": "t1", "name": "t1", "source_ids": [], "breached": True, "category": "high",
+        "core_indicators": ["gift_or_inheritance_unnamed"], "core_fired": ["gift_or_inheritance_unnamed"],
+        "supporting_indicators": ["unvalued_source_present", "related_party_transaction"],
+        "supporting_fired": ["unvalued_source_present"], "typical_documents": ["test doc"]}

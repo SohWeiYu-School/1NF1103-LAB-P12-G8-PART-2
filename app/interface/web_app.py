@@ -598,7 +598,7 @@ class WebApp:
                 "assessment_id": assessment_id,
                 "assessed_at":   datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "ai_warnings":   ai_warnings,
-                "crime_result":  result.get("crime_result"),
+                "crime_result":  WebApp.__crime_result_layout(result.get("crime_result")),
                 "typologies":    WebApp.__typology_layout(result.get("typologies")),
                 "benchmark":     result.get("benchmark"),
             }
@@ -608,6 +608,13 @@ class WebApp:
             logging.exception("Assessment of %s failed", record.client_ref)
             job["status"] = "error"
             job["error"] = str(exc)
+
+    @staticmethod
+    def __crime_result_layout(crime_result: dict | None) -> dict | None:
+        """The crime scan's result as the page template reads it (each MatchResult's to_dict())."""
+        if crime_result is None:
+            return None
+        return {**crime_result, "match_results": [match.to_dict() for match in crime_result["match_results"]]}
 
     @staticmethod
     def __typology_layout(typologies: list[Typology] | None) -> list[dict] | None:

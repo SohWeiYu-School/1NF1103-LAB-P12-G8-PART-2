@@ -7,6 +7,7 @@ from app.logic.indicator import (CounterpartyUnnamed, GiftOrInheritanceUnnamed, 
                                  RelatedPartyTransaction, SourceContradictsOccupation, UnvaluedSource)
 from app.model.check import Check
 from app.model.declaration import Declaration
+from app.model.match_result import MatchResult
 from app.model.research_report import ResearchReport
 from app.model.typology import Typology
 
@@ -294,7 +295,7 @@ class CrimeScan(RiskAnalysis):
     def _assess(self, typologies: list[Typology] | None, declaration: dict | None) -> dict:
         """Match every typology against the declaration.
 
-        Returns {"breach_count", "match_count", "match_results"}.
+        Returns {"breach_count", "match_count", "match_results": list[MatchResult]}.
         """
         # If either AI call failed entirely (returned None), skip assessment
         if typologies is None or declaration is None:
@@ -304,8 +305,8 @@ class CrimeScan(RiskAnalysis):
         match_results = self.match_typologies(Declaration(declaration.get("sources", [])), typologies)
 
         # Count full breaches (critical/high/medium) and all matches including partial/weak
-        breach_count = sum(1 for mr in match_results if mr["breached"])
-        match_count = sum(1 for mr in match_results if mr["category"] != "no_match")
+        breach_count = sum(1 for mr in match_results if mr.breached)
+        match_count = sum(1 for mr in match_results if mr.category != "no_match")
         return {"breach_count": breach_count, "match_count": match_count, "match_results": match_results}
 
     def _categorise_match(self, core_fired: list, core: list, supporting_fired: list) -> str:
@@ -323,36 +324,23 @@ class CrimeScan(RiskAnalysis):
             return "weak_signal"
         return "no_match"
 
-    def match_typologies(self, declaration: Declaration, typologies: list[Typology]) -> list[dict]:
+    def match_typologies(self, declaration: Declaration, typologies: list[Typology]) -> list[MatchResult]:
         """Match each typology's warning signs against the declaration. Pure function.
 
         A typology breaches when ALL its core indicators fire.
-        Returns a list of match result dicts, one per typology.
+        Returns one MatchResult per typology, in the same order; each holds its Typology.
         """
         fired = self.flags(declaration)
         indicator_results = {indicator.NAME: indicator.NAME in fired for indicator in self.__indicators}
 
-        matches: list[dict] = []
+        matches: list[MatchResult] = []
         for typology in typologies:
             core = typology.core_indicators()
             supporting = typology.supporting_indicators()
             core_fired = [i for i in core if indicator_results.get(i, False)]
             supporting_fired = [i for i in supporting if indicator_results.get(i, False)]
-            breached = len(core_fired) == len(core) and len(core) > 0
             category = self._categorise_match(core_fired, core, supporting_fired)
-
-            matches.append({
-                "typology_id": typology.typology_id,
-                "name": typology.name,
-                "source_ids": typology.cited_report_ids(),
-                "breached": breached,
-                "category": category,
-                "core_indicators": core,
-                "core_fired": core_fired,
-                "supporting_indicators": supporting,
-                "supporting_fired": supporting_fired,
-                "typical_documents": typology.typical_documents,
-            })
+            matches.append(MatchResult(typology, core_fired, supporting_fired, category))
         return matches
 
     def _to_iso(self, value, warnings: list) -> str | None:
@@ -556,12 +544,13 @@ class CrimeScan(RiskAnalysis):
         quotes = {t.typology_id: (t.source_quotes or [{}])[0] for t in typologies or []}
         checks = []
         for match in crime_result.get("match_results", []):
-            category = match.get("category", "no_match")
-            fired = match.get("core_fired", []) + match.get("supporting_fired", [])
+            typology_id = match.typology.typology_id
+            category = match.category
+            fired = match.fired()
             status = "failed" if category in CrimeScan.FULL_MATCH else "weak" if category in CrimeScan.WEAK_MATCH else "passed"
-            signs = ", ".join(f"{CrimeScan.SIGN_LABELS.get(s, s)} ({'core' if s in match.get('core_fired', []) else 'supporting'})"
+            signs = ", ".join(f"{CrimeScan.SIGN_LABELS.get(s, s)} ({'core' if s in match.core_fired else 'supporting'})"
                               for s in fired) or "no warning signs fired"
-            person = built.get(match["typology_id"])
+            person = built.get(typology_id)
             if person:
                 link = (f"Built into {person['type_id']} ({person['name']}), which "
                         f"{'fits' if person['fits'] else 'does not fit'} his money.")
@@ -569,16 +558,16 @@ class CrimeScan(RiskAnalysis):
                 link = "No person type uses it: none of his jobs, assets or sources opens this channel."
             else:
                 link = ""
-            quote = quotes.get(match["typology_id"], {})
-            sources = ", ".join(match.get("source_ids", []))
+            quote = quotes.get(typology_id, {})
+            sources = ", ".join(match.typology.cited_report_ids())
             detail = f"{CrimeScan.MATCH_LABELS.get(category, category)} match: {signs}"
             explanation = link + (f' "{quote["quote"]}" [{quote.get("report_id", "")}]' if quote.get("quote") else "")
-            check = self._check("TYPOLOGY", f"{match.get('name') or match['typology_id']}"
+            check = self._check("TYPOLOGY", f"{match.typology.name or typology_id}"
                                 + (f" [{sources}]" if sources else ""), "pattern", status, detail, explanation.strip(),
                                 group="Patterns")
             check.set_extra("signs", fired)               # the verdict and the report read these three
             check.set_extra("match", category)
-            check.set_extra("typology_id", match["typology_id"])
+            check.set_extra("typology_id", typology_id)
             checks.append(check)
         for person in types:
             if not person["typology_id"]:

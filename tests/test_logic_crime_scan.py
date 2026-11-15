@@ -4,6 +4,7 @@ from app.logic.crime_scan import CrimeScan
 from app.logic.risk_analysis import RiskAnalysis
 from app.model.check import Check
 from app.model.declaration import Declaration
+from app.model.match_result import MatchResult
 from app.model.research_report import ResearchReport
 from app.model.typology import Typology
 from tests import fake_ai
@@ -31,15 +32,17 @@ def test_flags_names_the_warning_signs_that_fire():
 def test_a_typology_is_breached_when_all_its_core_signs_fire():
     result = CrimeScan(POLICY).run(CASE, {"typology_response": fake_ai.typologies(), "declaration": UNNAMED})
     match = result["match_results"][0]
-    assert match["breached"] is True
-    assert match["core_fired"] == ["counterparty_unnamed"]
+    assert isinstance(match, MatchResult)                  # an object, not a dict
+    assert match.breached is True
+    assert match.core_fired == ["counterparty_unnamed"]
+    assert match.typology.typology_id == fake_ai.typologies()["sector_typologies"][0]["typology_id"]
     assert result["breach_count"] == 1
 
 
 def test_a_clean_declaration_breaches_nothing():
     result = CrimeScan(POLICY).run(CASE, {"typology_response": fake_ai.typologies(), "declaration": NAMED})
     assert result["breach_count"] == 0
-    assert result["match_results"][0]["category"] == "no_match"
+    assert result["match_results"][0].category == "no_match"
 
 
 def test_research_from_a_site_that_is_not_trusted_is_dropped():
@@ -80,7 +83,31 @@ def test_a_typology_reply_given_whole_is_read_like_the_typology_objects():
     whole = scan.run(CASE, {"typology_response": fake_ai.typologies(), "declaration": UNNAMED})
     objects = scan.run(CASE, {"typologies": scan.read_typologies(fake_ai.typologies()["sector_typologies"]),
                               "declaration": UNNAMED})
-    assert whole == objects
+    assert {**whole, "match_results": [match.to_dict() for match in whole["match_results"]]} == \
+        {**objects, "match_results": [match.to_dict() for match in objects["match_results"]]}
+
+
+def test_every_match_holds_the_very_typology_it_matched():
+    scan = CrimeScan(POLICY)
+    typologies = scan.verify_typology_sources(fake_ai.typologies()["sector_typologies"],
+                                              scan.verify_research(fake_ai.research()))
+    result = scan.run(CASE, {"typologies": typologies, "declaration": UNNAMED})
+    assert [match.typology for match in result["match_results"]] == typologies
+    assert result["match_results"][0].typology is typologies[0]
+
+
+def test_the_saved_match_layout_keeps_every_field_in_order():
+    result = CrimeScan(POLICY).run(CASE, {"typology_response": fake_ai.typologies(), "declaration": UNNAMED})
+    reply = fake_ai.typologies()["sector_typologies"][0]
+    assert list(result) == ["breach_count", "match_count", "match_results"]
+    assert result["match_results"][0].to_dict() == {
+        "typology_id": reply["typology_id"], "name": reply["name"], "source_ids": ["R1"], "breached": True,
+        "category": "high", "core_indicators": ["counterparty_unnamed"], "core_fired": ["counterparty_unnamed"],
+        "supporting_indicators": ["unvalued_source_present"], "supporting_fired": ["unvalued_source_present"],
+        "typical_documents": ["Freight invoices", "Bills of lading"]}
+    assert list(result["match_results"][0].to_dict()) == [
+        "typology_id", "name", "source_ids", "breached", "category", "core_indicators", "core_fired",
+        "supporting_indicators", "supporting_fired", "typical_documents"]
 
 
 def test_checks_are_check_objects_that_keep_the_signs_that_fired():
@@ -92,7 +119,7 @@ def test_checks_are_check_objects_that_keep_the_signs_that_fired():
     assert all(isinstance(check, Check) and check.feature == "crime" for check in checks)
     typology = next(check for check in checks if check.check == "TYPOLOGY")
     assert typology.extra("signs") == ["counterparty_unnamed", "unvalued_source_present"]
-    assert typology.extra("match") == result["match_results"][0]["category"]
+    assert typology.extra("match") == result["match_results"][0].category
     assert typology.extra("typology_id") == typologies[0].typology_id
     assert typology.explanation.endswith(f'"{typologies[0].source_quotes[0]["quote"]}" [R1]')
     assert (typology.group, typology.theme) == ("Patterns", "pattern")

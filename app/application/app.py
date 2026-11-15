@@ -313,13 +313,20 @@ class App:
             "report": verdict.report,
             "crime_scan": {"research": result["research"], "typologies": result["typology_response"],
                            "declaration": result["crime_declaration"]},
-            "crime_result": result["crime_result"],
+            "crime_result": App.__crime_result_layout(result["crime_result"]),
             "benchmark": result["benchmark"],
             "document_evidence": result["evidence"],
             "forecast": result["forecast_assessment"],
             "assessment": result["forecast_assessment"],
         })
         return verdict.assessment_id if saved else None
+
+    @staticmethod
+    def __crime_result_layout(crime_result: dict | None) -> dict | None:
+        """The crime scan's result as it is saved: each MatchResult in its to_dict() layout."""
+        if crime_result is None:
+            return None
+        return {**crime_result, "match_results": [match.to_dict() for match in crime_result["match_results"]]}
 
     def run_case_file(self, path: str) -> bool:
         """Assess a case file (the same assessment as the menu). False if it could not be assessed."""

@@ -46,7 +46,8 @@ class ReportView:
         self.__ui: ConsoleUI = ui or ConsoleUI()
 
     def _format_crime_section(self, crime_result: dict, typologies: list[Typology], width: int) -> list[str]:
-        """Build lines for the structured crime section inside the verdict report."""
+        """Build lines for the structured crime section inside the verdict report. crime_result is
+        CrimeScan.run's result: its match_results are MatchResult objects."""
         typ_lookup    = {t.typology_id: t for t in typologies}
         match_results = crime_result.get("match_results", [])
         match_count   = crime_result.get("match_count", 0)
@@ -57,15 +58,15 @@ class ReportView:
                  f"  {total} typologies  \u00b7  {match_count} matched  \u00b7  {total - match_count} no match"]
 
         for mr in match_results:
-            typ_id    = mr.get("typology_id", "")
-            name      = mr.get("name", typ_id or "?")
-            category  = mr.get("category", "no_match")
+            typ_id    = mr.typology.typology_id
+            name      = mr.typology.name
+            category  = mr.category
             label     = ReportView._CRIME_CATEGORY_LABEL.get(category, category.upper())
             typ_data  = typ_lookup.get(typ_id)
-            core_inds  = mr.get("core_indicators", [])
-            core_fired = set(mr.get("core_fired", []))
-            sup_inds   = mr.get("supporting_indicators", [])
-            sup_fired  = set(mr.get("supporting_fired", []))
+            core_inds  = mr.typology.core_indicators()
+            core_fired = set(mr.core_fired)
+            sup_inds   = mr.typology.supporting_indicators()
+            sup_fired  = set(mr.supporting_fired)
 
             lines += ["", f"  [{label}]  {name}"]
 
