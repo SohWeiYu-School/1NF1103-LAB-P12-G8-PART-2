@@ -346,21 +346,26 @@ def test_a_new_client_is_made_from_a_folder_of_documents(tmp_path, monkeypatch, 
     assert len(record.documents()) == len(os.listdir(folder))
 
 
-def test_documents_read_with_an_impossible_value_are_reported_and_nothing_is_saved(tmp_path, monkeypatch, capsys):
+def test_an_impossible_value_in_the_reading_is_left_empty_named_and_asked_for_while_good_fields_are_kept(
+        tmp_path, monkeypatch, capsys, caplog):
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MONGODB_URI", "")
     monkeypatch.setattr("app.interface.client_form.tk", None)
     folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documents", "marcus_lim")
     with open(folder + "_expected_extract.json", encoding="utf-8") as handle:
         reading = json.load(handle)
-    reading["client"].update(age=12, date_of_birth=None)
+    reading["client"].update(age=200, date_of_birth=None)
     app = App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))
-    #       menu  folder  type it in yourself?  leave
-    _answers(monkeypatch, "2", folder, "n", "8")
+    #       menu  folder  age (asked for)  income of asset 3  save  back to the menu  leave
+    _answers(monkeypatch, "2", folder, "45", "0", "1", "3", "8")
     app.run_menu()
     out = capsys.readouterr().out
-    assert "cannot be used because age must be between 18 and 120" in out
-    assert app.clients().load() == []
+    assert "Age: the value read from the documents (200) is not possible" in out
+    assert "so it was left empty. Please enter it." in out
+    assert "cannot be used" not in out                        # the whole reading was not thrown away
+    assert "left out of the AI's reading" in caplog.text      # the details are logged
+    saved = app.find_client(app.clients().load()[0]["client_ref"])
+    assert saved.profile.name == reading["client"]["name"] and saved.profile.age == 45
 
 
 def test_the_crime_result_is_saved_in_the_match_layout(tmp_path, monkeypatch):

@@ -42,13 +42,17 @@ class DocumentRecordBuilder:
     def _blank(self, value: Any) -> bool:
         return value is None or (isinstance(value, str) and not value.strip()) or value == []
 
-    def build(self, extracted: dict, client_ref: str) -> tuple[ClientRecord, list[str]]:
+    def build(self, extracted: dict, client_ref: str) -> tuple[ClientRecord, list[str], list[str]]:
         """Build a client record (the same layout the New Client form saves) from the AI's
-        reading of the documents. Returns (record, paths of the fields that came from the documents).
+        reading of the documents. Returns (record, paths of the fields that came from the documents,
+        one plain message for each field that was dropped).
 
         Every job, including the current one (end_year None), goes into career_history, and
-        the current job is copied into "career". Raises ValueError, saying what is wrong, if
-        the reading holds a value no client record can have (an age of 12, a negative price).
+        the current job is copied into "career". The AI only helps and the officer checks everything:
+        a value no client record can have (an age of 12, a negative price) is left empty, so it is
+        asked for like any missing detail, and is named in the dropped messages; every good field
+        is kept. Raises ValueError, saying what is wrong, only if the reading as a whole cannot be
+        a record even with those fields left empty.
         """
         today = self.__today
         client = extracted.get("client") or {}
@@ -103,9 +107,59 @@ class DocumentRecordBuilder:
             "sow_declaration": extracted.get("sow_declaration"),
             "supporting_documents": [],
         }
+        dropped: list[str] = []
+        try:
+            client = ClientRecord.from_dict(self.__finish_layout(record))
+        except (ValueError, TypeError):
+            record, dropped = self.__without_impossible_fields(record)
+            client = ClientRecord.from_dict(self.__finish_layout(record))      # still impossible: the whole reading
         found = [".".join(str(part) for part in item["path"])
                  for item in self._required_fields(record) if not self._missing(record, item)]
-        return ClientRecord.from_dict(self.__finish_layout(record)), found
+        return client, found, dropped
+
+    def __leaf_paths(self, record: dict) -> list[list[str | int]]:
+        """The path of every single value in a record that the AI's reading fills in."""
+        paths: list[list[str | int]] = [["name"], ["nationality"], ["career", "country_of_residence"], ["career", "age"]]
+        for section in ("career_history", "investments"):
+            for index, row in enumerate(record.get(section) or []):
+                paths += [[section, index, key] for key in row]
+        paths += [["claims", key] for key in record["claims"] if key != "asset_composition"]
+        paths += [["claims", "asset_composition", key] for key in record["claims"]["asset_composition"]]
+        return paths + [["sow_declaration"]]
+
+    def __without_impossible_fields(self, record: dict) -> tuple[dict, list[str]]:
+        """The record with each impossible value left empty, and a message for each one. A value
+        is impossible when a record holding only that value (everything else empty) is rejected."""
+        empty = copy.deepcopy(record)
+        paths = self.__leaf_paths(record)
+        for path in paths:
+            self.__set(empty, path, [] if isinstance(self.get_path(record, path), list) else None)
+        ClientRecord.from_dict(self.__finish_layout(empty))      # an empty record must be possible; else raise
+        names = {tuple(field["path"]): field for field in self._required_fields(record) + self._optional_fields(record)}
+        cleaned, dropped = copy.deepcopy(record), []
+        for path in paths:
+            value = self.get_path(record, path)
+            if self._blank(value):
+                continue
+            trial = copy.deepcopy(empty)
+            self.__set(trial, path, value)
+            try:
+                ClientRecord.from_dict(self.__finish_layout(trial))
+            except (ValueError, TypeError) as error:
+                self.__set(cleaned, path, [] if isinstance(value, list) else None)
+                field = names.get(tuple(path))
+                label = (f"{field['group']}: " if field and field["group"] else "") + (
+                    field["short"] if field else " ".join(str(part) for part in path[2:] or path[-1:]).replace("_", " "))
+                dropped.append(f"{label[:1].upper() + label[1:]}: the value read from the documents ({value}) is not "
+                               f"possible ({error}), so it was left empty. Please enter it.")
+        return cleaned, dropped
+
+    @staticmethod
+    def __set(record: dict, path: list[str | int], value: Any) -> None:
+        target = record
+        for part in path[:-1]:
+            target = target[part]
+        target[path[-1]] = value
 
     def get_path(self, record: dict, path: list[str | int]) -> Any:
         """The value at path (e.g. ["career_history", 0, "start_year"]), or None if it isn't there."""

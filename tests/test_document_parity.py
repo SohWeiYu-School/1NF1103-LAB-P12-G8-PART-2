@@ -38,7 +38,7 @@ def expected_reply() -> dict:
 def cli_record(reply: dict) -> dict:
     """What menu option 2 saves: documents -> record, the officer types what's missing."""
     builder = DocumentRecordBuilder(CONFIG, TODAY)
-    record, _ = builder.build(reply, "CL-MARCUS")
+    record, _, _ = builder.build(reply, "CL-MARCUS")
     for field in builder.missing_fields(record):
         assert field["path"] == ["investments", 2, "income_produced"], field   # the only gap
         record = builder.set_path(record, field["path"], 0)

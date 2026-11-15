@@ -433,19 +433,22 @@ def test_the_autofill_page_fills_the_form_and_keeps_the_upload(reading_web):
     assert "convert to SGD" in page                                          # the AI's note is shown
 
 
-def test_a_reading_with_an_impossible_value_fills_nothing_and_says_why(tmp_path, monkeypatch):
+def test_a_reading_with_an_impossible_value_keeps_the_good_fields_and_says_which_was_dropped(tmp_path, monkeypatch):
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MONGODB_URI", "")
-    reading = {**AI_READING, "client": {**AI_READING["client"], "age": 12, "date_of_birth": None}}
+    reading = {**AI_READING, "client": {**AI_READING["client"], "age": 200, "date_of_birth": None}}
     client = WebApp(App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))).flask().test_client()
     response = client.post("/client/new/autofill", content_type="multipart/form-data", data={
         "autofill_files": (io.BytesIO(b"Daniel Tan, Portfolio Manager at Temasek since 2012"), "cv.txt"),
     })
     page = response.get_data(as_text=True)
     assert response.status_code == 200
-    assert "the details cannot be used because age must be between 18 and 120" in page
-    assert 'value="Daniel Tan"' not in page
-    assert re.search(r'value="[^"/]+/documents/[0-9a-f]{8}_cv\.txt"', page)  # the upload is still kept
+    assert "Age: the value read from the documents (200) is not possible" in page
+    assert "so it was left empty. Please enter it." in page
+    assert "Nothing was filled in" not in page
+    assert 'value="Daniel Tan"' in page                                          # the good fields are kept
+    assert re.search(r'name="career.age"[^>]*value="200"', page) is None        # the impossible one is not
+    assert re.search(r'value="[^"/]+/documents/[0-9a-f]{8}_cv\.txt"', page)       # the upload is still kept
 
 
 def test_saving_after_autofill_attaches_the_documents(reading_web, tmp_path):

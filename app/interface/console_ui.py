@@ -97,6 +97,13 @@ class ConsoleUI:
         for path in paths:
             self.__write(f"  - {os.path.basename(path)}")
 
+    def show_dropped_fields(self, messages: list[str]) -> None:
+        """Say which details read from the documents could not be used (each message says why)."""
+        if messages:
+            self.__write("\nSome details read from the documents are not possible, so they were left empty:")
+            for message in messages:
+                self.__write(f"   ! {message}")
+
     def show_missing_intro(self, count: int) -> None:
         if count:
             self.__write(f"\n{count} required detail(s) weren't in the documents. Please fill them in:")

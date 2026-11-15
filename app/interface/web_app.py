@@ -411,8 +411,13 @@ class WebApp:
         The AI reply is turned into a client record by DocumentRecordBuilder - the very
         function the command line's "New Client from Documents" uses - so both give the same values
         (field names, age from the date of birth, wealth split as fractions, oldest job first).
-        Raises ValueError if the reading holds a value no client record can have."""
-        record, _ = self.__app.record_builder(current_date or self.today()).build(extracted, "")
+        A value no client record can have is left out (autofill_form says which). Raises ValueError
+        only if the reading as a whole cannot be a record."""
+        record, _, _ = self.__app.record_builder(current_date or self.today()).build(extracted, "")
+        return self.values_from_reading(record, extracted)
+
+    def values_from_reading(self, record: ClientRecord, extracted: dict) -> dict:
+        """The record DocumentRecordBuilder made from a reading, as form text."""
         data = record.to_dict()
         if not extracted.get("jobs"):
             data["career_history"] = []        # the command line's empty "current job" is only there to be asked for
@@ -517,18 +522,20 @@ class WebApp:
             flash("Document reading is not available right now — please try again later.")
         filled, notes = [], list(warnings)
         if extracted is not None:
+            builder = self.__app.record_builder(self.today())
             try:
-                found = self.extracted_to_values(extracted, self.today())
+                record, _, dropped = builder.build(extracted, "")
             except ValueError as error:
                 logger.error("WebApp.autofill_form: the AI's reading is not a possible record: %r", error)
                 flash(f"The documents were read, but the details cannot be used because {error}. "
                       "Nothing was filled in.")
                 return self.show_form(heading, values, [], documents=documents, notes=notes)
-            values, filled = self.fill_blanks(values, found)
+            if dropped:
+                logger.warning("WebApp.autofill_form: left out of the AI's reading: %s", " | ".join(dropped))
+            values, filled = self.fill_blanks(values, self.values_from_reading(record, extracted))
+            notes += dropped
             notes += extracted.get("notes") or []
             # the same second-look checks the command line shows after reading documents
-            builder = self.__app.record_builder(self.today())
-            record, _ = builder.build(extracted, "")
             notes += builder.check(record)
         if extracted is not None and filled:
             flash(f"Read {len(read)} document(s) and filled {len(filled)} box(es), highlighted in yellow. "

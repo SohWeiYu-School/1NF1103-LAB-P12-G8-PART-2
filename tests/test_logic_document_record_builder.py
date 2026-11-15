@@ -26,7 +26,7 @@ ANSWERS = {"words": "Singapore", "label": "Director", "text": "1,000 employees",
 
 
 def test_build_fills_the_record_and_lists_what_the_documents_did_not_say():
-    record, found = _builder().build(READING, "SOW-DOC-1")
+    record, found, _ = _builder().build(READING, "SOW-DOC-1")
     assert isinstance(record, ClientRecord)
     assert record.client_ref == "SOW-DOC-1"
     assert record.current_date == "2026-10-14"
@@ -36,7 +36,7 @@ def test_build_fills_the_record_and_lists_what_the_documents_did_not_say():
 
 def test_filling_the_gaps_leaves_nothing_missing():
     builder = _builder()
-    record, _ = builder.build({"client": {"name": "A B"}}, "SOW-DOC-1")       # almost nothing was read
+    record, _, _ = builder.build({"client": {"name": "A B"}}, "SOW-DOC-1")       # almost nothing was read
     for field in builder.missing_fields(record):
         record = builder.set_path(record, field["path"], ANSWERS[field["kind"]])
     assert builder.missing_fields(record) == []
@@ -51,7 +51,7 @@ def test_get_path_reaches_into_lists_and_dicts():
 
 def test_set_path_gives_a_changed_copy_and_leaves_the_original_alone():
     builder = _builder()
-    record, _ = builder.build(READING, "SOW-DOC-1")
+    record, _, _ = builder.build(READING, "SOW-DOC-1")
     changed = builder.set_path(record, ["claims", "declared_net_worth"], 5)
     assert changed.claims.declared_net_worth == 5
     assert record.claims.declared_net_worth == READING["claims"]["declared_net_worth_sgd"]
@@ -59,41 +59,69 @@ def test_set_path_gives_a_changed_copy_and_leaves_the_original_alone():
 
 def test_set_path_rejects_a_value_no_record_can_have():
     builder = _builder()
-    record, _ = builder.build(READING, "SOW-DOC-1")
+    record, _, _ = builder.build(READING, "SOW-DOC-1")
     with pytest.raises(ValueError, match="age must be between 18 and 120"):
         builder.set_path(record, ["career", "age"], 12)
 
 
-def test_a_reading_with_an_impossible_value_is_rejected_with_the_reason():
+def test_an_impossible_value_is_left_empty_and_named_while_every_good_field_is_kept():
     reading = {**READING, "client": {**READING["client"], "age": 12, "date_of_birth": None}}
-    with pytest.raises(ValueError, match="age must be between 18 and 120"):
-        _builder().build(reading, "SOW-DOC-1")
+    builder = _builder()
+    record, found, dropped = builder.build(reading, "SOW-DOC-1")
+    assert record.profile.age is None
+    assert record.profile.name == READING["client"]["name"]
+    assert len(dropped) == 1
+    assert dropped[0].startswith("Age: the value read from the documents (12) is not possible (age must be between 18 and 120)")
+    assert dropped[0].endswith("so it was left empty. Please enter it.")
+    assert "career.age" not in found
+    assert ["career", "age"] in [field["path"] for field in builder.missing_fields(record)]
+
+
+def test_several_impossible_values_in_jobs_assets_and_claims_are_each_dropped_on_their_own():
+    reading = {**READING, "jobs": [{**READING["jobs"][0], "start_year": 1800}],
+               "assets": [{**READING["assets"][0], "price_paid_sgd": -5}],
+               "claims": {**READING["claims"], "declared_net_worth_sgd": 0}}
+    record, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    saved = record.to_dict()
+    assert saved["career_history"][0]["start_year"] is None
+    assert saved["career_history"][0]["occupation"] == READING["jobs"][0]["occupation"]
+    assert saved["investments"][0]["price_paid"] is None
+    assert saved["investments"][0]["country"] == READING["assets"][0]["country"]
+    assert saved["claims"]["declared_net_worth"] is None
+    assert saved["claims"]["expected_aum"] == READING["claims"]["expected_aum_sgd"]
+    assert len(dropped) == 3
+    assert any("price paid" in message and "(-5)" in message for message in dropped)
+
+
+def test_a_reading_with_nothing_impossible_drops_nothing():
+    _, _, dropped = _builder().build(READING, "SOW-DOC-1")
+    assert dropped == []
 
 
 def test_a_split_read_only_in_part_is_kept_as_fractions_and_asked_for():
     builder = _builder()
-    record, _ = builder.build({"composition": {"property": 60, "cash": None}}, "SOW-DOC-1")
+    record, _, _ = builder.build({"composition": {"property": 60, "cash": None}}, "SOW-DOC-1")
     assert record.claims.asset_composition["property"] == 0.6
     assert ["claims", "asset_composition"] in [field["path"] for field in builder.missing_fields(record)]
 
 
 def test_check_warns_about_a_job_that_ends_before_it_starts():
     builder = _builder()
-    record, _ = builder.build(READING, "SOW-DOC-1")
+    record, _, _ = builder.build(READING, "SOW-DOC-1")
     record = builder.set_path(record, ["career_history", 0, "start_year"], 2015)
     record = builder.set_path(record, ["career_history", 0, "end_year"], 2010)
     assert "Job 1 ends (2010) before it starts (2015)." in builder.check(record)
 
 
 def test_the_current_job_is_the_career_block():
-    record, _ = _builder().build(READING, "SOW-DOC-1")
+    record, _, _ = _builder().build(READING, "SOW-DOC-1")
     saved = record.to_dict()
     assert saved["career"]["occupation"] == saved["career_history"][-1]["occupation"]
 
 
 def test_the_same_reading_always_builds_the_same_record():
-    first, found = _builder().build(READING, "SOW-DOC-1")
-    second, found_again = _builder().build(READING, "SOW-DOC-1")
+    first, found, _ = _builder().build(READING, "SOW-DOC-1")
+    second, found_again, _ = _builder().build(READING, "SOW-DOC-1")
     assert first.to_dict() == second.to_dict() and found == found_again
 
 
@@ -131,7 +159,7 @@ def _doc_builder():
 
 
 def doc_record():
-    record, found = _doc_builder().build(AI_REPLY, "CL-TEST")
+    record, found, _ = _doc_builder().build(AI_REPLY, "CL-TEST")
     return record, found
 
 
@@ -155,7 +183,7 @@ def test_only_missing_required_fields_are_asked_for():
 
 
 def test_no_jobs_in_documents_still_asks_for_the_current_job():
-    record, _ = _doc_builder().build({"client": {"name": "A B"}}, "CL-X")
+    record, _, _ = _doc_builder().build({"client": {"name": "A B"}}, "CL-X")
     missing = {".".join(map(str, f["path"])) for f in _doc_builder().missing_fields(record)}
 
     assert "career_history.0.occupation" in missing
@@ -187,7 +215,7 @@ def test_finish_after_an_edit_copies_the_last_job_when_every_job_has_ended():
     """When the documents list no open job, the last job is the one shown in "career"; after the
     officer edits that job, finish shows the edited job there again."""
     reply = {**AI_REPLY, "jobs": [dict(AI_REPLY["jobs"][0]), {**AI_REPLY["jobs"][1], "end_year": 2025}]}
-    record, _ = _doc_builder().build(reply, "CL-TEST")
+    record, _, _ = _doc_builder().build(reply, "CL-TEST")
     saved = record.to_dict()
     saved["career_history"][1]["employer_name"] = "Temasek Holdings"           # as the edit screen would
     finished = _doc_builder().finish(ClientRecord.from_dict(saved)).to_dict()

@@ -104,7 +104,7 @@ def marcus(tmp_path):
     with open(MARCUS + "_expected_extract.json", encoding="utf-8") as handle:
         reading = json.load(handle)
     builder = DocumentRecordBuilder(CONFIG, App(None, data_folder=str(tmp_path / "x")).today())
-    record, _ = builder.build(reading, "CL-MARCUS")
+    record, _, _ = builder.build(reading, "CL-MARCUS")
     record = builder.finish(builder.set_path(record, ["investments", 2, "income_produced"], 0)).to_dict()
     record["supporting_documents"] = [{"file_name": os.path.basename(path), "file_path": path}
                                       for path in DocumentStore().list_folder(MARCUS)]

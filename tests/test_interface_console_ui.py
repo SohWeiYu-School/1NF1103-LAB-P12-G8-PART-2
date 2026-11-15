@@ -157,3 +157,11 @@ def test_keep_countries_refuses_a_number_once_and_keeps_the_current_list(capsys)
     assert ConsoleUI(read=ask).keep_countries("Wealth countries", current) is current
     assert ask.asked == ["Wealth countries [Singapore]: "]
     assert "[ERROR] Not changed. Countries must be letters only" in capsys.readouterr().out
+
+
+def test_the_dropped_document_details_are_listed_with_their_reasons(capsys):
+    ConsoleUI().show_dropped_fields(["Age: the value read from the documents (200) is not possible."])
+    out = capsys.readouterr().out
+    assert "were left empty" in out and "Age: the value read" in out
+    ConsoleUI().show_dropped_fields([])
+    assert capsys.readouterr().out == ""

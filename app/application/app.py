@@ -498,14 +498,17 @@ class App:
             self.__ui.show_error(str(error))
             return None
         try:
-            document_record, _ = builder.build(extracted, client_ref)
+            document_record, _, dropped = builder.build(extracted, client_ref)
         except ValueError as error:
             logger.error("App.__new_client_from_documents: the AI's reading is not a possible record: %r", error)
             self.__ui.show_error(f"The details read from the documents cannot be used because {error}.")
             if not self.__ui.ask_yes_no("Type the details in yourself?"):
                 return None
             extracted = {}
-            document_record, _ = builder.build(extracted, client_ref)
+            document_record, _, dropped = builder.build(extracted, client_ref)
+        if dropped:
+            logger.warning("App.__new_client_from_documents: left out of the AI's reading: %s", " | ".join(dropped))
+            self.__ui.show_dropped_fields(dropped)
         record = document_record
         missing = builder.missing_fields(record)
         self.__ui.show_missing_intro(len(missing))
