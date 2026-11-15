@@ -413,3 +413,5 @@ No reviewed member was corrected; the code changed (follow-ups #10, #23, #50, #5
 - `ClientForm.find_existing_client`: the unused `load_fn` parameter removed.
 - Added `AssessmentRunner.RESEARCH_STEP` (the failed-research step's name) and `App.typologies_checked(report)` (static), so both front ends can mark typologies that were not checked against research.
 - Layout: `AssessmentRunner` was widened to 480 and moved up beside `App` (it had grown into App's bottom edge); every App and AssessmentRunner line was re-routed. The long constant value is shortened with `...`. layout_check 0.
+- Known limit (accepted): `App.typologies_checked` reads the report's "Could not run" section, so an assessment saved
+  before #56 with failed research would show no badge. None exist: the database is being reset (Marcus, #4).
