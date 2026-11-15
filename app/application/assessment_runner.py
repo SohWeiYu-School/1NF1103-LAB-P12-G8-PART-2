@@ -37,6 +37,8 @@ class AssessmentRunner:
     caller through on_failure(step, reason), and carries on only if the caller says so.
     """
 
+    # The research step's name when it fails: App reads it to tell whether the typologies were checked.
+    RESEARCH_STEP: str = "The crime scan's research (sources to check the typologies)"
     # The steps the command line and the web app's loading page both show, in order.
     STEPS: tuple[str, ...] = (
         "Reading the submitted documents",
@@ -136,8 +138,7 @@ class AssessmentRunner:
         step(2)
         research = self.__research_ai.run({"case": crime_input, "domains": policy.get("trusted_sources", [])})
         notes += self.__research_ai.warnings()
-        if research is None and not failed("The crime scan's research (sources to check the typologies)",
-                                           "the AI gave no usable research"):
+        if research is None and not failed(AssessmentRunner.RESEARCH_STEP, "the AI gave no usable research"):
             return None
         step(3)
         reports = None

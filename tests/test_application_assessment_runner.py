@@ -135,10 +135,12 @@ def test_failed_research_is_a_step_that_did_not_run_and_the_verdict_is_not_passe
     failures = []
     result, _ = _run(tmp_path, research=None, on_failure=lambda step, reason: failures.append(step) or True)
     verdict = result["verdict"]
-    research_step = "The crime scan's research (sources to check the typologies)"
+    research_step = AssessmentRunner.RESEARCH_STEP
+    assert research_step == "The crime scan's research (sources to check the typologies)"
     assert failures == [research_step]
     assert research_step in verdict.not_run
     assert verdict.outcome != "PASSED"
+    assert f"{research_step} couldn't run" in str(verdict.explanation)     # the reason a person must check
     evidence = {part["title"]: part["lines"] for part in verdict.report["evidence"]}
     assert all(line.endswith("(not checked against research)")
                for line in evidence["Sector typologies"] if not line.startswith("    "))
