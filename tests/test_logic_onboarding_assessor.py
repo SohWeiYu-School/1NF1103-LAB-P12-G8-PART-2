@@ -24,10 +24,6 @@ def _assessor():
     return OnboardingAssessor(FuturePaths(MarketModel()), POLICY, CONFIG)
 
 
-def _fit(fits=True, at_typical=True):
-    return {"fits": fits, "fits_at_typical": at_typical}
-
-
 def test_evaluate_gives_an_outcome_and_a_fit_for_every_type():
     result = _evaluate(sample_case())
     assert result["outcome"] in ("PASSED", "MANUAL_REVIEW", "RISKY", "SERIOUS_RISK")
@@ -88,24 +84,34 @@ def test_each_declared_source_is_checked_from_the_declaration():
                           "detail": "S1 about S1 (2010-2012, Hong Kong): no amount and no job or asset behind it"}
 
 
+def _outcome(declared, clean=False):
+    """The onboarding outcome for the sample case declaring this net worth. clean = no unexplained
+    assets, countries or sources, so no other check can fail."""
+    case = sample_case()
+    case["claims"]["declared_net_worth"] = declared
+    if not clean:
+        return _evaluate(case)["outcome"]
+    case["investments"] = []
+    case["claims"]["wealth_countries"] = ["Singapore"]
+    return _evaluate(case, declaration=Declaration.from_dict({"claimed_sources": []}))["outcome"]
+
+
 def test_only_a_crime_type_explaining_him_is_serious_risk():
-    fits = {"T1": _fit(fits=False), "T2": _fit(fits=True)}
-    assert _assessor()._decide_onboarding(fits, False, []) == "SERIOUS_RISK"
+    assert _outcome(20_000_000) == "SERIOUS_RISK"       # only T2 (a crime type) fits
 
 
 def test_no_type_explaining_him_is_risky():
-    fits = {"T1": _fit(fits=False), "T2": _fit(fits=False)}
-    assert _assessor()._decide_onboarding(fits, False, []) == "RISKY"
+    assert _outcome(100_000_000) == "RISKY"
 
 
 def test_honest_only_at_the_optimistic_edge_or_an_unaffordable_purchase_is_risky():
-    assert _assessor()._decide_onboarding({"T1": _fit(at_typical=False)}, False, []) == "RISKY"
-    assert _assessor()._decide_onboarding({"T1": _fit()}, True, []) == "RISKY"
+    assert _outcome(16_500_000) == "RISKY"              # T1 fits, but not at the typical wealth
+    assert _outcome(10_000_000, clean=True) == "RISKY"
 
 
 def test_other_failed_checks_mean_manual_review_and_a_clean_case_passes():
-    assert _assessor()._decide_onboarding({"T1": _fit()}, False, ["JURISDICTION"]) == "MANUAL_REVIEW"
-    assert _assessor()._decide_onboarding({"T1": _fit()}, False, []) == "PASSED"
+    assert _outcome(1_000_000) == "MANUAL_REVIEW"
+    assert _outcome(2_000_000, clean=True) == "PASSED"
 
 
 def test_an_answer_that_changes_when_the_forecasts_shift_goes_to_manual_review():
