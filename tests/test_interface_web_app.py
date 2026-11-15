@@ -8,6 +8,7 @@ import time
 import pytest
 
 from app.application.app import App
+from app.interface.rate_limiter import RateLimiter
 from app.interface.web_app import WebApp
 from app.model.client_record import ClientRecord
 from tests import fake_ai, fake_services
@@ -52,11 +53,26 @@ def _wait_for(site_client, job_id, seconds=20):
     raise AssertionError("the assessment did not finish")
 
 
-def test_the_web_app_only_holds_an_app(web):
+def test_the_web_app_only_holds_an_app_and_its_rate_limiter(web):
     _, site, _ = web
     held = [name for name in vars(site) if not name.startswith("_WebApp__")]
     assert held == []
-    assert set(vars(site)) == {"_WebApp__app", "_WebApp__jobs", "_WebApp__flask"}
+    assert set(vars(site)) == {"_WebApp__app", "_WebApp__limiter", "_WebApp__jobs", "_WebApp__flask"}
+
+
+def test_a_handed_in_rate_limiter_decides_when_an_assessment_may_start(tmp_path, monkeypatch):
+    """The limiter WebApp is handed is the one it asks; without one it uses the App's own."""
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    application = App(_no_answer, data_folder=str(tmp_path))
+    application.clients().save(sample_case())
+    ref = sample_case()["client_ref"]
+    limiter = RateLimiter(60)
+    limiter.record("127.0.0.1")                       # this browser has just started one
+    client = WebApp(application, limiter).flask().test_client()
+    page = client.post(f"/client/{ref}/assess", follow_redirects=True).get_data(as_text=True)
+    assert "Rate limit: please wait" in page
+    assert application.rate_limiter().check("127.0.0.1") == (True, 0)   # the App's limiter was not used
 
 
 def test_pages_return_html_text_and_redirects_return_a_response(web):

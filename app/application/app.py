@@ -189,7 +189,7 @@ class App:
         """Start the web app. HOST and PORT in .env set where it listens (default 127.0.0.1:5000)."""
         from app.interface.web_app import WebApp    # imported here: WebApp itself imports App
         self.__configure_logging()
-        WebApp(self).run(host or os.getenv("HOST") or "127.0.0.1", port or int(os.getenv("PORT") or 5000))
+        WebApp(self, self.__rate_limiter).run(host or os.getenv("HOST") or "127.0.0.1", port or int(os.getenv("PORT") or 5000))
         return 0
 
     def run_menu(self) -> None:

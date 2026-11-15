@@ -17,6 +17,7 @@ from werkzeug.wrappers import Response
 
 from app.application.app import App
 from app.interface.client_form import ClientForm
+from app.interface.rate_limiter import RateLimiter
 from app.interface.web_templates import TEMPLATES
 from app.model.client_record import ClientRecord
 from app.model.typology import Typology
@@ -90,8 +91,12 @@ class WebApp:
 
     MAX_UPLOAD_BYTES: int = 40 * 1024 * 1024     # uploads for auto-fill: 40 MB per request
 
-    def __init__(self, app: App | None = None) -> None:
+    def __init__(self, app: App | None = None, limiter: RateLimiter | None = None) -> None:
+        """limiter decides how often one browser may start an assessment. Without one, the App's
+        own limiter (made from the policy) is used."""
         self.__app: App | None = app
+        self.__limiter: RateLimiter | None = limiter if limiter is not None else \
+            (app.rate_limiter() if app is not None else None)
         self.__jobs: dict[str, dict] = {}        # job_id -> {status, step_num, step, result, error, client_ref}
         flask = Flask(__name__)
         flask.secret_key = os.getenv("SECRET_KEY", "dev-only-change-me")
@@ -820,12 +825,12 @@ class WebApp:
             return redirect(url_for("view_client", client_ref=client_ref))
 
         user_key = request.remote_addr or "unknown"
-        allowed, seconds_left = self.__app.rate_limiter().check(user_key)
+        allowed, seconds_left = self.__limiter.check(user_key)
         if not allowed:
             self.flash_rate_limit_error(seconds_left)
             return redirect(url_for("view_client", client_ref=client_ref))
 
-        self.__app.rate_limiter().record(user_key)
+        self.__limiter.record(user_key)
         # The same case the command line assesses, dated today (CaseReader).
         # The command line asks for anything missing; here the officer completes the record first.
         case, missing = self.__app.read_case(record)
