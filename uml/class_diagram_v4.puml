@@ -52,7 +52,7 @@ package "Data Manager (app/data)" {
     #_key_field : str = ""
     #_uri : str = ""
     --
-    +__init__(collection_name : str = "", key_field : str = "", uri : str = "")
+    +__init__(collection_name : str, key_field : str, uri : str = "")
     +save(record : dict) : bool
     +load() : list[dict]
     +find(ref : str) : dict | None
@@ -116,7 +116,7 @@ package "Data Manager (app/data)" {
     -__client : MongoClient | None = None
     +DB_NAME : str = "sow_risk_db" «const»
     --
-    +__init__(collection_name : str = "", key_field : str = "", uri : str = "")
+    +__init__(collection_name : str, key_field : str, uri : str = "")
     #_connect() : bool
     #_upsert(key : str, record : dict) : bool
     #_fetch(query : dict) : list[dict]
@@ -231,7 +231,6 @@ package "IO Manager (app/interface)" {
     +show_onboarding(assessment : dict) : None
     +show_assessment_list(records : list[dict]) : None
     +show_client_list(records : list[dict]) : None
-    +show_ai_progress(results : dict) : None
     +display_client_record(record : ClientRecord) : None
     +format_evidence(verdict : Verdict) : str
     -__format_crime_section(crime : dict, typologies : list[Typology]) : list[str]
@@ -258,7 +257,7 @@ package "IO Manager (app/interface)" {
     +assess_loading(job_id : str) : str
     +assess_poll(job_id : str) : dict
     +assess_result(job_id : str) : str | Response
-    +view_assessment(assessment_id : str) : str
+    +view_assessment(assessment_id : str) : str | Response
     +list_assessments_view() : str
     +sync_to_cloud() : Response
     -__run_in_background(job_id : str, record : ClientRecord, case : dict) : None

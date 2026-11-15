@@ -282,3 +282,16 @@ Reason code for the 18 added arrows: **T** (the class really works with the othe
 Checker: `relcheck.py` now reads the hand-checked "only passed on" links from `not_drawn_checked.json`. Any new link of this kind that nobody has checked is reported as **missing**, so it gets looked at instead of being hidden.
 
 Tools: the new arrows are routed automatically (`uml_arrows.py`: right-angled paths that never cross a class box), and `layout_check` reports 0.
+
+## Clean-up pass and §9 fixes (2026-11-16): 4 diagram edits
+
+The code changed first (follow-ups #32, #37, #38, #41, #42, approved by Marcus); the diagram follows it.
+
+| Class | Change | Reason |
+|---|---|---|
+| `DatabaseRepository`, `MongoRepository` | `__init__(collection_name : str, key_field : str, uri : str = "")`: the `""` defaults are gone | **R**: an empty key field made `find` query `{"": ref}` (§9 validation). Both values are now required and an empty one is rejected with a clear message, so a `""` default would always fail |
+| `WebApp` | `view_assessment(...) : str \| Response` | **T**: it now redirects home when the saved assessments cannot be read (§9) |
+| `ReportView` | `show_ai_progress(results)` removed | **T**: nothing but its own test ever called it (dead code, follow-up #38) |
+
+The renames to private (`CaseBuilder.__payment_method` and three more helpers, `ConsoleUI.__words_error`, `ForecastAI.__check_market_series` / `__check_position_pay`) and the removal of `WebApp.PAYMENT_OPTIONS` touch members that are not in the diagram yet, so they need no correction here; stage 5 adds the members as they now are.
+

@@ -110,7 +110,7 @@
         <mxCell id="c39" parent="c37" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
           <mxGeometry height="1" width="460" y="95.5" as="geometry" />
         </mxCell>
-        <mxCell id="c40" parent="c37" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(app : App | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;limiter : RateLimiter | None = None)&lt;br&gt;+ start(host : str = &amp;quot;127.0.0.1&amp;quot;, port : int = 5000,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;debug : bool = False) : None&lt;br&gt;+ home() : str&lt;br&gt;+ find() : Response&lt;br&gt;+ new_client() : str | Response&lt;br&gt;+ new_client_autofill() : str&lt;br&gt;+ view_client(client_ref : str) : str | Response&lt;br&gt;+ edit_client(client_ref : str) : str | Response&lt;br&gt;+ edit_client_autofill(client_ref : str) : str | Response&lt;br&gt;+ upload_documents(client_ref : str) : Response&lt;br&gt;+ download_document(client_ref : str, file_id : str) : Response&lt;br&gt;+ assess_client(client_ref : str) : Response&lt;br&gt;+ assess_loading(job_id : str) : str&lt;br&gt;+ assess_poll(job_id : str) : dict&lt;br&gt;+ assess_result(job_id : str) : str | Response&lt;br&gt;+ view_assessment(assessment_id : str) : str&lt;br&gt;+ list_assessments_view() : str&lt;br&gt;+ sync_to_cloud() : Response&lt;br&gt;− __run_in_background(job_id : str, record : ClientRecord,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;case : dict) : None&lt;/div&gt;" vertex="1">
+        <mxCell id="c40" parent="c37" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(app : App | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;limiter : RateLimiter | None = None)&lt;br&gt;+ start(host : str = &amp;quot;127.0.0.1&amp;quot;, port : int = 5000,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;debug : bool = False) : None&lt;br&gt;+ home() : str&lt;br&gt;+ find() : Response&lt;br&gt;+ new_client() : str | Response&lt;br&gt;+ new_client_autofill() : str&lt;br&gt;+ view_client(client_ref : str) : str | Response&lt;br&gt;+ edit_client(client_ref : str) : str | Response&lt;br&gt;+ edit_client_autofill(client_ref : str) : str | Response&lt;br&gt;+ upload_documents(client_ref : str) : Response&lt;br&gt;+ download_document(client_ref : str, file_id : str) : Response&lt;br&gt;+ assess_client(client_ref : str) : Response&lt;br&gt;+ assess_loading(job_id : str) : str&lt;br&gt;+ assess_poll(job_id : str) : dict&lt;br&gt;+ assess_result(job_id : str) : str | Response&lt;br&gt;+ view_assessment(assessment_id : str) : str | Response&lt;br&gt;+ list_assessments_view() : str&lt;br&gt;+ sync_to_cloud() : Response&lt;br&gt;− __run_in_background(job_id : str, record : ClientRecord,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;case : dict) : None&lt;/div&gt;" vertex="1">
           <mxGeometry height="340" width="460" y="96" as="geometry" />
         </mxCell>
         <mxCell id="c41" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="RateLimiter" vertex="1">
@@ -138,7 +138,7 @@
           <mxGeometry height="475" width="440" y="111" as="geometry" />
         </mxCell>
         <mxCell id="c49" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="ReportView" vertex="1">
-          <mxGeometry height="361" width="380" x="2620" y="740" as="geometry" />
+          <mxGeometry height="346" width="380" x="2620" y="740" as="geometry" />
         </mxCell>
         <mxCell id="c50" parent="c49" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __ui : ConsoleUI = ConsoleUI()&lt;br&gt;− __width : int = 96&lt;br&gt;+ FIELD_NAMES : dict = {...} «const»&lt;br&gt;+ OUTCOME_LABELS : dict = {...} «const»&lt;br&gt;+ MIN_WIDTH : int = 20 «const»&lt;br&gt;+ SOURCE_TAGS : dict[str, str] = {...} «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="100" width="380" y="26" as="geometry" />
@@ -146,8 +146,8 @@
         <mxCell id="c51" parent="c49" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
           <mxGeometry height="1" width="380" y="125.5" as="geometry" />
         </mxCell>
-        <mxCell id="c52" parent="c49" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(ui : ConsoleUI | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;width : int = REPORT_WIDTH)&lt;br&gt;+ show_verdict_report(verdict : Verdict,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;ask_for_evidence : bool = True,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;crime_result : dict | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;typologies : list[Typology] | None = None) : None&lt;br&gt;+ show_onboarding(assessment : dict) : None&lt;br&gt;+ show_assessment_list(records : list[dict]) : None&lt;br&gt;+ show_client_list(records : list[dict]) : None&lt;br&gt;+ show_ai_progress(results : dict) : None&lt;br&gt;+ display_client_record(record : ClientRecord) : None&lt;br&gt;+ format_evidence(verdict : Verdict) : str&lt;br&gt;− __format_crime_section(crime : dict,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;typologies : list[Typology]) : list[str]&lt;br&gt;− __display_section(title : str) : None&lt;/div&gt;" vertex="1">
-          <mxGeometry height="235" width="380" y="126" as="geometry" />
+        <mxCell id="c52" parent="c49" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(ui : ConsoleUI | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;width : int = REPORT_WIDTH)&lt;br&gt;+ show_verdict_report(verdict : Verdict,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;ask_for_evidence : bool = True,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;crime_result : dict | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;typologies : list[Typology] | None = None) : None&lt;br&gt;+ show_onboarding(assessment : dict) : None&lt;br&gt;+ show_assessment_list(records : list[dict]) : None&lt;br&gt;+ show_client_list(records : list[dict]) : None&lt;br&gt;+ display_client_record(record : ClientRecord) : None&lt;br&gt;+ format_evidence(verdict : Verdict) : str&lt;br&gt;− __format_crime_section(crime : dict,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;typologies : list[Typology]) : list[str]&lt;br&gt;− __display_section(title : str) : None&lt;/div&gt;" vertex="1">
+          <mxGeometry height="220" width="380" y="126" as="geometry" />
         </mxCell>
         <mxCell id="c53" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="ClientForm" vertex="1">
           <mxGeometry height="361" width="430" x="2620" y="1120" as="geometry" />
@@ -590,7 +590,7 @@
         <mxCell id="c199" parent="c197" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
           <mxGeometry height="1" width="430" y="94.5" as="geometry" />
         </mxCell>
-        <mxCell id="c200" parent="c197" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(collection_name : str = &amp;quot;&amp;quot;, key_field : str = &amp;quot;&amp;quot;,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;uri : str = &amp;quot;&amp;quot;)&lt;br&gt;+ save(record : dict) : bool&lt;br&gt;+ load() : list[dict]&lt;br&gt;+ find(ref : str) : dict | None&lt;br&gt;+ is_online() : bool&lt;br&gt;+ upload_local_documents(record : dict) : int&lt;br&gt;&lt;i&gt;# _connect() : bool {abstract}&lt;/i&gt;&lt;br&gt;&lt;i&gt;# _upsert(key : str, record : dict) : bool {abstract}&lt;/i&gt;&lt;br&gt;&lt;i&gt;# _fetch(query : dict) : list[dict] {abstract}&lt;/i&gt;&lt;br&gt;&lt;i&gt;# _store_file(path : str, name : str) : str {abstract}&lt;/i&gt;&lt;/div&gt;" vertex="1">
+        <mxCell id="c200" parent="c197" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(collection_name : str, key_field : str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;uri : str = &amp;quot;&amp;quot;)&lt;br&gt;+ save(record : dict) : bool&lt;br&gt;+ load() : list[dict]&lt;br&gt;+ find(ref : str) : dict | None&lt;br&gt;+ is_online() : bool&lt;br&gt;+ upload_local_documents(record : dict) : int&lt;br&gt;&lt;i&gt;# _connect() : bool {abstract}&lt;/i&gt;&lt;br&gt;&lt;i&gt;# _upsert(key : str, record : dict) : bool {abstract}&lt;/i&gt;&lt;br&gt;&lt;i&gt;# _fetch(query : dict) : list[dict] {abstract}&lt;/i&gt;&lt;br&gt;&lt;i&gt;# _store_file(path : str, name : str) : str {abstract}&lt;/i&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="175" width="430" y="95" as="geometry" />
         </mxCell>
         <mxCell id="c201" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="MongoRepository" vertex="1">
@@ -602,7 +602,7 @@
         <mxCell id="c203" parent="c201" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
           <mxGeometry height="1" width="430" y="65.5" as="geometry" />
         </mxCell>
-        <mxCell id="c204" parent="c201" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(collection_name : str = &amp;quot;&amp;quot;, key_field : str = &amp;quot;&amp;quot;,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;uri : str = &amp;quot;&amp;quot;)&lt;br&gt;# _connect() : bool&lt;br&gt;# _upsert(key : str, record : dict) : bool&lt;br&gt;# _fetch(query : dict) : list[dict]&lt;br&gt;# _store_file(path : str, name : str) : str&lt;/div&gt;" vertex="1">
+        <mxCell id="c204" parent="c201" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(collection_name : str, key_field : str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;uri : str = &amp;quot;&amp;quot;)&lt;br&gt;# _connect() : bool&lt;br&gt;# _upsert(key : str, record : dict) : bool&lt;br&gt;# _fetch(query : dict) : list[dict]&lt;br&gt;# _store_file(path : str, name : str) : str&lt;/div&gt;" vertex="1">
           <mxGeometry height="100" width="430" y="66" as="geometry" />
         </mxCell>
         <mxCell id="c205" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="CloudSync" vertex="1">
@@ -988,7 +988,7 @@
         <mxCell id="c315" edge="1" parent="1" source="c49" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=none;exitX=1.0000;exitY=0.6172;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.9073;entryDx=0;entryDy=0;entryPerimeter=0;" target="c45" value="prints via">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="3120" y="962.8" />
+              <mxPoint x="3120" y="953.6" />
               <mxPoint x="3120" y="621.7" />
             </Array>
           </mxGeometry>
@@ -1345,7 +1345,7 @@
         <mxCell id="c378" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.7963;exitY=0.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.0000;entryY=0.8984;entryDx=0;entryDy=0;entryPerimeter=0;" target="c49" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2480" y="1064.3" />
+              <mxPoint x="2480" y="1050.8" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -1743,7 +1743,7 @@
         <mxCell id="c439" edge="1" parent="1" source="c49" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=0.0000;exitY=0.9827;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.0000;entryY=0.6647;entryDx=0;entryDy=0;entryPerimeter=0;" target="c265" value="uses">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="1990" y="1094.8" />
+              <mxPoint x="1990" y="1080" />
               <mxPoint x="1990" y="1540" />
               <mxPoint x="-30" y="1540" />
               <mxPoint x="-30" y="5110" />
@@ -1753,7 +1753,7 @@
         <mxCell id="c440" edge="1" parent="1" source="c49" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=1.0000;exitY=0.8984;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.7948;entryDx=0;entryDy=0;entryPerimeter=0;" target="c241" value="uses">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="4020" y="1064.3" />
+              <mxPoint x="4020" y="1050.8" />
               <mxPoint x="4020" y="1370" />
               <mxPoint x="4140" y="1370" />
               <mxPoint x="4140" y="5321.9" />
@@ -1893,7 +1893,7 @@
             <Array as="points">
               <mxPoint x="3070" y="1210.25" />
               <mxPoint x="3070" y="1010" />
-              <mxPoint x="3020" y="1010.75" />
+              <mxPoint x="3020" y="999.5" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -1960,7 +1960,7 @@
         <mxCell id="c473" edge="1" parent="1" source="c49" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=1.0000;exitY=0.7500;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.2500;entryDx=0;entryDy=0;entryPerimeter=0;" target="c273" value="uses">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="3020" y="1010.75" />
+              <mxPoint x="3020" y="999.5" />
               <mxPoint x="3020" y="1000" />
               <mxPoint x="3080" y="1000" />
               <mxPoint x="3080" y="1830" />
@@ -2263,7 +2263,7 @@
         <mxCell id="c501" edge="1" parent="1" source="c49" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=1.0000;exitY=0.5000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.1500;entryDx=0;entryDy=0;entryPerimeter=0;" target="c245" value="uses">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="3020" y="920.5" />
+              <mxPoint x="3020" y="913" />
               <mxPoint x="3850" y="920" />
               <mxPoint x="3850" y="5440" />
               <mxPoint x="3050" y="5440" />
@@ -2276,7 +2276,7 @@
         <mxCell id="c502" edge="1" parent="1" source="c49" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=1.0000;exitY=0.4000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.7500;entryY=1.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c249" value="uses">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="3020" y="884.4" />
+              <mxPoint x="3020" y="878.4" />
               <mxPoint x="4270" y="880" />
               <mxPoint x="4270" y="6050" />
               <mxPoint x="3010" y="6050" />
