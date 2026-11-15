@@ -24,8 +24,8 @@ class VerdictEngine:
     on combine().
     """
 
-    VERDICT_LABELS = {"PASSED": "PASSED", "MANUAL_REVIEW": "MANUAL REVIEW", "RISKY": "RISKY", "SERIOUS_RISK": "SERIOUS RISK"}
-    THEMES = {
+    VERDICT_LABELS: dict[str, str] = {"PASSED": "PASSED", "MANUAL_REVIEW": "MANUAL REVIEW", "RISKY": "RISKY", "SERIOUS_RISK": "SERIOUS RISK"}
+    THEMES: dict[str, str] = {
         "wealth":    "Wealth too high for his career",
         "purchases": "Purchases he couldn't afford",
         "people":    "Unknown or unnamed people giving money",
@@ -33,8 +33,8 @@ class VerdictEngine:
         "sources":   "Sources that don't match his job",
         "pattern":   "Matches a known crime pattern",
     }
-    MARKS = {"failed": "fail", "weak": "weak", "explained": "explained", "passed": "pass", "skipped": "skip", "info": "info"}
-    REPORT_LEGEND = [
+    MARKS: dict[str, str] = {"failed": "fail", "weak": "weak", "explained": "explained", "passed": "pass", "skipped": "skip", "info": "info"}
+    REPORT_LEGEND: list[dict[str, str]] = [
         {"mark": "fail", "symbol": "\u2717", "meaning": "counts towards the verdict"},
         {"mark": "explained", "symbol": "~", "meaning": "failed, but another feature explains it"},
         {"mark": "weak", "symbol": "!", "meaning": "loose end"},
@@ -42,8 +42,8 @@ class VerdictEngine:
         {"mark": "skip", "symbol": "-", "meaning": "couldn't run"},
         {"mark": "info", "symbol": "\u2022", "meaning": "information"},
     ]
-    _ROUTINE_NOTES = ("converted to", "renumbered", "kept first")
-    ORIGINAL_BENCHMARK = ["TOTAL_WEALTH", "LIQUIDITY", "COMPOSITION_PROPERTY", "COMPOSITION_EQUITIES",
+    _ROUTINE_NOTES: tuple[str, ...] = ("converted to", "renumbered", "kept first")
+    ORIGINAL_BENCHMARK: list[str] = ["TOTAL_WEALTH", "LIQUIDITY", "COMPOSITION_PROPERTY", "COMPOSITION_EQUITIES",
                           "COMPOSITION_BUSINESS", "COMPOSITION_CASH", "VELOCITY", "COUNTERPARTIES", "JURISDICTION"]
 
     def __init__(self, features: list[RiskAnalysis] | None = None, config: Config | None = None) -> None:
