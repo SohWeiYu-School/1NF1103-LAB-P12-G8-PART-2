@@ -27,7 +27,7 @@ class DocumentRecordBuilder:
         self.__policy: dict = self.__config.policy
         self.__today: str = today
 
-    def _age_from_birth(self, date_of_birth) -> int | None:
+    def __age_from_birth(self, date_of_birth) -> int | None:
         """Whole years between date_of_birth and today, or None if either can't be read."""
         today = self.__today
         try:
@@ -80,7 +80,7 @@ class DocumentRecordBuilder:
         split = {key: composition.get(key) / 100 if self.__is_number(composition.get(key)) else None
                  for key in CaseReader.COMPOSITION_KEYS}
 
-        age = client.get("age") or self._age_from_birth(client.get("date_of_birth"))
+        age = client.get("age") or self.__age_from_birth(client.get("date_of_birth"))
         record = {
             "client_ref": client_ref,
             "name": client.get("name"),
