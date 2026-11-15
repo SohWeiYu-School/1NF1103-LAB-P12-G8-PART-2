@@ -20,7 +20,7 @@ class Benchmark(RiskAnalysis):
     forecast explains is marked "explained" and does not count towards the verdict.
     """
 
-    LIMITS = {
+    LIMITS: dict[str, int] = {
         "total_wealth": 3,
         "liquidity": 2,
         "composition": 40,
@@ -28,13 +28,13 @@ class Benchmark(RiskAnalysis):
         "counterparties": 1,
         "jurisdiction": 1
     }
-    _COMPOSITION_PARTS = [
+    _COMPOSITION_PARTS: list[tuple[str, str, str, str]] = [
         ("COMPOSITION_PROPERTY",  "property",        "expected_property",        "Property"),
         ("COMPOSITION_EQUITIES",  "listed_equities",  "expected_listed_equities", "Listed equities"),
         ("COMPOSITION_BUSINESS",  "private_business", "expected_private_business","Private business"),
         ("COMPOSITION_CASH",      "cash",             "expected_cash",            "Cash"),
     ]
-    BENCHMARK_LABELS = {
+    BENCHMARK_LABELS: dict[str, str] = {
         "TOTAL_WEALTH": "Total wealth", "UNEXPLAINED_GAP": "Unexplained wealth",
         "VELOCITY": "Wealth growth speed", "JUMP_VS_ECONOMY": "Wealth jump vs economy",
         "LIQUIDITY": "Liquidity", "AUM_FUNDING": "Money brought to the bank",
@@ -42,8 +42,8 @@ class Benchmark(RiskAnalysis):
         "COMPOSITION_BUSINESS": "Asset mix: private business", "COMPOSITION_CASH": "Asset mix: cash",
         "COUNTERPARTIES": "Counterparties", "JURISDICTION": "Countries", "PEP_STATUS": "PEP status",
     }
-    FORECAST_DERIVED = ("UNEXPLAINED_GAP", "PEP_STATUS", "PEER_BENCHMARK")
-    COMPOSITION_RULES = {"COMPOSITION_PROPERTY": "property", "COMPOSITION_EQUITIES": "listed_equities",
+    FORECAST_DERIVED: tuple[str, ...] = ("UNEXPLAINED_GAP", "PEP_STATUS", "PEER_BENCHMARK")
+    COMPOSITION_RULES: dict[str, str] = {"COMPOSITION_PROPERTY": "property", "COMPOSITION_EQUITIES": "listed_equities",
                          "COMPOSITION_BUSINESS": "private_business", "COMPOSITION_CASH": "cash"}
 
     NAME: str = "benchmark"
@@ -116,7 +116,7 @@ class Benchmark(RiskAnalysis):
 
         return unknown
 
-    def _clean_country(self, country):
+    def _clean_country(self, country: str) -> str:
         if country == "SG":
             return "Singapore"
         elif country == "MY":
@@ -141,7 +141,7 @@ class Benchmark(RiskAnalysis):
 
         return unknown
 
-    def _run_rules(self, client_data: dict, ai_data: dict):
+    def _run_rules(self, client_data: dict, ai_data: dict) -> dict | None:
         """Run all benchmark checks for a client."""
         policy = self._policy
 
