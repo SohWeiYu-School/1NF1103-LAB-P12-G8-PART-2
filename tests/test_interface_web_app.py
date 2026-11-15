@@ -204,6 +204,34 @@ def test_an_assessment_runs_in_the_background_and_is_saved(web):
     assert client.get("/assessments").status_code == 200
 
 
+def test_the_result_page_shows_the_crime_cards_from_the_typologies(tmp_path, monkeypatch):
+    """The page template reads dicts: the web app hands it the typologies' to_dict() layout, so a
+    fresh result and the same assessment opened later show the same crime cards."""
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    application = App(fake_ai.caller(), data_folder=str(tmp_path))
+    client = WebApp(application).flask().test_client()
+    record = sample_case()
+    application.clients().save(record)
+    case, _ = application.read_case(ClientRecord.from_dict(record))
+    fake_services.save_forecast_replies(application.response_cache(), case)
+    job_id = client.post(f"/client/{record['client_ref']}/assess").headers["Location"].rsplit("/", 1)[-1]
+    assert _wait_for(client, job_id)["status"] == "done"
+    typology = fake_ai.typologies()["sector_typologies"][0]
+
+    def crime_cards(page: str) -> str:
+        return page[page.index("Crime - known patterns for his industry"):]
+
+    fresh = client.get(f"/assess/result/{job_id}").get_data(as_text=True)
+    assert "1 typologies checked" in fresh and "1 matched" in fresh
+    for shown in (typology["name"], typology["description"], "TRADE BASED ML", "HIGH MATCH",
+                  typology["source_quotes"][0]["quote"]):
+        assert shown in fresh, shown
+    saved = application.assessments().for_client(record["client_ref"])[0]
+    reopened = client.get(f"/assessment/{saved['assessment_id']}").get_data(as_text=True)
+    assert crime_cards(reopened) == crime_cards(fresh)
+
+
 def test_assessing_a_saved_client_that_cannot_be_read_is_refused_with_a_message(web):
     application, _, client = web
     record = sample_case()

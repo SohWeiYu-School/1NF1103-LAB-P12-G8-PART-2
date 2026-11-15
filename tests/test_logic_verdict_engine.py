@@ -10,6 +10,7 @@ from app.logic.forecast import Forecast
 from app.logic.verdict_engine import VerdictEngine
 from app.model.check import Check
 from app.model.verdict import Verdict
+from tests import fake_ai
 from tests.logic_fixtures import CONFIG, POLICY, sample_case, sample_forecast
 
 
@@ -244,3 +245,41 @@ def test_pay_taken_from_documents_is_added_as_a_forecast_check(parts):
     assert (pay["feature"], pay["check"], pay["status"], pay["group"]) == (
         "forecast", "PAY_FROM_DOCUMENTS", "info", "Pay taken from his documents")
     assert "scaled x1.5" in pay["detail"]
+
+
+UNNAMED = {"sources": [{"source_id": "S1", "source_type": "advisory_fees", "counterparty": None,
+                        "amount_sgd": None, "occupation_mismatch": False, "jurisdiction": "HK"}]}
+
+
+def test_the_crime_scan_objects_feed_the_person_types_evidence_and_documents(parts):
+    case, data = parts
+    scan = CrimeScan(POLICY)
+    reports = scan.verify_research(fake_ai.research())
+    typologies = scan.verify_typology_sources(fake_ai.typologies()["sector_typologies"], reports)
+    crime_result = scan.run(case, {"typologies": typologies, "declaration": UNNAMED})
+    verdict = VerdictEngine(_features(), CONFIG).combine(case, {
+        **data, "reports": reports, "typologies": typologies, "crime_result": crime_result})
+    typology = typologies[0]
+
+    t2 = next(row for row in verdict.explanation["types"] if row["typology_id"] == typology.typology_id)
+    assert (t2["typology_name"], t2["match"], t2["source_ids"]) == (typology.name, "high", ["R1"])
+    assert t2["quote"] == typology.source_quotes[0]
+    assert t2["fired"] == ["counterparty_unnamed", "unvalued_source_present"]
+
+    evidence = {part["title"]: part["lines"] for part in verdict.explanation["evidence"]}
+    assert evidence["Research reports"] == ["[R1] FATF (2020) - Trade-Based Money Laundering"]
+    assert evidence["Sector typologies"] == [
+        f"{typology.name} ({CONFIG.category_name(typology.crime_category)})", f"    {typology.description}"]
+
+    asked = {entry["document"]: entry["reason"] for entry in verdict.explanation["documents"]}
+    assert verdict.outcome != "PASSED"
+    for document in typology.typical_documents:              # Freight invoices, Bills of lading
+        assert asked[document] == f"Matches the known pattern: {typology.name}"
+
+
+def test_with_no_research_the_evidence_says_no_reports_were_found(parts):
+    case, data = parts
+    verdict = VerdictEngine(_features(), CONFIG).combine(case, {**data, "reports": None, "typologies": None})
+    evidence = {part["title"]: part["lines"] for part in verdict.explanation["evidence"]}
+    assert evidence["Research reports"] == ["No research reports were found."]
+    assert evidence["Sector typologies"] == ["No verified typologies."]

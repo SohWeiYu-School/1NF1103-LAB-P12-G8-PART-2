@@ -1,11 +1,15 @@
-"""Tests for logic_manager indicator check functions and match_typologies."""
+"""Tests for CrimeScan's warning signs and match_typologies."""
 
 from app.logic.crime_scan import CrimeScan
+from app.model.declaration import Declaration
+from app.model.typology import Typology
 
 
 def match_typologies(typologies, declaration, clean_case, policy):
-    """The crime scan's matching, as these tests have always called it."""
-    return CrimeScan(policy).match_typologies(typologies, declaration, clean_case)
+    """The crime scan's matching, as these tests have always called it: the typology dicts become
+    Typology objects and the declaration a Declaration, as the crime scan hands them over."""
+    return CrimeScan(policy).match_typologies(Declaration(declaration["sources"]),
+                                              [Typology.from_dict(typology) for typology in typologies])
 
 
 # ---------------------------------------------------------------------------

@@ -8,6 +8,7 @@ from app.logic.document_evidence import DocumentEvidence
 from app.logic.forecast import Forecast
 from app.logic.verdict_engine import VerdictEngine
 from app.model.client_record import ClientRecord
+from tests import fake_ai
 from tests.logic_fixtures import CONFIG, POLICY, sample_case, sample_forecast
 
 
@@ -95,3 +96,36 @@ def test_a_client_record_shows_every_job_asset_and_document(capsys):
     assert "--- Job 2 ---" in out and "--- Investment 1 ---" in out
     assert "present (current job)" in out
     assert "1. payslip.pdf" in out and "File ID: f1" in out
+
+
+UNNAMED = {"sources": [{"source_id": "S1", "source_type": "advisory_fees", "counterparty": None,
+                        "amount_sgd": None, "occupation_mismatch": False, "jurisdiction": "HK"}]}
+
+
+def _crime_scan():
+    """The crime scan's own objects for the sample: the verified Typologies and the crime result."""
+    scan = CrimeScan(POLICY)
+    typologies = scan.verify_typology_sources(fake_ai.typologies()["sector_typologies"],
+                                              scan.verify_research(fake_ai.research()))
+    return typologies, scan.run(sample_case(), {"typologies": typologies, "declaration": UNNAMED})
+
+
+def test_the_crime_section_is_laid_out_from_the_typology_objects():
+    typologies, crime_result = _crime_scan()
+    text = _view().format_verdict_report(_report(), crime_result=crime_result, typologies=typologies)
+    typology = typologies[0]
+    assert "CRIME - KNOWN PATTERNS FOR HIS INDUSTRY" in text
+    assert "1 typologies  \u00b7  1 matched  \u00b7  0 no match" in text
+    assert f"[HIGH MATCH]  {typology.name}" in text
+    assert "    Core:        \u2713 Money from unnamed counterparty" in text
+    assert "    Supporting:  \u2713 Source with no declared amount" in text
+    assert typology.description.split(".")[0] in text                       # read from the Typology
+    assert f'"{typology.source_quotes[0]["quote"]}"  [R1]' in text
+
+
+def test_a_match_whose_typology_is_not_listed_shows_no_description_or_quote():
+    typologies, crime_result = _crime_scan()
+    text = _view().format_verdict_report(_report(), crime_result=crime_result, typologies=[])
+    assert f"[HIGH MATCH]  {typologies[0].name}" in text
+    assert typologies[0].description.split(".")[0] not in text
+    assert typologies[0].source_quotes[0]["quote"] not in text

@@ -19,6 +19,7 @@ from app.application.app import App
 from app.interface.client_form import ClientForm
 from app.interface.web_templates import TEMPLATES
 from app.model.client_record import ClientRecord
+from app.model.typology import Typology
 
 logger = logging.getLogger(__name__)
 
@@ -598,7 +599,7 @@ class WebApp:
                 "assessed_at":   datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "ai_warnings":   ai_warnings,
                 "crime_result":  result.get("crime_result"),
-                "typologies":    result.get("typologies"),
+                "typologies":    WebApp.__typology_layout(result.get("typologies")),
                 "benchmark":     result.get("benchmark"),
             }
             job["status"] = "done"
@@ -607,6 +608,11 @@ class WebApp:
             logging.exception("Assessment of %s failed", record.client_ref)
             job["status"] = "error"
             job["error"] = str(exc)
+
+    @staticmethod
+    def __typology_layout(typologies: list[Typology] | None) -> list[dict] | None:
+        """The typologies as the page template reads them (the typology reply's layout)."""
+        return None if typologies is None else [typology.to_dict() for typology in typologies]
 
     def show_report(self, record: dict, report: dict | None, assessed_at: str = "", assessment_id: str | None = None,
                     crime_result=None, typologies=None, benchmark=None):

@@ -5,6 +5,7 @@ import textwrap
 
 from app.interface.console_ui import ConsoleUI
 from app.model.client_record import ClientRecord
+from app.model.typology import Typology
 from app.model.verdict import Verdict
 
 
@@ -44,9 +45,9 @@ class ReportView:
     def __init__(self, ui: ConsoleUI | None = None) -> None:
         self.__ui: ConsoleUI = ui or ConsoleUI()
 
-    def _format_crime_section(self, crime_result: dict, typologies: list, width: int) -> list[str]:
+    def _format_crime_section(self, crime_result: dict, typologies: list[Typology], width: int) -> list[str]:
         """Build lines for the structured crime section inside the verdict report."""
-        typ_lookup    = {t.get("typology_id", ""): t for t in typologies}
+        typ_lookup    = {t.typology_id: t for t in typologies}
         match_results = crime_result.get("match_results", [])
         match_count   = crime_result.get("match_count", 0)
         total         = len(match_results)
@@ -60,7 +61,7 @@ class ReportView:
             name      = mr.get("name", typ_id or "?")
             category  = mr.get("category", "no_match")
             label     = ReportView._CRIME_CATEGORY_LABEL.get(category, category.upper())
-            typ_data  = typ_lookup.get(typ_id, {})
+            typ_data  = typ_lookup.get(typ_id)
             core_inds  = mr.get("core_indicators", [])
             core_fired = set(mr.get("core_fired", []))
             sup_inds   = mr.get("supporting_indicators", [])
@@ -68,7 +69,7 @@ class ReportView:
 
             lines += ["", f"  [{label}]  {name}"]
 
-            desc = (typ_data.get("description") or "").strip()
+            desc = (typ_data.description if typ_data else "").strip()
             if desc:
                 lines += textwrap.wrap(desc, width - 4, initial_indent="    ", subsequent_indent="    ")
 
@@ -81,7 +82,7 @@ class ReportView:
                     f"{'✓' if i in sup_fired else '—'} {ReportView._CRIME_INDICATOR_LABEL.get(i, i.replace('_', ' '))}"
                     for i in sup_inds))
 
-            quotes = typ_data.get("source_quotes") or []
+            quotes = typ_data.source_quotes if typ_data else []
             if quotes and quotes[0].get("quote"):
                 q   = quotes[0]
                 rid = q.get("report_id", "")
@@ -93,7 +94,7 @@ class ReportView:
         return lines
 
     def format_verdict_report(self, verdict: Verdict, crime_result: dict | None = None,
-                              typologies: list | None = None) -> str:
+                              typologies: list[Typology] | None = None) -> str:
         """The combined assessment as text: the same header, sections and evidence the web app shows
         (the verdict's report)."""
         report = verdict.report
@@ -138,7 +139,7 @@ class ReportView:
         return "\n".join(lines)
 
     def show_verdict_report(self, verdict: Verdict, ask_for_evidence: bool = True,
-                            crime_result: dict | None = None, typologies: list | None = None) -> None:
+                            crime_result: dict | None = None, typologies: list[Typology] | None = None) -> None:
         """The short report, then (if the officer wants it) the full evidence."""
         self.__ui.show("\n" + self.format_verdict_report(verdict, crime_result=crime_result, typologies=typologies) + "\n")
         if ask_for_evidence and self.__ui.ask_yes_no("Show the full evidence?"):

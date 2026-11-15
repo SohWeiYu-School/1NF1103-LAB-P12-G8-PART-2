@@ -92,6 +92,8 @@ class AssessmentRunner:
         Returns the result: the Verdict (under "verdict", with its report) and the evidence
         behind it (case, research, typologies, crime result, benchmark, forecast ...), which
         App saves and the web page shows. None if on_failure stopped the assessment.
+        "typologies" is a list of Typology objects (None if the typology step failed); the web
+        page gets their to_dict() layout. The typology reply itself is saved as it came.
         The Verdict is given a new assessment id and the time it was made here, because the
         VerdictEngine makes no ids and reads no clock.
         """
@@ -142,14 +144,17 @@ class AssessmentRunner:
             if not failed("The crime scan (sector typologies)", "the AI gave no usable typologies"):
                 return None
         else:
-            typologies = typology_response.get("sector_typologies", [])
+            found = typology_response.get("sector_typologies", [])
             if reports is not None:
-                typologies, warnings = self.__crime_scan.verify_typology_sources(typologies, reports)
-                notes += warnings
+                typologies = self.__crime_scan.verify_typology_sources(found, reports)
+            else:                                   # no research to check them against: taken as they are
+                typologies = self.__crime_scan.read_typologies(found)
+            notes += self.__crime_scan.warnings()
 
         # 6-10. Forecast: the declaration is read once here, and the crime types are built from the typologies
         run = self.__forecast_ai.run({
-            "record": case, "cache": self.__response_cache.load_raw_replies(ref), "typologies": typologies,
+            "record": case, "cache": self.__response_cache.load_raw_replies(ref),
+            "typologies": None if typologies is None else [typology.to_dict() for typology in typologies],
             "on_step": lambda stage: step(AssessmentRunner.FORECAST_STEP[stage])})
         self.__response_cache.save_raw_replies(ref, run["results"])
         partial = run["partial"]
@@ -199,7 +204,7 @@ class AssessmentRunner:
             crime_declaration, warnings = self.__crime_scan.normalise_jurisdictions(crime_declaration)
             notes += warnings
             crime_result = self.__crime_scan.run(crime_input, {
-                "typology_response": {"sector_typologies": typologies}, "declaration": crime_declaration})
+                "typologies": typologies, "declaration": crime_declaration})
         elif typologies is not None:
             if not failed("The crime scan's warning signs (the declaration couldn't be read)",
                           "the declaration could not be read"):

@@ -1,8 +1,9 @@
 """AssessmentRunner: one assessment from made-up AI services, including the ways a step can fail."""
 
 from app.application.assessment_runner import AssessmentRunner
+from app.model.typology import Typology
 from app.model.verdict import Verdict
-from tests import fake_services
+from tests import fake_ai, fake_services
 from tests.logic_fixtures import sample_case
 
 
@@ -102,3 +103,19 @@ def test_the_same_inputs_give_the_same_verdict(tmp_path):
     second, _ = _run(tmp_path)
     assert first["verdict"].details() == second["verdict"].details()
     assert first["verdict"].report == second["verdict"].report
+
+
+def test_the_typologies_are_checked_typology_objects_that_keep_the_reply_layout(tmp_path):
+    result, _ = _run(tmp_path)
+    typologies = result["typologies"]
+    assert all(isinstance(typology, Typology) and typology.verified for typology in typologies)
+    reply = fake_ai.typologies()["sector_typologies"][0]
+    assert typologies[0].to_dict() == {**reply, "corroborated": False, "outdated_source_ids": []}
+    assert result["typology_response"] == {**fake_ai.typologies(), "sector_typologies": [reply]}   # kept as given
+
+
+def test_without_research_the_typologies_are_taken_unchecked(tmp_path):
+    result, _ = _run(tmp_path, research=None)
+    typologies = result["typologies"]
+    assert all(isinstance(typology, Typology) and not typology.verified for typology in typologies)
+    assert [typology.to_dict() for typology in typologies] == fake_ai.typologies()["sector_typologies"]

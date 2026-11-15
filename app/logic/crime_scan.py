@@ -8,6 +8,7 @@ from app.logic.indicator import (CounterpartyUnnamed, GiftOrInheritanceUnnamed, 
 from app.model.check import Check
 from app.model.declaration import Declaration
 from app.model.research_report import ResearchReport
+from app.model.typology import Typology
 
 logger = logging.getLogger(__name__)
 
@@ -106,8 +107,13 @@ class CrimeScan(RiskAnalysis):
         self.__warnings: list[str] = []
 
     def run(self, case: dict, ai_data: dict) -> dict:
-        """Match the typologies against the client. ai_data is {"typology_response", "declaration"}."""
-        self._results = self._assess(case, ai_data.get("typology_response"), ai_data.get("declaration"))
+        """Match the typologies against the client. ai_data is {"typologies": list[Typology],
+        "declaration": {"sources": [...]}}. A raw typology reply may be given as "typology_response"
+        instead (the golden cases do); its typologies are read as they are, unverified."""
+        typologies = ai_data.get("typologies")
+        if typologies is None and ai_data.get("typology_response") is not None:
+            typologies = self.read_typologies(ai_data["typology_response"].get("sector_typologies", []))
+        self._results = self._assess(typologies, ai_data.get("declaration"))
         return self._results
 
     def checks(self, context: dict) -> list[Check]:
@@ -122,7 +128,8 @@ class CrimeScan(RiskAnalysis):
         return [indicator.NAME for indicator in self.__indicators if indicator.fires(declaration)]
 
     def warnings(self) -> list[str]:
-        """What the last verify_research call removed or could not read."""
+        """What the last verify_research, verify_typology_sources or read_typologies call removed
+        or could not read."""
         return list(self.__warnings)
 
     def verify_research(self, research: dict) -> list[ResearchReport]:
@@ -167,35 +174,36 @@ class CrimeScan(RiskAnalysis):
         return kept
 
     def verify_typology_sources(self, typologies: list[dict],
-        reports: list[ResearchReport]) -> tuple[list[dict], list[str]]:
-        """Verify and clean AI typology source citations against the trusted research reports.
-
-        Pure function — no I/O, no network.
+        reports: list[ResearchReport]) -> list[Typology]:
+        """The AI's typologies whose sources check out, as verified Typology objects. Pure: no I/O.
 
         For each typology:
         1. source_ids not found in the reports are removed.
         2. source_quotes whose quote does not appear (after normalisation) in the
            cited report's excerpts are removed.
         3. Typologies with no verified quotes left are dropped entirely.
-        4. corroborated: warns if fewer than 2 independent-org sources remain.
-        5. outdated: warns if a source exceeds policy[source_max_age_years].
-        6. unknown_age: reports with missing/invalid year are noted, not outdated.
-
-        Returns (cleaned_typologies, warnings).
+        4. corroborated: True if two of its grounded sources come from independent organisations.
+        5. outdated: sources older than policy[source_max_age_years] are listed (not a warning).
+        6. unknown_age: reports with missing/invalid year are a warning, not outdated.
+        Each removal is in warnings().
         """
         policy = self._policy
         report_map = {report.report_id: report for report in reports}
         max_age = policy.get("source_max_age_years", 10)
 
-        cleaned: list[dict] = []
-        warnings: list[str] = []
+        cleaned: list[Typology] = []
+        self.__warnings = []
+        warnings = self.__warnings
 
         for typ in typologies:
-            typ_id = typ.get("typology_id", "unknown")
+            typ_id = typ.get("typology_id", "unknown") if isinstance(typ, dict) else "unknown"
+            typology = self.__read_typology(typ, typ_id)
+            if typology is None:
+                continue
 
             # Check 1: source_ids exist — keep only valid ones
             valid_ids: list[str] = []
-            for sid in typ.get("source_ids", []):
+            for sid in typology.cited_report_ids():
                 if sid in report_map:
                     valid_ids.append(sid)
                 else:
@@ -203,7 +211,7 @@ class CrimeScan(RiskAnalysis):
 
             # Check 2: quotes verified (with normalisation) — keep only verified ones
             valid_quotes: list[dict] = []
-            for sq in typ.get("source_quotes", []):
+            for sq in typology.source_quotes:
                 rid = sq.get("report_id", "")
                 quote = sq.get("quote", "")
                 if rid not in report_map:
@@ -246,15 +254,29 @@ class CrimeScan(RiskAnalysis):
                 elif reference_year and (reference_year - year) > max_age:
                     outdated_ids.append(sid)
 
-            cleaned.append({
-                **typ,
-                "source_ids": valid_ids,
-                "source_quotes": valid_quotes,
-                "corroborated": corroborated,
-                "outdated_source_ids": outdated_ids,
-            })
+            cleaned.append(typology.with_verified_sources(valid_ids, valid_quotes, corroborated, outdated_ids))
+        return cleaned
 
-        return cleaned, warnings
+    def read_typologies(self, typologies: list[dict]) -> list[Typology]:
+        """The AI's typologies as Typology objects, unchecked (used when there is no research to check
+        them against). A typology that cannot be read is left out, with a warning in warnings()."""
+        self.__warnings = []
+        read: list[Typology] = []
+        for typ in typologies:
+            typ_id = typ.get("typology_id", "unknown") if isinstance(typ, dict) else "unknown"
+            typology = self.__read_typology(typ, typ_id)
+            if typology is not None:
+                read.append(typology)
+        return read
+
+    def __read_typology(self, data: dict, typ_id: str) -> Typology | None:
+        """One typology of the AI's reply, or None (logged and warned) if it cannot be read."""
+        try:
+            return Typology.from_dict(data)
+        except ValueError as error:
+            logger.warning("CrimeScan: typology %s cannot be read: %s", typ_id, error)
+            self.__warnings.append(f"Typology '{typ_id}': dropped — it could not be read ({error}).")
+            return None
 
     def _domain_is_trusted(self, url: str, trusted_domains: list[str]) -> bool:
         """Return True if the URL's domain matches or is a subdomain of a trusted domain."""
@@ -269,24 +291,17 @@ class CrimeScan(RiskAnalysis):
         s = org_string.replace(" and ", ",").replace("&", ",").replace("/", ",")
         return {p.strip().lower() for p in s.split(",") if p.strip()}
 
-    def _assess(self, case_input: dict,
-        typology_response: dict | None,
-        declaration: dict | None) -> dict:
-        """Run the full Sector Crime Scan assessment for a single case.
+    def _assess(self, typologies: list[Typology] | None, declaration: dict | None) -> dict:
+        """Match every typology against the declaration.
 
-        Returns a dict with keys: outcome, findings, documents, match_results.
+        Returns {"breach_count", "match_count", "match_results"}.
         """
-
         # If either AI call failed entirely (returned None), skip assessment
-        if typology_response is None or declaration is None:
+        if typologies is None or declaration is None:
             return {"breach_count": 0, "match_count": 0, "match_results": []}
 
-        # Normalise the client record so country fields and int fields are clean
-        clean_case, _ = self._prepare_case(case_input)
-        typologies = typology_response.get("sector_typologies", [])
-
         # Run all 5 indicators against each typology and collect match results
-        match_results = self.match_typologies(typologies, declaration, clean_case)
+        match_results = self.match_typologies(Declaration(declaration.get("sources", [])), typologies)
 
         # Count full breaches (critical/high/medium) and all matches including partial/weak
         breach_count = sum(1 for mr in match_results if mr["breached"])
@@ -308,38 +323,35 @@ class CrimeScan(RiskAnalysis):
             return "weak_signal"
         return "no_match"
 
-    def match_typologies(self, typologies: list[dict],
-        declaration: dict,
-        clean_case: dict) -> list[dict]:
-        """Match each typology's indicators against client data. Pure function.
+    def match_typologies(self, declaration: Declaration, typologies: list[Typology]) -> list[dict]:
+        """Match each typology's warning signs against the declaration. Pure function.
 
         A typology breaches when ALL its core indicators fire.
         Returns a list of match result dicts, one per typology.
         """
-        fired = self.flags(Declaration(declaration.get("sources", [])))
+        fired = self.flags(declaration)
         indicator_results = {indicator.NAME: indicator.NAME in fired for indicator in self.__indicators}
 
         matches: list[dict] = []
-        for typ in typologies:
-            indicators = typ.get("indicators", [])
-            core = [i["indicator"] for i in indicators if i.get("weight") == "core"]
-            supporting = [i["indicator"] for i in indicators if i.get("weight") == "supporting"]
+        for typology in typologies:
+            core = typology.core_indicators()
+            supporting = typology.supporting_indicators()
             core_fired = [i for i in core if indicator_results.get(i, False)]
             supporting_fired = [i for i in supporting if indicator_results.get(i, False)]
             breached = len(core_fired) == len(core) and len(core) > 0
             category = self._categorise_match(core_fired, core, supporting_fired)
 
             matches.append({
-                "typology_id": typ.get("typology_id", ""),
-                "name": typ.get("name", ""),
-                "source_ids": typ.get("source_ids", []),
+                "typology_id": typology.typology_id,
+                "name": typology.name,
+                "source_ids": typology.cited_report_ids(),
                 "breached": breached,
                 "category": category,
                 "core_indicators": core,
                 "core_fired": core_fired,
                 "supporting_indicators": supporting,
                 "supporting_fired": supporting_fired,
-                "typical_documents": typ.get("typical_documents", []),
+                "typical_documents": typology.typical_documents,
             })
         return matches
 
@@ -533,7 +545,7 @@ class CrimeScan(RiskAnalysis):
         return {"sources": rows}, warnings
 
     def _crime_checks(self, crime_result: dict | None, reports: list[ResearchReport] | None,
-                      typologies: list[dict] | None,
+                      typologies: list[Typology] | None,
                      types: list[dict], forecast_ran: bool) -> list[Check]:
         """The crime scan's patterns in the shared shape: how well each one matches, and which
         person type was built from it."""
@@ -541,7 +553,7 @@ class CrimeScan(RiskAnalysis):
             return [self._check("CRIME_SCAN", "Crime scan", "pattern", "skipped",
                                 "The warning signs couldn't be checked (no typologies or no declaration reading).")]
         built = {t["typology_id"]: t for t in types if t["typology_id"]}
-        quotes = {t.get("typology_id"): (t.get("source_quotes") or [{}])[0] for t in typologies or []}
+        quotes = {t.typology_id: (t.source_quotes or [{}])[0] for t in typologies or []}
         checks = []
         for match in crime_result.get("match_results", []):
             category = match.get("category", "no_match")

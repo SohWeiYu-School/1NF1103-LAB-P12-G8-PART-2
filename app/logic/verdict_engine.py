@@ -8,6 +8,7 @@ from app.logic.formatter import Formatter
 from app.logic.future_paths import FuturePaths
 from app.model.check import Check
 from app.model.config import Config
+from app.model.typology import Typology
 from app.model.verdict import Verdict
 
 
@@ -73,13 +74,13 @@ class VerdictEngine:
         return status not in self.__policy["verdict"]["no_pep_values"]
 
     def _type_patterns(self, forecast: dict | None, assessment: dict | None, crime_result: dict | None,
-                      typologies: list[dict] | None) -> list[dict]:
+                      typologies: list[Typology] | None) -> list[dict]:
         """One row per crime person type: does its money fit (forecast), which researched pattern it
         was built from, and how many of that pattern's warning signs fired (crime scan)."""
         if not forecast or not assessment:
             return []
         matches = {m["typology_id"]: m for m in (crime_result or {}).get("match_results", [])}
-        by_id = {t.get("typology_id"): t for t in typologies or []}
+        by_id = {t.typology_id: t for t in typologies or []}
         fits = {row["type_id"]: row for row in assessment.get("types", [])}
         rows = []
         for person_type in forecast["types"]["person_types"]:
@@ -89,20 +90,20 @@ class VerdictEngine:
             fit = fits.get(type_id, {})
             typology_id = person_type.get("typology_id")
             if typology_id not in by_id:   # older replies: link by category, as ai_manager.link_typologies does
-                typology_id = next((t.get("typology_id") for t in typologies or []
-                                    if t.get("crime_category") == person_type.get("category")), None)
+                typology_id = next((t.typology_id for t in typologies or []
+                                    if t.crime_category == person_type.get("category")), None)
             match = matches.get(typology_id, {})
-            typology = by_id.get(typology_id, {})
+            typology = by_id.get(typology_id)
             rows.append({
                 "type_id": type_id, "name": person_type["name"], "category": person_type["category"],
                 "category_name": self.__config.category_name(person_type["category"]),
                 "fits": bool(fit.get("fits")), "fit_score": fit.get("fit_score"),
                 "route_years": fit.get("route_years", ""), "enabled_by": fit.get("enabled_by", ""),
-                "typology_id": typology_id, "typology_name": typology.get("name"),
+                "typology_id": typology_id, "typology_name": typology.name if typology else None,
                 "match": match.get("category") if match else None,
                 "fired": list(match.get("core_fired", [])) + list(match.get("supporting_fired", [])) if match else [],
-                "quote": (typology.get("source_quotes") or [{}])[0] if typology else {},
-                "source_ids": typology.get("source_ids", []),
+                "quote": (typology.source_quotes or [{}])[0] if typology else {},
+                "source_ids": typology.cited_report_ids() if typology else [],
             })
         return rows
 
@@ -157,7 +158,8 @@ class VerdictEngine:
         order = list(VerdictEngine.THEMES)
         return sorted(themes.values(), key=lambda t: (-len(t["features"]), order.index(t["theme"])))
 
-    def _documents(self, assessment: dict | None, bench: list[Check], crime: list[Check], typologies: list[dict] | None,
+    def _documents(self, assessment: dict | None, bench: list[Check], crime: list[Check],
+                   typologies: list[Typology] | None,
                    case: dict, docs: list[Check] | None = None) -> list[dict]:
         """Documents to ask for: first for what his own documents contradict, then the forecast's (failed
         checks, then the ones that rule out the most stories), the benchmark's failed checks, and the
@@ -188,11 +190,12 @@ class VerdictEngine:
             for code in settings["benchmark_documents"].get(rule, []):
                 if code in names:
                     add(names[code], f"Benchmark check failed: {check.label.lower()}")
-        by_id = {t.get("typology_id"): t for t in typologies or []}
+        by_id = {t.typology_id: t for t in typologies or []}
         for check in crime:
             if check.check == "TYPOLOGY" and check.status in ("failed", "weak"):
                 name = check.label.split(" [")[0]
-                for document in by_id.get(check.extra("typology_id"), {}).get("typical_documents", []):
+                typology = by_id.get(check.extra("typology_id"))
+                for document in typology.typical_documents if typology else []:
                     add(document, f"Matches the known pattern: {name}")
         return wanted[:settings["max_documents"]]
 
@@ -200,7 +203,7 @@ class VerdictEngine:
         """ONE Verdict from the crime scan, the benchmark, the forecast and the documents.
 
         results: reports (the trusted ResearchReports; None if the research did not run),
-                 typologies (verified list), crime_result, declaration (forecast Step 0),
+                 typologies (the Typology objects), crime_result, declaration (forecast Step 0),
                  benchmark_input, benchmark_ai, benchmark_findings, forecast, forecast_assessment,
                  markets (Call 1, even if the forecast stopped later), evidence (the documents layer),
                  pay_adjustments (calibrate_pay), failed_step, not_run, notes, and the
@@ -412,9 +415,9 @@ class VerdictEngine:
             f" - {r.title}" for r in reports] or ["No research reports were found."]})
         typology_lines = []
         for t in results.get("typologies") or []:
-            typology_lines.append(f"{t.get('name')} ({self.__config.category_name(t.get('crime_category', ''))})")
-            if t.get("description"):
-                typology_lines.append(f"    {t['description']}")
+            typology_lines.append(f"{t.name} ({self.__config.category_name(t.crime_category)})")
+            if t.description:
+                typology_lines.append(f"    {t.description}")
         sections.append({"title": "Sector typologies", "lines": typology_lines or ["No verified typologies."]})
         if assessment and honest:
             sections.append({"title": "Person types", "lines": [

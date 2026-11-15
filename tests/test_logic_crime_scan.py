@@ -5,6 +5,7 @@ from app.logic.risk_analysis import RiskAnalysis
 from app.model.check import Check
 from app.model.declaration import Declaration
 from app.model.research_report import ResearchReport
+from app.model.typology import Typology
 from tests import fake_ai
 from tests.logic_fixtures import POLICY
 
@@ -56,25 +57,44 @@ def test_a_typology_whose_quote_is_not_in_its_report_is_dropped():
     scan = CrimeScan(POLICY)
     clean = scan.verify_research(fake_ai.research())
     typologies = fake_ai.typologies()["sector_typologies"]
-    kept, _ = scan.verify_typology_sources(typologies, clean)
+    kept = scan.verify_typology_sources(typologies, clean)
     assert len(kept) == 1
+    assert isinstance(kept[0], Typology) and kept[0].verified
     invented = [{**typologies[0], "source_quotes": [{"report_id": "R1", "quote": "A sentence the report never said."}]}]
-    kept, warnings = scan.verify_typology_sources(invented, clean)
+    kept = scan.verify_typology_sources(invented, clean)
     assert kept == []
-    assert any("dropped" in warning for warning in warnings)
+    assert any("dropped" in warning for warning in scan.warnings())
+
+
+def test_without_research_the_typologies_are_read_unchecked():
+    scan = CrimeScan(POLICY)
+    reply = fake_ai.typologies()["sector_typologies"]
+    read = scan.read_typologies(reply)
+    assert all(isinstance(typology, Typology) and not typology.verified for typology in read)
+    assert [typology.to_dict() for typology in read] == reply      # nothing lost, nothing added
+    assert scan.warnings() == []
+
+
+def test_a_typology_reply_given_whole_is_read_like_the_typology_objects():
+    scan = CrimeScan(POLICY)
+    whole = scan.run(CASE, {"typology_response": fake_ai.typologies(), "declaration": UNNAMED})
+    objects = scan.run(CASE, {"typologies": scan.read_typologies(fake_ai.typologies()["sector_typologies"]),
+                              "declaration": UNNAMED})
+    assert whole == objects
 
 
 def test_checks_are_check_objects_that_keep_the_signs_that_fired():
     scan = CrimeScan(POLICY)
     clean = scan.verify_research(fake_ai.research())
-    typologies, _ = scan.verify_typology_sources(fake_ai.typologies()["sector_typologies"], clean)
-    result = scan.run(CASE, {"typology_response": {"sector_typologies": typologies}, "declaration": UNNAMED})
+    typologies = scan.verify_typology_sources(fake_ai.typologies()["sector_typologies"], clean)
+    result = scan.run(CASE, {"typologies": typologies, "declaration": UNNAMED})
     checks = scan.checks({"crime_result": result, "reports": clean, "typologies": typologies, "types": []})
     assert all(isinstance(check, Check) and check.feature == "crime" for check in checks)
     typology = next(check for check in checks if check.check == "TYPOLOGY")
     assert typology.extra("signs") == ["counterparty_unnamed", "unvalued_source_present"]
     assert typology.extra("match") == result["match_results"][0]["category"]
-    assert typology.extra("typology_id") == typologies[0]["typology_id"]
+    assert typology.extra("typology_id") == typologies[0].typology_id
+    assert typology.explanation.endswith(f'"{typologies[0].source_quotes[0]["quote"]}" [R1]')
     assert (typology.group, typology.theme) == ("Patterns", "pattern")
     saved = typology.to_dict()                      # the saved layout keeps them after the shared fields
     assert list(saved)[-3:] == ["signs", "match", "typology_id"]
