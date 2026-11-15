@@ -846,6 +846,7 @@ App *-- "1" CaseBuilder
 App *-- "1" CaseFiles
 App *-- "1" ClientForm
 App *-- "1" Config
+App *-- "1" ConfigReader
 App *-- "1" ConsoleUI
 App *-- "1" DocumentAI
 App *-- "1" DocumentStore
@@ -854,7 +855,6 @@ App *-- "1" ReportView
 App *-- "1" ResponseCache
 App *-- "2" CloudSync
 App *-- "2" Repository
-App *-- ConfigReader
 App ..> AIService : creates
 App ..> CaseReader : creates
 App ..> ClientRecord : uses
@@ -868,9 +868,9 @@ AssessmentRunner *-- "1" CaseReader
 AssessmentRunner *-- "1" VerdictEngine
 AssessmentRunner *-- "4" RiskAnalysis
 AssessmentRunner -- Config : reads policy
-AssessmentRunner -- DocumentStore : reads documents from
-AssessmentRunner -- ResponseCache : caches in
 AssessmentRunner ..> Verdict : uses
+AssessmentRunner o-- "0..1" DocumentStore : reads documents from
+AssessmentRunner o-- "0..1" ResponseCache : caches in
 AssessmentRunner o-- "1..*" AIService
 AssetPath -- MarketModel : grows with
 AssetPath ..> Band : uses
@@ -901,7 +901,7 @@ CloudSync -- Repository : local
 CounterpartyUnnamed --|> Indicator
 CrimeScan *-- "5" Indicator
 CrimeScan --|> RiskAnalysis
-CrimeScan ..> Declaration : reads
+CrimeScan ..> Declaration : creates
 CrimeScan ..> MatchResult : creates
 CrimeScan ..> ResearchReport : creates
 CrimeScan ..> Typology : creates
@@ -964,6 +964,7 @@ VerdictEngine ..> CaseTimeline : creates
 VerdictEngine ..> Check : uses
 VerdictEngine ..> Forecast : calls
 VerdictEngine ..> Formatter : uses
+VerdictEngine ..> MatchResult : uses
 VerdictEngine ..> Typology : uses
 VerdictEngine ..> Verdict : creates
 VerdictEngine o-- "1..*" RiskAnalysis

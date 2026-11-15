@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `4640603` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `9292801` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -705,7 +705,7 @@ How to fix: **UML:** add or correct the `= value`. Where the code is computed, d
 
 ## Stage 7: Relationships (0)
 
-131 of 132 UML arrows are confirmed in the code. The script and the independent reviewer agreed on every verdict below.
+131 of 133 UML arrows are confirmed in the code by the pattern check (its known blind spots are listed in uml/FOLLOW_UPS.md #44).
 
 How to fix: mostly **UML** (redraw an arrow, change a verb or multiplicity, add missing arrows). Where an arrow shows a model class but the code passes a plain `dict`, the team has to decide: either the diagram drops the arrow, or the code starts using the model class (a bigger change).
 
@@ -714,9 +714,10 @@ How to fix: mostly **UML** (redraw an arrow, change a verb or multiplicity, add 
 Real class-to-class links in the code that the drawing rule says to draw, with no UML line between the two classes.
 
 
-### Kept without code evidence, by decision (1)
+### Kept without code evidence, by decision (2)
 
 - `Typology -- "1..*" ResearchReport : cites`: linked by report id: a Typology keeps the ids of the ResearchReports it cites (source_ids), not the objects; the link is real in the data, so the diagram keeps it
+- `VerdictEngine ..> MatchResult : uses`: checked by hand: __type_patterns reads m.typology, match.category and calls match.fired() on the MatchResult objects in crime_result (app/logic/verdict_engine.py:82, 102-103); the scan cannot see it because the class name is never written there
 
 ### Not drawn, by the drawing rule (32)
 

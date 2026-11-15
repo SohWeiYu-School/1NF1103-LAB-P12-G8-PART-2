@@ -217,7 +217,7 @@ No code changed in this stage.
 - objects reached only through another object's method (e.g. ReportView reads `record.jobs()`, so ReportView → Job is implied by `ClientRecord *-- Job`);
 - reads of another class's constant (e.g. `CaseTimeline.FORECAST_YEARS`).
 
-This keeps the reviewed diagram readable. The scan applies the same rule and lists the 32 links it leaves out in `UML_DIFFERENCES.md` ("Not drawn, by the drawing rule"), so nothing is hidden.
+This keeps the reviewed diagram readable. The scan applies the same rule and lists the 32 links it finds and leaves out in `UML_DIFFERENCES.md` ("Not drawn, by the drawing rule"). A few more links are not in that list: the scan counts a line to the parent class as covering them (for example `CloudSync → JsonRepository`, covered by `CloudSync -- Repository`), or it cannot see them because the class name is never written in the code (for example `App → ReviewStatus`). Its known blind spots are follow-up #44.
 
 | Arrow | Correction | Reason |
 |---|---|---|
@@ -240,5 +240,20 @@ This keeps the reviewed diagram readable. The scan applies the same rule and lis
 | note on `App` | now quotes `main.py` exactly | **T**: `main.py` runs `sys.exit(App(with_fallback(openai_caller(), gemini_caller())).start(sys.argv[1:]))`; there is no `caller` variable and the callers take no arguments |
 
 Not drawn under the rule, from the earlier list: `App → CaseTimeline`, `App → ReviewStatus`, `VerdictEngine → CrimeScan / Benchmark / FuturePaths` (constants), `PayCalibrator → MarketModel`, `OnboardingAssessor → Verdict`, `CaseBuilder → ClientForm`, `WebApp → ClientForm`, `CloudSync → JsonRepository`, `DocumentRecordBuilder → CaseReader` (constants), and links reached through another object such as `Forecast → AssetPath / CareerSavings`, `Indicator → ClaimedSource` and WebApp's repositories (follow-up #39). `App ..> Check : creates` no longer applies: App no longer builds Check objects.
+
+### Stage 7 review fixes (independent review, 2026-11-15)
+
+The review found no arrow that states something false about the code. It found these smaller problems, fixed in the diagram:
+
+| Arrow | Change | Reason |
+|---|---|---|
+| `App *-- "1" ConfigReader` | multiplicity "1" added | **B**: the log already said "1" but the line had no label; every other `App *--` line shows "1" (`app.py:74`) |
+| `AssessmentRunner o-- "0..1" DocumentStore : reads documents from` | was `--` with no multiplicity | **T**: the runner is given the store (it may be `None`) and never creates it, which is aggregation, as its `o-- "1..*" AIService` line already shows (`assessment_runner.py:63, 70`) |
+| `AssessmentRunner o-- "0..1" ResponseCache : caches in` | was `--` with no multiplicity | **T**: same reason (`assessment_runner.py:63, 71`) |
+| `CrimeScan ..> Declaration : creates` | verb was `reads` | **T**: CrimeScan builds Declarations (`crime_scan.py:308, 477, 516`) |
+| `VerdictEngine ..> MatchResult : uses` | added | **T**: the engine reads `typology` and `category` and calls `fired()` on the match results (`verdict_engine.py:82, 102-103`). The scan cannot see this link (no type hint), so it is listed as checked by hand |
+| Lines into `CaseReader`, `Forecast` and `Formatter` | re-routed | **B**: two "1" labels sat on the same spot over an arrowhead, and two arrows shared one end point on Forecast. The router now keeps arrow ends at least 25 px apart and avoids running along other lines more strongly |
+
+Open question for Marcus (follow-up #43): the drawing rule's "reached through another object" case. Two reviewed arrows (`AssessmentRunner ..> Verdict`, `DocumentStore ..> DocumentReader`) rest on an object the class gets back from a method and then works with, which is the same evidence that puts some links under "Not drawn".
 
 Tools: the new arrows are routed automatically (`uml_arrows.py`: right-angled paths that never cross a class box), and `layout_check` reports 0.
