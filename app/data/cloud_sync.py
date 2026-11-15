@@ -41,7 +41,8 @@ class CloudSync:
         except (OSError, ValueError) as error:
             # Not "0 records synced": the local records could not be read, so nothing was backed up.
             logger.error("CloudSync.sync: the local records cannot be read: %r", error)
-            stats["errors"].append("The local records could not be read, so nothing was sent to the cloud database.")
+            stats["errors"].append(f"The local records for {self.__remote.name.replace('_', ' ')} could not be read, "
+                                   "so nothing was sent to the cloud database.")
             return stats
 
         state = self.__load_state()

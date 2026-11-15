@@ -98,6 +98,7 @@ def test_a_damaged_local_file_is_a_failed_sync_not_zero_records_synced(tmp_path)
     result = sync.sync()
     assert result["synced"] == 0 and result["skipped"] == 0
     assert len(result["errors"]) == 1 and "could not be read" in result["errors"][0]
+    assert "client cases" in result["errors"][0]      # says which store failed
     assert remote.records == {}
     assert path.read_bytes() == b"[{broken"
     assert not (tmp_path / "sync_state.json").exists()
