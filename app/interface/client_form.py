@@ -652,7 +652,7 @@ class ClientForm:
 
         try:
             client_record = find_fn(client_ref) if find_fn else None
-        except ValueError as error:      # the client exists, but the saved record cannot be read
+        except ValueError as error:      # the saved record, or the client database, cannot be read
             self.__ui.show_error(str(error))
             self.__ui.read_answer("\nPress Enter to return to the main menu...")
             return None
