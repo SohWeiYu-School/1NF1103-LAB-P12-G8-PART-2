@@ -135,3 +135,13 @@ def test_an_answer_that_changes_when_the_forecasts_shift_goes_to_manual_review()
 
 def test_a_borderline_case_is_never_downgraded():
     assert _assessor().stable_outcome("SERIOUS_RISK", {"-10%": "RISKY", "+10%": "SERIOUS_RISK"}) == ("SERIOUS_RISK", True)
+
+
+@pytest.mark.parametrize("args, message", [
+    (("paths",), "future paths must be a FuturePaths"),
+    ((None, ["policy"]), "policy must be a dict"),
+    ((None, None, {"policy": {}}), "config must be a Config"),
+])
+def test_the_onboarding_assessor_rejects_wrong_typed_inputs(args, message):
+    with pytest.raises(ValueError, match=message):
+        OnboardingAssessor(*args)

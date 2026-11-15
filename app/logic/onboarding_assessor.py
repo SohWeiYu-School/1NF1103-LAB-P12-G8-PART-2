@@ -19,6 +19,12 @@ class OnboardingAssessor:
 
     def __init__(self, future_paths: FuturePaths | None = None, policy: dict | None = None,
                  config: Config | None = None) -> None:
+        if future_paths is not None and not isinstance(future_paths, FuturePaths):
+            raise ValueError(f"the future paths must be a FuturePaths (or None), not {type(future_paths).__name__}")
+        if policy is not None and not isinstance(policy, dict):
+            raise ValueError(f"the policy must be a dict (or None), not {type(policy).__name__}")
+        if config is not None and not isinstance(config, Config):
+            raise ValueError(f"the config must be a Config (or None), not {type(config).__name__}")
         self.__future_paths: FuturePaths = future_paths or FuturePaths()
         self.__policy: dict = policy or {}
         self.__config: Config = config or Config()
