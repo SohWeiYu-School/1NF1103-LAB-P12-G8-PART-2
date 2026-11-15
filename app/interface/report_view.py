@@ -195,13 +195,6 @@ class ReportView:
             self.__ui.show(f"  {i:<4}{ref:<18}{name:<28}{industry}")
         self.__ui.show("─" * W + "\n")
 
-    def show_ai_progress(self, results: dict) -> None:
-        """One line per AI request: where the reply came from and whether it passed the checks."""
-        for name, result in results.items():
-            source = "saved reply" if result["from_cache"] else f"API, {result['attempts']} attempt(s)"
-            status = "ok" if result["ok"] else "FAILED"
-            self.__ui.show(f"  {name:<40} {source:<20} {status}")
-
     def display_client_record(self, record: ClientRecord) -> None:
         """Display all information collected for the client."""
 
