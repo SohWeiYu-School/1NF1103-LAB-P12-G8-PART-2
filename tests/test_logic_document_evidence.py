@@ -63,3 +63,19 @@ def test_each_finding_becomes_a_check_that_names_its_source_files():
 def test_documents_that_show_nothing_new_pass():
     feature, _ = _run(reading={"evidence": {"documented_pay": [], "findings": []}})
     assert [check.check for check in feature.checks({})] == ["DOCUMENTS_AGREE"]
+
+
+def test_a_finding_check_names_the_crime_stories_it_supports():
+    feature, _ = _run()
+    supports = POLICY["verdict"]["document_evidence"][KIND]["supports"]
+    first = next(check for check in feature.checks({"types": []}) if check.check == KIND.upper())
+    assert first.supports == supports
+    assert (first.group, first.label) == ("Documents", POLICY["verdict"]["document_evidence"][KIND]["label"])
+
+
+def test_a_finding_without_source_files_still_saves_an_empty_list():
+    feature, _ = _run()
+    other = next(check for check in feature.checks({"types": []}) if check.check == "OTHER")
+    assert other.sources == []
+    saved = other.to_dict()
+    assert list(saved.items())[-2:] == [("sources", []), ("supports", [])]   # the saved layout keeps both
