@@ -60,16 +60,16 @@ class VerdictEngine:
     def features(self) -> list[RiskAnalysis]:
         return list(self.__features)
 
-    def _feature(self, name: str) -> RiskAnalysis | None:
+    def __feature(self, name: str) -> RiskAnalysis | None:
         """The feature with this NAME, or None if the engine was not given one."""
         return next((feature for feature in self.__features if feature.NAME == name), None)
 
-    def _feature_checks(self, name: str, context: dict) -> list[Check]:
+    def __feature_checks(self, name: str, context: dict) -> list[Check]:
         """One feature's checks. A feature the engine was not given has none."""
-        feature = self._feature(name)
+        feature = self.__feature(name)
         return list(feature.checks(context)) if feature else []
 
-    def _check(self, feature: str, check: str, label: str, theme: str, status: str, detail: str,
+    def __check(self, feature: str, check: str, label: str, theme: str, status: str, detail: str,
                explanation: str = "", group: str = "") -> Check:
         """One finding the engine adds itself."""
         return Check(feature, check, label, theme, status, detail, explanation, group)
@@ -213,7 +213,7 @@ class VerdictEngine:
         forecast, assessment = results.get("forecast"), results.get("forecast_assessment")
         honest = None
         if forecast and assessment:
-            honest = self._feature("forecast").honest_numbers(case, forecast, assessment)
+            honest = self.__feature("forecast").honest_numbers(case, forecast, assessment)
         types = self.__type_patterns(forecast, assessment, results.get("crime_result"), results.get("typologies"))
         return {"case": case, "results": results, "forecast": forecast, "assessment": assessment,
                 "honest": honest, "types": types}
@@ -225,23 +225,23 @@ class VerdictEngine:
         forecast, assessment = context["forecast"], context["assessment"]
         honest, types = context["honest"], context["types"]
         evidence = results.get("evidence")
-        docs = self._feature_checks("documents", {"evidence": evidence, "types": types})
+        docs = self.__feature_checks("documents", {"evidence": evidence, "types": types})
         for t in types:                                 # which of his documents support each crime story
             t["documents"] = [c.label for c in docs if c.failed() and t["category"] in c.supports]
-        bench = self._feature_checks("benchmark", {
+        bench = self.__feature_checks("benchmark", {
             "case": case, "bench_input": results.get("benchmark_input"), "ai_data": results.get("benchmark_ai"),
             "findings": results.get("benchmark_findings"), "honest": honest, "assessment": assessment,
             "declaration": results.get("declaration"), "markets": results.get("markets"), "types": types})
-        fore = self._feature_checks("forecast", {
+        fore = self.__feature_checks("forecast", {
             "case": case, "assessment": assessment, "honest": honest, "types": types,
             "failed_step": results.get("failed_step"),
             "unmodelled": (forecast or {}).get("earnings", {}).get("fallback_assets")})
         for adjusted in reversed(results.get("pay_adjustments") or []):
-            fore.insert(1, self._check("forecast", "PAY_FROM_DOCUMENTS", "Pay taken from his documents", "wealth", "info",
+            fore.insert(1, self.__check("forecast", "PAY_FROM_DOCUMENTS", "Pay taken from his documents", "wealth", "info",
                                   f"The AI estimated {Formatter.sgd(adjusted['ai_pay'])} for {adjusted['year']}; "
                                   f"{adjusted['source_file'] or 'his documents'} shows {Formatter.sgd(adjusted['documented_pay'])}, "
                                   f"so his pay as {adjusted['job']} was scaled x{adjusted['ratio']:g} for every year of that job."))
-        crime = self._feature_checks("crime", {
+        crime = self.__feature_checks("crime", {
             "crime_result": results.get("crime_result"), "reports": results.get("reports"),
             "typologies": results.get("typologies"), "types": types, "forecast_ran": forecast is not None})
         return {"benchmark": bench, "forecast": fore, "crime": crime, "documents": docs}
