@@ -208,6 +208,14 @@ def test_normalise_jurisdictions_gives_a_new_declaration_and_leaves_the_old_one(
     assert kept == {**rows.to_scan_dict()["sources"][1], "jurisdiction": "SG"}
 
 
+def test_normalise_jurisdictions_keeps_a_valid_code_and_a_missing_one_without_warnings():
+    rows = Declaration([{**UNNAMED["sources"][0], "source_id": "S1", "jurisdiction": "SG"},
+                        {**UNNAMED["sources"][0], "source_id": "S2", "jurisdiction": None}])
+    cleaned, warnings = CrimeScan(POLICY).normalise_jurisdictions(rows)
+    assert [source.country for source in cleaned.sources()] == ["SG", None]
+    assert warnings == []
+
+
 def test_run_takes_the_declaration_object_or_its_saved_rows():
     typologies = CrimeScan(POLICY).read_typologies(fake_ai.typologies()["sector_typologies"])
     as_object = CrimeScan(POLICY).run(CASE, {"typologies": typologies, "declaration": Declaration(UNNAMED["sources"])})
