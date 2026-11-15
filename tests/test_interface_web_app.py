@@ -306,6 +306,10 @@ def test_when_the_research_fails_the_page_says_the_typologies_were_not_checked(t
     assert "The crime scan&#39;s research" in fresh or "The crime scan's research" in fresh   # shown as not run
     saved = application.assessments().for_client(record["client_ref"])[0]
     assert saved["verdict"]["verdict"] != "PASSED"
+    reopened = client.get(f"/assessment/{saved['assessment_id']}").get_data(as_text=True)
+    for page in (fresh, reopened):                     # on the crime cards themselves, fresh and reopened
+        cards = page[page.index("Crime - known patterns for his industry"):]
+        assert "not checked against research" in cards.split("Full evidence")[0]
 
 
 def test_assessing_a_saved_client_that_cannot_be_read_is_refused_with_a_message(web):

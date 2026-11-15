@@ -651,7 +651,8 @@ class WebApp:
         typologies_by_id = {t.get("typology_id"): t for t in (typologies or [])}
         return render_template("assess_result.html", record=record, report=report, symbols=symbols,
                                assessed_at=assessed_at, assessment_id=assessment_id,
-                               crime_result=crime_result, typologies_by_id=typologies_by_id, benchmark=benchmark)
+                               crime_result=crime_result, typologies_by_id=typologies_by_id, benchmark=benchmark,
+                               typologies_checked=App.typologies_checked(report))
 
     def home(self) -> str:
         """The client list. If the saved clients cannot be read the page says so and shows no list

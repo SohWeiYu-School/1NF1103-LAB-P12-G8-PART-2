@@ -475,6 +475,9 @@ ASSESS_RESULT = """{% extends "base.html" %}
       <span style="font-size:.7rem; font-weight:700; letter-spacing:.06em; padding:2px 8px; border-radius:3px;
                    background:{{ CAT_BORDER.get(cat,'#9ca3af') }}; color:#fff">{{ CAT_LABEL.get(cat, cat.upper()) }}</span>
       <strong style="font-size:.97rem; color:#111">{{ m.get('name', m.get('typology_id')) }}</strong>
+      {% if not typologies_checked %}
+      <span style="font-size:.76rem; color:#92400e; background:#fef3c7; padding:1px 7px; border-radius:3px; border:1px solid #fcd34d">not checked against research</span>
+      {% endif %}
       {% if typo.get('crime_category') %}
       <span style="font-size:.76rem; color:#6b7280; background:#f3f4f6; padding:1px 7px; border-radius:3px; border:1px solid #e5e7eb">{{ typo['crime_category'].replace('_', ' ') }}</span>
       {% endif %}
