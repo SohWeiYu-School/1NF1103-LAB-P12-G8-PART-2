@@ -71,3 +71,12 @@ def test_jump_years_is_empty_when_no_usable_jump_was_declared(claims):
 
 def test_a_jump_over_part_of_a_year_counts_as_one_year():
     assert _Sample()._jump_years({"claims": {"biggest_wealth_jump": 5, "wealth_jump_years": 0.3}}) == (5.0, 1)
+
+
+def test_check_builds_a_check_with_every_shared_field():
+    check = _Sample()._check("GIFT", "Gift from abroad", "people", "weak", "A gift.", "Supports T2.", "Documents",
+                             sources=["bank.pdf"], supports=["fraud"])
+    assert isinstance(check, Check)
+    assert check.to_dict() == {"feature": "sample", "check": "GIFT", "label": "Gift from abroad", "theme": "people",
+                               "status": "weak", "detail": "A gift.", "explanation": "Supports T2.",
+                               "group": "Documents", "sources": ["bank.pdf"], "supports": ["fraud"]}
