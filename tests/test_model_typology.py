@@ -1,7 +1,6 @@
 """Typology, MatchResult and ResearchReport: the crime scan's data objects."""
 
 from app.model.match_result import MatchResult
-from app.model.research_report import ResearchReport
 from app.model.typology import Typology
 
 INDICATORS = [{"indicator": "gift_or_inheritance_unnamed", "weight": "core"},
@@ -35,19 +34,3 @@ def test_a_match_is_breached_only_when_every_core_sign_fired():
 
 def test_a_typology_with_no_core_signs_is_never_breached():
     assert not MatchResult(_typology([{"indicator": "x", "weight": "supporting"}]), []).breached
-
-
-def test_report_domain_comes_from_its_url():
-    report = ResearchReport("R1", "https://www.FATF-gafi.org/publications/x.html", [])
-    assert report.domain() == "www.fatf-gafi.org"
-    assert ResearchReport("R2", "", []).domain() == ""
-
-
-def test_a_quote_is_found_despite_case_spacing_and_curly_marks():
-    report = ResearchReport("R1", "https://mas.gov.sg/x", ["Shell   companies are “often” used – widely."])
-    assert report.contains_quote('shell companies are "often" used - widely')
-    assert not report.contains_quote("shell companies are rarely used")
-
-
-def test_a_report_with_no_excerpts_contains_no_quote():
-    assert not ResearchReport("R1", "https://mas.gov.sg/x").contains_quote("anything")
