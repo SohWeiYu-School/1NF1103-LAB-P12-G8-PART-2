@@ -89,6 +89,8 @@ class WebApp:
     ]
 
     MAX_UPLOAD_BYTES: int = 40 * 1024 * 1024     # uploads for auto-fill: 40 MB per request
+    ASSESSMENT_NOT_SAVED: str = ("This assessment was NOT saved, so it is not in the client's history and the "
+                                 "client's outcome was not changed. Please try again later.")
 
     def __init__(self, app: App | None = None, limiter: RateLimiter | None = None) -> None:
         """limiter decides how often one browser may start an assessment. Without one, the App's
@@ -552,7 +554,8 @@ class WebApp:
             logger.error("WebApp: the form for %s did not make a valid record: %r", record.get("client_ref"), error)
             return [f"The client could not be saved because {error}."]
         if not self.__app.save_client(client):
-            return ["The client could not be saved. Check the database connection."]
+            return ["The client was not saved because the client database cannot be read or written right now. "
+                    "Please try again later."]
         return []
 
     def flash_ai_unavailable(self, feature: str = "Assessment") -> None:
@@ -600,6 +603,7 @@ class WebApp:
                 "record":        record.to_dict(),       # the page template reads the saved layout
                 "report":        result["verdict"].report,
                 "assessment_id": assessment_id,
+                "saved":         assessment_id is not None,
                 "assessed_at":   datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "ai_warnings":   ai_warnings,
                 "crime_result":  WebApp.__crime_result_layout(result.get("crime_result")),
@@ -900,6 +904,8 @@ class WebApp:
         for feature in job["result"].get("ai_warnings", []):
             self.flash_ai_unavailable(feature)
         r = job["result"]
+        if not r.get("saved", True):
+            flash(WebApp.ASSESSMENT_NOT_SAVED)
         return self.show_report(r["record"], r["report"], r.get("assessed_at", ""), r.get("assessment_id"),
                            crime_result=r.get("crime_result"), typologies=r.get("typologies"),
                            benchmark=r.get("benchmark"))

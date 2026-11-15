@@ -515,5 +515,22 @@ def test_saving_a_new_client_into_a_damaged_file_says_it_was_not_saved_and_keeps
     _, site, client = web
     path = _damage(tmp_path, "sow_cases.json")
     reply = client.post("/client/new", data=_form_fields(site, sample_case()))
-    assert b"could not be saved" in reply.data
+    assert b"client was not saved" in reply.data and b"database connection" not in reply.data
+    assert path.read_bytes() == b"[{broken"
+
+
+def test_an_assessment_that_could_not_be_saved_says_so_and_leaves_the_client_unchanged(web, tmp_path):
+    application, _, client = web
+    record = sample_case()
+    application.clients().save(record)
+    before = application.clients().find(record["client_ref"])
+    case, _ = application.read_case(ClientRecord.from_dict(record))
+    fake_services.save_forecast_replies(application.response_cache(), case)
+    path = _damage(tmp_path, "ai_assessments.json")
+    started = client.post(f"/client/{record['client_ref']}/assess")
+    job_id = started.headers["Location"].rsplit("/", 1)[-1]
+    assert _wait_for(client, job_id)["status"] == "done"
+    page = client.get(f"/assess/result/{job_id}").get_data(as_text=True)
+    assert "This assessment was NOT saved" in page
+    assert application.clients().find(record["client_ref"]) == before
     assert path.read_bytes() == b"[{broken"
