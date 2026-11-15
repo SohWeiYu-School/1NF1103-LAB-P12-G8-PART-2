@@ -2,6 +2,7 @@
 
 import copy
 import datetime
+from typing import Any
 
 from app.logic.case_reader import CaseReader
 from app.model.client_record import ClientRecord
@@ -18,7 +19,7 @@ class DocumentRecordBuilder:
     It stores the Config (asset names from the policy) and today's date.
     """
 
-    SUMMARY_SECTIONS = {"name": "Client", "nationality": "Client", "career": "Client",
+    SUMMARY_SECTIONS: dict[str, str] = {"name": "Client", "nationality": "Client", "career": "Client",
                         "career_history": "Career history", "investments": "Assets",
                         "claims": "Financial claims", "sow_declaration": "Source of wealth declaration"}
 
@@ -38,7 +39,7 @@ class DocumentRecordBuilder:
         age = day.year - born.year - ((day.month, day.day) < (born.month, born.day))
         return age if 0 < age < 130 else None
 
-    def _blank(self, value) -> bool:
+    def _blank(self, value: Any) -> bool:
         return value is None or (isinstance(value, str) and not value.strip()) or value == []
 
     def build(self, extracted: dict, client_ref: str) -> tuple[ClientRecord, list[str]]:
@@ -106,7 +107,7 @@ class DocumentRecordBuilder:
                  for item in self._required_fields(record) if not self._missing(record, item)]
         return ClientRecord.from_dict(self.__finish_layout(record)), found
 
-    def get_path(self, record: dict, path: list):
+    def get_path(self, record: dict, path: list[str | int]) -> Any:
         """The value at path (e.g. ["career_history", 0, "start_year"]), or None if it isn't there."""
         value = record
         for part in path:
@@ -118,7 +119,7 @@ class DocumentRecordBuilder:
                 return None
         return value
 
-    def set_path(self, record: ClientRecord, path: list, value) -> ClientRecord:
+    def set_path(self, record: ClientRecord, path: list[str | int], value: Any) -> ClientRecord:
         """Return a copy of record with the value at path replaced. Raises ValueError, saying
         what is wrong, if the value is not possible there."""
         new = record.to_dict()
