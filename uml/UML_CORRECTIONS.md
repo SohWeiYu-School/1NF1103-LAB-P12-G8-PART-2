@@ -404,3 +404,12 @@ diagram was updated to show the new and changed members, so the scan stays at 0.
 - New arrow: `DocumentRecordBuilder ..> CaseReader : uses` (it calls `CaseReader.is_iso_date`).
 - Layout: ConsoleUI grew into ReportView, so `ClientForm` moved to the left IO column under `CaseBuilder`; the lines
   around it were re-routed. layout_check 0.
+
+## Group 2 graded-rule fixes (2026-11-16): code changed, the diagram follows it
+
+No reviewed member was corrected; the code changed (follow-ups #10, #23, #50, #52, #54, #56) and the diagram shows it.
+- `VerdictEngine`: `#_feature`, `#_feature_checks`, `#_check` -> `-__feature`, `-__feature_checks`, `-__check` (no children; CLAUDE.md §1).
+- `CrimeScan`: `#_prepare_case`, `#_safe_int` and `-__to_iso` removed (dead code: the old matching never read `_prepare_case`'s output; Marcus decided to delete it). **R/B**.
+- `ClientForm.find_existing_client`: the unused `load_fn` parameter removed.
+- Added `AssessmentRunner.RESEARCH_STEP` (the failed-research step's name) and `App.typologies_checked(report)` (static), so both front ends can mark typologies that were not checked against research.
+- Layout: `AssessmentRunner` was widened to 480 and moved up beside `App` (it had grown into App's bottom edge); every App and AssessmentRunner line was re-routed. The long constant value is shortened with `...`. layout_check 0.
