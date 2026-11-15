@@ -34,7 +34,7 @@ class ReportView:
     }
     FIELD_NAMES = {"expected_aum": "Expected AUM", "pep_status": "PEP Status",
                    "current_declared_value": "Current Value (SGD)", "income_produced": "Yearly Income (SGD)"}
-    SOURCE_TAGS = {"documents": "[DOC]   ", "edited": "[EDITED]", "entered": "[YOU]   ", "blank": "[ -- ]  "}
+    SOURCE_TAGS: dict[str, str] = {"documents": "[DOC]   ", "edited": "[EDITED]", "entered": "[YOU]   ", "blank": "[ -- ]  "}
     OUTCOME_LABELS = {
         "PASSED": "PASSED",
         "MANUAL_REVIEW": "MANUAL REVIEW",
