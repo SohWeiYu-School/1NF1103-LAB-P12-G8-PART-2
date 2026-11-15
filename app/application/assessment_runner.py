@@ -87,12 +87,12 @@ class AssessmentRunner:
     def engine(self) -> VerdictEngine:
         return self.__engine
 
-    def run(self, case: dict, supporting_documents: list[dict] | None = None,
+    def run(self, case: dict, files: list[dict] | None = None,
             on_step: Callable[[int, str], None] | None = None,
             on_failure: Callable[[str, str], bool] | None = None) -> dict | None:
         """Assess one case. Nothing is printed and nothing is saved here.
 
-        supporting_documents  the client record's saved documents; every one is read.
+        files  the client record's saved documents (supporting_documents); every one is read.
         on_step(number, label)  is told each step in STEPS as it starts.
         on_failure(step, reason)  is told each step that could not be completed and answers
                                   True to carry on without it or False to stop.
@@ -123,14 +123,14 @@ class AssessmentRunner:
 
         # 1. Documents: what every submitted document shows (compared later with what he declared)
         step(1)
-        files = [str(document.get("file_name") or "document") for document in supporting_documents or []]
+        file_names = [str(document.get("file_name") or "document") for document in files or []]
         extracted = None
-        if files:
-            extracted = self.__document_ai.run({"documents": self.__document_store.read_all(supporting_documents)})
+        if file_names:
+            extracted = self.__document_ai.run({"documents": self.__document_store.read_all(files)})
             notes += self.__document_ai.warnings()
             if extracted is None and not failed("Reading the submitted documents", "the AI gave no usable reading"):
                 return None
-        evidence = self.__documents.run(case, {"extracted": extracted, "files": files})
+        evidence = self.__documents.run(case, {"extracted": extracted, "files": file_names})
 
         # 2-5. Crime scan context: what published reports say about his industry
         step(2)

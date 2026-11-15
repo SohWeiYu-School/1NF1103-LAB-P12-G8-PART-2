@@ -197,3 +197,19 @@ def test_parallel_runs_never_use_the_shared_forecast_at_the_same_time(tmp_path, 
     spans.sort()
     for (_, earlier_end), (later_start, _) in zip(spans, spans[1:]):
         assert later_start >= earlier_end       # the Forecast was never used by two runs at once
+
+
+def test_the_files_handed_in_are_read_by_the_document_reader(tmp_path):
+    """run(case, files=...): every saved document is opened and sent to the document reader; with
+    no files it is never asked. Here the reader gives no answer, so the step is reported as failed."""
+    runner, cache, fakes = fake_services.runner(tmp_path)
+    case = sample_case()
+    fake_services.save_forecast_replies(cache, case)
+    runner.run(case)
+    assert fakes["documents"].sources == []
+    failed = []
+    result = runner.run(case, files=[{"file_name": "payslip.pdf", "file_path": "data/documents/payslip.pdf"}],
+                        on_failure=lambda step, error: failed.append(step) or True)
+    assert len(fakes["documents"].sources) == 1
+    assert failed[0] == "Reading the submitted documents"
+    assert "Reading the submitted documents" in result["verdict"].not_run
