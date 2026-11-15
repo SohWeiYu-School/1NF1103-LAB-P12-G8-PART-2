@@ -4,6 +4,7 @@ import datetime
 import logging
 import os
 import uuid
+from typing import Callable
 
 from app.interface.console_ui import ConsoleUI
 from app.interface.report_view import ReportView
@@ -221,7 +222,8 @@ class ClientForm:
 
         return documents
 
-    def create_new_client(self, save_fn=None, upload_fn=None) -> ClientRecord | None:
+    def create_new_client(self, save_fn: Callable[[ClientRecord], bool] | None = None,
+                          upload_fn: Callable[[str], str | None] | None = None) -> ClientRecord | None:
         """Collect, review and optionally save a new client. save_fn is given the ClientRecord.
         Returns the saved record when the officer wants to assess it now, otherwise None."""
 
@@ -532,7 +534,8 @@ class ClientForm:
             f"\n{len(new_documents)} document(s) added."
         )
 
-    def edit_existing_client(self, record: ClientRecord, upload_fn=None) -> ClientRecord:
+    def edit_existing_client(self, record: ClientRecord,
+                             upload_fn: Callable[[str], str | None] | None = None) -> ClientRecord:
         """Allow the user to edit or add information to an existing client. Returns the edited
         record as a new ClientRecord. If the changes do not make a valid record, it says why and
         returns the SAME object it was given, unchanged, so the caller knows not to save."""
