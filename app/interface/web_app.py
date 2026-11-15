@@ -128,7 +128,7 @@ class WebApp:
         """The Flask application (tests use its test client)."""
         return self.__flask
 
-    def run(self, host: str = "127.0.0.1", port: int = 5000, debug: bool = False) -> None:
+    def start(self, host: str = "127.0.0.1", port: int = 5000, debug: bool = False) -> None:
         """Serve the web app until it is stopped."""
         self.__flask.run(host=host, port=port, debug=debug, use_reloader=False)
 
@@ -573,7 +573,7 @@ class WebApp:
                                field_errors=field_errors or {}, documents=documents or [],
                                autofilled=autofilled or [], notes=notes or [])
 
-    def _run_assessment_job(self, job_id: str, record: ClientRecord, case: dict) -> None:
+    def __run_in_background(self, job_id: str, record: ClientRecord, case: dict) -> None:
         """The assessment, in the background: App.assess, the very method the command
         line runs, then the same save."""
         job = self.__jobs[job_id]
@@ -609,7 +609,7 @@ class WebApp:
             }
             job["status"] = "done"
         except Exception as exc:
-            logging.getLogger(__name__).error("_run_assessment_job %s failed: %s", job_id, repr(exc))
+            logging.getLogger(__name__).error("__run_in_background %s failed: %s", job_id, repr(exc))
             logging.exception("Assessment of %s failed", record.client_ref)
             job["status"] = "error"
             job["error"] = str(exc)
@@ -848,7 +848,7 @@ class WebApp:
             "client_ref": client_ref,
         }
         threading.Thread(
-            target=self._run_assessment_job, args=(job_id, record, case), daemon=True
+            target=self.__run_in_background, args=(job_id, record, case), daemon=True
         ).start()
         return redirect(url_for("assess_loading", job_id=job_id))
 

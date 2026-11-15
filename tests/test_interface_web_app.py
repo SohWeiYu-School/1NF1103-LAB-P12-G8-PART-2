@@ -75,6 +75,22 @@ def test_a_handed_in_rate_limiter_decides_when_an_assessment_may_start(tmp_path,
     assert application.rate_limiter().check("127.0.0.1") == (True, 0)   # the App's limiter was not used
 
 
+def test_start_serves_the_flask_app_on_the_local_machine_by_default(web, monkeypatch):
+    _, site, _ = web
+    served = []
+    monkeypatch.setattr(site.flask(), "run", lambda **options: served.append(options))
+    site.start()
+    assert served == [{"host": "127.0.0.1", "port": 5000, "debug": False, "use_reloader": False}]
+
+
+def test_start_uses_the_host_port_and_debug_it_is_given(web, monkeypatch):
+    _, site, _ = web
+    served = []
+    monkeypatch.setattr(site.flask(), "run", lambda **options: served.append(options))
+    site.start("0.0.0.0", 5001, True)
+    assert served == [{"host": "0.0.0.0", "port": 5001, "debug": True, "use_reloader": False}]
+
+
 def test_pages_return_html_text_and_redirects_return_a_response(web):
     """The type hints match what Flask really returns: a page is HTML text (str), while
     redirect() and send_file() give a werkzeug Response object, and the progress poll is a dict
