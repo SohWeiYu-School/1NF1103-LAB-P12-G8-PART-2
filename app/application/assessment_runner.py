@@ -81,11 +81,11 @@ class AssessmentRunner:
         self.__documents: DocumentEvidence = DocumentEvidence(policy)
         self.__benchmark: Benchmark = Benchmark(policy, self.__config)
         self.__forecast: Forecast = Forecast(policy, self.__config)
-        self.__engine: VerdictEngine = VerdictEngine(
+        self.__verdict_engine: VerdictEngine = VerdictEngine(
             [self.__crime_scan, self.__documents, self.__benchmark, self.__forecast], self.__config)
 
     def engine(self) -> VerdictEngine:
-        return self.__engine
+        return self.__verdict_engine
 
     def run(self, case: dict, files: list[dict] | None = None,
             on_step: Callable[[int, str], None] | None = None,
@@ -170,7 +170,7 @@ class AssessmentRunner:
         forecast = run["forecast"] if run["ok"] else None
         stopped_at = None
         if forecast is None:
-            stopped_at = (f"{self.__engine.describe_piece(case, run.get('failed_piece'))} "
+            stopped_at = (f"{self.__verdict_engine.describe_piece(case, run.get('failed_piece'))} "
                           f"({run.get('failed_error') or 'unknown error'})")
             notes.append(f"The forecast stopped at {stopped_at}. Finished AI replies are saved, "
                          "so running again carries on from there.")
@@ -226,7 +226,7 @@ class AssessmentRunner:
         step(13)
         try:
             with self.__forecast_lock:        # combine() calls Forecast.honest_numbers
-                verdict = self.__engine.combine(case, {
+                verdict = self.__verdict_engine.combine(case, {
                     "reports": reports,
                     "typologies": typologies, "crime_result": crime_result, "declaration": declaration,
                     "benchmark_input": bench_input, "benchmark_ai": bench_ai, "benchmark_findings": findings,
