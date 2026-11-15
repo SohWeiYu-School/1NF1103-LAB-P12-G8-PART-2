@@ -49,7 +49,7 @@ class Forecast(RiskAnalysis):
     def honest_numbers(self, case: dict, forecast: dict, assessment: dict) -> dict:
         """The honest type's figures the benchmark and the report compare against."""
         self.__use(forecast)
-        return self._honest_numbers(case, assessment)
+        return self.__honest_numbers(case, assessment)
 
     def calibrate_pay(self, case: dict, forecast: dict, documented_pay: list[dict]) -> tuple[dict, list[dict]]:
         """The forecast with its pay set to what his documents show, and what was changed."""
@@ -82,7 +82,7 @@ class Forecast(RiskAnalysis):
             parts.append(f"declared source {person_type['enabled_by_source_id']}")
         return " and ".join(parts) or "not stated"
 
-    def _rank_documents(self, candidates: list[str]) -> list[dict]:
+    def __rank_documents(self, candidates: list[str]) -> list[dict]:
         """Documents ordered by how many candidate types each one would rule out."""
         forecast = self.__forecast
         pool = set(candidates)
@@ -119,11 +119,11 @@ class Forecast(RiskAnalysis):
             for code in lookup.get(key, []):
                 add(code, failure["detail"])
         if len(candidates) > 1:
-            for document in self._rank_documents(candidates):
+            for document in self.__rank_documents(candidates):
                 add(document["document_code"], f"rules out {', '.join(document['rules_out'])}")
         return request[:policy["max_documents"]]
 
-    def _data_quality(self) -> dict:
+    def __data_quality(self) -> dict:
         """How many market figures the AI could only give from memory or not at all."""
         forecast = self.__forecast
         figures = [row for series in forecast["markets"]["series"].values() for row in series["history"]]
@@ -244,7 +244,7 @@ class Forecast(RiskAnalysis):
             "documents": documents,
             "watch_dates": watch_dates,
             "next_review_date": min([scheduled] + first_divergence),
-            "data_quality": self._data_quality(),
+            "data_quality": self.__data_quality(),
         }
 
     def economy_brief(self, markets: dict | None) -> dict | None:
@@ -261,7 +261,7 @@ class Forecast(RiskAnalysis):
                                  for j in markets.get("jurisdictions", [])],
         }
 
-    def _honest_numbers(self, case: dict, assessment: dict) -> dict:
+    def __honest_numbers(self, case: dict, assessment: dict) -> dict:
         """T1's fit, wealth today, liquid wealth, wealth by year and peak pay."""
         forecast = self.__forecast
         policy = self._policy
