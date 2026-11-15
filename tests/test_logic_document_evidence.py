@@ -1,5 +1,7 @@
 """DocumentEvidence: the documents feature."""
 
+import pytest
+
 from app.logic.document_evidence import DocumentEvidence
 from app.logic.risk_analysis import RiskAnalysis
 from app.model.check import Check
@@ -79,3 +81,8 @@ def test_a_finding_without_source_files_still_saves_an_empty_list():
     assert other.sources == []
     saved = other.to_dict()
     assert list(saved.items())[-2:] == [("sources", []), ("supports", [])]   # the saved layout keeps both
+
+
+def test_the_document_evidence_rejects_a_policy_that_is_not_a_dict():
+    with pytest.raises(ValueError, match="policy must be a dict"):
+        DocumentEvidence("policy")

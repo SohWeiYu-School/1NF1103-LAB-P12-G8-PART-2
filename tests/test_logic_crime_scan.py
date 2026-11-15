@@ -1,5 +1,7 @@
 """CrimeScan: the crime scan feature and the warning signs it owns."""
 
+import pytest
+
 from app.logic.crime_scan import CrimeScan
 from app.logic.risk_analysis import RiskAnalysis
 from app.model.check import Check
@@ -212,3 +214,8 @@ def test_run_takes_the_declaration_object_or_its_saved_rows():
     as_rows = CrimeScan(POLICY).run(CASE, {"typologies": typologies, "declaration": UNNAMED})
     assert [m.to_dict() for m in as_object["match_results"]] == [m.to_dict() for m in as_rows["match_results"]]
     assert as_object["breach_count"] == 1
+
+
+def test_the_crime_scan_rejects_a_policy_that_is_not_a_dict():
+    with pytest.raises(ValueError, match="policy must be a dict"):
+        CrimeScan(["policy"])
