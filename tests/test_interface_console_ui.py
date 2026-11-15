@@ -165,3 +165,12 @@ def test_the_dropped_document_details_are_listed_with_their_reasons(capsys):
     assert "were left empty" in out and "Age: the value read" in out
     ConsoleUI().show_dropped_fields([])
     assert capsys.readouterr().out == ""
+
+
+def test_keep_money_can_refuse_zero_and_asks_again_straight_away(capsys):
+    ask = _answers("0", "-1", "250,000")
+    ui = ConsoleUI(read=ask)
+    assert ui.keep_money("Declared net worth", 100.0, allow_zero=False) == 250000.0
+    out = capsys.readouterr().out
+    assert "above zero" in out and "can't be negative" in out
+    assert ConsoleUI(read=_answers("0")).keep_money("Yearly income", 5.0) == 0.0      # zero is still fine by default

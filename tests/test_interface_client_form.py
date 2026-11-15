@@ -236,3 +236,11 @@ def test_ask_document_folder_gives_none_when_the_officer_goes_back(monkeypatch):
     monkeypatch.setattr("app.interface.client_form.tk", None)
     _type(monkeypatch, "")
     assert _form().ask_document_folder() is None
+
+
+def test_typing_zero_for_net_worth_or_aum_in_the_edit_screen_is_refused_and_asked_again(monkeypatch, capsys):
+    #       declarations  net worth: 0 then 2m   AUM: 0 then 1m   PEP  countries  stop
+    _type(monkeypatch, "5", "0", "2,000,000", "0", "1,000,000", "n", "", "n")
+    edited = _form().edit_existing_client(ClientRecord.from_dict(sample_case()))
+    assert edited.claims.declared_net_worth == 2_000_000 and edited.claims.expected_aum == 1_000_000
+    assert capsys.readouterr().out.count("above zero") == 2

@@ -250,8 +250,9 @@ class ConsoleUI:
                 return n
             self.show_error(f"Please enter a value between {minimum} and {maximum}.")
 
-    def keep_money(self, label: str, current: float | None) -> float | None:
-        """Enter keeps the current amount; None means there is no amount yet (and stays None)."""
+    def keep_money(self, label: str, current: float | None, allow_zero: bool = True) -> float | None:
+        """Enter keeps the current amount; None means there is no amount yet (and stays None).
+        With allow_zero False a typed 0 is refused straight away, like ask_money does."""
         while True:
             shown = "" if current is None else current      # an empty amount shows as [], as it always did
             v = self.__read(f"{label} [{shown}]: ").strip().replace(",", "")
@@ -262,9 +263,12 @@ class ConsoleUI:
             except ValueError:
                 self.show_error("Please enter an amount like 1500000, or press Enter to keep.")
                 continue
-            if n >= 0:
+            if n < 0:
+                self.show_error("Amounts can't be negative.")
+            elif n == 0 and not allow_zero:
+                self.show_error("Please enter an amount above zero, or press Enter to keep.")
+            else:
                 return n
-            self.show_error("Amounts can't be negative.")
 
     def __only(self, text: str, allowed: str) -> bool:
         """Must contain at least one letter, and nothing outside letters + the allowed characters."""

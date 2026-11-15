@@ -510,8 +510,9 @@ class ClientForm:
         claims = record.setdefault("claims", {})
         self.__ui.show("Press Enter to keep the existing value.")
 
-        claims["declared_net_worth"] = self.__ui.keep_money("Declared net worth (SGD)", claims.get("declared_net_worth"))
-        claims["expected_aum"]       = self.__ui.keep_money("Expected AUM (SGD)", claims.get("expected_aum"))
+        claims["declared_net_worth"] = self.__ui.keep_money("Declared net worth (SGD)", claims.get("declared_net_worth"),
+                                                              allow_zero=False)
+        claims["expected_aum"]       = self.__ui.keep_money("Expected AUM (SGD)", claims.get("expected_aum"), allow_zero=False)
 
         self.__ui.show(f"PEP status [{claims.get('pep_status', '')}]")
         if self.__ui.ask_yes_no("Change PEP status?"):
