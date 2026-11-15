@@ -34,7 +34,7 @@ Kept as the diagram says, because the code will be changed to match in a later s
 - `ClientForm.create_new_client : ClientRecord | None` and `edit_existing_client : ClientRecord`: the dict → model refactor (R1) makes the code return a `ClientRecord`. Until then, the code is typed with what it really returns (`dict | None`, `None`).
 - `ConsoleUI.keep_money(current : float) : float`: stage 3 replaces `""` with `None` for an empty value (CLAUDE.md §9). The diagram is then corrected once, to the final type.
 
-## Stage 3, batch A: AI Manager (2026-11-16): 27 corrections
+## Stage 3, batch A: AI Manager (2026-11-15): 27 corrections
 
 Code changed to match the diagram: ForecastAI's 8 step/check helpers became private (`__forecast_markets`,
 `__check_declaration`, …), and `read_declaration` lost its unused `cache` parameter.
@@ -48,10 +48,12 @@ Everything below is the diagram being corrected, because the code is technically
 | AIService | `_complete(…, options : dict = {})` | `options : dict \| None = None` | **T**: a shared `{}` default would leak values from one call into the next |
 | AIService | `_build_prompt`, `_redact_names` | `+ schema`, `+ honorifics` parameters | **T**: ForecastAI passes them; the prompt text depends on them |
 | AIService | `__parse_reply(raw : str)` | `raw : str \| None` | **T**: an AI caller returns `None` on failure |
-| ResponseCache | `get`, `__key` | `+ prompt_version : str = ""` | **T**: the prompt version is part of the cache key; without it every saved reply would be missed |
-| ForecastAI, ResearchAI, TypologyAI, BenchmarkAI, DocumentAI | `__init__` | real parameters and defaults (`settings`, `vocabulary` for ForecastAI) | **T**: App passes them, and `None` caller/cache when there is no API key |
+| ResponseCache | `get`, `__key` | `+ prompt_version : str = ""` | **T**: the prompt version is part of the cache key, so a changed prompt correctly misses replies saved for the old prompt; without it, stale replies would be reused |
+| ForecastAI, ResearchAI, TypologyAI, BenchmarkAI, DocumentAI | `__init__` | `ai_caller : Callable \| None`, `response_cache : ResponseCache \| None`, and `settings`/`vocabulary` for ForecastAI | **T**: the base class handles a missing caller or cache, App gives ForecastAI and DocumentAI no caller when there is no API key, and App passes ForecastAI its settings and vocabulary. The added defaults (`= ""`, `= 0.0`) are **B** (below review level) |
 | ForecastAI | `read_declaration : Declaration` | `: Declaration \| None` | **T**: `None` when the AI gives no usable reading (the step then fails honestly) |
 | ForecastAI | the 8 private step/check helpers | their real parameters, steps return `dict \| None` | **T**: they need these inputs; a step returns `None` at the first failure |
 
-Layout: the AI service boxes grew, so the right-hand column was re-stacked, the AI Manager folder grew to fit,
-and two multiplicity labels were moved out of the grown boxes.
+Layout: the AI service boxes grew, so the right-hand column was re-stacked and the AI Manager folder grew to fit
+(the Application folder also grew by 15 px, harmlessly). Connector bends next to the moved boxes were re-levelled so
+the lines keep their right angles (an independent review caught that they had gone diagonal), and three
+multiplicity labels were moved back beside their lines.

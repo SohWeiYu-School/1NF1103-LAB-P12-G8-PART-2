@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `4662faf` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `9ded4e4` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -24,12 +24,12 @@ Checked code at commit `4662faf` against `uml/class_diagram_v4.puml`, which is c
 |---|---|---|---|
 | 1 | Structure: classes and inheritance | 0 | Code + UML |
 | 2 | Graded code rules: types and `__init__` | 0 | Code |
-| 3 | Same member, different details | 178 | Decide per item |
-| 4 | In UML, missing in code | 40 | Decide per item |
+| 3 | Same member, different details | 180 | Decide per item |
+| 4 | In UML, missing in code | 38 | Decide per item |
 | 5 | In code, missing from UML | 485 | UML |
-| 6 | Minor: default and starting values | 88 | UML |
+| 6 | Minor: default and starting values | 90 | UML |
 | 7 | Relationships (arrows, verbs, multiplicities) and the main.py note | 43 | Mostly UML |
-| | **Total** | **834** | |
+| | **Total** | **836** | |
 
 Pairs where only the underscores differ (`__x` in UML, `_x` in code) are merged into one item in stage 3, so the total is lower than the raw count of differences.
 
@@ -49,7 +49,7 @@ How to fix: **Code:** add the missing type hints, and create every attribute in 
 
 **Done.** Nothing left in this stage.
 
-## Stage 3: Same member, different details (178)
+## Stage 3: Same member, different details (180)
 
 Both sides have it, but the signature, type, visibility, static or abstract marker, or constant value differs.
 
@@ -229,7 +229,7 @@ How to fix: Decide per item. If the code is the better design, update the UML. I
 - [ ] `calibrate` parameters differ. UML: `+calibrate(case : dict, documented_pay : dict) : list` · code: `(case, forecast, documented_pay)` (app/logic/pay_calibrator.py:21)
 - [ ] `calibrate` return type differs. UML: `list` · code: `tuple[dict, list[dict]]` (app/logic/pay_calibrator.py:21)
 
-### Shared core (89)
+### Shared core (91)
 
 **`App`**
 
@@ -253,11 +253,11 @@ How to fix: Decide per item. If the code is the better design, update the UML. I
 
 **`CaseBuilder`**
 
-- [ ] `__jobs_from_record` (UML) is `_jobs_from_record` in code: visibility (underscores) differs. UML: `-__jobs_from_record(record : ClientRecord) : list[dict]` · code: app/interface/case_builder.py:86
-- [ ] `__assets_from_record` (UML) is `_assets_from_record` in code: visibility (underscores) differs. UML: `-__assets_from_record(record : ClientRecord) : list[dict]` · code: app/interface/case_builder.py:133
-- [ ] `__number_or_ask` (UML) is `_number_or_ask` in code: visibility (underscores) differs. UML: `-__number_or_ask(value : float | None, question : str) : float` · code: app/interface/case_builder.py:67
-- [ ] `__year_or_ask` (UML) is `_year_or_ask` in code: visibility (underscores) differs. UML: `-__year_or_ask(value : int | None, question : str) : int` · code: app/interface/case_builder.py:75
-- [ ] `__init__` parameters differ. UML: `+__init__(ui : ConsoleUI, today : str = "")` · code: `(ui, case_schema)` (app/interface/case_builder.py:21)
+- [ ] `__jobs_from_record` (UML) is `_jobs_from_record` in code: visibility (underscores) differs. UML: `-__jobs_from_record(record : ClientRecord) : list[dict]` · code: app/interface/case_builder.py:83
+- [ ] `__assets_from_record` (UML) is `_assets_from_record` in code: visibility (underscores) differs. UML: `-__assets_from_record(record : ClientRecord) : list[dict]` · code: app/interface/case_builder.py:130
+- [ ] `__number_or_ask` (UML) is `_number_or_ask` in code: visibility (underscores) differs. UML: `-__number_or_ask(value : float | None, question : str) : float` · code: app/interface/case_builder.py:64
+- [ ] `__year_or_ask` (UML) is `_year_or_ask` in code: visibility (underscores) differs. UML: `-__year_or_ask(value : int | None, question : str) : int` · code: app/interface/case_builder.py:72
+- [ ] `__init__` parameters differ. UML: `+__init__(ui : ConsoleUI, today : str = "")` · code: `(ui, case_schema)` (app/interface/case_builder.py:18)
 
 **`CaseReader`**
 
@@ -300,23 +300,25 @@ How to fix: Decide per item. If the code is the better design, update the UML. I
 
 **`ConsoleUI`**
 
-- [ ] `__only` (UML) is `_only` in code: visibility (underscores) differs. UML: `-__only(text : str, allowed : str) : bool` · code: app/interface/console_ui.py:306
-- [ ] `__parse_count` (UML) is `_parse_count` in code: visibility (underscores) differs. UML: `-__parse_count(text : str) : int | None` · code: app/interface/console_ui.py:338
-- [ ] `__init__` parameters differ. UML: `+__init__(read : Callable = input, write : Callable = print)` · code: `()` (app/interface/console_ui.py:30)
-- [ ] `ask_text` parameters differ. UML: `+ask_text(question : str, min_length : int = 1) : str` · code: `(question, ask, min_length)` (app/interface/console_ui.py:165)
-- [ ] `ask_int` parameters differ. UML: `+ask_int(question : str, minimum : int = 0) : int` · code: `(question, ask, minimum, maximum, allow_blank)` (app/interface/console_ui.py:173)
-- [ ] `ask_int` return type differs. UML: `int` · code: `int | None` (app/interface/console_ui.py:173)
-- [ ] `ask_money` parameters differ. UML: `+ask_money(question : str, allow_zero : bool = False) : float` · code: `(question, ask, allow_zero)` (app/interface/console_ui.py:192)
-- [ ] `ask_year` parameters differ. UML: `+ask_year(question : str, minimum : int, maximum : int) : int` · code: `(question, minimum, maximum, allow_blank)` (app/interface/console_ui.py:227)
-- [ ] `ask_year` return type differs. UML: `int` · code: `int | None` (app/interface/console_ui.py:227)
-- [ ] `ask_choice` parameters differ. UML: `+ask_choice(question : str, options : list) : int | None` · code: `(question, options, ask, allow_back)` (app/interface/console_ui.py:206)
-- [ ] `ask_yes_no` parameters differ. UML: `+ask_yes_no(question : str) : bool` · code: `(question, ask)` (app/interface/console_ui.py:217)
-- [ ] `ask_client_ref` parameters differ. UML: `+ask_client_ref() : str | None` · code: `(ask)` (app/interface/console_ui.py:370)
-- [ ] `keep_text` parameters differ. UML: `+keep_text(label : str, current : str) : str` · code: `(label, current, min_length)` (app/interface/console_ui.py:269)
-- [ ] `keep_money` parameter `current` type differs. UML: `float` · code: `float | str` (app/interface/console_ui.py:292)
-- [ ] `keep_money` return type differs. UML: `float` · code: `float | str` (app/interface/console_ui.py:292)
-- [ ] `money` parameter `value` type differs. UML: `float` · code: `float | None` (app/interface/console_ui.py:155)
-- [ ] `money_range` parameters differ. UML: `+money_range(band : Band) : str` · code: `(values)` (app/interface/console_ui.py:158)
+- [ ] `__only` (UML) is `_only` in code: visibility (underscores) differs. UML: `-__only(text : str, allowed : str) : bool` · code: app/interface/console_ui.py:307
+- [ ] `__parse_count` (UML) is `_parse_count` in code: visibility (underscores) differs. UML: `-__parse_count(text : str) : int | None` · code: app/interface/console_ui.py:339
+- [ ] `__read` type differs. UML: `Callable` · code: `Callable[[str], str]` (app/interface/console_ui.py:36)
+- [ ] `__write` type differs. UML: `Callable` · code: `Callable[[str], None]` (app/interface/console_ui.py:37)
+- [ ] `__init__` parameter `read` type differs. UML: `Callable` · code: `Callable[[str], str] | None` (app/interface/console_ui.py:27)
+- [ ] `__init__` parameter `read` default differs. UML: `input` · code: `None` (app/interface/console_ui.py:27)
+- [ ] `__init__` parameter `write` type differs. UML: `Callable` · code: `Callable[[str], None] | None` (app/interface/console_ui.py:27)
+- [ ] `__init__` parameter `write` default differs. UML: `print` · code: `None` (app/interface/console_ui.py:27)
+- [ ] `ask_int` parameters differ. UML: `+ask_int(question : str, minimum : int = 0) : int` · code: `(question, minimum, maximum, allow_blank)` (app/interface/console_ui.py:179)
+- [ ] `ask_int` return type differs. UML: `int` · code: `int | None` (app/interface/console_ui.py:179)
+- [ ] `ask_money` parameter `allow_zero` default differs. UML: `False` · code: `True` (app/interface/console_ui.py:197)
+- [ ] `ask_year` parameters differ. UML: `+ask_year(question : str, minimum : int, maximum : int) : int` · code: `(question, minimum, maximum, allow_blank)` (app/interface/console_ui.py:229)
+- [ ] `ask_year` return type differs. UML: `int` · code: `int | None` (app/interface/console_ui.py:229)
+- [ ] `ask_choice` parameters differ. UML: `+ask_choice(question : str, options : list) : int | None` · code: `(question, options, allow_back)` (app/interface/console_ui.py:210)
+- [ ] `keep_text` parameters differ. UML: `+keep_text(label : str, current : str) : str` · code: `(label, current, min_length)` (app/interface/console_ui.py:270)
+- [ ] `keep_money` parameter `current` type differs. UML: `float` · code: `float | str` (app/interface/console_ui.py:293)
+- [ ] `keep_money` return type differs. UML: `float` · code: `float | str` (app/interface/console_ui.py:293)
+- [ ] `money` parameter `value` type differs. UML: `float` · code: `float | None` (app/interface/console_ui.py:162)
+- [ ] `money_range` parameters differ. UML: `+money_range(band : Band) : str` · code: `(values)` (app/interface/console_ui.py:165)
 
 **`Declaration`**
 
@@ -380,7 +382,7 @@ How to fix: Decide per item. If the code is the better design, update the UML. I
 - [ ] `view_client` return type differs. UML: `str` · code: `str | Response` (app/interface/web_app.py:675)
 - [ ] `edit_client_autofill` return type differs. UML: `str` · code: `str | Response` (app/interface/web_app.py:729)
 
-## Stage 4: In UML, missing in code (40)
+## Stage 4: In UML, missing in code (38)
 
 The diagram promises something the code doesn't have.
 
@@ -410,7 +412,7 @@ How to fix: Either the work was done under another name (then update the UML), o
 - [ ] `__check_pay()` missing in code. UML: `-__check_pay(data : dict) : list[str]` · code: `—` (app/ai/forecast_ai.py:19)
 - [ ] `__repair()` missing in code. UML: `-__repair(data : dict, errors : list[str]) : dict` · code: `—` (app/ai/forecast_ai.py:19)
 
-### Shared core (34)
+### Shared core (32)
 
 **`App`**
 
@@ -433,9 +435,9 @@ How to fix: Either the work was done under another name (then update the UML), o
 
 **`CaseBuilder`**
 
-- [ ] `__today` missing in code (__init__). UML: `-__today : str = ""` · code: `—` (app/interface/case_builder.py:15)
-- [ ] `build()` missing in code. UML: `+build(record : ClientRecord, missing : list[str]) : dict | None` · code: `—` (app/interface/case_builder.py:15)
-- [ ] `show_case_problems()` missing in code. UML: `+show_case_problems(where : str, problems : list) : None` · code: `—` (app/interface/case_builder.py:15)
+- [ ] `__today` missing in code (__init__). UML: `-__today : str = ""` · code: `—` (app/interface/case_builder.py:12)
+- [ ] `build()` missing in code. UML: `+build(record : ClientRecord, missing : list[str]) : dict | None` · code: `—` (app/interface/case_builder.py:12)
+- [ ] `show_case_problems()` missing in code. UML: `+show_case_problems(where : str, problems : list) : None` · code: `—` (app/interface/case_builder.py:12)
 
 **`ClientForm`**
 
@@ -445,10 +447,8 @@ How to fix: Either the work was done under another name (then update the UML), o
 
 **`ConsoleUI`**
 
-- [ ] `__read` missing in code (__init__). UML: `-__read : Callable = input` · code: `—` (app/interface/console_ui.py:16)
-- [ ] `__write` missing in code (__init__). UML: `-__write : Callable = print` · code: `—` (app/interface/console_ui.py:16)
-- [ ] constant `PAYMENT_METHODS` missing in code. UML: `+PAYMENT_METHODS : list[str] = [...] «const»` · code: `—` (app/interface/console_ui.py:16)
-- [ ] constant `PEP_OPTIONS` missing in code. UML: `+PEP_OPTIONS : list[str] = [...] «const»` · code: `—` (app/interface/console_ui.py:16)
+- [ ] constant `PAYMENT_METHODS` missing in code. UML: `+PAYMENT_METHODS : list[str] = [...] «const»` · code: `—` (app/interface/console_ui.py:13)
+- [ ] constant `PEP_OPTIONS` missing in code. UML: `+PEP_OPTIONS : list[str] = [...] «const»` · code: `—` (app/interface/console_ui.py:13)
 
 **`RateLimiter`**
 
@@ -869,13 +869,13 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 
 **`CaseBuilder`**
 
-- [ ] `__case_schema` exists in code but not in UML. UML: `—` · code: `dict = case_schema or {}` (app/interface/case_builder.py:23)
-- [ ] `_composition_from_record()` exists in code but not in UML. UML: `—` · code: `app/interface/case_builder.py:166` (app/interface/case_builder.py:166)
-- [ ] `_first_filled()` exists in code but not in UML. UML: `—` · code: `app/interface/case_builder.py:126` (app/interface/case_builder.py:126)
-- [ ] `_payment_method()` exists in code but not in UML. UML: `—` · code: `app/interface/case_builder.py:56` (app/interface/case_builder.py:56)
-- [ ] `_text_or_ask()` exists in code but not in UML. UML: `—` · code: `app/interface/case_builder.py:82` (app/interface/case_builder.py:82)
-- [ ] `case_from_client_record()` exists in code but not in UML. UML: `—` · code: `app/interface/case_builder.py:187` (app/interface/case_builder.py:187)
-- [ ] `validate_case()` exists in code but not in UML. UML: `—` · code: `app/interface/case_builder.py:25` (app/interface/case_builder.py:25)
+- [ ] `__case_schema` exists in code but not in UML. UML: `—` · code: `dict = case_schema or {}` (app/interface/case_builder.py:20)
+- [ ] `_composition_from_record()` exists in code but not in UML. UML: `—` · code: `app/interface/case_builder.py:163` (app/interface/case_builder.py:163)
+- [ ] `_first_filled()` exists in code but not in UML. UML: `—` · code: `app/interface/case_builder.py:123` (app/interface/case_builder.py:123)
+- [ ] `_payment_method()` exists in code but not in UML. UML: `—` · code: `app/interface/case_builder.py:53` (app/interface/case_builder.py:53)
+- [ ] `_text_or_ask()` exists in code but not in UML. UML: `—` · code: `app/interface/case_builder.py:79` (app/interface/case_builder.py:79)
+- [ ] `case_from_client_record()` exists in code but not in UML. UML: `—` · code: `app/interface/case_builder.py:184` (app/interface/case_builder.py:184)
+- [ ] `validate_case()` exists in code but not in UML. UML: `—` · code: `app/interface/case_builder.py:22` (app/interface/case_builder.py:22)
 
 **`CaseReader`**
 
@@ -983,28 +983,28 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 
 **`ConsoleUI`**
 
-- [ ] `__width` exists in code but not in UML. UML: `—` · code: `int = len(ConsoleUI.LINE)` (app/interface/console_ui.py:31)
-- [ ] class-level `LABEL` exists in code but not in UML. UML: `—` · code: `" '.-&/,()%#0123456789"` (app/interface/console_ui.py:16)
-- [ ] `_words_error()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:310` (app/interface/console_ui.py:310)
-- [ ] `ask_composition()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:240` (app/interface/console_ui.py:240)
-- [ ] `ask_count()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:345` (app/interface/console_ui.py:345)
-- [ ] `ask_countries()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:331` (app/interface/console_ui.py:331)
-- [ ] `ask_currency()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:232` (app/interface/console_ui.py:232)
-- [ ] `ask_document_folder()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:116` (app/interface/console_ui.py:116)
-- [ ] `ask_document_record_action()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:147` (app/interface/console_ui.py:147)
-- [ ] `ask_words()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:315` (app/interface/console_ui.py:315)
-- [ ] `display_section()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:93` (app/interface/console_ui.py:93)
+- [ ] `__width` exists in code but not in UML. UML: `—` · code: `int = len(ConsoleUI.LINE)` (app/interface/console_ui.py:38)
+- [ ] class-level `LABEL` exists in code but not in UML. UML: `—` · code: `" '.-&/,()%#0123456789"` (app/interface/console_ui.py:13)
+- [ ] `_words_error()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:311` (app/interface/console_ui.py:311)
+- [ ] `ask_composition()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:241` (app/interface/console_ui.py:241)
+- [ ] `ask_count()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:346` (app/interface/console_ui.py:346)
+- [ ] `ask_countries()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:332` (app/interface/console_ui.py:332)
+- [ ] `ask_currency()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:234` (app/interface/console_ui.py:234)
+- [ ] `ask_document_folder()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:123` (app/interface/console_ui.py:123)
+- [ ] `ask_document_record_action()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:154` (app/interface/console_ui.py:154)
+- [ ] `ask_words()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:316` (app/interface/console_ui.py:316)
+- [ ] `display_section()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:100` (app/interface/console_ui.py:100)
 - [ ] `keep_count()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:354` (app/interface/console_ui.py:354)
-- [ ] `keep_int()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:278` (app/interface/console_ui.py:278)
-- [ ] `keep_words()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:322` (app/interface/console_ui.py:322)
-- [ ] `read_number()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:382` (app/interface/console_ui.py:382)
-- [ ] `read_year()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:399` (app/interface/console_ui.py:399)
-- [ ] `show_ai_progress()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:375` (app/interface/console_ui.py:375)
+- [ ] `keep_int()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:279` (app/interface/console_ui.py:279)
+- [ ] `keep_words()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:323` (app/interface/console_ui.py:323)
+- [ ] `read_number()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:381` (app/interface/console_ui.py:381)
+- [ ] `read_year()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:398` (app/interface/console_ui.py:398)
+- [ ] `show_ai_progress()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:374` (app/interface/console_ui.py:374)
 - [ ] `show_case_problems()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:364` (app/interface/console_ui.py:364)
-- [ ] `show_client_list()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:100` (app/interface/console_ui.py:100)
-- [ ] `show_documents_found()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:136` (app/interface/console_ui.py:136)
-- [ ] `show_missing_intro()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:141` (app/interface/console_ui.py:141)
-- [ ] `show_unexpected_error()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:63` (app/interface/console_ui.py:63)
+- [ ] `show_client_list()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:107` (app/interface/console_ui.py:107)
+- [ ] `show_documents_found()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:143` (app/interface/console_ui.py:143)
+- [ ] `show_missing_intro()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:148` (app/interface/console_ui.py:148)
+- [ ] `show_unexpected_error()` exists in code but not in UML. UML: `—` · code: `app/interface/console_ui.py:70` (app/interface/console_ui.py:70)
 
 **`Declaration`**
 
@@ -1126,7 +1126,7 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `values_from_form()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:181` (app/interface/web_app.py:181)
 - [ ] `values_from_record()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:156` (app/interface/web_app.py:156)
 
-## Stage 6: Minor: default and starting values (88)
+## Stage 6: Minor: default and starting values (90)
 
 A parameter default the UML leaves out, or an attribute whose starting value differs.
 
@@ -1240,7 +1240,7 @@ How to fix: **UML:** add or correct the `= value`. Where the code is computed, d
 - [ ] `__init__` parameter `career_savings` has a default in code that UML does not show. UML: `—` · code: `None` (app/logic/pay_calibrator.py:17)
 - [ ] `__init__` parameter `policy` has a default in code that UML does not show. UML: `—` · code: `None` (app/logic/pay_calibrator.py:17)
 
-### Shared core (44)
+### Shared core (46)
 
 **`App`**
 
@@ -1263,7 +1263,7 @@ How to fix: **UML:** add or correct the `= value`. Where the code is computed, d
 
 **`CaseBuilder`**
 
-- [ ] `__ui` starts with a different value. UML: `None` · code: `ConsoleUI()` (app/interface/case_builder.py:22) *(pattern: UML writes `= None` for a part that `__init__` creates)*
+- [ ] `__ui` starts with a different value. UML: `None` · code: `ConsoleUI()` (app/interface/case_builder.py:19) *(pattern: UML writes `= None` for a part that `__init__` creates)*
 
 **`CaseTimeline`**
 
@@ -1297,8 +1297,10 @@ How to fix: **UML:** add or correct the `= value`. Where the code is computed, d
 
 **`ConsoleUI`**
 
-- [ ] `show` parameter `text` has a default in code that UML does not show. UML: `—` · code: `''` (app/interface/console_ui.py:152)
-- [ ] `show_ai_unavailable` parameter `feature` has a default in code that UML does not show. UML: `—` · code: `'Assessment'` (app/interface/console_ui.py:60)
+- [ ] `__read` starts with a different value. UML: `input` · code: `read if read is not None else lambda question: input(question)` (app/interface/console_ui.py:36) *(computed in code: check by hand)*
+- [ ] `__write` starts with a different value. UML: `print` · code: `write if write is not None else lambda text: print(text)` (app/interface/console_ui.py:37) *(computed in code: check by hand)*
+- [ ] `show` parameter `text` has a default in code that UML does not show. UML: `—` · code: `''` (app/interface/console_ui.py:159)
+- [ ] `show_ai_unavailable` parameter `feature` has a default in code that UML does not show. UML: `—` · code: `'Assessment'` (app/interface/console_ui.py:67)
 
 **`Investment`**
 
