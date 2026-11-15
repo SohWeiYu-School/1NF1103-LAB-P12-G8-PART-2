@@ -18,6 +18,8 @@ class RiskAnalysis(ABC):
     NAME: str = "feature"
 
     def __init__(self, policy: dict | None = None) -> None:
+        if policy is not None and not isinstance(policy, dict):
+            raise ValueError(f"a feature's policy must be a dict (or None), not {type(policy).__name__}")
         self._policy: dict = policy or {}
         self._results: dict = {}
 

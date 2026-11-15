@@ -80,3 +80,9 @@ def test_check_builds_a_check_with_every_shared_field():
     assert check.to_dict() == {"feature": "sample", "check": "GIFT", "label": "Gift from abroad", "theme": "people",
                                "status": "weak", "detail": "A gift.", "explanation": "Supports T2.",
                                "group": "Documents", "sources": ["bank.pdf"], "supports": ["fraud"]}
+
+
+def test_a_feature_rejects_a_policy_that_is_not_a_dict():
+    with pytest.raises(ValueError, match="policy must be a dict"):
+        _Sample("limit=5")
+    assert _Sample(None) is not None and _Sample({}) is not None
