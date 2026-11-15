@@ -194,7 +194,8 @@ class ConsoleUI:
             else:
                 return number
 
-    def ask_money(self, question: str, allow_zero: bool = True) -> float:
+    def ask_money(self, question: str, allow_zero: bool = False) -> float:
+        """An amount above zero, or zero too when allow_zero is True. Commas are allowed."""
         while True:
             answer = self.read_answer(f"{question}: ").strip().replace(",", "")
             try:
@@ -246,7 +247,7 @@ class ConsoleUI:
             split = {}
             for key, label in labels:
                 if current is None:
-                    split[key] = self.ask_money(f"{label} (%)") / 100
+                    split[key] = self.ask_money(f"{label} (%)", allow_zero=True) / 100
                 else:
                     shown = f"{current.get(key, 0) * 100:.0f}"
                     v = self.__read(f"{label} (%) [{shown}]: ").strip().replace(",", "")
@@ -267,7 +268,7 @@ class ConsoleUI:
                 return split
             self.show_error(f"That adds up to {total:.1%}. It must be 100%. Please re-enter.")
 
-    def keep_text(self, label: str, current, min_length: int = 2) -> str:
+    def keep_text(self, label: str, current: str, min_length: int = 2) -> str:
         while True:
             v = self.__read(f"{label} [{current}]: ").strip()
             if not v:

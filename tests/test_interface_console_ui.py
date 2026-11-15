@@ -38,14 +38,16 @@ def test_ask_int_may_be_left_blank_only_when_allowed():
 
 
 def test_ask_money_accepts_commas_and_rejects_negatives(capsys):
-    assert ConsoleUI(read=_answers("a lot", "-5", "1,650,000")).ask_money("Price paid") == 1650000.0
+    assert ConsoleUI(read=_answers("a lot", "-5", "1,650,000")).ask_money("Price paid", allow_zero=True) == 1650000.0
     out = capsys.readouterr().out
     assert "Please enter an amount, e.g. 1500000." in out
     assert "Amounts can't be negative." in out
 
 
-def test_ask_money_can_refuse_zero():
-    assert ConsoleUI(read=_answers("0", "5")).ask_money("Net worth", allow_zero=False) == 5.0
+def test_ask_money_refuses_zero_unless_it_is_allowed(capsys):
+    assert ConsoleUI(read=_answers("0", "5")).ask_money("Net worth") == 5.0
+    assert "[ERROR] Please enter an amount above zero." in capsys.readouterr().out
+    assert ConsoleUI(read=_answers("0")).ask_money("Yearly income", allow_zero=True) == 0.0
 
 
 def test_ask_text_needs_a_minimum_length():

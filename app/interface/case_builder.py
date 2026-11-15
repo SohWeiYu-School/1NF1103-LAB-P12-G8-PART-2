@@ -174,7 +174,7 @@ class CaseBuilder:
         self.__ui.show_error("The asset composition is missing or doesn't add up to 100%.")
         while True:
             self.__ui.show("\nHow the client says his wealth is split (percent)")
-            split = {key: self.__ui.ask_money(f"  {label} %") / 100
+            split = {key: self.__ui.ask_money(f"  {label} %", allow_zero=True) / 100
                      for key, label in [("property", "Property"), ("listed_equities", "Listed shares"),
                                         ("private_business", "Private business"), ("cash", "Cash")]}
             if 0.95 <= sum(split.values()) <= 1.05:

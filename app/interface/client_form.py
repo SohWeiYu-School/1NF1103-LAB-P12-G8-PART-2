@@ -103,7 +103,7 @@ class ClientForm:
         year_sold = sale_price = None
         if self.__ui.ask_yes_no("Has this asset been sold?"):
             year_sold  = self.__ui.ask_year("Year sold", minimum=year_acquired)
-            sale_price = self.__ui.ask_money("Sale price")
+            sale_price = self.__ui.ask_money("Sale price", allow_zero=True)
         # Same layout as the web form and the documents auto-fill: "Property - Condo", current_declared_value,
         # income_produced. year_sold, sale_price and currency are extra details only this screen asks for.
         return {
@@ -111,8 +111,8 @@ class ClientForm:
             "country": country,
             "year_acquired": year_acquired, "price_paid": price_paid,
             "payment_method": payment_method, "year_sold": year_sold, "sale_price": sale_price,
-            "current_declared_value": self.__ui.ask_money("Current value (0 if sold)"),
-            "income_produced":        self.__ui.ask_money("Yearly income from this asset (0 if none)"),
+            "current_declared_value": self.__ui.ask_money("Current value (0 if sold)", allow_zero=True),
+            "income_produced":        self.__ui.ask_money("Yearly income from this asset (0 if none)", allow_zero=True),
             "currency":               self.__ui.ask_currency(),
         }
 
@@ -320,7 +320,7 @@ class ClientForm:
         if kind == "money_positive":
             return self.__ui.ask_money(label, allow_zero=False)
         if kind == "money":
-            return self.__ui.ask_money(label)
+            return self.__ui.ask_money(label, allow_zero=True)
         if kind == "payment":
             return ClientForm.PAYMENT_METHODS[self.__ui.ask_choice(label, ClientForm.PAYMENT_METHODS)]
         if kind == "pep":
