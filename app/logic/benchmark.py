@@ -70,7 +70,7 @@ class Benchmark(RiskAnalysis):
     def _market_history(self, forecast: dict) -> dict:
         return MarketModel(forecast).history()
 
-    def __total_wealth(self, client_data, ai_data):
+    def __total_wealth(self, client_data: dict, ai_data: dict) -> float:
 
         declared = client_data["declared_net_worth"]
         expected = ai_data["expected_wealth"]
@@ -79,7 +79,7 @@ class Benchmark(RiskAnalysis):
 
         return result1
 
-    def __liquidity(self, client_data, ai_data):
+    def __liquidity(self, client_data: dict, ai_data: dict) -> float:
 
         declared = client_data["listed_equities"] + client_data["cash"]
         expected = ai_data["expected_liquidity"]
@@ -88,7 +88,7 @@ class Benchmark(RiskAnalysis):
 
         return result2
 
-    def __composition(self, client_data, ai_data):
+    def __composition(self, client_data: dict, ai_data: dict) -> list[dict]:
         results = []
         for rule_id, client_key, ai_key, label in Benchmark._COMPOSITION_PARTS:
             declared = client_data[client_key]
@@ -98,7 +98,7 @@ class Benchmark(RiskAnalysis):
                             "detail": f"{label}: declared {declared}%, expected {expected}%, diff {diff}%"})
         return results
 
-    def __velocity(self, client_data, ai_data):
+    def __velocity(self, client_data: dict, ai_data: dict) -> tuple[float | None, float | None]:
         jump = client_data.get("biggest_wealth_jump")
         years = client_data.get("wealth_jump_years")
         expected = ai_data.get("expected_velocity")
@@ -107,7 +107,7 @@ class Benchmark(RiskAnalysis):
         per_year = jump / years
         return per_year / expected, per_year
 
-    def __counterparties(self, declared, expected):
+    def __counterparties(self, declared: list[str], expected: list[str]) -> list[str]:
         unknown = []
 
         for item in declared:
@@ -130,7 +130,7 @@ class Benchmark(RiskAnalysis):
 
         return country
 
-    def __jurisdiction(self, declared, expected):
+    def __jurisdiction(self, declared: list[str], expected: list[str]) -> list[str]:
         unknown = []
 
         for country in declared:
