@@ -43,17 +43,17 @@ package "Data Manager (app/data)" {
   }
   class ConfigReader {
     -__folder : str = ".../config"
+    -__files : dict[str, dict] = {}
     +FILE_NAMES : tuple[str, ...] = ("policy", "vocabulary") «const»
     +REQUIRED : dict[str, tuple[str, ...]] = {...} «const»
-    -__files : dict[str, dict] = {}
     --
     +__init__(folder : str = os.path.join(ROOT_DIR, "config"))
     +read(name : str) : dict
     +problems() : list[str]
   }
   abstract class DatabaseRepository {
-    #_collection_name : str = ""
-    #_key_field : str = "" {get}
+    #_collection_name : str
+    #_key_field : str {get}
     #_uri : str = ""
     +name : str «property»
     --
@@ -181,9 +181,9 @@ package "IO Manager (app/interface)" {
   }
   class ClientForm {
     -__ui : ConsoleUI = ConsoleUI()
+    -__report_view : ReportView = ReportView(...)
     +PAYMENT_METHODS : list[str] = [...] «const»
     +PEP_OPTIONS : list[str] = [...] «const»
-    -__report_view : ReportView = ReportView(...)
     --
     +__init__(ui : ConsoleUI | None = None, report_view : ReportView | None = None)
     +create_new_client(save_fn : Callable[[ClientRecord], bool] | None = None, upload_fn : Callable[[str], str | None] | None = None) : ClientRecord | None
@@ -215,11 +215,11 @@ package "IO Manager (app/interface)" {
   class ConsoleUI {
     -__read : Callable[[str], str] = lambda question: input(...)
     -__write : Callable[[str], None] = lambda text: print(...)
+    -__width : int = 72
     +LINE : str = "-" * 72 «const»
     +LETTERS : str = " '.-" «const»
     +MAX_EMPLOYEES : int = 10_000_000 «const»
     +LABEL : str = " '.-&/,()%#0123456789" «const»
-    -__width : int = 72
     --
     +__init__(read : Callable[[str], str] | None = None, write : Callable[[str], None] | None = None)
     +show(text : str = "") : None
@@ -264,8 +264,8 @@ package "IO Manager (app/interface)" {
   class RateLimiter {
     -__cooldown_seconds : int = 60
     -__last_run : dict[str, float] = {}
-    +DEFAULT_COOLDOWN_SECONDS : int = 60 «const»
     -__enabled : bool = True
+    +DEFAULT_COOLDOWN_SECONDS : int = 60 «const»
     --
     +__init__(cooldown_seconds : int = DEFAULT_COOLDOWN_SECONDS, enabled : bool = True)
     +check(user_key : str) : tuple[bool, int]
@@ -376,10 +376,10 @@ package "AI Manager (app/ai)" {
     #_temperature : float = 0.0
     #_ai_caller : Callable[[str, dict, dict], str | None] | None = None
     #_response_cache : ResponseCache | None = None
+    #_warnings : list[str] = []
     +PROMPT_NAME : str = "" «const»
     +SCHEMA_NAME : str = "" «const»
     +ATTEMPTS : int = 2 «const»
-    #_warnings : list[str] = []
     --
     +__init__(provider : str = "", ai_caller : Callable[[str, dict, dict], str | None] | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None)
     +run(source : dict) : dict | None
@@ -429,14 +429,14 @@ package "AI Manager (app/ai)" {
   }
   class ForecastAI {
     -__forecast_years : int = 4
+    -__schemas : dict = {}
+    -__settings : dict = {}
+    -__vocabulary : dict = {}
     +BASELINE_TYPE : str = "T1" «const»
     +RANGE_KEYS : tuple[str, ...] = ("low", "typical", "high") «const»
     +REPORTING_CURRENCY : str = "SGD" «const»
     +SCENARIOS : tuple[str, ...] = ("steady", "boom", "downturn") «const»
     +STAGES : tuple[str, ...] = (...) «const»
-    -__schemas : dict = {}
-    -__settings : dict = {}
-    -__vocabulary : dict = {}
     --
     +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None, forecast_years : int = 4, settings : dict | None = None, vocabulary : dict | None = None)
     +run(source : dict) : dict | None
@@ -570,6 +570,9 @@ package "Application (app/application)" {
     -__document_ai : DocumentAI = DocumentAI(...)
     -__response_cache : ResponseCache = ResponseCache(...)
     -__syncs : list[CloudSync] = [CloudSync(...), CloudSync(...)]
+    -__config_reader : ConfigReader = ConfigReader(...)
+    -__root : str = ROOT_DIR
+    -__settings_ok : bool = True
     +CRITICAL_STEPS : tuple[str, ...] = ("Deciding the verdict",) «const»
     +ASSESSMENTS_UNAVAILABLE : str = "We can't load the saved assessments ... «const»
     +ASSESSMENT_COLLECTION : str = "ai_assessments" «const»
@@ -578,9 +581,6 @@ package "Application (app/application)" {
     +LOG_HANDLER_NAME : str = "app_log_file" «const»
     +NOISY_LOGGERS : tuple[str, ...] = (...) «const»
     +SETTINGS_UNAVAILABLE : str = "The app's settings could not be load... «const»
-    -__config_reader : ConfigReader = ".../config"
-    -__root : str = ROOT_DIR
-    -__settings_ok : bool = True
     --
     +__init__(ai_caller : Callable[[str, dict, dict], str | None] | None = None, root : str = ROOT_DIR, data_folder : str = "data")
     +start(arguments : list[str]) : int
@@ -635,8 +635,6 @@ package "Application (app/application)" {
   class AssessmentRunner {
     -__verdict_engine : VerdictEngine = VerdictEngine(...)
     -__config : Config = Config()
-    +STEPS : tuple[str, ...] = (...) «const»
-    +FORECAST_STEP : dict[str, int] = {...} «const»
     -__benchmark : Benchmark = Benchmark(policy, self.__config)
     -__benchmark_ai : BenchmarkAI | None = None
     -__case_reader : CaseReader = CaseReader()
@@ -651,6 +649,8 @@ package "Application (app/application)" {
     -__research_ai : ResearchAI | None = None
     -__response_cache : ResponseCache | None = None
     -__typology_ai : TypologyAI | None = None
+    +STEPS : tuple[str, ...] = (...) «const»
+    +FORECAST_STEP : dict[str, int] = {...} «const»
     --
     +__init__(config : Config | None = None, research_ai : ResearchAI | None = None, typology_ai : TypologyAI | None = None, benchmark_ai : BenchmarkAI | None = None, document_ai : DocumentAI | None = None, forecast_ai : ForecastAI | None = None, document_store : DocumentStore | None = None, response_cache : ResponseCache | None = None)
     +run(case : dict, files : list[dict] | None = None, on_step : Callable[[int, str], None] | None = None, on_failure : Callable[[str, str], bool] | None = None) : dict | None
@@ -739,6 +739,7 @@ package "Logic Manager (app/logic)" {
   }
   class CrimeScan {
     -__indicators : list[Indicator] = [GiftOrInheritanceUnnamed(...), ...]
+    -__warnings : list[str] = []
     -__COUNTRY_TO_ISO : dict[str, str] = {...} «const»
     +MATCH_LABELS : dict[str, str] = {...} «const»
     +FULL_MATCH : tuple[str, ...] = ("critical", "high", "medium") «const»
@@ -746,7 +747,6 @@ package "Logic Manager (app/logic)" {
     +SIGN_LABELS : dict[str, str] = {...} «const»
     +SIGN_THEMES : dict[str, str] = {...} «const»
     +WEAK_MATCH : tuple[str, ...] = ("partial", "weak_signal") «const»
-    -__warnings : list[str] = []
     --
     +__init__(policy : dict | None = None)
     +run(case : dict, ai_data : dict) : dict
@@ -770,8 +770,8 @@ package "Logic Manager (app/logic)" {
     +warnings() : list[str]
   }
   class DocumentEvidence {
-    +NAME : str = "documents" «const»
     -__reader : CaseReader = CaseReader()
+    +NAME : str = "documents" «const»
     --
     +__init__(policy : dict | None = None)
     +run(case : dict, ai_data : dict) : dict
@@ -782,8 +782,8 @@ package "Logic Manager (app/logic)" {
   class DocumentRecordBuilder {
     -__today : str = ""
     -__policy : dict = {}
-    +SUMMARY_SECTIONS : dict[str, str] = {...} «const»
     -__config : Config = Config(...)
+    +SUMMARY_SECTIONS : dict[str, str] = {...} «const»
     --
     +__init__(config : Config | None = None, today : str = "")
     +build(extracted : dict, client_ref : str) : tuple[ClientRecord, list[str]]
@@ -839,10 +839,10 @@ package "Logic Manager (app/logic)" {
     -__career_savings : CareerSavings = CareerSavings(...)
     -__asset_path : AssetPath = AssetPath(...)
     -__paths : dict = {}
-    +BASELINE_TYPE : str = "T1" «const»
     -__forecast : dict = {}
     -__market_model : MarketModel = MarketModel()
     -__policy : dict = {}
+    +BASELINE_TYPE : str = "T1" «const»
     --
     +__init__(market_model : MarketModel | None = None, forecast : dict | None = None, policy : dict | None = None)
     +career_savings() : CareerSavings
@@ -939,13 +939,13 @@ package "Logic Manager (app/logic)" {
   class VerdictEngine {
     -__features : list[RiskAnalysis] = []
     -__config : Config = Config()
+    -__policy : dict = {}
     +VERDICT_LABELS : dict[str, str] = {...} «const»
     +THEMES : dict[str, str] = {...} «const»
     +MARKS : dict[str, str] = {...} «const»
     +REPORT_LEGEND : list[dict[str, str]] = [...] «const»
     +ORIGINAL_BENCHMARK : list[str] = [...] «const»
     #_ROUTINE_NOTES : tuple[str, ...] = (...) «const»
-    -__policy : dict = {}
     --
     +__init__(features : list[RiskAnalysis] | None = None, config : Config | None = None)
     +combine(case : dict, results : dict) : Verdict
@@ -1003,10 +1003,10 @@ package "Domain Model (app/model)" {
     -__group : str = "" {get}
     -__sources : list[str] = [] {get}
     -__supports : list[str] = [] {get}
-    +STATUSES : tuple[str, ...] = ("passed", "failed", "weak", "explained", "skipped", "info") «const»
-    +FIELDS : tuple[str, ...] = (...) «const»
     -__empty_lists : list[str] = []
     -__extra : dict = {}
+    +STATUSES : tuple[str, ...] = ("passed", "failed", "weak", "explained", "skipped", "info") «const»
+    +FIELDS : tuple[str, ...] = (...) «const»
     --
     +__init__(feature : str = "", check : str = "", label : str = "", theme : str = "", status : str = "passed", detail : str = "", explanation : str = "", group : str = "", sources : list[str] | None = None, supports : list[str] | None = None, extra : dict | None = None)
     +failed() : bool
@@ -1021,9 +1021,6 @@ package "Domain Model (app/model)" {
     -__counterparty : str | None = None {get}
     -__amount : float | None = None {get, set}
     -__occupation_mismatch : bool = False {get}
-    +GIFT_TYPES : tuple[str, ...] = ("inheritance", "gift") «const»
-    +READING_KEYS : tuple[str, ...] = (...) «const»
-    -__SCAN_NAMES : dict = {...} «const»
     -__amount_explained : bool = False {get}
     -__country : str | None = None {get}
     -__description : str = "" {get}
@@ -1034,6 +1031,9 @@ package "Domain Model (app/model)" {
     -__quote : str = "" {get}
     -__source_id : str | None = None {get}
     -__start_year : int | None = None {get}
+    +GIFT_TYPES : tuple[str, ...] = ("inheritance", "gift") «const»
+    +READING_KEYS : tuple[str, ...] = (...) «const»
+    -__SCAN_NAMES : dict = {...} «const»
     --
     +__init__(source_type : str = "", counterparty : str | None = None, amount : float | None = None, occupation_mismatch : bool = False, amount_explained : bool = False, source_id : str | None = None, description : str = "", start_year : int | None = None, end_year : int | None = None, country : str | None = None, quote : str = "", linked_position_index : int | None = None, linked_asset_index : int | None = None, layout : tuple[str, ...] = READING_KEYS)
     +is_gift_or_inheritance() : bool
@@ -1058,9 +1058,9 @@ package "Domain Model (app/model)" {
     -__declared_counterparties : list[str] = [] {get}
     -__biggest_wealth_jump : float | None = None {get, set}
     -__wealth_jump_years : int | None = None {get, set}
+    -__extra : dict = {}
     +LIQUID_PARTS : tuple[str, ...] = ("listed_equities", "cash") «const»
     +NO_PEP_VALUES : tuple[str, ...] = ("none", "no", "not a pep", "n/a", "na") «const»
-    -__extra : dict = {}
     --
     +__init__(declared_net_worth : float | None = None, expected_aum : float | None = None, pep_status : str = "", asset_composition : dict | None = None, wealth_countries : list[str] | None = None, declared_counterparties : list[str] | None = None, biggest_wealth_jump : float | None = None, wealth_jump_years : int | None = None, extra : dict | None = None)
     +is_pep() : bool
@@ -1095,12 +1095,12 @@ package "Domain Model (app/model)" {
     -__declaration : Declaration = Declaration() {get}
     -__supporting_documents : list[dict] = []
     -__review_status : ReviewStatus = ReviewStatus() {get}
+    -__career_extra : dict = {}
+    -__extra : dict = {}
     +CAREER_JOB_KEYS : tuple[str, ...] = (...) «const»
     +MIN_WORKING_AGE : int = 14 «const»
     +REQUIRED : tuple[str, ...] = (...) «const»
     -__OWN_KEYS : tuple[str, ...] = (...) «const»
-    -__career_extra : dict = {}
-    -__extra : dict = {}
     --
     +__init__(client_ref : str = "", name : str = "", nationality : str = "", current_date : str = "", country_of_residence : str = "", age : int | None = None)
     +jobs() : list[Job]
@@ -1176,8 +1176,8 @@ package "Domain Model (app/model)" {
     -__employer_name : str = "" {get}
     -__employer_size : str = "" {get}
     -__country : str = "" {get}
-    +KEYS : tuple[str, ...] = (...) «const»
     -__extra : dict = {}
+    +KEYS : tuple[str, ...] = (...) «const»
     --
     +__init__(start_year : int | None = None, end_year : int | None = None, occupation : str = "", seniority : str = "", industry : str = "", employer_name : str = "", employer_size : str = "", country : str = "", extra : dict | None = None)
     +is_current() : bool
@@ -1189,9 +1189,9 @@ package "Domain Model (app/model)" {
   class MatchResult {
     -__typology : Typology = Typology() {get}
     -__core_fired : list[str] = [] {get}
-    +CATEGORIES : tuple[str, ...] = (...) «const»
     -__category : str = "no_match" {get}
     -__supporting_fired : list[str] = [] {get}
+    +CATEGORIES : tuple[str, ...] = (...) «const»
     --
     +__init__(typology : Typology | None = None, core_fired : list[str] | None = None, supporting_fired : list[str] | None = None, category : str = "no_match")
     +breached : bool «property»
@@ -1234,7 +1234,6 @@ package "Domain Model (app/model)" {
     -__typology_id : str = "" {get}
     -__name : str = "" {get}
     -__indicators : list[dict] = [] {get}
-    +WEIGHTS : tuple[str, ...] = ("core", "supporting") «const»
     -__corroborated : bool = False {get}
     -__crime_category : str = "" {get}
     -__description : str = "" {get}
@@ -1243,6 +1242,7 @@ package "Domain Model (app/model)" {
     -__source_quotes : list[dict] = [] {get}
     -__typical_documents : list[str] = [] {get}
     -__verified : bool = False {get}
+    +WEIGHTS : tuple[str, ...] = ("core", "supporting") «const»
     --
     +__init__(typology_id : str = "", name : str = "", indicators : list[dict] | None = None, source_ids : list[str] | None = None, crime_category : str = "", description : str = "", source_quotes : list[dict] | None = None, typical_documents : list[str] | None = None)
     +core_indicators() : list[str]
@@ -1268,11 +1268,11 @@ package "Domain Model (app/model)" {
     -__notes : list[str] = [] {get}
     -__not_run : list[str] = [] {get}
     -__report : dict = {} {get, set}
+    -__explanation : dict = {} {get, set}
     +OUTCOMES : tuple[str, ...] = ("PASSED", "MANUAL_REVIEW", "RISKY", "SERIOUS_RISK") «const»
     +CHECK_GROUPS : dict[str, str] = {...} «const»
     +EXPLANATION_KEYS : tuple[str, ...] = (...) «const»
     +SEVERITY : dict[str, int] = {...} «const»
-    -__explanation : dict = {} {get, set}
     --
     +__init__(assessment_id : str = "", client_ref : str = "", assessed_at : str = "", outcome : str = "MANUAL_REVIEW", next_step : str = "", next_review_date : str = "", notes : list[str] | None = None, not_run : list[str] | None = None)
     +add_check(check : Check) : None

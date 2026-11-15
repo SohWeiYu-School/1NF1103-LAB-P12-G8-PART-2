@@ -298,7 +298,14 @@ The renames to private (`CaseBuilder.__payment_method` and three more helpers, `
 ## Stage 5: every code member added (2026-11-16): 450 additions, plus types, values and a new layout
 
 Marcus chose to show **every** member, so the diagram shows the code exactly; the scan is now 0 in every stage.
-Reason code for all additions: **B** (below the level the professor reviewed: private helpers, constants, properties).
+Reason codes (counted from the `.puml` before and after):
+
+| Added | Count | Reason |
+|---|---|---|
+| Public methods (`+name(...)`) | 135 | **T**: they are part of the classes' real public interface, which the reviewed diagram left out, so it was incomplete |
+| Protected (`#`) and private (`-`) methods | 165 | **B**: helpers below the level the professor reviewed |
+| Attributes (67 private, 1 protected), constants (75) and the computed property (1) | 144 | **B**: private state and fixed values |
+
 The professor's reviewed members were not changed.
 
 | Kind | Added |
@@ -368,3 +375,16 @@ Also in this stage:
 - 10 constants already in the diagram now show the exact types the code declares (`dict` -> `dict[str, str]`, `list` -> `list[dict[str, str]]` ...). **B**.
 - Starting values are written the diagram's short way: `X(...)`, `[...]`, `{...}`, `(...)`, `".../folder"`, or the text cut with `...`.
 - **Layout:** the boxes grew a lot, so the diagram was re-packed (`relayout.py`): inside each folder boxes keep their place and order and are only pushed down far enough to clear the box above; folders grow to fit and move down so none overlap. Nine boxes were widened so no line is cut off. Every line was then re-routed (`uml_arrows.py` reroute_all): right-angled paths that never cross a box, arrow ends kept apart, inheritance lines into one parent sharing a trunk. `layout_check` reports 0.
+
+### Stage 5 review fixes (independent Opus review, 2026-11-16)
+
+The review found every added member and every line faithful to the code. Its fixes:
+- Two starting values now match the code: `App.__config_reader = ConfigReader(...)` and DatabaseRepository's
+  `#_collection_name : str` / `#_key_field : str {get}` (no `""` default since the §9 fix).
+- In each box, fields come before constants again (122 lines moved, no text changed).
+- Line labels: the verb labels (90) sit on a clear stretch of their own line, and 6 multiplicity labels moved off box borders (`place_labels.py`).
+- The main.py note is drawn above the lines that pass under it, so its text is readable.
+- The Indicator family is a single clean tree: each child joins one trunk on its left, which leads up to Indicator.
+  The DocumentEvidence → CaseReader composition now goes straight down, so it no longer seems to merge with that trunk.
+- Open question for Marcus: `Repository` is drawn as `«interface»`, but it has an `__init__` (CLAUDE.md §1), so strictly
+  it is an abstract class (follow-up #53).
