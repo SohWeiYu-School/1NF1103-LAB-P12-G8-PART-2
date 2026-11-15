@@ -140,7 +140,7 @@
         <mxCell id="c49" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="ReportView" vertex="1">
           <mxGeometry height="346" width="380" x="2620" y="740" as="geometry" />
         </mxCell>
-        <mxCell id="c50" parent="c49" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __ui : ConsoleUI = ConsoleUI()&lt;br&gt;− __width : int = 96&lt;br&gt;+ FIELD_NAMES : dict = {...} «const»&lt;br&gt;+ OUTCOME_LABELS : dict = {...} «const»&lt;br&gt;+ MIN_WIDTH : int = 20 «const»&lt;br&gt;+ SOURCE_TAGS : dict[str, str] = {...} «const»&lt;/div&gt;" vertex="1">
+        <mxCell id="c50" parent="c49" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __ui : ConsoleUI = ConsoleUI()&lt;br&gt;− __width : int = 96&lt;br&gt;+ FIELD_NAMES : dict[str, str] = {...} «const»&lt;br&gt;+ OUTCOME_LABELS : dict[str, str] = {...} «const»&lt;br&gt;+ MIN_WIDTH : int = 20 «const»&lt;br&gt;+ SOURCE_TAGS : dict[str, str] = {...} «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="100" width="380" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c51" parent="c49" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -272,7 +272,7 @@
         <mxCell id="c93" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="VerdictEngine" vertex="1">
           <mxGeometry height="346" width="420" x="900" y="2420" as="geometry" />
         </mxCell>
-        <mxCell id="c94" parent="c93" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __features : list[RiskAnalysis] = []&lt;br&gt;− __config : Config = Config()&lt;br&gt;+ VERDICT_LABELS : dict = {...} «const»&lt;br&gt;+ THEMES : dict = {...} «const»&lt;br&gt;+ MARKS : dict = {...} «const»&lt;br&gt;+ REPORT_LEGEND : list = [...] «const»&lt;/div&gt;" vertex="1">
+        <mxCell id="c94" parent="c93" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __features : list[RiskAnalysis] = []&lt;br&gt;− __config : Config = Config()&lt;br&gt;+ VERDICT_LABELS : dict[str, str] = {...} «const»&lt;br&gt;+ THEMES : dict[str, str] = {...} «const»&lt;br&gt;+ MARKS : dict[str, str] = {...} «const»&lt;br&gt;+ REPORT_LEGEND : list[dict[str, str]] = [...] «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="100" width="420" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c95" parent="c93" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -296,7 +296,7 @@
         <mxCell id="c101" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="CrimeScan" vertex="1">
           <mxGeometry height="316" width="460" x="640" y="3190" as="geometry" />
         </mxCell>
-        <mxCell id="c102" parent="c101" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __indicators : list[Indicator] = [GiftOrInheritanceUnnamed(...),&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;...]&lt;br&gt;− __COUNTRY_TO_ISO : dict = {...} «const»&lt;br&gt;+ MATCH_LABELS : dict[str, str] = {...} «const»&lt;/div&gt;" vertex="1">
+        <mxCell id="c102" parent="c101" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __indicators : list[Indicator] = [GiftOrInheritanceUnnamed(...),&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;...]&lt;br&gt;− __COUNTRY_TO_ISO : dict[str, str] = {...} «const»&lt;br&gt;+ MATCH_LABELS : dict[str, str] = {...} «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="70" width="460" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c103" parent="c101" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -380,7 +380,7 @@
         <mxCell id="c129" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="Benchmark" vertex="1">
           <mxGeometry height="316" width="420" x="1560" y="3190" as="geometry" />
         </mxCell>
-        <mxCell id="c130" parent="c129" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __config : Config = Config(...)&lt;br&gt;+ BENCHMARK_LABELS : dict = {...} «const»&lt;br&gt;+ COMPOSITION_RULES : dict = {...} «const»&lt;/div&gt;" vertex="1">
+        <mxCell id="c130" parent="c129" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __config : Config = Config(...)&lt;br&gt;+ BENCHMARK_LABELS : dict[str, str] = {...} «const»&lt;br&gt;+ COMPOSITION_RULES : dict[str, str] = {...} «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="55" width="420" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c131" parent="c129" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -488,7 +488,7 @@
         <mxCell id="c165" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="CaseReader" vertex="1">
           <mxGeometry height="181" width="380" x="1110" y="3510" as="geometry" />
         </mxCell>
-        <mxCell id="c166" parent="c165" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __today : str = &amp;quot;&amp;quot;&lt;br&gt;− __PRESENT_WORDS : tuple = (...) «const»&lt;/div&gt;" vertex="1">
+        <mxCell id="c166" parent="c165" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __today : str = &amp;quot;&amp;quot;&lt;br&gt;− __PRESENT_WORDS : tuple[str, ...] = (...) «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="40" width="380" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c167" parent="c165" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">

@@ -221,8 +221,8 @@ package "IO Manager (app/interface)" {
   class ReportView {
     -__ui : ConsoleUI = ConsoleUI()
     -__width : int = 96
-    +FIELD_NAMES : dict = {...} «const»
-    +OUTCOME_LABELS : dict = {...} «const»
+    +FIELD_NAMES : dict[str, str] = {...} «const»
+    +OUTCOME_LABELS : dict[str, str] = {...} «const»
     +MIN_WIDTH : int = 20 «const»
     +SOURCE_TAGS : dict[str, str] = {...} «const»
     --
@@ -413,8 +413,8 @@ package "Logic Manager (app/logic)" {
   }
   class Benchmark {
     -__config : Config = Config(...)
-    +BENCHMARK_LABELS : dict = {...} «const»
-    +COMPOSITION_RULES : dict = {...} «const»
+    +BENCHMARK_LABELS : dict[str, str] = {...} «const»
+    +COMPOSITION_RULES : dict[str, str] = {...} «const»
     --
     +__init__(policy : dict | None = None, config : Config | None = None)
     +run(case : dict, ai_data : dict) : dict
@@ -437,7 +437,7 @@ package "Logic Manager (app/logic)" {
   }
   class CaseReader {
     -__today : str = ""
-    -__PRESENT_WORDS : tuple = (...) «const»
+    -__PRESENT_WORDS : tuple[str, ...] = (...) «const»
     --
     +__init__(today : str = "")
     +forecasting_case(record : dict) : tuple[dict | None, list[str]]
@@ -464,7 +464,7 @@ package "Logic Manager (app/logic)" {
   }
   class CrimeScan {
     -__indicators : list[Indicator] = [GiftOrInheritanceUnnamed(...), ...]
-    -__COUNTRY_TO_ISO : dict = {...} «const»
+    -__COUNTRY_TO_ISO : dict[str, str] = {...} «const»
     +MATCH_LABELS : dict[str, str] = {...} «const»
     --
     +__init__(policy : dict | None = None)
@@ -607,10 +607,10 @@ package "Logic Manager (app/logic)" {
   class VerdictEngine {
     -__features : list[RiskAnalysis] = []
     -__config : Config = Config()
-    +VERDICT_LABELS : dict = {...} «const»
-    +THEMES : dict = {...} «const»
-    +MARKS : dict = {...} «const»
-    +REPORT_LEGEND : list = [...] «const»
+    +VERDICT_LABELS : dict[str, str] = {...} «const»
+    +THEMES : dict[str, str] = {...} «const»
+    +MARKS : dict[str, str] = {...} «const»
+    +REPORT_LEGEND : list[dict[str, str]] = [...] «const»
     --
     +__init__(features : list[RiskAnalysis] | None = None, config : Config | None = None)
     +combine(case : dict, results : dict) : Verdict
