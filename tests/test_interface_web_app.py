@@ -286,6 +286,8 @@ def test_the_result_page_shows_the_crime_cards_from_the_typologies(tmp_path, mon
     saved = application.assessments().for_client(record["client_ref"])[0]
     reopened = client.get(f"/assessment/{saved['assessment_id']}").get_data(as_text=True)
     assert crime_cards(reopened) == crime_cards(fresh)
+    # the research reply of this fake AI is rejected, so the typologies are unchecked and the page says so
+    assert "not checked against research" in fresh and "not checked against research" in reopened
 
 
 def test_assessing_a_saved_client_that_cannot_be_read_is_refused_with_a_message(web):

@@ -103,7 +103,9 @@ def test_one_verdict_with_reasons_from_every_feature(run):
     assert verdict["reasons"], "the verdict must say why"
     assert {c["feature"] for c in verdict["benchmark"]} == {"benchmark"}
     assert verdict["forecast"] and verdict["crime"]
-    assert verdict["not_run"] == []
+    # fake_ai.caller's research reply carries fields the real AI never sends (api_sources, report_id ...),
+    # so the schema check rejects it and the research step is honestly reported as not run
+    assert verdict["not_run"] == ["The crime scan's research (sources to check the typologies)"]
     titles = [s["title"] for s in result["verdict"].report["sections"]]
     assert titles[0] == "Why"
     assert any(t.startswith("Benchmark") for t in titles) and any(t.startswith("Forecast") for t in titles)

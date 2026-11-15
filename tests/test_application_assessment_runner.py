@@ -131,6 +131,31 @@ def test_without_research_the_typologies_are_taken_unchecked(tmp_path):
     assert [typology.to_dict() for typology in typologies] == fake_ai.typologies()["sector_typologies"]
 
 
+def test_failed_research_is_a_step_that_did_not_run_and_the_verdict_is_not_passed(tmp_path):
+    failures = []
+    result, _ = _run(tmp_path, research=None, on_failure=lambda step, reason: failures.append(step) or True)
+    verdict = result["verdict"]
+    research_step = "The crime scan's research (sources to check the typologies)"
+    assert failures == [research_step]
+    assert research_step in verdict.not_run
+    assert verdict.outcome != "PASSED"
+    evidence = {part["title"]: part["lines"] for part in verdict.report["evidence"]}
+    assert all(line.endswith("(not checked against research)")
+               for line in evidence["Sector typologies"] if not line.startswith("    "))
+    assert evidence["Sector typologies"]                     # still shown, so the officer sees them
+
+
+def test_the_run_stops_when_on_failure_says_stop_at_failed_research(tmp_path):
+    result, _ = _run(tmp_path, research=None, on_failure=lambda step, reason: False)
+    assert result is None
+
+
+def test_research_that_ran_and_found_no_trusted_reports_is_not_a_failure(tmp_path):
+    result, _ = _run(tmp_path, research={**fake_ai.research(), "reports": [], "api_sources": []})
+    assert not any("research" in step for step in result["verdict"].not_run)
+    assert result["typologies"] == []                        # nothing could be checked, so nothing is kept
+
+
 def test_parallel_runs_never_interleave_a_crime_scan_check_and_its_warnings(tmp_path, monkeypatch):
     """The web app runs assessments in parallel on one runner. CrimeScan keeps the warnings of its
     last check, so one run must not start a check while another is still reading its warnings.

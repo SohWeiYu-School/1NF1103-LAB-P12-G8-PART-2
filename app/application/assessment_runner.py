@@ -136,6 +136,9 @@ class AssessmentRunner:
         step(2)
         research = self.__research_ai.run({"case": crime_input, "domains": policy.get("trusted_sources", [])})
         notes += self.__research_ai.warnings()
+        if research is None and not failed("The crime scan's research (sources to check the typologies)",
+                                           "the AI gave no usable research"):
+            return None
         step(3)
         reports = None
         if research is not None:
@@ -156,7 +159,7 @@ class AssessmentRunner:
             with self.__crime_scan_lock:
                 if reports is not None:
                     typologies = self.__crime_scan.verify_typology_sources(found, reports)
-                else:                               # no research to check them against: taken as they are
+                else:                               # research failed: taken as they are, shown as not checked
                     typologies = self.__crime_scan.read_typologies(found)
                 notes += self.__crime_scan.warnings()
 
