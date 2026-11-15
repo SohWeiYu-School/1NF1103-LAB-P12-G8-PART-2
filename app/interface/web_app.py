@@ -634,32 +634,41 @@ class WebApp:
             abort(404)
         show_archived = request.args.get("archived") == "1"
         repository = self.__app.assessments()
-        assessments = repository.for_client(client_ref, include_archived=show_archived)
-        archived_count = (len(repository.for_client(client_ref, include_archived=True))
-                          - len(repository.for_client(client_ref)))
+        everything = repository.for_client(client_ref, include_archived=True)
+        archived_ids = {a.get("assessment_id") for a in everything if repository.is_archived(a)}
+        assessments = everything if show_archived else [a for a in everything if a.get("assessment_id") not in archived_ids]
         return render_template("client_view.html", record=record,
                                values=self.values_from_record(record), SECTIONS=WebApp.SECTIONS,
                                assessments=assessments, show_archived=show_archived,
-                               archived_count=archived_count)
+                               archived_count=len(archived_ids), archived_ids=archived_ids)
 
     def archive_assessment(self, assessment_id):
-        saved = self.__app.assessments().find(assessment_id)
+        repository = self.__app.assessments()
+        saved = repository.find(assessment_id)
         if saved is None:
             abort(404)
-        if self.__app.assessments().archive(saved["assessment_id"], request.form.get("reason", "").strip()):
+        if repository.is_archived(saved):
+            flash("This assessment is already archived.")
+        elif repository.archive(saved["assessment_id"]):
             flash("Assessment archived. It is hidden from the lists, not deleted.")
+        else:
+            flash("This assessment could not be archived. Please try again later.")
         return redirect(url_for("view_client", client_ref=saved["client_ref"]))
 
     def restore_assessment(self, assessment_id):
-        saved = self.__app.assessments().find(assessment_id)
+        repository = self.__app.assessments()
+        saved = repository.find(assessment_id)
         if saved is None:
             abort(404)
-        repository = self.__app.assessments()
-        if repository.restore(saved["assessment_id"]):
+        if not repository.is_archived(saved):
+            flash("This assessment is not archived.")
+        elif repository.restore(saved["assessment_id"]):
             flash("Assessment restored.")
+        else:
+            flash("This assessment could not be restored. Please try again later.")
         client_ref = saved["client_ref"]
-        still_archived = (len(repository.for_client(client_ref, include_archived=True))
-                          - len(repository.for_client(client_ref)))
+        everything = repository.for_client(client_ref, include_archived=True)
+        still_archived = any(repository.is_archived(a) for a in everything)
         return redirect(url_for("view_client", client_ref=client_ref, **({"archived": "1"} if still_archived else {})))
 
     def view_assessment(self, assessment_id):

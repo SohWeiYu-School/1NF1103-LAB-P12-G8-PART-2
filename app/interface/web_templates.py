@@ -323,7 +323,7 @@ VIEW = """{% extends "base.html" %}
   <table style="table-layout:fixed">
     <colgroup><col style="width:17%"><col style="width:15%"><col style="width:34%"><col style="width:12%"><col style="width:22%"></colgroup>
     {% for a in assessments %}
-    {% set is_archived = a.get('archive_log') and a['archive_log'][-1].get('action') == 'archived' %}
+    {% set is_archived = a.get('assessment_id') in archived_ids %}
     <tr{% if is_archived %} style="opacity:.55"{% endif %}>
       <td>{{ a.get('assessed_at', '')[:10] }}</td>
       <td>{{ a.get('assessed_at', '')[11:16] }} UTC</td>
