@@ -148,6 +148,21 @@ def test_saving_an_assessment_writes_the_outcome_onto_the_client_record(app):
     assert saved["report"] == verdict.report
 
 
+def test_a_failed_assessment_save_leaves_the_client_record_as_it_was(app, tmp_path):
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record)
+    before = app.clients().find(record.client_ref)
+    case, _ = app.read_case(record)
+    fake_services.save_forecast_replies(app.response_cache(), case)
+    result = app.assess(case)
+    path = tmp_path / "local database" / "ai_assessments.json"
+    path.write_bytes(b"[{broken")                       # the saved assessments cannot be read
+    assert app.save_assessment(result, record) is None
+    assert app.clients().find(record.client_ref) == before      # no outcome without a saved assessment
+    assert record.review_status.outcome == ClientRecord.from_dict(before).review_status.outcome
+    assert path.read_bytes() == b"[{broken"
+
+
 def test_the_saved_assessment_keeps_its_layout(app):
     record = ClientRecord.from_dict(sample_case())
     app.save_client(record)

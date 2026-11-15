@@ -313,20 +313,14 @@ class App:
 
     def save_assessment(self, result: dict, record: ClientRecord | None = None,
                         on_step: Callable[[int, str], None] | None = None) -> str | None:
-        """Save the assessment as ONE record, and its outcome on the client record when given.
-        Returns the assessment id, or None if it could not be saved."""
+        """Save the assessment as ONE record, then its outcome on the client record when given.
+        Returns the assessment id, or None if the assessment could not be saved (the client
+        record is then left as it was)."""
         if on_step is not None:
             on_step(len(AssessmentRunner.STEPS), AssessmentRunner.STEPS[-1])
         case = result["case"]
         verdict: Verdict = result["verdict"]
         details = verdict.details()             # the layout saved under "verdict"
-        if record is not None:
-            # The record keeps the case's date (assessed_on), not the time the verdict was made
-            # (assessed_at), so ClientRecord.record_assessment is not used here.
-            record.review_status.update(verdict.outcome, verdict.next_step, verdict.next_review_date,
-                                        details["assessed_on"] or self.today(), case)
-            if not self.save_client(record):
-                logger.error("App.save_assessment: could not save the client record for %s", verdict.client_ref)
         saved = self.__assessments.save({
             "assessment_id": verdict.assessment_id,
             "client_ref": verdict.client_ref,
@@ -343,7 +337,19 @@ class App:
             "forecast": result["forecast_assessment"],
             "assessment": result["forecast_assessment"],
         })
-        return verdict.assessment_id if saved else None
+        if not saved:
+            # The client record is not touched: its outcome must never point at an assessment
+            # that was not saved.
+            logger.error("App.save_assessment: the assessment for %s was not saved", verdict.client_ref)
+            return None
+        if record is not None:
+            # The record keeps the case's date (assessed_on), not the time the verdict was made
+            # (assessed_at), so ClientRecord.record_assessment is not used here.
+            record.review_status.update(verdict.outcome, verdict.next_step, verdict.next_review_date,
+                                        details["assessed_on"] or self.today(), case)
+            if not self.save_client(record):
+                logger.error("App.save_assessment: could not save the client record for %s", verdict.client_ref)
+        return verdict.assessment_id
 
     @staticmethod
     def __crime_declaration_layout(declaration: Declaration | None) -> dict | None:
