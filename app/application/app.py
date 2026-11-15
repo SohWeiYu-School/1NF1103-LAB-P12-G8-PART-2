@@ -104,7 +104,9 @@ class App:
         self.__client_form: ClientForm = ClientForm(self.__ui, self.__report_view)
         schema = self.__case_files.load(os.path.join(root, "app", "schemas", "case_input.schema.json"), default={})
         self.__case_builder: CaseBuilder = CaseBuilder(self.__ui, schema)
-        self.__rate_limiter: RateLimiter = RateLimiter(policy.get("assessment_rate_limit", {}))
+        limits = policy.get("assessment_rate_limit", {})
+        self.__rate_limiter: RateLimiter = RateLimiter(
+            limits.get("cooldown_seconds", RateLimiter.DEFAULT_COOLDOWN_SECONDS), limits.get("enabled", True))
 
     # ----- what the front ends are given ----------------------------------------------
 
