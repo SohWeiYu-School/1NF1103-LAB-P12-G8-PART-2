@@ -8,10 +8,13 @@ import shutil
 import tempfile
 import threading
 import uuid
+from typing import Any
 
 from flask import (Flask, abort, flash, redirect, render_template,
                    request, send_file, url_for)
 from jinja2 import DictLoader
+from werkzeug.datastructures import FileStorage, MultiDict
+from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 from werkzeug.wrappers import Response
 
@@ -34,13 +37,13 @@ class WebApp:
     Assessments run in a background thread; the loading page polls for the step reached.
     """
 
-    CLIENT_FIELDS = [
+    CLIENT_FIELDS: list[tuple[str, str, str]] = [
         ("name", "Full name", "text"),
         ("nationality", "Nationality", "text"),
         ("country_of_residence", "Country of residence", "text"),
         ("age", "Age", "int"),
     ]
-    JOB_FIELDS = [
+    JOB_FIELDS: list[tuple[str, str, str]] = [
         ("start_year", "Start year", "int"),
         ("end_year", "End year (blank for the current job)", "int"),
         ("occupation", "Job title", "text"),
@@ -50,7 +53,7 @@ class WebApp:
         ("employer_size", "Employer size (e.g. 10000)", "text"),
         ("country", "Country of the job", "text"),
     ]
-    ASSET_FIELDS = [
+    ASSET_FIELDS: list[tuple[str, str, str]] = [
         ("asset_type", "Asset (e.g. Property - Condo)", "text"),
         ("country", "Country", "text"),
         ("year_acquired", "Year bought", "int"),
@@ -59,13 +62,13 @@ class WebApp:
         ("payment_method", "How it was paid for", "payment"),
         ("income_produced", "Income it produces per year (SGD, 0 if none)", "money"),
     ]
-    COMPOSITION_FIELDS = [
+    COMPOSITION_FIELDS: list[tuple[str, str, str]] = [
         ("property", "Property (%)", "percent"),
         ("listed_equities", "Listed equities (%)", "percent"),
         ("private_business", "Private business (%)", "percent"),
         ("cash", "Cash (%)", "percent"),
     ]
-    CLAIM_FIELDS = [
+    CLAIM_FIELDS: list[tuple[str, str, str]] = [
         ("declared_net_worth", "Declared net worth (SGD)", "money"),
         ("expected_aum", "Expected assets to be managed by the bank (SGD)", "money"),
         ("pep_status", "PEP status", "pep"),
@@ -74,10 +77,10 @@ class WebApp:
         ("wealth_jump_years", "Over how many years did this increase occur (leave blank if unknown)", "text"),
         ("declared_counterparties", "Known counterparties — banks, brokers, firms (comma separated, leave blank if none)", "text"),
     ]
-    SOW_FIELDS = [
+    SOW_FIELDS: list[tuple[str, str, str]] = [
         ("sow_declaration", "Declaration (at least 50 characters)", "textarea"),
     ]
-    SECTIONS = [
+    SECTIONS: list[tuple[str, str, list[tuple[str, str, str]], str]] = [
         ("client", "Client", CLIENT_FIELDS, "dict"),
         ("jobs", "Career history (include the current job and leave its end year blank)",
          JOB_FIELDS, "list"),
@@ -138,7 +141,7 @@ class WebApp:
     def today(self) -> str:
         return self.__app.today()
 
-    def trim(self, number) -> str:
+    def trim(self, number: Any) -> str:
         """60000.0 -> '60000', 7.5 -> '7.5'. Anything that isn't a number is shown as it is."""
         try:
             number = round(float(number), 2)
@@ -146,7 +149,7 @@ class WebApp:
             return str(number)
         return str(int(number)) if number == int(number) else str(number)
 
-    def to_text(self, kind: str, value) -> str:
+    def to_text(self, kind: str, value: Any) -> str:
         """How one stored value is shown in a box."""
         if value is None:
             return ""
@@ -186,7 +189,7 @@ class WebApp:
                                   for item in raw[prefix]]
         return values
 
-    def values_from_form(self, form) -> dict:
+    def values_from_form(self, form: MultiDict) -> dict:
         """The text for every box, taken from the submitted form."""
         values = {}
         for prefix, title, fields, kind in WebApp.SECTIONS:
@@ -204,7 +207,7 @@ class WebApp:
                 values[prefix] = rows
         return values
 
-    def read_year(self, text, label, problems, blank_ok=False):
+    def read_year(self, text: str, label: str, problems: list[str], blank_ok: bool = False) -> int | None:
         if text == "" and blank_ok:
             return None
         if text.isdigit() and 1900 <= int(text) <= 2100:
@@ -212,7 +215,8 @@ class WebApp:
         problems.append(f"{label} must be a year such as 2015.")
         return 0
 
-    def read_amount(self, text, label, problems, allow_zero=True, blank_zero=False):
+    def read_amount(self, text: str, label: str, problems: list[str], allow_zero: bool = True,
+                    blank_zero: bool = False) -> float:
         if text == "" and blank_zero:
             return 0.0
         number = self.__app.read_amount(text)
@@ -222,7 +226,7 @@ class WebApp:
             return 0.0
         return number
 
-    def build_record(self, values: dict, client_ref: str, old: dict | None = None):
+    def build_record(self, values: dict, client_ref: str, old: dict | None = None) -> tuple[dict, list[str], dict[str, str]]:
         """Turn the form text into a record. Returns (record, problems, field_errors).
 
         field_errors maps HTML input name -> short inline message for the form UI.
@@ -473,13 +477,13 @@ class WebApp:
         """Only accept document references this app made (the DocumentStore decides)."""
         return self.__app.documents().owns(file_id)
 
-    def pending_documents(self, form) -> list[dict]:
+    def pending_documents(self, form: MultiDict) -> list[dict]:
         """Documents uploaded during auto-fill, carried in hidden boxes until the client is saved."""
         names, ids = form.getlist("doc.file_name"), form.getlist("doc.file_id")
         return [{"file_name": secure_filename(name) or "document", "file_id": file_id}
                 for name, file_id in zip(names, ids) if self._is_stored_document(file_id)]
 
-    def store_uploads(self, files) -> tuple[list[dict], list[dict]]:
+    def store_uploads(self, files: list[FileStorage]) -> tuple[list[dict], list[dict]]:
         """Keep each uploaded file as a supporting document and read it for the AI.
         Returns (supporting document entries, documents read for extraction)."""
         stored, read = [], []
@@ -499,7 +503,7 @@ class WebApp:
                 shutil.rmtree(folder, ignore_errors=True)
         return stored, read
 
-    def autofill_form(self, heading: str, form, files):
+    def autofill_form(self, heading: str, form: MultiDict, files: list[FileStorage]) -> str:
         """Read the uploaded documents and show the form again with the blanks filled in."""
         values = self.values_from_form(form)
         documents = self.pending_documents(form)
@@ -569,9 +573,9 @@ class WebApp:
     def flash_unexpected_error(self) -> None:
         flash("An unexpected error occurred — please try again or contact support.")
 
-    def show_form(self, heading: str, values: dict, problems: list, field_errors: dict = None,
+    def show_form(self, heading: str, values: dict, problems: list, field_errors: dict | None = None,
                   documents: list | None = None, autofilled: list | None = None,
-                  notes: list | None = None, notes_title: str = ""):
+                  notes: list | None = None, notes_title: str = "") -> str:
         return render_template("client_form.html", heading=heading, values=values,
                                problems=problems, SECTIONS=WebApp.SECTIONS,
                                field_errors=field_errors or {}, documents=documents or [],
@@ -632,7 +636,8 @@ class WebApp:
         return None if typologies is None else [typology.to_dict() for typology in typologies]
 
     def show_report(self, record: dict, report: dict | None, assessed_at: str = "", assessment_id: str | None = None,
-                    crime_result=None, typologies=None, benchmark=None):
+                    crime_result: dict | None = None, typologies: list[dict] | None = None,
+                    benchmark: dict | None = None) -> str:
         """The assessment page: the same report the command line prints (VerdictEngine.report)."""
         symbols = {entry["mark"]: entry["symbol"] for entry in (report or {}).get("legend", [])}
         typologies_by_id = {t.get("typology_id"): t for t in (typologies or [])}
@@ -663,7 +668,7 @@ class WebApp:
         flash(f"No client found with reference '{client_ref}'.")
         return redirect(url_for("home"))
 
-    def _documents_on_save(self, form, files) -> list[dict]:
+    def _documents_on_save(self, form: MultiDict, files: list[FileStorage]) -> list[dict]:
         """Documents to attach when the form is saved: ones kept from auto-fill, plus any
         files chosen in the upload box without pressing "Read documents"."""
         stored, _ = self.store_uploads(files)
@@ -948,10 +953,10 @@ class WebApp:
             flash("Sync unsuccessful — please try again later or contact your administrator.")
         return redirect(url_for("home"))
 
-    def handle_404(self, e):
+    def handle_404(self, e: HTTPException) -> tuple[str, int]:
         return render_template("error.html", error_detail=None), 404
 
-    def handle_exception(self, e):
+    def handle_exception(self, e: Exception) -> tuple[str, int]:
         import logging
         import traceback
         logging.error("Unhandled exception: %s", traceback.format_exc())
