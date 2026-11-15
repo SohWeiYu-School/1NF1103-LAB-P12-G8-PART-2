@@ -62,6 +62,9 @@ class App:
                                       "google_genai", "hpack", "pymongo")
     CLIENT_COLLECTION: str = "client_cases"
     ASSESSMENT_COLLECTION: str = "ai_assessments"
+    # What the user is told when saved records cannot be read (the real error goes to the log).
+    CLIENTS_UNAVAILABLE: str = "We can't load the client database right now. Please try again later."
+    ASSESSMENTS_UNAVAILABLE: str = "We can't load the saved assessments right now. Please try again later."
 
     def __init__(self, ai_caller: Callable[[str, dict, dict], str | None] | None = None,
                  root: str = ROOT_DIR, data_folder: str = "data") -> None:
@@ -202,7 +205,11 @@ class App:
 
     def run_menu(self) -> None:
         """Show the main menu until the officer chooses to leave."""
-        self.__ui.show_message(f"{len(self.__assessments.load())} saved assessment(s) loaded.")
+        try:
+            self.__ui.show_message(f"{len(self.__assessments.load())} saved assessment(s) loaded.")
+        except (OSError, ValueError) as error:
+            logger.error("App.run_menu: the saved assessments cannot be read: %r", error)
+            self.__ui.show_error(App.ASSESSMENTS_UNAVAILABLE)
         while True:
             choice = self.__ui.show_app_menu()
             if choice == "1":
@@ -234,7 +241,13 @@ class App:
             elif choice == "5":
                 self.list_assessments()
             elif choice == "6":
-                self.__report_view.show_client_list(self.__clients.load())
+                try:
+                    clients = self.__clients.load()
+                except (OSError, ValueError) as error:
+                    logger.error("App.run_menu: the client records cannot be read: %r", error)
+                    self.__ui.show_error(App.CLIENTS_UNAVAILABLE)
+                    continue
+                self.__report_view.show_client_list(clients)
                 self.__ui.read_answer("Press Enter to continue...")
             elif choice == "7":
                 self.__ui.show_message("\n--- Synchronizing Local Data to Cloud Database ---")
@@ -389,8 +402,13 @@ class App:
 
     def find_client(self, client_ref: str) -> ClientRecord | None:
         """The saved client with this reference, or None if no client has it.
-        Raises ValueError, saying what is wrong, if the saved record cannot be read."""
-        saved = self.__clients.find(client_ref)
+        Raises ValueError, with a message that is safe to show, if the client database cannot
+        be read or the saved record is not valid."""
+        try:
+            saved = self.__clients.find(client_ref)
+        except (OSError, ValueError) as error:
+            logger.error("App.find_client: the client records cannot be read: %r", error)
+            raise ValueError(App.CLIENTS_UNAVAILABLE) from error
         if saved is None:
             return None
         try:
@@ -513,7 +531,12 @@ class App:
         if choice is None:
             return          # 0 = back to the main menu
         picked = outcomes[choice]
-        matches = self.__assessments.query("" if picked == "(all)" else picked)
+        try:
+            matches = self.__assessments.query("" if picked == "(all)" else picked)
+        except (OSError, ValueError) as error:
+            logger.error("App.list_assessments: the saved assessments cannot be read: %r", error)
+            self.__ui.show_error(App.ASSESSMENTS_UNAVAILABLE)
+            return
         self.__report_view.show_assessment_list(matches)
         if matches and self.__ui.ask_yes_no("Open one in full?"):
             labels = [f"{match['client_ref']}  {match['kind']}" for match in matches]
@@ -530,11 +553,13 @@ class App:
 
     def client_assessments(self, client_ref: str) -> list[dict]:
         """Every saved assessment of one client, newest first. Nothing is hidden or caught here:
-        whatever the AssessmentRepository reports (a list, or an error it raises) comes straight back."""
+        whatever the AssessmentRepository reports (a list, or an OSError or ValueError it raises when
+        the saved assessments cannot be read) comes straight back. The caller shows ASSESSMENTS_UNAVAILABLE."""
         return self.__assessments.for_client(client_ref)
 
     def find_assessment(self, assessment_id: str) -> dict | None:
-        """The saved assessment with this id, or None if there is none."""
+        """The saved assessment with this id, or None if there is none. Raises OSError or ValueError
+        when the saved assessments cannot be read; the caller shows ASSESSMENTS_UNAVAILABLE."""
         return self.__assessments.find(assessment_id)
 
     def upload_document(self, file_path: str) -> str | None:

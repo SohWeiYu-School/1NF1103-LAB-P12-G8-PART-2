@@ -404,3 +404,70 @@ def test_upload_document_gives_none_for_a_file_that_does_not_exist(app, tmp_path
 
 def test_download_document_gives_false_for_an_unknown_document(app, tmp_path):
     assert app.download_document("data/documents/nothing.pdf", str(tmp_path / "out.pdf")) is False
+
+
+# ----- a read failure is reported, never shown as "no records" ------------------------------------
+
+def _damage(tmp_path, name):
+    path = tmp_path / "local database" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"[{broken")
+    return path
+
+
+def test_the_menu_tells_the_user_when_the_client_database_cannot_be_read(app, tmp_path, monkeypatch, capsys, caplog):
+    path = _damage(tmp_path, "sow_cases.json")
+    _answers(monkeypatch, "6", "8")
+    app.run_menu()
+    out = capsys.readouterr().out
+    assert App.CLIENTS_UNAVAILABLE in out
+    assert "No clients saved yet" not in out
+    assert "damaged" in caplog.text                               # the real details are logged
+    assert "damaged" not in out and "JSONDecodeError" not in out  # and not shown
+    assert path.read_bytes() == b"[{broken"
+
+
+def test_the_menu_tells_the_user_when_the_saved_assessments_cannot_be_read(app, tmp_path, monkeypatch, capsys):
+    _damage(tmp_path, "ai_assessments.json")
+    _answers(monkeypatch, "5", "1", "8")
+    app.run_menu()
+    out = capsys.readouterr().out
+    assert out.count(App.ASSESSMENTS_UNAVAILABLE) == 2           # at start-up, and when listing
+    assert "saved assessment(s) loaded" not in out
+    assert "No assessments" not in out
+
+
+def test_find_client_raises_a_safe_message_when_the_database_cannot_be_read(app, tmp_path, caplog):
+    _damage(tmp_path, "sow_cases.json")
+    with pytest.raises(ValueError) as error:
+        app.find_client("CL-1")
+    assert str(error.value) == App.CLIENTS_UNAVAILABLE
+    assert "App.find_client" in caplog.text
+
+
+def test_menu_find_client_shows_the_message_not_no_client_found(app, tmp_path, monkeypatch, capsys):
+    _damage(tmp_path, "sow_cases.json")
+    _answers(monkeypatch, "4", "CL-1", "8")
+    app.run_menu()
+    out = capsys.readouterr().out
+    assert App.CLIENTS_UNAVAILABLE in out and "No client found" not in out
+
+
+def test_saving_a_client_into_a_damaged_file_fails_and_keeps_the_file(app, tmp_path):
+    path = _damage(tmp_path, "sow_cases.json")
+    assert app.save_client(ClientRecord.from_dict(sample_case())) is False
+    assert path.read_bytes() == b"[{broken"
+
+
+def test_the_web_facade_methods_raise_when_the_saved_assessments_cannot_be_read(app, tmp_path):
+    _damage(tmp_path, "ai_assessments.json")
+    with pytest.raises(ValueError):
+        app.client_assessments("C-1")
+    with pytest.raises(ValueError):
+        app.find_assessment("A1")
+
+
+def test_a_failed_local_read_is_a_failed_sync_through_the_app(app, tmp_path):
+    _damage(tmp_path, "sow_cases.json")
+    stats = app.sync_to_cloud()
+    assert stats["cases_synced"] == 0 and stats["errors"]
