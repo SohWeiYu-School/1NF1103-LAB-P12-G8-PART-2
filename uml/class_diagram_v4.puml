@@ -841,11 +841,9 @@ package "Domain Model (app/model)" {
 }
 
 AIService -- ResponseCache : caches in
-App *-- "0..*" CloudSync
 App *-- "1" AssessmentRunner
 App *-- "1" CaseBuilder
 App *-- "1" CaseFiles
-App *-- "1" CaseReader
 App *-- "1" ClientForm
 App *-- "1" Config
 App *-- "1" ConsoleUI
@@ -854,34 +852,45 @@ App *-- "1" DocumentStore
 App *-- "1" RateLimiter
 App *-- "1" ReportView
 App *-- "1" ResponseCache
+App *-- "2" CloudSync
 App *-- "2" Repository
+App *-- ConfigReader
 App ..> AIService : creates
+App ..> CaseReader : creates
 App ..> ClientRecord : uses
-App ..> ConfigReader : creates
+App ..> Declaration : uses
 App ..> DocumentRecordBuilder : creates
 App ..> MongoRepository : creates
 App ..> Verdict : uses
 App ..> WebApp : creates
 AssessmentRepository --|> JsonRepository
+AssessmentRunner *-- "1" CaseReader
 AssessmentRunner *-- "1" VerdictEngine
 AssessmentRunner *-- "4" RiskAnalysis
 AssessmentRunner -- Config : reads policy
+AssessmentRunner -- DocumentStore : reads documents from
+AssessmentRunner -- ResponseCache : caches in
 AssessmentRunner ..> Verdict : uses
 AssessmentRunner o-- "1..*" AIService
 AssetPath -- MarketModel : grows with
 AssetPath ..> Band : uses
+AssetPath ..> CaseTimeline : creates
 Benchmark -- Config : reads names
 Benchmark --|> RiskAnalysis
+Benchmark ..> CaseTimeline : creates
+Benchmark ..> Declaration : uses
+Benchmark ..> Formatter : uses
 Benchmark ..> MarketModel : uses
 BenchmarkAI --|> AIService
 CareerSavings ..> Band : uses
 CaseBuilder -- ConsoleUI : asks via
 CaseBuilder ..> ClientRecord : uses
 ClientForm -- ConsoleUI : prints via
+ClientForm -- ReportView : shows via
 ClientForm ..> ClientRecord : creates
 ClientRecord *-- "0..*" Investment
 ClientRecord *-- "0..*" Job
-ClientRecord *-- "1" Claims
+ClientRecord *-- "0..1" Claims
 ClientRecord *-- "1" ClientProfile
 ClientRecord *-- "1" Declaration
 ClientRecord *-- "1" ReviewStatus
@@ -889,7 +898,6 @@ ClientRecord ..> Verdict : uses
 ClientRepository --|> JsonRepository
 CloudSync -- DatabaseRepository : remote
 CloudSync -- Repository : local
-ConsoleUI ..> Band : uses
 CounterpartyUnnamed --|> Indicator
 CrimeScan *-- "5" Indicator
 CrimeScan --|> RiskAnalysis
@@ -900,8 +908,10 @@ CrimeScan ..> Typology : creates
 DatabaseRepository ..|> Repository
 Declaration *-- "0..*" ClaimedSource
 DocumentAI --|> AIService
+DocumentEvidence *-- "1" CaseReader
 DocumentEvidence --|> RiskAnalysis
 DocumentReaderFactory ..> DocumentReader : creates
+DocumentRecordBuilder -- Config : reads policy
 DocumentRecordBuilder ..> ClientRecord : creates
 DocumentStore *-- "1" DocumentReaderFactory
 DocumentStore ..> DocumentReader : uses
@@ -914,13 +924,15 @@ Forecast -- Config : reads names
 Forecast --|> RiskAnalysis
 Forecast ..> Band : uses
 Forecast ..> CaseTimeline : creates
+Forecast ..> Formatter : uses
 ForecastAI --|> AIService
+ForecastAI ..> ClaimedSource : checks
 ForecastAI ..> Declaration : creates
 FuturePaths *-- "1" AssetPath
 FuturePaths *-- "1" CareerSavings
+FuturePaths -- MarketModel : projects with
 FuturePaths ..> Band : uses
 FuturePaths ..> CaseTimeline : creates
-FuturePaths ..> MarketModel : uses
 GiftOrInheritanceUnnamed --|> Indicator
 ImageReader --|> DocumentReader
 Indicator ..> Declaration : reads
@@ -930,15 +942,17 @@ MongoRepository --|> DatabaseRepository
 OnboardingAssessor -- Config : reads names
 OnboardingAssessor -- FuturePaths : tests against
 OnboardingAssessor ..> Band : uses
+OnboardingAssessor ..> CaseTimeline : creates
 PayCalibrator -- CareerSavings : adjusts
+PayCalibrator ..> CaseTimeline : creates
 PdfReader --|> DocumentReader
 RelatedPartyTransaction --|> Indicator
 ReportView -- ConsoleUI : prints via
 ReportView ..> ClientRecord : uses
+ReportView ..> Typology : uses
 ReportView ..> Verdict : uses
 ResearchAI --|> AIService
 RiskAnalysis ..> Check : creates
-RiskAnalysis ..> Formatter : uses
 SourceContradictsOccupation --|> Indicator
 TextReader --|> DocumentReader
 Typology -- "1..*" ResearchReport : cites
@@ -948,17 +962,21 @@ Verdict o-- "0..*" Check
 VerdictEngine -- Config : reads policy
 VerdictEngine ..> CaseTimeline : creates
 VerdictEngine ..> Check : uses
+VerdictEngine ..> Forecast : calls
+VerdictEngine ..> Formatter : uses
+VerdictEngine ..> Typology : uses
 VerdictEngine ..> Verdict : creates
 VerdictEngine o-- "1..*" RiskAnalysis
 WebApp -- App : calls
 WebApp -- RateLimiter : checks with
 WebApp ..> ClientRecord : uses
+WebApp ..> Typology : uses
 WordReader --|> DocumentReader
 
 note top of App
   main.py (project root) — only starts App (the AI brand is chosen here)
-  caller = with_fallback(openai_caller(OpenAI()), gemini_caller(genai.Client()))
-  sys.exit(App(caller).start(sys.argv[1:]))   # App creates every other object
+  sys.exit(App(with_fallback(openai_caller(), gemini_caller()))
+  .start(sys.argv[1:]))   # App creates every other object
 end note
 
 @enduml

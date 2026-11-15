@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `d46178a` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `4640603` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -28,8 +28,8 @@ Checked code at commit `d46178a` against `uml/class_diagram_v4.puml`, which is c
 | 4 | In UML, missing in code | 0 | Decide per item |
 | 5 | In code, missing from UML | 465 | UML |
 | 6 | Minor: default and starting values | 0 | UML |
-| 7 | Relationships (arrows, verbs, multiplicities) and the main.py note | 43 | Mostly UML |
-| | **Total** | **508** | |
+| 7 | Relationships (arrows, verbs, multiplicities) and the main.py note | 0 | Mostly UML |
+| | **Total** | **465** | |
 
 Pairs where only the underscores differ (`__x` in UML, `_x` in code) are merged into one item in stage 3, so the total is lower than the raw count of differences.
 
@@ -703,78 +703,59 @@ How to fix: **UML:** add or correct the `= value`. Where the code is computed, d
 
 **Done.** Nothing left in this stage.
 
-## Stage 7: Relationships (43)
+## Stage 7: Relationships (0)
 
-105 of 114 UML arrows are confirmed in the code. The script and the independent reviewer agreed on every verdict below.
+131 of 132 UML arrows are confirmed in the code. The script and the independent reviewer agreed on every verdict below.
 
 How to fix: mostly **UML** (redraw an arrow, change a verb or multiplicity, add missing arrows). Where an arrow shows a model class but the code passes a plain `dict`, the team has to decide: either the diagram drops the arrow, or the code starts using the model class (a bigger change).
 
-### Wrong kind of arrow (3)
+### Missing from the UML (0)
 
-- [ ] `App *-- "1" CaseReader`: only uses it in methods, does not store it (dependency) (app/application/app.py:263 (used in method in read_case))
-- [ ] `App ..> ConfigReader : creates`: stores it in an attribute (association/composition, not a passing dependency) (app/application/app.py:74 self.__config_reader = ConfigReader(os.path.join(root, 'config')))
-- [ ] `FuturePaths ..> MarketModel : uses`: stores it in an attribute (association/composition, not a passing dependency) (app/logic/future_paths.py:24 self.__market_model = market_model or MarketModel())
+Real class-to-class links in the code that the drawing rule says to draw, with no UML line between the two classes.
 
-### Wrong verb (1)
 
-- [ ] `DocumentReaderFactory ..> DocumentReader : creates`: never creates one, only uses it (verb should be 'uses') (app/data/document_reader_factory.py:24 (used in method in create))
+### Kept without code evidence, by decision (1)
 
-### Wrong multiplicity (2)
+- `Typology -- "1..*" ResearchReport : cites`: linked by report id: a Typology keeps the ids of the ResearchReports it cites (source_ids), not the objects; the link is real in the data, so the diagram keeps it
 
-- [ ] `App *-- "0..*" CloudSync`: creates and stores it; code always holds exactly 2 (a fixed list) (app/application/app.py:89 self.__syncs = [CloudSync(self.__clients, MongoRepository(App.CLIENT_COLLECTION, 'client_ref', uri), state_path), CloudSync(self.__asse)
-- [ ] `ClientRecord *-- "1" Claims`: creates and stores it; starts as None and is created later, so 0..1 (app/model/client_record.py:36 self.__claims = None)
+### Not drawn, by the drawing rule (32)
 
-### No evidence in the code (3)
+An arrow is drawn when a class stores, creates or directly works with another class. Links that are only reached through another object's method, and reads of another class's constant, are not drawn (see uml/UML_CORRECTIONS.md, stage 7).
 
-Most of these show a model class (`ClientRecord`, `Verdict`, `Typology`, `MatchResult`, `Declaration`) where the code actually passes a plain `dict`. `RiskAnalysis ..> Formatter` belongs on its children `Benchmark` and `Forecast` instead (see the missing list).
+- App → CaseTimeline: constant only
+- AssessmentRunner → Declaration: reached through another object
+- AssessmentRunner → ResearchReport: reached through another object
+- AssessmentRunner → Typology: reached through another object
+- Benchmark → ClaimedSource: reached through another object
+- CaseBuilder → ClientForm: constant only
+- CaseBuilder → Investment: reached through another object
+- CaseBuilder → Job: reached through another object
+- ClientForm → DocumentStore: reached through another object
+- CrimeScan → ClaimedSource: reached through another object
+- DocumentRecordBuilder → CaseReader: constant only
+- Forecast → AssetPath: reached through another object
+- Forecast → CareerSavings: reached through another object
+- Forecast → ClientRecord: reached through another object
+- FuturePaths → ClientRecord: reached through another object
+- GiftOrInheritanceUnnamed → ClaimedSource: reached through another object
+- OnboardingAssessor → AssetPath: reached through another object
+- OnboardingAssessor → ClaimedSource: reached through another object
+- OnboardingAssessor → Verdict: constant only
+- PayCalibrator → MarketModel: constant only
+- RelatedPartyTransaction → ClaimedSource: reached through another object
+- ReportView → DocumentStore: reached through another object
+- ReportView → Investment: reached through another object
+- ReportView → Job: reached through another object
+- SourceContradictsOccupation → ClaimedSource: reached through another object
+- UnvaluedSource → ClaimedSource: reached through another object
+- VerdictEngine → FuturePaths: constant only
+- WebApp → AssessmentRepository: reached through another object
+- WebApp → ClientForm: constant only
+- WebApp → DocumentRecordBuilder: reached through another object
+- WebApp → DocumentStore: reached through another object
+- WebApp → Repository: reached through another object
 
-- [ ] `ConsoleUI ..> Band : uses`: the code never connects these two classes
-- [ ] `RiskAnalysis ..> Formatter : uses`: the code never connects these two classes
-- [ ] `Typology -- "1..*" ResearchReport : cites`: the code never connects these two classes
-
-### Missing from the UML (33)
-
-Real class-to-class links in the code with no UML line between the two classes. *Constant only* means the class just reads another class's constant; the team can decide to leave those out.
-
-- [ ] add `AssessmentRunner *-- "1" CaseReader`: creates and keeps one (app/application/assessment_runner.py:70)
-- [ ] add `AssessmentRunner o-- "1" DocumentStore`: stores the one App hands in (app/application/assessment_runner.py:67)
-- [ ] add `AssessmentRunner o-- "1" ResponseCache`: stores the one App hands in (app/application/assessment_runner.py:68)
-- [ ] add `App ..> CaseTimeline : uses`: reads CaseTimeline.FORECAST_YEARS (constant only) (app/application/app.py:517)
-- [ ] add `App ..> Check : creates`: Check.from_dict(...) (app/application/app.py:559)
-- [ ] add `App ..> ReviewStatus : uses`: record.review_status.update(...) / to_dict() (app/application/app.py:568) *(found by the reviewer)*
-- [ ] add `VerdictEngine ..> Formatter : uses`: Formatter calls (app/logic/verdict_engine.py:242)
-- [ ] add `VerdictEngine ..> FuturePaths : uses`: reads FuturePaths.BASELINE_TYPE (constant only) (app/logic/verdict_engine.py:87)
-- [ ] add `VerdictEngine ..> CrimeScan : uses`: reads CrimeScan.SIGN_THEMES / SIGN_LABELS / FULL_MATCH / MATCH_LABELS (design smell: the engine is meant to treat every RiskAnalysis alike) (app/logic/verdict_engine.py:139) *(found by the reviewer)*
-- [ ] add `VerdictEngine ..> Benchmark : uses`: reads Benchmark.BENCHMARK_LABELS (constant only) (app/logic/verdict_engine.py:470) *(found by the reviewer)*
-- [ ] add `VerdictEngine ..> Forecast : calls`: calls honest_numbers(), which only Forecast has, through the RiskAnalysis list (app/logic/verdict_engine.py:226) *(found by the reviewer)*
-- [ ] add `Benchmark ..> Formatter : uses`: Formatter calls (the UML puts this on RiskAnalysis, which never uses Formatter) (app/logic/benchmark.py:7) *(found by the reviewer)*
-- [ ] add `Forecast ..> Formatter : uses`: Formatter calls (the UML puts this on RiskAnalysis, which never uses Formatter) (app/logic/forecast.py:5) *(found by the reviewer)*
-- [ ] add `Benchmark ..> CaseTimeline : creates`: CaseTimeline(...) in a method (app/logic/benchmark.py:323)
-- [ ] add `Forecast ..> CareerSavings : passes on`: gets it from FuturePaths and hands it to PayCalibrator (app/logic/forecast.py:34)
-- [ ] add `Forecast ..> AssetPath : uses`: self.__future_paths.asset_path().build(...) (app/logic/forecast.py:145) *(found by the script)*
-- [ ] add `DocumentEvidence *-- "1" CaseReader`: creates and keeps one (app/logic/document_evidence.py:20)
-- [ ] add `DocumentRecordBuilder o-- "1" Config`: stores the Config App hands in (app/logic/document_record_builder.py:24)
-- [ ] add `DocumentRecordBuilder ..> CaseReader : uses`: reads CaseReader constants (COMPOSITION_KEYS) (app/logic/document_record_builder.py:76)
-- [ ] add `Indicator ..> ClaimedSource : uses`: all four sign classes call methods on declaration.sources() (app/logic/indicator.py:31)
-- [ ] add `AssetPath ..> CaseTimeline : creates`: CaseTimeline(...) in a method (app/logic/asset_path.py:25)
-- [ ] add `PayCalibrator ..> CaseTimeline : creates`: CaseTimeline(...) in a method (app/logic/pay_calibrator.py:34)
-- [ ] add `PayCalibrator ..> MarketModel : uses`: reads MarketModel.SCENARIOS (constant only) (app/logic/pay_calibrator.py:56)
-- [ ] add `OnboardingAssessor ..> CaseTimeline : creates`: CaseTimeline(...) in a method (app/logic/onboarding_assessor.py:88)
-- [ ] add `OnboardingAssessor ..> Verdict : uses`: reads Verdict.SEVERITY (constant only) (app/logic/onboarding_assessor.py:160)
-- [ ] add `OnboardingAssessor ..> AssetPath : uses`: future_paths.asset_path().income_up_to(...) (app/logic/onboarding_assessor.py:78)
-- [ ] add `ClientForm o-- "1" ReportView`: stores the ReportView App hands in (app/interface/client_form.py:33)
-- [ ] add `CaseBuilder ..> ClientForm : uses`: reads ClientForm.PAYMENT_METHODS (constant only) (app/interface/case_builder.py:150)
-- [ ] add `WebApp ..> ClientForm : uses`: reads ClientForm.PEP_OPTIONS (constant only) (app/interface/web_app.py:97)
-- [ ] add `WebApp ..> Repository : uses`: calls on App.clients() / App.assessments() (app/interface/web_app.py:519)
-- [ ] add `WebApp ..> DocumentStore : uses`: calls on App.documents() (app/interface/web_app.py:461)
-- [ ] add `WebApp ..> DocumentRecordBuilder : uses`: calls on App.record_builder() (app/interface/web_app.py:399)
-- [ ] add `CloudSync ..> JsonRepository : uses`: JsonRepository.DATA_DIR as a default argument (constant only) (app/data/cloud_sync.py:23) *(found by the reviewer)*
-
-### main.py note (1)
-
-- [ ] The note on `App` says `caller = with_fallback(openai_caller(OpenAI()), gemini_caller(genai.Client()))` then `App(caller)`, but `main.py:22` is `App(with_fallback(openai_caller(), gemini_caller()))`: no `caller` variable, and the callers take no arguments. Fix in UML.
-
-## Appendix: values shortened with `...` (not checked, 54)
+## Appendix: values shortened with `...` (checked by pattern: class name or folder, 54)
 
 `App.__assessments`, `App.__case_builder`, `App.__case_files`, `App.__client_form`, `App.__clients`, `App.__config`, `App.__document_ai`, `App.__documents`, `App.__limiter`, `App.__report_view`, `App.__response_cache`, `App.__runner`, `App.__syncs`, `AssessmentRunner.STEPS`, `AssessmentRunner.__verdict_engine`, `Band.MONEY_IN`, `Band.MONEY_OUT`, `Benchmark.BENCHMARK_LABELS`, `Benchmark.COMPOSITION_RULES`, `Benchmark.__config`, `BenchmarkAI.ALLOWED_FIELDS`, `CaseFiles.__folder`, `CaseReader.__PRESENT_WORDS`, `ClientForm.PAYMENT_METHODS`, `ClientForm.PEP_OPTIONS`, `ClientRecord.__profile`, `ClientRepository.OLD_ASSET_KEYS`, `CloudSync.__state_path`, `ConfigReader.__folder`, `ConsoleUI.__read`, `ConsoleUI.__write`, `CrimeScan.MATCH_LABELS`, `CrimeScan.__COUNTRY_TO_ISO`, `CrimeScan.__indicators`, `DocumentReaderFactory.READER_TYPES`, `DocumentStore.__folder`, `Forecast.__assessor`, `Forecast.__config`, `Forecast.__future_paths`, `Forecast.__pay_calibrator`, `FuturePaths.__asset_path`, `FuturePaths.__career_savings`, `ImageReader.IMAGE_TYPES`, `JsonRepository.DATA_DIR`, `RelatedPartyTransaction.__KEYWORDS`, `ReportView.FIELD_NAMES`, `ReportView.OUTCOME_LABELS`, `ReportView.SOURCE_TAGS`, `ResponseCache.__folder`, `VerdictEngine.MARKS`, `VerdictEngine.REPORT_LEGEND`, `VerdictEngine.THEMES`, `VerdictEngine.VERDICT_LABELS`, `WebApp.__flask`
 

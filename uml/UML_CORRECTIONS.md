@@ -208,3 +208,37 @@ After the review, the checker also verifies abbreviated values: `X(...)` must na
 | WebApp | `__flask` | `Flask(...)` | **B**: `Flask(__name__)` was not wrong; the checker flagged it because the code builds it in a local variable first. `(...)` matches the convention above |
 
 Layout: CrimeScan, Forecast, FuturePaths and DocumentStore were widened so the longer lines fit. The App→DocumentStore line ends beside the wider box, and the IO Manager folder was trimmed so it no longer overlaps the Application folder. `layout_check` reports 0.
+
+## Stage 7: relationships (2026-11-15): 28 arrow edits and the main.py note
+
+No code changed in this stage.
+
+**Drawing rule (Marcus's decision).** An arrow is drawn when a class **stores** another class, **creates** one, or **works with one directly**: it is handed one as a parameter, calls its methods, or calls its static helpers. Two kinds of link are **not drawn**:
+- objects reached only through another object's method (e.g. ReportView reads `record.jobs()`, so ReportView → Job is implied by `ClientRecord *-- Job`);
+- reads of another class's constant (e.g. `CaseTimeline.FORECAST_YEARS`).
+
+This keeps the reviewed diagram readable. The scan applies the same rule and lists the 32 links it leaves out in `UML_DIFFERENCES.md` ("Not drawn, by the drawing rule"), so nothing is hidden.
+
+| Arrow | Correction | Reason |
+|---|---|---|
+| `App *-- "1" CaseReader` | → `App ..> CaseReader : creates` | **T**: App makes a CaseReader per case (stage 4) |
+| `App ..> ConfigReader : creates` | → `App *-- "1" ConfigReader` | **T**: App keeps it and asks it for `problems()` at start-up |
+| `FuturePaths ..> MarketModel : uses` | → `FuturePaths -- MarketModel : projects with` | **T**: FuturePaths keeps the MarketModel it is handed (or makes a default one) |
+| `App *-- "0..*" CloudSync` | → `"2"` | **T**: App always keeps exactly two, one for clients and one for assessments |
+| `ClientRecord *-- "1" Claims` | → `"0..1"` | **T**: a new record has no declaration yet (`__claims : Claims \| None`) |
+| `ConsoleUI ..> Band : uses` | removed | **T**: ConsoleUI formats a range from a dict and never touches Band (stage 3 batch B) |
+| `RiskAnalysis ..> Formatter : uses` | removed; added `Benchmark ..> Formatter`, `Forecast ..> Formatter`, `VerdictEngine ..> Formatter` | **T**: RiskAnalysis itself never uses Formatter; these three do |
+| `AssessmentRunner *-- "1" CaseReader`, `DocumentEvidence *-- "1" CaseReader` | added | **T**: each creates and keeps its own |
+| `AssessmentRunner -- DocumentStore : reads documents from`, `AssessmentRunner -- ResponseCache : caches in` | added | **T**: it keeps the ones App hands in |
+| `DocumentRecordBuilder -- Config : reads policy`, `ClientForm -- ReportView : shows via` | added | **T**: each keeps the one it is handed (as other classes keep `Config` and `ConsoleUI`) |
+| `AssetPath`, `Benchmark`, `OnboardingAssessor`, `PayCalibrator ..> CaseTimeline : creates` | added | **T**: each builds a CaseTimeline in a method |
+| `App ..> Declaration`, `Benchmark ..> Declaration`, `ReportView ..> Typology`, `VerdictEngine ..> Typology`, `WebApp ..> Typology` | added (`uses`) | **T**: each is handed these model objects and reads them (since the dict → model refactor) |
+| `ForecastAI ..> ClaimedSource : checks` | added | **T**: its person-type check and repair take the declared sources |
+| `VerdictEngine ..> Forecast : calls` | added | **T**: the engine calls `honest_numbers()`, which only Forecast has, through its feature list. This is a design smell (the engine should treat every RiskAnalysis alike); the arrow shows it honestly |
+| `DocumentReaderFactory ..> DocumentReader : creates` | kept | The verb was right: the factory builds the reader from `READER_TYPES`. The checker missed it after stage 4 moved the table to a class constant; the checker is fixed |
+| `Typology -- "1..*" ResearchReport : cites` | kept, without code evidence | A Typology keeps the *ids* of the reports it cites (`source_ids`), not the objects. The link is real in the data, so the reviewed diagram keeps it (listed in the scan as "kept by decision") |
+| note on `App` | now quotes `main.py` exactly | **T**: `main.py` runs `sys.exit(App(with_fallback(openai_caller(), gemini_caller())).start(sys.argv[1:]))`; there is no `caller` variable and the callers take no arguments |
+
+Not drawn under the rule, from the earlier list: `App → CaseTimeline`, `App → ReviewStatus`, `VerdictEngine → CrimeScan / Benchmark / FuturePaths` (constants), `PayCalibrator → MarketModel`, `OnboardingAssessor → Verdict`, `CaseBuilder → ClientForm`, `WebApp → ClientForm`, `CloudSync → JsonRepository`, `DocumentRecordBuilder → CaseReader` (constants), and links reached through another object such as `Forecast → AssetPath / CareerSavings`, `Indicator → ClaimedSource` and WebApp's repositories (follow-up #39). `App ..> Check : creates` no longer applies: App no longer builds Check objects.
+
+Tools: the new arrows are routed automatically (`uml_arrows.py`: right-angled paths that never cross a class box), and `layout_check` reports 0.
