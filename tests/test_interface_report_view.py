@@ -140,6 +140,16 @@ def test_the_crime_section_is_laid_out_from_the_typology_objects():
     assert f'"{typology.source_quotes[0]["quote"]}"  [R1]' in text
 
 
+def test_an_unchecked_typology_is_marked_in_the_crime_section():
+    typologies, crime_result = _crime_scan()
+    unchecked = CrimeScan(POLICY).read_typologies(fake_ai.typologies()["sector_typologies"])
+    crime_result = CrimeScan(POLICY).run(sample_case(), {"typologies": unchecked, "declaration": UNNAMED})
+    text = _view().format_verdict_report(_report(), crime_result=crime_result, typologies=unchecked)
+    assert f"[HIGH MATCH]  {unchecked[0].name}  (not checked against research)" in text
+    checked = _view().format_verdict_report(_report(), crime_result=_crime_scan()[1], typologies=typologies)
+    assert "not checked against research" not in checked
+
+
 def test_a_match_whose_typology_is_not_listed_shows_no_description_or_quote():
     typologies, crime_result = _crime_scan()
     text = _view().format_verdict_report(_report(), crime_result=crime_result, typologies=[])
