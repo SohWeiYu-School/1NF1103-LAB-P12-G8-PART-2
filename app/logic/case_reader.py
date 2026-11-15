@@ -56,7 +56,7 @@ class CaseReader:
         auto-fill) into the case every part of the assessment uses, dated today.
 
         Returns (case, []) when everything can be read, otherwise (None, what's missing).
-        The command line then asks the officer for what's missing (io_manager.case_from_client_record);
+        The command line then asks the officer for what's missing (CaseBuilder.build);
         the web app asks the officer to complete the record. Both assess the same case.
         """
         today = self.__today

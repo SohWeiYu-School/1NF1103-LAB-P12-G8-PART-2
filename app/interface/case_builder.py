@@ -181,7 +181,14 @@ class CaseBuilder:
                 return split
             self.__ui.show_error(f"That adds up to {sum(split.values()):.0%}. Please make it 100%.")
 
-    def case_from_client_record(self, record: ClientRecord) -> dict | None:
+    def show_case_problems(self, where: str, problems: list[str]) -> None:
+        """Tell the officer why a case can't be assessed yet, one line for each problem."""
+        self.__ui.show_error(f"{where} can't be assessed yet:")
+        for problem in problems:
+            self.__ui.show(f"    - {problem}")
+        self.__ui.show("  Fix the client record (Find / Edit Existing Client) and try again.")
+
+    def build(self, record: ClientRecord) -> dict | None:
         """Build the forecasting case from a saved client record.
 
         Reads the record in its saved layout. The officer is asked only for
@@ -248,6 +255,6 @@ class CaseBuilder:
 
         problems = self.validate_case(case)
         if problems:
-            self.__ui.show_case_problems(case["client_ref"], problems)
+            self.show_case_problems(case["client_ref"], problems)
             return None
         return case

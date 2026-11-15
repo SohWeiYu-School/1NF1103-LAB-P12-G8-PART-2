@@ -377,12 +377,6 @@ class ConsoleUI:
                 return number
             self.show_error("Please enter a single whole number, e.g. 2500, or press Enter to keep.")
 
-    def show_case_problems(self, where: str, problems: list[str]) -> None:
-        self.show_error(f"{where} can't be assessed yet:")
-        for problem in problems:
-            self.show(f"    - {problem}")
-        self.show("  Fix the client record (Find / Edit Existing Client) and try again.")
-
     def ask_client_ref(self) -> str | None:
         ref = self.ask_text("Client reference (e.g. CL-1A2B3C4D, 0 to go back)")
         return None if ref == "0" else ref

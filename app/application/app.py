@@ -251,12 +251,12 @@ class App:
         case, missing = self.read_case(record)
         if case is None:
             self.__ui.show_error("Needed before the assessment can run: " + ", ".join(missing))
-            case = self.__case_builder.case_from_client_record(record)
+            case = self.__case_builder.build(record)
             if case is None:
                 return None
         problems = self.__case_builder.validate_case(case)
         if problems:
-            self.__ui.show_case_problems(case["client_ref"], problems)
+            self.__case_builder.show_case_problems(case["client_ref"], problems)
             return None
         return case
 
@@ -353,7 +353,7 @@ class App:
             return True
         problems = self.__case_builder.validate_case(case)
         if problems:
-            self.__ui.show_case_problems(path, problems)
+            self.__case_builder.show_case_problems(path, problems)
             return False
         self.__ui.show_message(f"\nAssessing {case['client_ref']} ({os.path.basename(path)}).")
         result = self.assess(case, on_step=self.__show_step)
