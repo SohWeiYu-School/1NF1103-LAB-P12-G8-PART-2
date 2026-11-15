@@ -1,5 +1,7 @@
 """Benchmark: the benchmark feature."""
 
+import pytest
+
 from app.logic.benchmark import Benchmark
 from app.logic.risk_analysis import RiskAnalysis
 from app.model.check import Check
@@ -140,3 +142,10 @@ def test_only_the_sources_counterparty_names_someone_not_its_description():
 def test_with_no_declaration_reading_the_counterparties_are_not_checked():
     check = _counterparty_check(None)
     assert check.status == "failed" and check.explanation
+
+
+def test_the_benchmark_rejects_a_config_that_is_not_a_config_and_a_policy_that_is_not_a_dict():
+    with pytest.raises(ValueError, match="config must be a Config"):
+        Benchmark(POLICY, {"policy": POLICY})
+    with pytest.raises(ValueError, match="policy must be a dict"):
+        Benchmark("policy")

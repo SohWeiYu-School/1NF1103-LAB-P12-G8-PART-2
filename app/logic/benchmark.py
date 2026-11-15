@@ -50,6 +50,8 @@ class Benchmark(RiskAnalysis):
 
     def __init__(self, policy: dict | None = None, config: Config | None = None) -> None:
         super().__init__(policy)
+        if config is not None and not isinstance(config, Config):
+            raise ValueError(f"the config must be a Config (or None), not {type(config).__name__}")
         self.__config: Config = config or Config(self._policy, {})
 
     def run(self, case: dict, ai_data: dict) -> dict:
