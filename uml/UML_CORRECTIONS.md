@@ -295,3 +295,76 @@ The code changed first (follow-ups #32, #37, #38, #41, #42, approved by Marcus);
 
 The renames to private (`CaseBuilder.__payment_method` and three more helpers, `ConsoleUI.__words_error`, `ForecastAI.__check_market_series` / `__check_position_pay`) and the removal of `WebApp.PAYMENT_OPTIONS` touch members that are not in the diagram yet, so they need no correction here; stage 5 adds the members as they now are.
 
+## Stage 5: every code member added (2026-11-16): 450 additions, plus types, values and a new layout
+
+Marcus chose to show **every** member, so the diagram shows the code exactly; the scan is now 0 in every stage.
+Reason code for all additions: **B** (below the level the professor reviewed: private helpers, constants, properties).
+The professor's reviewed members were not changed.
+
+| Kind | Added |
+|---|---|
+| Methods | 300 |
+| Attributes (with `{get}` / `{get, set}` when a property exposes them) | 68 |
+| Constants (`«const»`) | 75 |
+| Computed properties (`«property»`), and `{get}` added to an attribute already shown | 7 |
+
+Per class (most first):
+
+| Class | Methods | Attributes | Constants | Properties |
+|---|---|---|---|---|
+| `ForecastAI` | 48 | 3 | 5 | 0 |
+| `App` | 30 | 3 | 7 | 1 |
+| `WebApp` | 31 | 0 | 9 | 0 |
+| `ClaimedSource` | 8 | 10 | 3 | 0 |
+| `Typology` | 9 | 8 | 1 | 0 |
+| `AssessmentRunner` | 2 | 14 | 1 | 0 |
+| `ConsoleUI` | 15 | 1 | 1 | 0 |
+| `CrimeScan` | 10 | 1 | 5 | 0 |
+| `DocumentRecordBuilder` | 14 | 1 | 1 | 0 |
+| `ClientForm` | 14 | 1 | 0 | 0 |
+| `AIService` | 12 | 1 | 1 | 0 |
+| `ClientRecord` | 5 | 2 | 4 | 2 |
+| `ReportView` | 7 | 0 | 4 | 0 |
+| `VerdictEngine` | 8 | 1 | 2 | 0 |
+| `ResearchReport` | 6 | 5 | 0 | 0 |
+| `Benchmark` | 6 | 0 | 4 | 0 |
+| `FuturePaths` | 4 | 3 | 1 | 0 |
+| `Band` | 8 | 0 | 0 | 0 |
+| `Forecast` | 6 | 0 | 1 | 0 |
+| `ResearchAI` | 5 | 0 | 2 | 0 |
+| `Verdict` | 1 | 1 | 3 | 2 |
+| `CaseReader` | 5 | 0 | 1 | 0 |
+| `Check` | 3 | 2 | 1 | 0 |
+| `DocumentAI` | 4 | 0 | 2 | 0 |
+| `MatchResult` | 3 | 2 | 1 | 0 |
+| `CaseBuilder` | 5 | 1 | 0 | 0 |
+| `ResponseCache` | 4 | 0 | 1 | 0 |
+| `TypologyAI` | 3 | 0 | 2 | 0 |
+| `Claims` | 1 | 1 | 2 | 0 |
+| `DocumentEvidence` | 2 | 1 | 1 | 0 |
+| `ClientProfile` | 1 | 0 | 2 | 0 |
+| `RateLimiter` | 1 | 1 | 1 | 0 |
+| `DatabaseRepository` | 1 | 0 | 0 | 2 |
+| `Declaration` | 3 | 0 | 0 | 0 |
+| `OnboardingAssessor` | 3 | 0 | 0 | 0 |
+| `ConfigReader` | 0 | 1 | 1 | 0 |
+| `Job` | 0 | 1 | 1 | 0 |
+| `MarketModel` | 0 | 0 | 2 | 0 |
+| `MongoRepository` | 1 | 0 | 1 | 0 |
+| `AssetPath` | 1 | 1 | 0 | 0 |
+| `DocumentStore` | 1 | 1 | 0 | 0 |
+| `Investment` | 1 | 1 | 0 | 0 |
+| `BenchmarkAI` | 2 | 0 | 0 | 0 |
+| `TextReader` | 0 | 0 | 1 | 0 |
+| `AssessmentRepository` | 1 | 0 | 0 | 0 |
+| `ClientRepository` | 1 | 0 | 0 | 0 |
+| `Config` | 1 | 0 | 0 | 0 |
+| `DocumentReader` | 1 | 0 | 0 | 0 |
+| `Repository` | 1 | 0 | 0 | 0 |
+| `RiskAnalysis` | 1 | 0 | 0 | 0 |
+
+Also in this stage:
+- **Code first:** 23 constants and 36 methods had no type hints (CLAUDE.md §1). They were typed in the code (annotations only, proved byte-identical by the harnesses) before they were drawn, so the diagram shows real types, not `object`.
+- 10 constants already in the diagram now show the exact types the code declares (`dict` -> `dict[str, str]`, `list` -> `list[dict[str, str]]` ...). **B**.
+- Starting values are written the diagram's short way: `X(...)`, `[...]`, `{...}`, `(...)`, `".../folder"`, or the text cut with `...`.
+- **Layout:** the boxes grew a lot, so the diagram was re-packed (`relayout.py`): inside each folder boxes keep their place and order and are only pushed down far enough to clear the box above; folders grow to fit and move down so none overlap. Nine boxes were widened so no line is cut off. Every line was then re-routed (`uml_arrows.py` reroute_all): right-angled paths that never cross a box, arrow ends kept apart, inheritance lines into one parent sharing a trunk. `layout_check` reports 0.
