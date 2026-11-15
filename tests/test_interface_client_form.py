@@ -43,6 +43,14 @@ def test_a_new_current_job_title_in_the_profile_is_kept_on_the_current_job(monke
     assert record.current_job().occupation == sample_case()["career"]["occupation"]   # the original is untouched
 
 
+def test_the_wealth_countries_are_changed_only_by_a_valid_list(monkeypatch, capsys):
+    #       declarations  net worth  AUM  PEP  countries            again  declarations ...  bad countries  stop
+    _type(monkeypatch, "5", "", "", "n", "Singapore, Malaysia", "y", "5", "", "", "n", "S1ngapore", "n")
+    edited = _form().edit_existing_client(ClientRecord.from_dict(sample_case()))
+    assert edited.claims.wealth_countries == ["Singapore", "Malaysia"]
+    assert "Not changed. Countries must be letters only" in capsys.readouterr().out
+
+
 def test_a_client_whose_saved_record_cannot_be_read_is_reported(monkeypatch, capsys):
     def find(client_ref):
         raise ValueError(f"Client {client_ref} could not be loaded because age must be between 18 and 120.")

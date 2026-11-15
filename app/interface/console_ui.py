@@ -304,7 +304,7 @@ class ConsoleUI:
                 return n
             self.show_error("Amounts can't be negative.")
 
-    def _only(self, text: str, allowed: str) -> bool:
+    def __only(self, text: str, allowed: str) -> bool:
         """Must contain at least one letter, and nothing outside letters + the allowed characters."""
         return any(c.isalpha() for c in text) and all(c.isalpha() or c in allowed for c in text)
 
@@ -316,7 +316,7 @@ class ConsoleUI:
     def ask_words(self, question: str, allowed: str = LETTERS, min_length: int = 2) -> str:
         while True:
             answer = self.__read(f"{question}: ").strip()
-            if len(answer) >= min_length and self._only(answer, allowed):
+            if len(answer) >= min_length and self.__only(answer, allowed):
                 return answer
             self.show_error(self._words_error(allowed))
 
@@ -325,18 +325,31 @@ class ConsoleUI:
             v = self.__read(f"{label} [{current}]: ").strip()
             if not v:
                 return current
-            if len(v) >= min_length and self._only(v, allowed):
+            if len(v) >= min_length and self.__only(v, allowed):
                 return v
             self.show_error(self._words_error(allowed))
 
     def ask_countries(self, question: str) -> list:
         while True:
             items = [c.strip() for c in self.ask_text(question).split(",") if c.strip()]
-            if items and all(self._only(c, ConsoleUI.LETTERS) for c in items):
+            if items and all(self.__only(c, ConsoleUI.LETTERS) for c in items):
                 return items
             self.show_error("Enter country names separated by commas, letters only (no numbers).")
 
-    def _parse_count(self, text: str) -> int | None:
+    def keep_countries(self, label: str, current: list[str]) -> list[str]:
+        """Countries separated by commas, letters only. Enter keeps the current list; an answer
+        that isn't a list of country names is refused once (with the reason) and the current
+        list is kept, so the officer is not stuck in the question."""
+        v = self.__read(f"{label} [{', '.join(current)}]: ").strip()
+        if not v:
+            return current
+        items = [c.strip() for c in v.split(",") if c.strip()]
+        if items and all(self.__only(c, ConsoleUI.LETTERS) for c in items):
+            return items
+        self.show_error("Not changed. Countries must be letters only, separated by commas.")
+        return current
+
+    def __parse_count(self, text: str) -> int | None:
         """'2,500' -> 2500. Returns None for ranges, text, zero or absurdly large numbers."""
         cleaned = text.strip().replace(",", "")
         if cleaned.isdigit() and 1 <= int(cleaned) <= ConsoleUI.MAX_EMPLOYEES:
@@ -345,7 +358,7 @@ class ConsoleUI:
 
     def ask_count(self, question: str) -> int:
         while True:
-            number = self._parse_count(self.read_answer(f"{question}: "))
+            number = self.__parse_count(self.read_answer(f"{question}: "))
             if number is not None:
                 return number
             self.show_error("Please enter the number of employees as a single whole number, e.g. 2500 "
@@ -356,7 +369,7 @@ class ConsoleUI:
             v = self.__read(f"{label} [{current}]: ").strip()
             if not v:
                 return current
-            number = self._parse_count(v)
+            number = self.__parse_count(v)
             if number is not None:
                 return number
             self.show_error("Please enter a single whole number, e.g. 2500, or press Enter to keep.")

@@ -129,3 +129,28 @@ def test_keep_money_keeps_the_current_value_on_enter_and_reads_a_new_amount(monk
     assert ui.keep_money("Price paid", 250000.0) == 250000.0
     assert ui.keep_money("Price paid", "") == ""
     assert ui.keep_money("Price paid", "") == 1500000.0
+
+
+def test_ask_count_takes_one_whole_number_and_refuses_ranges_and_text(capsys):
+    assert ConsoleUI(read=_answers("2,000-3,000", "about 50", "0", "2,500")).ask_count("Employer size") == 2500
+    assert capsys.readouterr().out.count("[ERROR] Please enter the number of employees") == 3
+
+
+def test_ask_words_refuses_numbers_in_a_name(capsys):
+    assert ConsoleUI(read=_answers("Daniel 7an", "Daniel Tan")).ask_words("Full name") == "Daniel Tan"
+    assert "Letters only please" in capsys.readouterr().out
+
+
+def test_keep_countries_keeps_on_enter_and_takes_a_new_list():
+    ui = ConsoleUI(read=_answers("", "Singapore, Malaysia"))
+    current = ["Singapore"]
+    assert ui.keep_countries("Wealth countries", current) is current
+    assert ui.keep_countries("Wealth countries", current) == ["Singapore", "Malaysia"]
+
+
+def test_keep_countries_refuses_a_number_once_and_keeps_the_current_list(capsys):
+    ask = _answers("S1ngapore")
+    current = ["Singapore"]
+    assert ConsoleUI(read=ask).keep_countries("Wealth countries", current) is current
+    assert ask.asked == ["Wealth countries [Singapore]: "]
+    assert "[ERROR] Not changed. Countries must be letters only" in capsys.readouterr().out

@@ -499,13 +499,10 @@ class ClientForm:
         if self.__ui.ask_yes_no("Change PEP status?"):
             claims["pep_status"] = ClientForm.PEP_OPTIONS[self.__ui.ask_choice("PEP status", ClientForm.PEP_OPTIONS)]
 
-        v = self.__ui.read_answer(f"Wealth countries [{', '.join(claims.get('wealth_countries', []))}]: ").strip()
-        if v:
-            items = [c.strip() for c in v.split(",") if c.strip()]
-            if items and all(self.__ui._only(c, ConsoleUI.LETTERS) for c in items):
-                claims["wealth_countries"] = items
-            else:
-                self.__ui.show_error("Not changed. Countries must be letters only, separated by commas.")
+        current = claims.get("wealth_countries", [])
+        countries = self.__ui.keep_countries("Wealth countries", current)
+        if countries is not current:          # only a valid new list is written back
+            claims["wealth_countries"] = countries
 
         self.__ui.show("\nClaims updated.")
 
