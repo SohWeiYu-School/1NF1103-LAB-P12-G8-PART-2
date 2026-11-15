@@ -34,7 +34,6 @@ class WebApp:
     Assessments run in a background thread; the loading page polls for the step reached.
     """
 
-    PAYMENT_OPTIONS = ["cash", "loan", "asset_sale"]
     CLIENT_FIELDS = [
         ("name", "Full name", "text"),
         ("nationality", "Nationality", "text"),
@@ -102,7 +101,7 @@ class WebApp:
         flask.secret_key = os.getenv("SECRET_KEY", "dev-only-change-me")
         flask.config["MAX_CONTENT_LENGTH"] = WebApp.MAX_UPLOAD_BYTES
         flask.jinja_env.loader = DictLoader(TEMPLATES)
-        flask.jinja_env.globals.update(PEP_OPTIONS=ClientForm.PEP_OPTIONS, PAYMENT_OPTIONS=WebApp.PAYMENT_OPTIONS)
+        flask.jinja_env.globals.update(PEP_OPTIONS=ClientForm.PEP_OPTIONS, PAYMENT_OPTIONS=ClientForm.PAYMENT_METHODS)
         flask.add_url_rule('/', endpoint='home', view_func=self.home)
         flask.add_url_rule('/find', endpoint='find', view_func=self.find)
         flask.add_url_rule('/client/new', endpoint='new_client', view_func=self.new_client, methods=['GET', 'POST'])
@@ -306,7 +305,7 @@ class WebApp:
             for key, text in [("asset_type", "name"), ("country", "country")]:
                 if not row[key]:
                     _p(f"{label}: {text} is required.", f"assets.{i}.{key}", "Required.")
-            if row["payment_method"] not in WebApp.PAYMENT_OPTIONS:
+            if row["payment_method"] not in ClientForm.PAYMENT_METHODS:
                 _p(f"{label}: choose how it was paid for.", f"assets.{i}.payment_method", "Choose one.")
             n = len(problems)
             yr  = self.read_year(row["year_acquired"], f"{label}: year bought", problems)
