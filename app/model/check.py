@@ -85,11 +85,11 @@ class Check:
     def failed(self) -> bool:
         return self.__status == "failed"
 
-    def extra(self, name: str, default=None):
+    def extra(self, name: str, default: object = None) -> object:
         """A detail the feature attached (for example "signs" or "independent"), or default."""
         return self.__extra.get(name, default)
 
-    def set_extra(self, name: str, value) -> None:
+    def set_extra(self, name: str, value: object) -> None:
         """Attach a detail for the verdict and the report. The named fields can't be set this way."""
         if not isinstance(name, str) or not name:
             raise ValueError("a check's extra detail needs a name (a non-empty text)")
