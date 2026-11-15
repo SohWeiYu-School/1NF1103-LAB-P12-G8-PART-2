@@ -206,7 +206,7 @@ package "IO Manager (app/interface)" {
     +edit_asset_composition(record : dict) : None
     +edit_client_declarations(record : dict) : None
     +edit_client_profile(record : dict) : None
-    +find_existing_client(find_fn : Callable[[str], ClientRecord | None] | None = None, load_fn : Callable[..., Any] | None = None, save_fn : Callable[[ClientRecord], bool] | None = None, download_fn : Callable[[str, str], bool] | None = None, upload_fn : Callable[[str], str | None] | None = None) : None
+    +find_existing_client(find_fn : Callable[[str], ClientRecord | None] | None = None, save_fn : Callable[[ClientRecord], bool] | None = None, download_fn : Callable[[str, str], bool] | None = None, upload_fn : Callable[[str], str | None] | None = None) : None
     +get_career_history() : list
     +get_client_profile() : dict
     +get_investments() : list
@@ -765,12 +765,9 @@ package "Logic Manager (app/logic)" {
     +match_typologies(declaration : Declaration, typologies : list[Typology]) : list[MatchResult]
     -__categorise_match(core_fired : list[str], core : list[str], supporting_fired : list[str]) : str
     -__domain_is_trusted(url : str, trusted_domains : list[str]) : bool
-    -__to_iso(value : str | None, warnings : list[str]) : str | None
     -__read_typology(data : dict, typ_id : str) : Typology | None
     #_assess(typologies : list[Typology] | None, declaration : Declaration | dict | None) : dict
     #_crime_checks(crime_result : dict | None, reports : list[ResearchReport] | None, typologies : list[Typology] | None, types : list[dict], forecast_ran : bool) : list[Check]
-    #_prepare_case(record : dict) : tuple[dict, list[str]]
-    #_safe_int(value : int | float | str | None, default : int | None = None) : int | None
     #_split_org_names(org_string : str) : set[str]
     +crime_declaration(declaration : Declaration | None) : tuple[Declaration | None, list[str]]
     +normalise_jurisdictions(declaration : Declaration) : tuple[Declaration, list[str]]
@@ -970,10 +967,10 @@ package "Logic Manager (app/logic)" {
     -__type_patterns(forecast : dict | None, assessment : dict | None, crime_result : dict | None, typologies : list[Typology] | None) : list[dict]
     -__evidence(case : dict, results : dict, assessment : dict | None, honest : dict | None) : list[dict]
     #_benchmark_items(checks : list[dict]) : list[dict]
-    #_check(feature : str, check : str, label : str, theme : str, status : str, detail : str, explanation : str = "", group : str = "") : Check
+    -__check(feature : str, check : str, label : str, theme : str, status : str, detail : str, explanation : str = "", group : str = "") : Check
     #_documents(assessment : dict | None, bench : list[Check], crime : list[Check], typologies : list[Typology] | None, case : dict, docs : list[Check] | None = None) : list[dict]
-    #_feature(name : str) : RiskAnalysis | None
-    #_feature_checks(name : str, context : dict) : list[Check]
+    -__feature(name : str) : RiskAnalysis | None
+    -__feature_checks(name : str, context : dict) : list[Check]
     #_is_pep(case : dict) : bool
     #_items(checks : list[dict], statuses : tuple) : list[dict]
     +features() : list[RiskAnalysis]
