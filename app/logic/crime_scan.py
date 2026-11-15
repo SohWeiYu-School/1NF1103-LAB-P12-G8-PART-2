@@ -86,8 +86,8 @@ class CrimeScan(RiskAnalysis):
     }
     FULL_MATCH = ("critical", "high", "medium")
     WEAK_MATCH = ("partial", "weak_signal")
-    MATCH_LABELS = {"critical": "CRITICAL", "high": "HIGH", "medium": "MEDIUM", "partial": "PARTIAL",
-                    "weak_signal": "WEAK", "no_match": "NO MATCH"}
+    MATCH_LABELS: dict[str, str] = {"critical": "CRITICAL", "high": "HIGH", "medium": "MEDIUM", "partial": "PARTIAL",
+                                    "weak_signal": "WEAK", "no_match": "NO MATCH"}
     SIGN_THEMES = {"gift_or_inheritance_unnamed": "people", "counterparty_unnamed": "people",
                    "related_party_transaction": "people", "source_contradicts_occupation": "sources",
                    "unvalued_source_present": "sources"}
