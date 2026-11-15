@@ -199,6 +199,46 @@ class VerdictEngine:
                     add(document, f"Matches the known pattern: {name}")
         return wanted[:settings["max_documents"]]
 
+    def __build_context(self, case: dict, results: dict) -> dict:
+        """What the checks are worked out from: the case and the results, the forecast and its
+        assessment, the honest numbers (None if there is no forecast to take them from) and the
+        crime person types."""
+        forecast, assessment = results.get("forecast"), results.get("forecast_assessment")
+        honest = None
+        if forecast and assessment:
+            honest = self._feature("forecast").honest_numbers(case, forecast, assessment)
+        types = self.__type_patterns(forecast, assessment, results.get("crime_result"), results.get("typologies"))
+        return {"case": case, "results": results, "forecast": forecast, "assessment": assessment,
+                "honest": honest, "types": types}
+
+    def __collect_checks(self, context: dict) -> dict[str, list[Check]]:
+        """Every feature's checks, as {"benchmark", "forecast", "crime", "documents": [Check, ...]}.
+        The documents are checked first, because the types then record which documents support them."""
+        case, results = context["case"], context["results"]
+        forecast, assessment = context["forecast"], context["assessment"]
+        honest, types = context["honest"], context["types"]
+        evidence = results.get("evidence")
+        docs = self._feature_checks("documents", {"evidence": evidence, "types": types})
+        for t in types:                                 # which of his documents support each crime story
+            t["documents"] = [c.label for c in docs if c.failed() and t["category"] in c.supports]
+        bench = self._feature_checks("benchmark", {
+            "case": case, "bench_input": results.get("benchmark_input"), "ai_data": results.get("benchmark_ai"),
+            "findings": results.get("benchmark_findings"), "honest": honest, "assessment": assessment,
+            "declaration": results.get("declaration"), "markets": results.get("markets"), "types": types})
+        fore = self._feature_checks("forecast", {
+            "case": case, "assessment": assessment, "honest": honest, "types": types,
+            "failed_step": results.get("failed_step"),
+            "unmodelled": (forecast or {}).get("earnings", {}).get("fallback_assets")})
+        for adjusted in reversed(results.get("pay_adjustments") or []):
+            fore.insert(1, self._check("forecast", "PAY_FROM_DOCUMENTS", "Pay taken from his documents", "wealth", "info",
+                                  f"The AI estimated {Formatter.sgd(adjusted['ai_pay'])} for {adjusted['year']}; "
+                                  f"{adjusted['source_file'] or 'his documents'} shows {Formatter.sgd(adjusted['documented_pay'])}, "
+                                  f"so his pay as {adjusted['job']} was scaled x{adjusted['ratio']:g} for every year of that job."))
+        crime = self._feature_checks("crime", {
+            "crime_result": results.get("crime_result"), "reports": results.get("reports"),
+            "typologies": results.get("typologies"), "types": types, "forecast_ran": forecast is not None})
+        return {"benchmark": bench, "forecast": fore, "crime": crime, "documents": docs}
+
     def combine(self, case: dict, results: dict) -> Verdict:
         """ONE Verdict from the crime scan, the benchmark, the forecast and the documents.
 
@@ -232,31 +272,12 @@ class VerdictEngine:
         """
         policy = self.__policy
         settings = policy["verdict"]
-        forecast, assessment = results.get("forecast"), results.get("forecast_assessment")
-        honest = None
-        if forecast and assessment:
-            honest = self._feature("forecast").honest_numbers(case, forecast, assessment)
-        types = self.__type_patterns(forecast, assessment, results.get("crime_result"), results.get("typologies"))
-        evidence = results.get("evidence")
-        docs = self._feature_checks("documents", {"evidence": evidence, "types": types})
-        for t in types:                                 # which of his documents support each crime story
-            t["documents"] = [c.label for c in docs if c.failed() and t["category"] in c.supports]
-        bench = self._feature_checks("benchmark", {
-            "case": case, "bench_input": results.get("benchmark_input"), "ai_data": results.get("benchmark_ai"),
-            "findings": results.get("benchmark_findings"), "honest": honest, "assessment": assessment,
-            "declaration": results.get("declaration"), "markets": results.get("markets"), "types": types})
-        fore = self._feature_checks("forecast", {
-            "case": case, "assessment": assessment, "honest": honest, "types": types,
-            "failed_step": results.get("failed_step"),
-            "unmodelled": (forecast or {}).get("earnings", {}).get("fallback_assets")})
-        for adjusted in reversed(results.get("pay_adjustments") or []):
-            fore.insert(1, self._check("forecast", "PAY_FROM_DOCUMENTS", "Pay taken from his documents", "wealth", "info",
-                                  f"The AI estimated {Formatter.sgd(adjusted['ai_pay'])} for {adjusted['year']}; "
-                                  f"{adjusted['source_file'] or 'his documents'} shows {Formatter.sgd(adjusted['documented_pay'])}, "
-                                  f"so his pay as {adjusted['job']} was scaled x{adjusted['ratio']:g} for every year of that job."))
-        crime = self._feature_checks("crime", {
-            "crime_result": results.get("crime_result"), "reports": results.get("reports"),
-            "typologies": results.get("typologies"), "types": types, "forecast_ran": forecast is not None})
+        context = self.__build_context(case, results)
+        forecast, assessment = context["forecast"], context["assessment"]
+        honest, types = context["honest"], context["types"]
+        collected = self.__collect_checks(context)
+        bench, fore, crime, docs = (collected["benchmark"], collected["forecast"], collected["crime"],
+                                    collected["documents"])
         checks = bench + fore + crime + docs
 
         triggers: list[tuple[str, str]] = []           # (level, reason)
