@@ -637,6 +637,7 @@ package "Application (app/application)" {
     +steps() : list[str]
     +validate_case(case : object) : list[str]
     +client_ref_taken(client_ref : str) : bool
+    {static} +typologies_checked(report : dict | None) : bool
   }
   class AssessmentRunner {
     -__verdict_engine : VerdictEngine = VerdictEngine(...)
@@ -657,6 +658,7 @@ package "Application (app/application)" {
     -__typology_ai : TypologyAI | None = None
     +STEPS : tuple[str, ...] = (...) «const»
     +FORECAST_STEP : dict[str, int] = {...} «const»
+    +RESEARCH_STEP : str = "The crime scan's research..." «const»
     --
     +__init__(config : Config | None = None, research_ai : ResearchAI | None = None, typology_ai : TypologyAI | None = None, benchmark_ai : BenchmarkAI | None = None, document_ai : DocumentAI | None = None, forecast_ai : ForecastAI | None = None, document_store : DocumentStore | None = None, response_cache : ResponseCache | None = None)
     +run(case : dict, files : list[dict] | None = None, on_step : Callable[[int, str], None] | None = None, on_failure : Callable[[str, str], bool] | None = None) : dict | None
