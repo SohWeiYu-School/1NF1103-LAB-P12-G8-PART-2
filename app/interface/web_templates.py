@@ -461,7 +461,7 @@ ASSESS_RESULT = """{% extends "base.html" %}
 <div class="panel">
   <h2>{{ section['title'] }}</h2>
   <div style="display:flex; gap:16px; margin-bottom:18px; font-size:.85rem; border-bottom:1px solid var(--line); padding-bottom:12px">
-    <span style="color:var(--muted)">{{ crime_result.get('match_results', []) | length }} typologies checked</span>
+    <span style="color:var(--muted)">{{ crime_result.get('match_results', []) | length }} typologies scanned</span>
     <span style="color:#b91c1c; font-weight:600">{{ crime_result.get('match_count', 0) }} matched</span>
     <span style="color:var(--muted)">{{ (crime_result.get('match_results', []) | length) - crime_result.get('match_count', 0) }} no match</span>
   </div>

@@ -279,7 +279,7 @@ def test_the_result_page_shows_the_crime_cards_from_the_typologies(tmp_path, mon
         return page[page.index("Crime - known patterns for his industry"):]
 
     fresh = client.get(f"/assess/result/{job_id}").get_data(as_text=True)
-    assert "1 typologies checked" in fresh and "1 matched" in fresh
+    assert "1 typologies scanned" in fresh and "1 matched" in fresh
     for shown in (typology["name"], typology["description"], "TRADE BASED ML", "HIGH MATCH",
                   typology["source_quotes"][0]["quote"]):
         assert shown in fresh, shown
@@ -310,6 +310,7 @@ def test_when_the_research_fails_the_page_says_the_typologies_were_not_checked(t
     for page in (fresh, reopened):                     # on the crime cards themselves, fresh and reopened
         cards = page[page.index("Crime - known patterns for his industry"):]
         assert "not checked against research" in cards.split("Full evidence")[0]
+        assert "typologies checked" not in page               # the header doesn't claim a check that didn't happen
 
 
 def test_assessing_a_saved_client_that_cannot_be_read_is_refused_with_a_message(web):
