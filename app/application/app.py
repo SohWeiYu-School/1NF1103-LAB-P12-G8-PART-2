@@ -279,7 +279,7 @@ class App:
             return None
         saved = self.save_assessment(result, record, on_step=self.__show_step)
         verdict = result["verdict"]
-        self.__report_view.show_verdict_report(verdict.report, crime_result=result.get("crime_result"),
+        self.__report_view.show_verdict_report(verdict, crime_result=result.get("crime_result"),
                                                typologies=result.get("typologies"))
         if saved:
             self.__ui.show_message("Assessment saved.")
@@ -339,7 +339,7 @@ class App:
             return False
         if not self.save_assessment(result, on_step=self.__show_step):
             self.__ui.show_error("Could not save the assessment.")
-        self.__report_view.show_verdict_report(result["verdict"].report, ask_for_evidence=False,
+        self.__report_view.show_verdict_report(result["verdict"], ask_for_evidence=False,
                                                crime_result=result.get("crime_result"),
                                                typologies=result.get("typologies"))
         return result["forecast"] is not None
@@ -495,8 +495,13 @@ class App:
         if matches and self.__ui.ask_yes_no("Open one in full?"):
             labels = [f"{match['client_ref']}  {match['kind']}" for match in matches]
             chosen = matches[self.__ui.ask_choice("Which one?", labels)]
-            if chosen.get("report"):
-                self.__report_view.show_verdict_report(chosen["report"])     # the combined assessment
+            if chosen.get("report"):                                         # the combined assessment
+                verdict = self.__saved_verdict(chosen)
+                if verdict is None:
+                    self.__ui.show_error("This saved assessment could not be read, so its report cannot be "
+                                         "shown. The other saved assessments are not affected.")
+                else:
+                    self.__report_view.show_verdict_report(verdict)
             else:
                 self.__report_view.show_onboarding(chosen["assessment"])     # saved before the combined verdict
 
@@ -600,6 +605,18 @@ class App:
 
     def __show_step(self, number: int, label: str) -> None:
         self.__ui.show_step(number, len(AssessmentRunner.STEPS), label)
+
+    def __saved_verdict(self, saved: dict) -> Verdict | None:
+        """A saved assessment as a Verdict holding its saved report, so it can be shown again.
+        None (and logged) if the saved outcome or report is not possible."""
+        try:
+            verdict = Verdict(str(saved.get("assessment_id") or ""), str(saved.get("client_ref") or ""),
+                              str(saved.get("assessed_at") or ""), saved.get("outcome"))
+            verdict.report = saved["report"]
+        except ValueError as error:
+            logger.error("App: the saved assessment %s cannot be read: %r", saved.get("assessment_id"), error)
+            return None
+        return verdict
 
     def __configure_logging(self) -> None:
         """Send all logging to logs/app.log. Nothing goes to the console."""

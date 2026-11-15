@@ -21,22 +21,49 @@ def _report():
     feature = Forecast(POLICY, CONFIG)
     assessment = feature.run(case, {"forecast": forecast})
     engine = VerdictEngine([CrimeScan(POLICY), DocumentEvidence(POLICY), Benchmark(POLICY, CONFIG), feature], CONFIG)
-    verdict = engine.combine(case, {"forecast": forecast, "forecast_assessment": assessment,
-                                    "markets": forecast["markets"], "declaration": forecast["declaration"]})
-    return verdict.details(), verdict.report
+    return engine.combine(case, {"forecast": forecast, "forecast_assessment": assessment,
+                                 "markets": forecast["markets"], "declaration": forecast["declaration"]})
 
 
 def test_the_verdict_report_names_the_client_and_the_verdict():
-    verdict, report = _report()
-    text = _view().format_verdict_report(report)
-    assert verdict["client_ref"] in text
-    assert verdict["verdict_label"] in text
+    verdict = _report()
+    text = _view().format_verdict_report(verdict)
+    assert verdict.client_ref in text
+    assert verdict.explanation["verdict_label"] in text
+    assert verdict.next_step in text and verdict.next_review_date in text
+    for part in verdict.report["sections"]:
+        if part["items"] and part["title"] != "Crime - known patterns for his industry":
+            assert part["title"].upper() in text
+
+
+def test_the_report_is_read_from_the_verdict_object():
+    verdict = _report()
+    verdict.report = {**verdict.report, "header": {**verdict.report["header"], "summary": "Summary from the report."}}
+    assert "Summary from the report." in _view().format_verdict_report(verdict)
 
 
 def test_the_evidence_is_laid_out_under_its_titles():
-    _, report = _report()
-    text = _view().format_evidence(report)
-    assert all(title in text for title in report["evidence_titles"][:1])
+    verdict = _report()
+    text = _view().format_evidence(verdict)
+    assert verdict.client_ref in text
+    assert all(title in text for title in verdict.report["evidence_titles"])
+
+
+def test_showing_a_verdict_prints_the_report_then_asks_for_the_evidence(capsys, monkeypatch):
+    verdict = _report()
+    asked = []
+    monkeypatch.setattr("builtins.input", lambda question="": asked.append(question) or "y")
+    _view().show_verdict_report(verdict)
+    out = capsys.readouterr().out
+    assert "COMBINED ASSESSMENT" in out and "FULL EVIDENCE  " in out
+    assert out.index("FULL EVIDENCE  ") > out.index("COMBINED ASSESSMENT")
+    assert any("Show the full evidence?" in question for question in asked)
+
+
+def test_the_evidence_is_not_offered_when_not_asked_for(capsys, monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda question="": (_ for _ in ()).throw(AssertionError(question)))
+    _view().show_verdict_report(_report(), ask_for_evidence=False)
+    assert "FULL EVIDENCE  " not in capsys.readouterr().out
 
 
 def test_an_empty_assessment_list_says_so():

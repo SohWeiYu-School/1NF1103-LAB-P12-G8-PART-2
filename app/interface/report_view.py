@@ -5,6 +5,7 @@ import textwrap
 
 from app.interface.console_ui import ConsoleUI
 from app.model.client_record import ClientRecord
+from app.model.verdict import Verdict
 
 
 class ReportView:
@@ -91,9 +92,11 @@ class ReportView:
         lines.append(div)
         return lines
 
-    def format_verdict_report(self, report: dict, crime_result: dict | None = None,
+    def format_verdict_report(self, verdict: Verdict, crime_result: dict | None = None,
                               typologies: list | None = None) -> str:
-        """The combined assessment as text: the same header, sections and evidence the web app shows."""
+        """The combined assessment as text: the same header, sections and evidence the web app shows
+        (the verdict's report)."""
+        report = verdict.report
         head = report["header"]
         symbols = {entry["mark"]: entry["symbol"] for entry in report["legend"]}
         rule = "\u2550" * ReportView.REPORT_WIDTH
@@ -122,8 +125,9 @@ class ReportView:
         lines.extend(["", "  FULL EVIDENCE: " + " \u00b7 ".join(report.get("evidence_titles", [])), rule])
         return "\n".join(lines)
 
-    def format_evidence(self, report: dict) -> str:
+    def format_evidence(self, verdict: Verdict) -> str:
         """The full evidence behind the verdict (the web app shows the same sections, collapsed)."""
+        report = verdict.report
         rule = "\u2550" * ReportView.REPORT_WIDTH
         lines = [rule, f"  FULL EVIDENCE  {report['header']['client_ref']}", rule]
         for part in report["evidence"]:
@@ -133,12 +137,12 @@ class ReportView:
         lines.append(rule)
         return "\n".join(lines)
 
-    def show_verdict_report(self, report: dict, ask_for_evidence: bool = True,
+    def show_verdict_report(self, verdict: Verdict, ask_for_evidence: bool = True,
                             crime_result: dict | None = None, typologies: list | None = None) -> None:
         """The short report, then (if the officer wants it) the full evidence."""
-        self.__ui.show("\n" + self.format_verdict_report(report, crime_result=crime_result, typologies=typologies) + "\n")
+        self.__ui.show("\n" + self.format_verdict_report(verdict, crime_result=crime_result, typologies=typologies) + "\n")
         if ask_for_evidence and self.__ui.ask_yes_no("Show the full evidence?"):
-            self.__ui.show("\n" + self.format_evidence(report) + "\n")
+            self.__ui.show("\n" + self.format_evidence(verdict) + "\n")
 
     def _field_name(self, key: str) -> str:
         return ReportView.FIELD_NAMES.get(key, key.replace("_", " ").title())

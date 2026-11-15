@@ -163,6 +163,41 @@ def test_the_saved_assessment_keeps_its_layout(app):
     assert saved["document_evidence"] == json.loads(json.dumps(result["evidence"]))
 
 
+def _saved_assessment(app) -> dict:
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record)
+    case, _ = app.read_case(record)
+    fake_services.save_forecast_replies(app.response_cache(), case)
+    result = app.assess(case)
+    return app.assessments().find(app.save_assessment(result, record))
+
+
+def test_a_saved_assessment_can_be_opened_from_the_list(app, monkeypatch, capsys):
+    saved = _saved_assessment(app)
+    capsys.readouterr()
+    _answers(monkeypatch, "1", "y", "1", "y")         # every outcome, open one, the first, the evidence
+    app.list_assessments()
+    out = capsys.readouterr().out
+    assert f"COMBINED ASSESSMENT  {saved['client_ref']}" in out
+    assert saved["report"]["header"]["summary"][:40] in " ".join(out.split())
+    assert "FULL EVIDENCE  " in out
+
+
+def test_a_damaged_saved_assessment_is_reported_not_shown_or_crashed(app, tmp_path, monkeypatch, capsys, caplog):
+    saved = _saved_assessment(app)
+    records = app.assessments().load()
+    records[0]["outcome"] = "FINE"                    # not an outcome
+    with open(tmp_path / "local database" / "ai_assessments.json", "w", encoding="utf-8") as handle:
+        json.dump(records, handle)
+    capsys.readouterr()
+    _answers(monkeypatch, "1", "y", "1")
+    app.list_assessments()
+    out = capsys.readouterr().out
+    assert "This saved assessment could not be read" in out
+    assert "COMBINED ASSESSMENT" not in out
+    assert saved["assessment_id"] in caplog.text and "FINE" in caplog.text
+
+
 def test_the_menu_can_list_clients_and_leave(app, monkeypatch, capsys):
     app.clients().save(sample_case())
     _answers(monkeypatch, "6", "", "8")
