@@ -73,7 +73,7 @@ class VerdictEngine:
         status = str(case.get("claims", {}).get("pep_status") or "").strip().lower()
         return status not in self.__policy["verdict"]["no_pep_values"]
 
-    def _type_patterns(self, forecast: dict | None, assessment: dict | None, crime_result: dict | None,
+    def __type_patterns(self, forecast: dict | None, assessment: dict | None, crime_result: dict | None,
                       typologies: list[Typology] | None) -> list[dict]:
         """One row per crime person type: does its money fit (forecast), which researched pattern it
         was built from, and how many of that pattern's warning signs fired (crime scan)."""
@@ -130,7 +130,7 @@ class VerdictEngine:
             return f"how person type {parts[2]} reacts to events"
         return piece or "an early step"
 
-    def _agreement(self, checks: list[Check]) -> list[dict]:
+    def __agreement(self, checks: list[Check]) -> list[dict]:
         """Group the findings that count (failed, or a crime warning sign) by theme, most agreement first."""
         themes: dict = {}
         for check in checks:
@@ -236,7 +236,7 @@ class VerdictEngine:
         honest = None
         if forecast and assessment:
             honest = self._feature("forecast").honest_numbers(case, forecast, assessment)
-        types = self._type_patterns(forecast, assessment, results.get("crime_result"), results.get("typologies"))
+        types = self.__type_patterns(forecast, assessment, results.get("crime_result"), results.get("typologies"))
         evidence = results.get("evidence")
         docs = self._feature_checks("documents", {"evidence": evidence, "types": types})
         for t in types:                                 # which of his documents support each crime story
@@ -388,17 +388,17 @@ class VerdictEngine:
             "verdict_label": VerdictEngine.VERDICT_LABELS[level],
             "summary": summary,
             "reasons": reasons,
-            "agreement": self._agreement(checks),
+            "agreement": self.__agreement(checks),
             "types": types,
             "documents": (self._documents(assessment, bench, crime, results.get("typologies"), case, docs)
                           if level != "PASSED" else []),
             "clean": clean,
-            "evidence": self._evidence(case, results, assessment, honest),
+            "evidence": self.__evidence(case, results, assessment, honest),
         }
         verdict.report = self.__report(verdict)
         return verdict
 
-    def _evidence(self, case: dict, results: dict, assessment: dict | None, honest: dict | None) -> list[dict]:
+    def __evidence(self, case: dict, results: dict, assessment: dict | None, honest: dict | None) -> list[dict]:
         """The detail behind the verdict, shown under "Full evidence"."""
         sections = []
         evidence = results.get("evidence") or {}
