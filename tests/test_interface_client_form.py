@@ -1,5 +1,7 @@
 """ClientForm: the questions that create a client. The typed answers are a hard-coded list."""
 
+import pytest
+
 from app.interface.client_form import ClientForm
 from app.interface.console_ui import ConsoleUI
 from app.interface.report_view import ReportView
@@ -21,6 +23,40 @@ def test_a_new_client_reference_is_made_up_of_cl_and_eight_characters():
     first, second = _form().generate_client_id(), _form().generate_client_id()
     assert first.startswith("CL-") and len(first) == 11
     assert first != second
+
+
+def test_a_new_reference_is_never_one_that_is_already_taken():
+    asked = []
+
+    def taken(ref):
+        asked.append(ref)
+        return len(asked) < 4                       # the first three are taken, the fourth is free
+
+    ref = _form().generate_client_id(taken)
+    assert ref == asked[-1] and len(set(asked)) == 4
+
+
+def test_when_every_reference_is_taken_a_clear_error_is_raised_after_a_few_tries():
+    asked = []
+    with pytest.raises(ValueError, match="could not be made"):
+        _form().generate_client_id(lambda ref: asked.append(ref) or True)
+    assert len(asked) == ClientForm.MAX_ID_TRIES
+
+
+def test_a_failing_check_is_an_error_not_a_free_reference():
+    def broken(ref):
+        raise ValueError("the clients cannot be read")
+
+    with pytest.raises(ValueError, match="cannot be read"):
+        _form().generate_client_id(broken)
+
+
+def test_the_new_client_questions_stop_with_a_message_when_no_reference_can_be_made(capsys):
+    def broken(ref):
+        raise ValueError("We can't load the client database right now. Please try again later.")
+
+    assert _form().create_new_client(is_taken_fn=broken) is None
+    assert "client database" in capsys.readouterr().out
 
 
 def test_editing_with_no_changes_returns_the_same_record(monkeypatch):

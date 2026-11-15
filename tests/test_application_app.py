@@ -71,6 +71,25 @@ def _save_replies_for_the_samples(app):
             fake_services.save_forecast_replies(app.response_cache(), case)
 
 
+def test_a_new_client_reference_is_checked_against_the_saved_clients(app, tmp_path):
+    saved = {**sample_case(), "client_ref": "CL-TAKEN001"}
+    app.clients().save(saved)
+    assert app.client_ref_taken("CL-TAKEN001") is True
+    assert app.client_ref_taken("cl-taken001") is True          # upper and lower case are the same reference
+    assert app.client_ref_taken("CL-FREE0001") is False
+    assert app.new_client_ref().startswith("CL-")
+
+
+def test_a_client_file_that_cannot_be_read_is_an_error_not_a_free_reference(app, tmp_path, caplog):
+    _damage(tmp_path, "sow_cases.json")
+    with pytest.raises(ValueError) as error:
+        app.client_ref_taken("CL-ANYTHING")
+    assert str(error.value) == App.CLIENTS_UNAVAILABLE
+    with pytest.raises(ValueError):
+        app.new_client_ref()
+    assert "App.client_ref_taken" in caplog.text
+
+
 def test_every_sample_is_assessed_from_saved_replies_with_no_ai(app, capsys):
     _save_replies_for_the_samples(app)
     assert app.start(["--all-samples"]) == 0

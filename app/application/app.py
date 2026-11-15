@@ -243,7 +243,8 @@ class App:
             choice = self.__ui.show_app_menu()
             if choice == "1":
                 record = self.__client_form.create_new_client(save_fn=self.save_client,
-                                                             upload_fn=self.upload_document)
+                                                             upload_fn=self.upload_document,
+                                                             is_taken_fn=self.client_ref_taken)
                 if record is not None:
                     self.__maybe_assess(record)
             elif choice == "2":
@@ -491,7 +492,11 @@ class App:
 
         # 3. Build the record and ask for anything missing
         builder = self.record_builder()
-        client_ref = self.__client_form.generate_client_id()
+        try:
+            client_ref = self.new_client_ref()
+        except ValueError as error:
+            self.__ui.show_error(str(error))
+            return None
         try:
             document_record, _ = builder.build(extracted, client_ref)
         except ValueError as error:
@@ -551,8 +556,18 @@ class App:
         return DocumentRecordBuilder(self.__config, date or self.today())
 
     def new_client_ref(self) -> str:
-        """A new, unused client reference."""
-        return self.__client_form.generate_client_id()
+        """A new client reference that no saved client has. Raises ValueError, with a message that
+        is safe to show, if the saved clients cannot be read or no free reference was found."""
+        return self.__client_form.generate_client_id(self.client_ref_taken)
+
+    def client_ref_taken(self, client_ref: str) -> bool:
+        """True if a saved client has this reference. Raises ValueError, with a message that is
+        safe to show, if the client database cannot be read (that is never "not taken")."""
+        try:
+            return self.__clients.find(client_ref) is not None
+        except (OSError, ValueError) as error:
+            logger.error("App.client_ref_taken: the client records cannot be read: %r", error)
+            raise ValueError(App.CLIENTS_UNAVAILABLE) from error
 
     def validate_case(self, case: object) -> list[str]:
         """Everything wrong with a case. [] means it can be assessed."""

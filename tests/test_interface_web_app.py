@@ -7,6 +7,7 @@ import shutil
 import time
 
 import pytest
+from markupsafe import escape
 
 from app.application.app import App
 from app.interface.rate_limiter import RateLimiter
@@ -539,7 +540,10 @@ def test_saving_a_new_client_into_a_damaged_file_says_it_was_not_saved_and_keeps
     _, site, client = web
     path = _damage(tmp_path, "sow_cases.json")
     reply = client.post("/client/new", data=_form_fields(site, sample_case()))
-    assert b"client was not saved" in reply.data and b"database connection" not in reply.data
+    # the new reference can't be checked against the unreadable file, so the page says the database
+    # can't be read (an error, never "the reference is free") and nothing is saved
+    assert escape(App.CLIENTS_UNAVAILABLE).encode() in reply.data
+    assert b"database connection" not in reply.data
     assert path.read_bytes() == b"[{broken"
 
 

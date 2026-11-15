@@ -678,7 +678,11 @@ class WebApp:
         if request.method == "POST":
             values = self.values_from_form(request.form)
             documents = self._documents_on_save(request.form, request.files.getlist("autofill_files"))
-            record, problems, field_errors = self.build_record(values, self.__app.new_client_ref())
+            try:
+                new_ref = self.__app.new_client_ref()
+            except ValueError as error:          # the saved clients can't be checked, so no reference is made
+                return self.show_form("New client", values, [str(error)], {}, documents=documents)
+            record, problems, field_errors = self.build_record(values, new_ref)
             if not problems:
                 problems = self.check_record(record)
                 field_errors = {}

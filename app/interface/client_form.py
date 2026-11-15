@@ -38,10 +38,20 @@ class ClientForm:
         self.__ui: ConsoleUI = ui or ConsoleUI()
         self.__report_view: ReportView = report_view or ReportView(self.__ui)
 
-    def generate_client_id(self) -> str:
-        """Generate a unique client reference ID."""
+    MAX_ID_TRIES: int = 10
 
-        return "CL-" + uuid.uuid4().hex[:8].upper()
+    def generate_client_id(self, is_taken_fn: Callable[[str], bool] | None = None) -> str:
+        """Generate a client reference ID. is_taken_fn(ref) says whether a saved client already has
+        that reference; a taken one is thrown away and another made, up to MAX_ID_TRIES times.
+        Raises ValueError (with a message that is safe to show) if no free reference was found, and
+        whatever is_taken_fn raises if the saved clients cannot be checked: that is an error, never
+        "the reference is free"."""
+        for _ in range(ClientForm.MAX_ID_TRIES):
+            client_ref = "CL-" + uuid.uuid4().hex[:8].upper()
+            if is_taken_fn is None or not is_taken_fn(client_ref):
+                return client_ref
+        logger.error("ClientForm.generate_client_id: %d references in a row were already taken", ClientForm.MAX_ID_TRIES)
+        raise ValueError("A new client reference could not be made. Please try again.")
 
     def get_client_profile(self) -> dict:
         """Collect name, nationality and current position."""
@@ -223,8 +233,10 @@ class ClientForm:
         return documents
 
     def create_new_client(self, save_fn: Callable[[ClientRecord], bool] | None = None,
-                          upload_fn: Callable[[str], str | None] | None = None) -> ClientRecord | None:
-        """Collect, review and optionally save a new client. save_fn is given the ClientRecord.
+                          upload_fn: Callable[[str], str | None] | None = None,
+                          is_taken_fn: Callable[[str], bool] | None = None) -> ClientRecord | None:
+        """Collect, review and optionally save a new client. save_fn is given the ClientRecord;
+        is_taken_fn(ref) says whether a saved client already has that reference.
         Returns the saved record when the officer wants to assess it now, otherwise None."""
 
         self.__ui.show("\n")
@@ -233,7 +245,11 @@ class ClientForm:
         self.__ui.show("=" * 60)
 
         # Generate client reference
-        client_ref = self.generate_client_id()
+        try:
+            client_ref = self.generate_client_id(is_taken_fn)
+        except ValueError as error:
+            self.__ui.show_error(str(error))
+            return None
 
         self.__ui.show(f"\nGenerated Client Reference: {client_ref}")
 
