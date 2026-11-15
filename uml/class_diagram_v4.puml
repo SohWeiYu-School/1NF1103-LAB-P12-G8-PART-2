@@ -28,11 +28,11 @@ package "Data Manager (app/data)" {
     -__standardise(record : dict) : dict
   }
   class CloudSync {
-    -__local : Repository = None
-    -__remote : DatabaseRepository = None
+    -__local : Repository | None = None
+    -__remote : DatabaseRepository | None = None
     -__state_path : str = ".../sync_state.json"
     --
-    +__init__(local : Repository, remote : DatabaseRepository, state_path : str = ".../sync_state.json")
+    +__init__(local : Repository | None = None, remote : DatabaseRepository | None = None, state_path : str = os.path.join(JsonRepository.DATA_DIR, "sync_state.json"))
     +sync() : dict
     +is_online() : bool
     -__load_state() : dict
@@ -43,7 +43,7 @@ package "Data Manager (app/data)" {
     -__folder : str = "config"
     +FILE_NAMES : tuple[str, ...] = ("policy", "vocabulary") «const»
     --
-    +__init__(folder : str = "config")
+    +__init__(folder : str = os.path.join(ROOT_DIR, "config"))
     +read(name : str) : dict
     +problems() : list[str]
   }
@@ -76,17 +76,17 @@ package "Data Manager (app/data)" {
     --
     +__init__(max_chars : int = 40_000)
     +create(file_name : str) : DocumentReader | None
-    +supported_types() : set[str]
+    +supported_types() : list[str]
   }
   class DocumentStore {
     -__folder : str = "data/documents"
     -__reader_factory : DocumentReaderFactory = None
     --
-    +__init__(folder : str = "data/documents")
+    +__init__(folder : str = "data/documents", root : str = ROOT_DIR)
     +upload(file_path : str) : str | None
     +download(file_id : str, output_path : str) : bool
     +read_all(entries : list[dict]) : list[dict]
-    +read_for_extraction(file_path : str) : dict
+    +read_for_extraction(file_path : str, file_name : str | None = None) : dict
     +list_folder(folder : str) : list[str] | None
   }
   class ExcelReader {
@@ -104,7 +104,7 @@ package "Data Manager (app/data)" {
   abstract class JsonRepository {
     #_path : str = ""
     #_key_field : str = "client_ref"
-    +DATA_DIR : str = "data/local database" «const»
+    +DATA_DIR : str = ".../data/local database" «const»
     --
     +__init__(path : str, key_field : str)
     {abstract} +save(record : dict) : bool
@@ -415,40 +415,40 @@ package "Logic Manager (app/logic)" {
     -__market_model : MarketModel = None
     -__paths : list[dict] = []
     --
-    +__init__(market_model : MarketModel)
-    +build(record : dict, last_year : int) : list[dict]
-    +income_up_to(year : int) : dict
+    +__init__(market_model : MarketModel | None = None, asset_models : list[dict] | None = None)
+    +build(record : dict, last_year : int, scenario : str = "steady", shocks : dict | None = None) : list[dict]
+    +income_up_to(path : dict, year : int) : dict
   }
   class Benchmark {
     -__config : Config = None
     +BENCHMARK_LABELS : dict = {...} «const»
     +COMPOSITION_RULES : dict = {...} «const»
     --
-    +__init__(policy : dict = {}, config : Config = None)
+    +__init__(policy : dict | None = None, config : Config | None = None)
     +run(case : dict, ai_data : dict) : dict
     +checks(context : dict) : list[Check]
     -__is_pep(case : dict) : bool
-    -__total_wealth(client : dict, ai : dict) : dict
-    -__liquidity(client : dict, ai : dict) : dict
-    -__composition(client : dict, ai : dict) : dict
-    -__velocity(client : dict, ai : dict) : dict
-    -__counterparties(declared : dict, expected : dict) : dict
-    -__jurisdiction(declared : dict, expected : dict) : dict
+    -__total_wealth(client_data : dict, ai_data : dict) : float
+    -__liquidity(client_data : dict, ai_data : dict) : float
+    -__composition(client_data : dict, ai_data : dict) : list[dict]
+    -__velocity(client_data : dict, ai_data : dict) : tuple[float | None, float | None]
+    -__counterparties(declared : list[str], expected : list[str]) : list[str]
+    -__jurisdiction(declared : list[str], expected : list[str]) : list[str]
   }
   class CareerSavings {
     -__pay : dict = {}
     -__rows : list[dict] = []
     --
-    +__init__(pay : dict = {})
+    +__init__(pay : dict | None = None)
     +rows(start : int, end : int) : list[dict]
-    +pay_total(level : str) : float
+    +pay_total(pay : dict, level : str) : float
   }
   class CaseReader {
     -__today : str = ""
     -__PRESENT_WORDS : tuple = (...) «const»
     --
     +__init__(today : str = "")
-    +forecasting_case(record : dict) : tuple[dict, list]
+    +forecasting_case(record : dict) : tuple[dict | None, list[str]]
     {static} +read_amount(text : str | int | float | None) : float | None
     {static} +read_year(text : str | int | float | None) : int | None
   }
@@ -467,27 +467,27 @@ package "Logic Manager (app/logic)" {
   class CounterpartyUnnamed {
     +NAME : str = "counterparty_unnamed" «const»
     --
-    +__init__(policy : dict = {})
+    +__init__(policy : dict | None = None)
     +fires(declaration : Declaration) : bool
   }
   class CrimeScan {
     -__indicators : list[Indicator] = []
     -__COUNTRY_TO_ISO : dict = {...} «const»
     --
-    +__init__(policy : dict = {})
+    +__init__(policy : dict | None = None)
     +run(case : dict, ai_data : dict) : dict
     +checks(context : dict) : list[Check]
     +flags(declaration : Declaration) : list[str]
     +verify_research(research : dict) : list[ResearchReport]
     +verify_typology_sources(typologies : list[dict], reports : list[ResearchReport]) : list[Typology]
     +match_typologies(declaration : Declaration, typologies : list[Typology]) : list[MatchResult]
-    -__categorise_match(core_fired : list[str], core : list[str], supporting_fired : list[str]) : str
-    -__domain_is_trusted(url : str) : bool
-    -__to_iso(value : str) : str
+    -__categorise_match(core_fired : list, core : list, supporting_fired : list) : str
+    -__domain_is_trusted(url : str, trusted_domains : list[str]) : bool
+    -__to_iso(value : str | None, warnings : list) : str | None
   }
   class DocumentEvidence {
     --
-    +__init__(policy : dict = {})
+    +__init__(policy : dict | None = None)
     +run(case : dict, ai_data : dict) : dict
     +checks(context : dict) : list[Check]
   }
@@ -496,11 +496,11 @@ package "Logic Manager (app/logic)" {
     -__today : str = ""
     -__policy : dict = {}
     --
-    +__init__(client_ref : str, today : str, policy : dict)
-    +build(extracted : dict) : tuple[ClientRecord, list]
-    +missing_fields(record : ClientRecord) : list[str]
-    +summarise(record : ClientRecord) : list[dict]
-    -__age_from_birth(date_of_birth : str) : int | None
+    +__init__(config : Config | None = None, today : str = "")
+    +build(extracted : dict, client_ref : str) : tuple[ClientRecord, list[str]]
+    +missing_fields(record : ClientRecord) : list[dict]
+    +summarise(client : ClientRecord, doc_client : ClientRecord) : list[dict]
+    -__age_from_birth(date_of_birth : str | None) : int | None
   }
   class Forecast {
     -__forecast : dict = {}
@@ -510,13 +510,13 @@ package "Logic Manager (app/logic)" {
     -__pay_calibrator : PayCalibrator = None
     -__config : Config = None
     --
-    +__init__(policy : dict = {}, config : Config = None)
+    +__init__(policy : dict | None = None, config : Config | None = None)
     +run(case : dict, ai_data : dict) : dict
     +checks(context : dict) : list[Check]
-    +economy_brief() : dict
-    +document_request(failures : list[Check]) : dict
-    -__honest_numbers(case : dict) : dict
-    -__rank_documents(candidates : list[str]) : list[str]
+    +economy_brief(markets : dict | None) : dict | None
+    +document_request(failures : list[dict], candidates : list[str]) : list[dict]
+    -__honest_numbers(case : dict, assessment : dict) : dict
+    -__rank_documents(candidates : list[str]) : list[dict]
     -__data_quality() : dict
   }
   class Formatter <<utility>> {
@@ -530,25 +530,25 @@ package "Logic Manager (app/logic)" {
     -__asset_path : AssetPath = None
     -__paths : dict = {}
     --
-    +__init__(market_model : MarketModel)
+    +__init__(market_model : MarketModel | None = None, forecast : dict | None = None, policy : dict | None = None)
     +career_savings() : CareerSavings
-    +expected_paths(record : dict) : dict
-    +event_impacts(record : dict) : list
-    +divergence_years() : dict
-    +honest_wealth(record : dict, year : int) : dict
+    +expected_paths(record : dict, savings_rows : list[dict]) : dict
+    +event_impacts(record : dict, savings_rows : list[dict]) : list[dict]
+    +divergence_years(paths : dict) : list[dict]
+    +honest_wealth(record : dict, savings_rows : list[dict], paths : list[dict], year : int) : dict
     +monitoring_ranges(year : int) : dict
   }
   class GiftOrInheritanceUnnamed {
     +NAME : str = "gift_or_inheritance_unnamed" «const»
     --
-    +__init__(policy : dict = {})
+    +__init__(policy : dict | None = None)
     +fires(declaration : Declaration) : bool
   }
   abstract class Indicator {
     #_policy : dict = {}
     +NAME : str = "indicator" «const»
     --
-    +__init__(policy : dict = {})
+    +__init__(policy : dict | None = None)
     {abstract} +fires(declaration : Declaration) : bool
   }
   class MarketModel {
@@ -556,37 +556,37 @@ package "Logic Manager (app/logic)" {
     -__outlook : dict = {}
     -__scenario_chances : dict = {}
     --
-    +__init__(forecast : dict = {})
+    +__init__(forecast : dict | None = None)
     +history() : dict
     +outlook() : dict
     +scenario_chances() : dict
-    +change(market_id : str, year : int, scenario : str) : float
+    +change(market_id : str, year : int, scenario : str, level : str = "typical", shocks : dict | None = None) : float
   }
   class OnboardingAssessor {
     -__future_paths : FuturePaths = None
     -__policy : dict = {}
     -__config : Config = None
     --
-    +__init__(future_paths : FuturePaths, policy : dict, config : Config)
-    +evaluate(record : dict, forecast : dict) : dict
-    +stable_outcome(outcome : str, shifted : list) : str
-    -__check_asset_values(record : dict) : list
-    -__check_affordability(record : dict) : list
-    -__check_jurisdictions(record : dict) : list
-    -__decide_onboarding(fits : dict) : str
+    +__init__(future_paths : FuturePaths | None = None, policy : dict | None = None, config : Config | None = None)
+    +evaluate(record : dict, forecast : dict, savings_rows : list[dict], paths : list[dict], scale : float = 1.0) : dict
+    +stable_outcome(outcome : str, outcomes_when_shifted : dict) : tuple[str, bool]
+    -__check_asset_values(record : dict, forecast : dict, paths : list[dict], end : int, scale : float = 1.0) : list[dict]
+    -__check_affordability(record : dict, savings_rows : list[dict], paths : list[dict], behaviour : dict, scale : float = 1.0) : list[dict]
+    -__check_jurisdictions(record : dict, forecast : dict) : dict
+    -__decide_onboarding(fits : dict, t1_affordability_breach : bool, other_failures : list[str]) : str
   }
   class PayCalibrator {
     -__career_savings : CareerSavings = None
     -__policy : dict = {}
     --
-    +__init__(career_savings : CareerSavings, policy : dict)
-    +calibrate(case : dict, documented_pay : dict) : list
+    +__init__(career_savings : CareerSavings | None = None, policy : dict | None = None)
+    +calibrate(case : dict, forecast : dict, documented_pay : list[dict]) : tuple[dict, list[dict]]
   }
   class RelatedPartyTransaction {
     +NAME : str = "related_party_transaction" «const»
     -__KEYWORDS : list[str] = [...] «const»
     --
-    +__init__(policy : dict = {})
+    +__init__(policy : dict | None = None)
     +fires(declaration : Declaration) : bool
   }
   abstract class RiskAnalysis {
@@ -594,22 +594,22 @@ package "Logic Manager (app/logic)" {
     #_results : dict = {}
     +NAME : str = "feature" «const»
     --
-    +__init__(policy : dict = {})
+    +__init__(policy : dict | None = None)
     {abstract} +run(case : dict, ai_data : dict) : dict
     {abstract} +checks(context : dict) : list[Check]
-    #_check(check : str, label : str, theme : str, status : str, detail : str, explanation : str = "", group : str = "", sources : list[str] = [], supports : list[str] = []) : Check
-    #_jump_years(case : dict) : list[int]
+    #_check(check : str, label : str, theme : str, status : str, detail : str, explanation : str = "", group : str = "", sources : list[str] | None = None, supports : list[str] | None = None) : Check
+    #_jump_years(case : dict) : tuple[float | None, int | None]
   }
   class SourceContradictsOccupation {
     +NAME : str = "source_contradicts_occupation" «const»
     --
-    +__init__(policy : dict = {})
+    +__init__(policy : dict | None = None)
     +fires(declaration : Declaration) : bool
   }
   class UnvaluedSource {
-    +NAME : str = "unvalued_source" «const»
+    +NAME : str = "unvalued_source_present" «const»
     --
-    +__init__(policy : dict = {})
+    +__init__(policy : dict | None = None)
     +fires(declaration : Declaration) : bool
   }
   class VerdictEngine {
@@ -621,15 +621,15 @@ package "Logic Manager (app/logic)" {
     +MARKS : dict = {...} «const»
     +REPORT_LEGEND : list = [...] «const»
     --
-    +__init__(features : list[RiskAnalysis], config : Config)
+    +__init__(features : list[RiskAnalysis] | None = None, config : Config | None = None)
     +combine(case : dict, results : dict) : Verdict
-    +describe_piece(case : dict, piece : str) : str
+    +describe_piece(case : dict, piece : str | None) : str
     -__build_context(case : dict, results : dict) : dict
     -__collect_checks(context : dict) : list[Check]
     -__report(verdict : Verdict) : dict
-    -__agreement(checks : list[Check]) : dict
-    -__type_patterns(results : dict) : list
-    -__evidence(case : dict, results : dict) : dict
+    -__agreement(checks : list[Check]) : list[dict]
+    -__type_patterns(forecast : dict | None, assessment : dict | None, crime_result : dict | None, typologies : list[Typology] | None) : list[dict]
+    -__evidence(case : dict, results : dict, assessment : dict | None, honest : dict | None) : list[dict]
   }
 }
 
@@ -663,7 +663,7 @@ package "Domain Model (app/model)" {
     -__supports : list[str] = [] {get}
     +STATUSES : tuple[str, ...] = ("passed", "failed", "weak", "explained", "skipped", "info") «const»
     --
-    +__init__(feature : str, check : str, label : str, theme : str, status : str = "passed", detail : str = "", explanation : str = "", group : str = "", sources : list[str] = [], supports : list[str] = [])
+    +__init__(feature : str = "", check : str = "", label : str = "", theme : str = "", status : str = "passed", detail : str = "", explanation : str = "", group : str = "", sources : list[str] | None = None, supports : list[str] | None = None, extra : dict | None = None)
     +failed() : bool
     +to_dict() : dict
     -__check_status(status : str) : None
@@ -674,7 +674,7 @@ package "Domain Model (app/model)" {
     -__amount : float | None = None {get, set}
     -__occupation_mismatch : bool = False {get}
     --
-    +__init__(source_type : str, counterparty : str | None, amount : float | None, occupation_mismatch : bool)
+    +__init__(source_type : str = "", counterparty : str | None = None, amount : float | None = None, occupation_mismatch : bool = False, amount_explained : bool = False, source_id : str | None = None, description : str = "", start_year : int | None = None, end_year : int | None = None, country : str | None = None, quote : str = "", linked_position_index : int | None = None, linked_asset_index : int | None = None, layout : tuple[str, ...] = READING_KEYS)
     +is_gift_or_inheritance() : bool
     +has_named_counterparty() : bool
     +is_valued() : bool
@@ -690,7 +690,7 @@ package "Domain Model (app/model)" {
     -__biggest_wealth_jump : float | None = None {get, set}
     -__wealth_jump_years : int | None = None {get, set}
     --
-    +__init__(declared_net_worth : float | None, expected_aum : float | None, pep_status : str, asset_composition : dict, wealth_countries : list[str], declared_counterparties : list[str], biggest_wealth_jump : float | None = None, wealth_jump_years : int | None = None)
+    +__init__(declared_net_worth : float | None = None, expected_aum : float | None = None, pep_status : str = "", asset_composition : dict | None = None, wealth_countries : list[str] | None = None, declared_counterparties : list[str] | None = None, biggest_wealth_jump : float | None = None, wealth_jump_years : int | None = None, extra : dict | None = None)
     +is_pep() : bool
     +liquid_share() : float
     +problems() : list[str]
@@ -715,7 +715,7 @@ package "Domain Model (app/model)" {
     -__sow_declaration : str = "" {get, set}
     -__career_history : list[Job] = []
     -__investments : list[Investment] = []
-    -__claims : Claims = None
+    -__claims : Claims | None = None
     -__declaration : Declaration = Declaration()
     -__supporting_documents : list[dict] = []
     -__review_status : ReviewStatus = ReviewStatus() {get}
@@ -747,14 +747,14 @@ package "Domain Model (app/model)" {
     -__policy : dict = {} {get}
     -__vocabulary : dict = {} {get}
     --
-    +__init__(policy : dict, vocabulary : dict)
+    +__init__(policy : dict | None = None, vocabulary : dict | None = None)
     +category_name(code : str) : str
     +same_country(name : str) : str
   }
   class Declaration {
     -__sources : list[ClaimedSource] = []
     --
-    +__init__(sources : list[dict] = [])
+    +__init__(sources : list[dict] | None = None)
     +sources() : list[ClaimedSource]
     +add_source(details : dict) : ClaimedSource
     +unnamed_count() : int
@@ -762,20 +762,20 @@ package "Domain Model (app/model)" {
   class Investment {
     -__asset_type : str = "" {get}
     -__country : str = "" {get}
-    -__year_acquired : int = 0 {get, set}
+    -__year_acquired : int | None = 0 {get, set}
     -__price_paid : float | None = None {get, set}
-    -__current_declared_value : float = 0.0 {get, set}
-    -__income_produced : float = 0.0 {get, set}
+    -__current_declared_value : float | None = 0.0 {get, set}
+    -__income_produced : float | None = 0.0 {get, set}
     -__payment_method : str | None = None {get}
     --
-    +__init__(asset_type : str, country : str, year_acquired : int, price_paid : float | None, current_declared_value : float, payment_method : str | None, income_produced : float)
+    +__init__(asset_type : str = "", country : str = "", year_acquired : int | None = None, price_paid : float | None = None, current_declared_value : float | None = None, payment_method : str | None = None, income_produced : float | None = None, extra : dict | None = None)
     +category(policy : dict) : str
     +to_dict() : dict
     -__check_amount(value : float | None, allow_zero : bool) : None
     -__check_payment_method(method : str | None) : None
   }
   class Job {
-    -__start_year : int = 0 {get, set}
+    -__start_year : int | None = 0 {get, set}
     -__end_year : int | None = None {get, set}
     -__occupation : str = "" {get}
     -__seniority : str = "" {get}
@@ -784,18 +784,18 @@ package "Domain Model (app/model)" {
     -__employer_size : str = "" {get}
     -__country : str = "" {get}
     --
-    +__init__(start_year : int, end_year : int | None, occupation : str, seniority : str, industry : str, employer_name : str, employer_size : str, country : str)
+    +__init__(start_year : int | None = None, end_year : int | None = None, occupation : str = "", seniority : str = "", industry : str = "", employer_name : str = "", employer_size : str = "", country : str = "", extra : dict | None = None)
     +is_current() : bool
     +end_or(this_year : int) : int
     +problems() : list[str]
     +to_dict() : dict
-    -__check_years(start_year : int, end_year : int | None) : None
+    -__check_years(start_year : int | None, end_year : int | None) : None
   }
   class MatchResult {
     -__typology : Typology = None {get}
     -__core_fired : list[str] = [] {get}
     --
-    +__init__(typology : Typology, core_fired : list[str])
+    +__init__(typology : Typology | None = None, core_fired : list[str] | None = None, supporting_fired : list[str] | None = None, category : str = "no_match")
     +breached : bool «property»
   }
   class ResearchReport {
@@ -803,7 +803,7 @@ package "Domain Model (app/model)" {
     -__url : str = "" {get}
     -__excerpts : list[str] = [] {get}
     --
-    +__init__(report_id : str, url : str, excerpts : list[str])
+    +__init__(report_id : str = "", url : str = "", excerpts : list[str] | None = None, organisation : str = "", title : str = "", year : int | None = None, summary : list[str] | None = None, retrieved_at : str = "")
     +domain() : str
     +contains_quote(quote : str) : bool
   }
@@ -823,7 +823,7 @@ package "Domain Model (app/model)" {
     -__name : str = "" {get}
     -__indicators : list[dict] = [] {get}
     --
-    +__init__(typology_id : str, name : str, indicators : list[dict])
+    +__init__(typology_id : str = "", name : str = "", indicators : list[dict] | None = None, source_ids : list[str] | None = None, crime_category : str = "", description : str = "", source_quotes : list[dict] | None = None, typical_documents : list[str] | None = None)
     +core_indicators() : list[str]
     +cited_report_ids() : list[str]
   }
@@ -840,7 +840,7 @@ package "Domain Model (app/model)" {
     -__report : dict = {} {get, set}
     +OUTCOMES : tuple[str, ...] = ("PASSED", "MANUAL_REVIEW", "RISKY", "SERIOUS_RISK") «const»
     --
-    +__init__(assessment_id : str, client_ref : str, assessed_at : str, outcome : str, next_step : str = "", next_review_date : str = "", notes : list[str] = [], not_run : list[str] = [])
+    +__init__(assessment_id : str = "", client_ref : str = "", assessed_at : str = "", outcome : str = "MANUAL_REVIEW", next_step : str = "", next_review_date : str = "", notes : list[str] | None = None, not_run : list[str] | None = None)
     +add_check(check : Check) : None
     +checks() : list[Check]
     +to_dict() : dict

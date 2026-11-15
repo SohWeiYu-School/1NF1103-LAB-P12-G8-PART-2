@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `73476a7` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `295f6de` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -14,7 +14,7 @@ Checked code at commit `73476a7` against `uml/class_diagram_v4.puml`, which is c
 
 **What was compared:** class presence, kind, package and parent; attribute name, visibility, type and starting value; `{get}` / `{get, set}` properties; «const» name, type and value; method name, visibility, parameters (names, order, types, defaults), return type, «static», abstract; every relationship's kind, direction, verb and multiplicity; class-to-class links in the code that have no UML line; module-level functions (only `app/ai/ai_caller.py`: ✅); the main.py note.
 
-**Not checked (can't be, statically):** method behaviour; 17 values the UML shortens with `...` (listed at the end).
+**Not checked (can't be, statically):** method behaviour; 20 values the UML shortens with `...` (listed at the end).
 
 **Area** is the feature area of the class, to help split the work. It is a best guess, so confirm it with the team. Don't change a teammate's files without asking them.
 
@@ -24,12 +24,12 @@ Checked code at commit `73476a7` against `uml/class_diagram_v4.puml`, which is c
 |---|---|---|---|
 | 1 | Structure: classes and inheritance | 0 | Code + UML |
 | 2 | Graded code rules: types and `__init__` | 0 | Code |
-| 3 | Same member, different details | 124 | Decide per item |
+| 3 | Same member, different details | 0 | Decide per item |
 | 4 | In UML, missing in code | 36 | Decide per item |
 | 5 | In code, missing from UML | 485 | UML |
-| 6 | Minor: default and starting values | 91 | UML |
+| 6 | Minor: default and starting values | 76 | UML |
 | 7 | Relationships (arrows, verbs, multiplicities) and the main.py note | 42 | Mostly UML |
-| | **Total** | **778** | |
+| | **Total** | **639** | |
 
 Pairs where only the underscores differ (`__x` in UML, `_x` in code) are merged into one item in stage 3, so the total is lower than the raw count of differences.
 
@@ -49,258 +49,13 @@ How to fix: **Code:** add the missing type hints, and create every attribute in 
 
 **Done.** Nothing left in this stage.
 
-## Stage 3: Same member, different details (124)
+## Stage 3: Same member, different details (0)
 
 Both sides have it, but the signature, type, visibility, static or abstract marker, or constant value differs.
 
 How to fix: Decide per item. If the code is the better design, update the UML. If the code breaks the design, fix the code.
 
-### Benchmark (10)
-
-**`Benchmark`**
-
-- [ ] `__is_pep` (UML) is `is_pep` in code: visibility (underscores) differs. UML: `-__is_pep(case : dict) : bool` · code: app/logic/benchmark.py:223
-- [ ] `__total_wealth` (UML) is `_total_wealth` in code: visibility (underscores) differs. UML: `-__total_wealth(client : dict, ai : dict) : dict` · code: app/logic/benchmark.py:73
-- [ ] `__liquidity` (UML) is `_liquidity` in code: visibility (underscores) differs. UML: `-__liquidity(client : dict, ai : dict) : dict` · code: app/logic/benchmark.py:82
-- [ ] `__composition` (UML) is `_composition` in code: visibility (underscores) differs. UML: `-__composition(client : dict, ai : dict) : dict` · code: app/logic/benchmark.py:91
-- [ ] `__velocity` (UML) is `_velocity` in code: visibility (underscores) differs. UML: `-__velocity(client : dict, ai : dict) : dict` · code: app/logic/benchmark.py:101
-- [ ] `__counterparties` (UML) is `_counterparties` in code: visibility (underscores) differs. UML: `-__counterparties(declared : dict, expected : dict) : dict` · code: app/logic/benchmark.py:110
-- [ ] `__jurisdiction` (UML) is `_jurisdiction` in code: visibility (underscores) differs. UML: `-__jurisdiction(declared : dict, expected : dict) : dict` · code: app/logic/benchmark.py:133
-- [ ] `__init__` parameter `policy` type differs. UML: `dict` · code: `dict | None` (app/logic/benchmark.py:51)
-- [ ] `__init__` parameter `policy` default differs. UML: `{}` · code: `None` (app/logic/benchmark.py:51)
-- [ ] `__init__` parameter `config` type differs. UML: `Config` · code: `Config | None` (app/logic/benchmark.py:51)
-
-### Crime Scan (22)
-
-**`CounterpartyUnnamed`**
-
-- [ ] `__init__` parameter `policy` type differs. UML: `dict` · code: `dict | None` (app/logic/indicator.py:40)
-- [ ] `__init__` parameter `policy` default differs. UML: `{}` · code: `None` (app/logic/indicator.py:40)
-
-**`CrimeScan`**
-
-- [ ] `__COUNTRY_TO_ISO` (UML) is `_COUNTRY_TO_ISO` in code: visibility (underscores) differs. UML: `-__COUNTRY_TO_ISO : dict = {...} «const»` · code: app/logic/crime_scan.py:17
-- [ ] `__categorise_match` (UML) is `_categorise_match` in code: visibility (underscores) differs. UML: `-__categorise_match(core_fired : list[str], core : list[str], supporting_fired : list[str]) : str` · code: app/logic/crime_scan.py:316
-- [ ] `__domain_is_trusted` (UML) is `_domain_is_trusted` in code: visibility (underscores) differs. UML: `-__domain_is_trusted(url : str) : bool` · code: app/logic/crime_scan.py:284
-- [ ] `__to_iso` (UML) is `_to_iso` in code: visibility (underscores) differs. UML: `-__to_iso(value : str) : str` · code: app/logic/crime_scan.py:350
-- [ ] `__init__` parameter `policy` type differs. UML: `dict` · code: `dict | None` (app/logic/crime_scan.py:102)
-- [ ] `__init__` parameter `policy` default differs. UML: `{}` · code: `None` (app/logic/crime_scan.py:102)
-
-**`GiftOrInheritanceUnnamed`**
-
-- [ ] `__init__` parameter `policy` type differs. UML: `dict` · code: `dict | None` (app/logic/indicator.py:27)
-- [ ] `__init__` parameter `policy` default differs. UML: `{}` · code: `None` (app/logic/indicator.py:27)
-
-**`Indicator`**
-
-- [ ] `__init__` parameter `policy` type differs. UML: `dict` · code: `dict | None` (app/logic/indicator.py:14)
-- [ ] `__init__` parameter `policy` default differs. UML: `{}` · code: `None` (app/logic/indicator.py:14)
-
-**`MatchResult`**
-
-- [ ] `__init__` parameters differ. UML: `+__init__(typology : Typology, core_fired : list[str])` · code: `(typology, core_fired, supporting_fired, category)` (app/model/match_result.py:16)
-
-**`RelatedPartyTransaction`**
-
-- [ ] `__init__` parameter `policy` type differs. UML: `dict` · code: `dict | None` (app/logic/indicator.py:84)
-- [ ] `__init__` parameter `policy` default differs. UML: `{}` · code: `None` (app/logic/indicator.py:84)
-
-**`ResearchReport`**
-
-- [ ] `__init__` parameters differ. UML: `+__init__(report_id : str, url : str, excerpts : list[str])` · code: `(report_id, url, excerpts, organisation, title, year, summary, retrieved_at)` (app/model/research_report.py:14)
-
-**`SourceContradictsOccupation`**
-
-- [ ] `__init__` parameter `policy` type differs. UML: `dict` · code: `dict | None` (app/logic/indicator.py:53)
-- [ ] `__init__` parameter `policy` default differs. UML: `{}` · code: `None` (app/logic/indicator.py:53)
-
-**`Typology`**
-
-- [ ] `__init__` parameters differ. UML: `+__init__(typology_id : str, name : str, indicators : list[dict])` · code: `(typology_id, name, indicators, source_ids, crime_category, description, source_quotes, typical_documents)` (app/model/typology.py:14)
-
-**`UnvaluedSource`**
-
-- [ ] constant `NAME` value differs. UML: `"unvalued_source"` · code: `'unvalued_source_present'` (app/logic/indicator.py:60)
-- [ ] `__init__` parameter `policy` type differs. UML: `dict` · code: `dict | None` (app/logic/indicator.py:66)
-- [ ] `__init__` parameter `policy` default differs. UML: `{}` · code: `None` (app/logic/indicator.py:66)
-
-### Data (6)
-
-**`CloudSync`**
-
-- [ ] `__local` type differs. UML: `Repository` · code: `Repository | None` (app/data/cloud_sync.py:24)
-- [ ] `__remote` type differs. UML: `DatabaseRepository` · code: `DatabaseRepository | None` (app/data/cloud_sync.py:25)
-- [ ] `__init__` parameter `local` type differs. UML: `Repository` · code: `Repository | None` (app/data/cloud_sync.py:22)
-- [ ] `__init__` parameter `remote` type differs. UML: `DatabaseRepository` · code: `DatabaseRepository | None` (app/data/cloud_sync.py:22)
-
-**`ConfigReader`**
-
-- [ ] `__init__` parameter `folder` default differs. UML: `"config"` · code: `os.path.join(ROOT_DIR, 'config')` (app/data/config_reader.py:20)
-
-**`JsonRepository`**
-
-- [ ] constant `DATA_DIR` value differs. UML: `"data/local database"` · code: `os.path.join(ROOT_DIR, 'data', 'local database')` (app/data/json_repository.py:15)
-
-### Document Evidence (11)
-
-**`DocumentEvidence`**
-
-- [ ] `__init__` parameter `policy` type differs. UML: `dict` · code: `dict | None` (app/logic/document_evidence.py:18)
-- [ ] `__init__` parameter `policy` default differs. UML: `{}` · code: `None` (app/logic/document_evidence.py:18)
-
-**`DocumentReaderFactory`**
-
-- [ ] `supported_types` return type differs. UML: `set[str]` · code: `list[str]` (app/data/document_reader_factory.py:31)
-
-**`DocumentRecordBuilder`**
-
-- [ ] `__age_from_birth` (UML) is `_age_from_birth` in code: visibility (underscores) differs. UML: `-__age_from_birth(date_of_birth : str) : int | None` · code: app/logic/document_record_builder.py:30
-- [ ] `__init__` parameters differ. UML: `+__init__(client_ref : str, today : str, policy : dict)` · code: `(config, today)` (app/logic/document_record_builder.py:25)
-- [ ] `build` parameters differ. UML: `+build(extracted : dict) : tuple[ClientRecord, list]` · code: `(extracted, client_ref)` (app/logic/document_record_builder.py:44)
-- [ ] `build` return type differs. UML: `tuple[ClientRecord, list]` · code: `tuple[ClientRecord, list[str]]` (app/logic/document_record_builder.py:44)
-- [ ] `missing_fields` return type differs. UML: `list[str]` · code: `list[dict]` (app/logic/document_record_builder.py:201)
-- [ ] `summarise` parameters differ. UML: `+summarise(record : ClientRecord) : list[dict]` · code: `(client, doc_client)` (app/logic/document_record_builder.py:296)
-
-**`DocumentStore`**
-
-- [ ] `__init__` parameters differ. UML: `+__init__(folder : str = "data/documents")` · code: `(folder, root)` (app/data/document_store.py:22)
-- [ ] `read_for_extraction` parameters differ. UML: `+read_for_extraction(file_path : str) : dict` · code: `(file_path, file_name)` (app/data/document_store.py:84)
-
-### Forecast (40)
-
-**`AssetPath`**
-
-- [ ] `__init__` parameters differ. UML: `+__init__(market_model : MarketModel)` · code: `(market_model, asset_models)` (app/logic/asset_path.py:16)
-- [ ] `build` parameters differ. UML: `+build(record : dict, last_year : int) : list[dict]` · code: `(record, last_year, scenario, shocks)` (app/logic/asset_path.py:21)
-- [ ] `income_up_to` parameters differ. UML: `+income_up_to(year : int) : dict` · code: `(path, year)` (app/logic/asset_path.py:30)
-
-**`CareerSavings`**
-
-- [ ] `__init__` parameter `pay` type differs. UML: `dict` · code: `dict | None` (app/logic/career_savings.py:18)
-- [ ] `__init__` parameter `pay` default differs. UML: `{}` · code: `None` (app/logic/career_savings.py:18)
-- [ ] `pay_total` parameters differ. UML: `+pay_total(level : str) : float` · code: `(pay, level)` (app/logic/career_savings.py:55)
-
-**`Forecast`**
-
-- [ ] `__honest_numbers` (UML) is `_honest_numbers` in code: visibility (underscores) differs. UML: `-__honest_numbers(case : dict) : dict` · code: app/logic/forecast.py:264
-- [ ] `__rank_documents` (UML) is `_rank_documents` in code: visibility (underscores) differs. UML: `-__rank_documents(candidates : list[str]) : list[str]` · code: app/logic/forecast.py:85
-- [ ] `__data_quality` (UML) is `_data_quality` in code: visibility (underscores) differs. UML: `-__data_quality() : dict` · code: app/logic/forecast.py:126
-- [ ] `__init__` parameter `policy` type differs. UML: `dict` · code: `dict | None` (app/logic/forecast.py:27)
-- [ ] `__init__` parameter `policy` default differs. UML: `{}` · code: `None` (app/logic/forecast.py:27)
-- [ ] `__init__` parameter `config` type differs. UML: `Config` · code: `Config | None` (app/logic/forecast.py:27)
-- [ ] `economy_brief` parameters differ. UML: `+economy_brief() : dict` · code: `(markets)` (app/logic/forecast.py:250)
-- [ ] `economy_brief` return type differs. UML: `dict` · code: `dict | None` (app/logic/forecast.py:250)
-- [ ] `document_request` parameters differ. UML: `+document_request(failures : list[Check]) : dict` · code: `(failures, candidates)` (app/logic/forecast.py:99)
-- [ ] `document_request` return type differs. UML: `dict` · code: `list[dict]` (app/logic/forecast.py:99)
-
-**`FuturePaths`**
-
-- [ ] `__init__` parameters differ. UML: `+__init__(market_model : MarketModel)` · code: `(market_model, forecast, policy)` (app/logic/future_paths.py:20)
-- [ ] `expected_paths` parameters differ. UML: `+expected_paths(record : dict) : dict` · code: `(record, savings_rows)` (app/logic/future_paths.py:100)
-- [ ] `event_impacts` parameters differ. UML: `+event_impacts(record : dict) : list` · code: `(record, savings_rows)` (app/logic/future_paths.py:114)
-- [ ] `event_impacts` return type differs. UML: `list` · code: `list[dict]` (app/logic/future_paths.py:114)
-- [ ] `divergence_years` parameters differ. UML: `+divergence_years() : dict` · code: `(paths)` (app/logic/future_paths.py:136)
-- [ ] `divergence_years` return type differs. UML: `dict` · code: `list[dict]` (app/logic/future_paths.py:136)
-- [ ] `honest_wealth` parameters differ. UML: `+honest_wealth(record : dict, year : int) : dict` · code: `(record, savings_rows, paths, year)` (app/logic/future_paths.py:44)
-
-**`MarketModel`**
-
-- [ ] `__init__` parameter `forecast` type differs. UML: `dict` · code: `dict | None` (app/logic/market_model.py:15)
-- [ ] `__init__` parameter `forecast` default differs. UML: `{}` · code: `None` (app/logic/market_model.py:15)
-- [ ] `change` parameters differ. UML: `+change(market_id : str, year : int, scenario : str) : float` · code: `(market_id, year, scenario, level, shocks)` (app/logic/market_model.py:40)
-
-**`OnboardingAssessor`**
-
-- [ ] `__check_asset_values` (UML) is `_check_asset_values` in code: visibility (underscores) differs. UML: `-__check_asset_values(record : dict) : list` · code: app/logic/onboarding_assessor.py:26
-- [ ] `__check_affordability` (UML) is `_check_affordability` in code: visibility (underscores) differs. UML: `-__check_affordability(record : dict) : list` · code: app/logic/onboarding_assessor.py:61
-- [ ] `__check_jurisdictions` (UML) is `_check_jurisdictions` in code: visibility (underscores) differs. UML: `-__check_jurisdictions(record : dict) : list` · code: app/logic/onboarding_assessor.py:86
-- [ ] `__decide_onboarding` (UML) is `_decide_onboarding` in code: visibility (underscores) differs. UML: `-__decide_onboarding(fits : dict) : str` · code: app/logic/onboarding_assessor.py:142
-- [ ] `__init__` parameter `future_paths` type differs. UML: `FuturePaths` · code: `FuturePaths | None` (app/logic/onboarding_assessor.py:20)
-- [ ] `__init__` parameter `policy` type differs. UML: `dict` · code: `dict | None` (app/logic/onboarding_assessor.py:20)
-- [ ] `__init__` parameter `config` type differs. UML: `Config` · code: `Config | None` (app/logic/onboarding_assessor.py:20)
-- [ ] `evaluate` parameters differ. UML: `+evaluate(record : dict, forecast : dict) : dict` · code: `(record, forecast, savings_rows, paths, scale)` (app/logic/onboarding_assessor.py:164)
-- [ ] `stable_outcome` parameters differ. UML: `+stable_outcome(outcome : str, shifted : list) : str` · code: `(outcome, outcomes_when_shifted)` (app/logic/onboarding_assessor.py:156)
-- [ ] `stable_outcome` return type differs. UML: `str` · code: `tuple[str, bool]` (app/logic/onboarding_assessor.py:156)
-
-**`PayCalibrator`**
-
-- [ ] `__init__` parameter `career_savings` type differs. UML: `CareerSavings` · code: `CareerSavings | None` (app/logic/pay_calibrator.py:17)
-- [ ] `__init__` parameter `policy` type differs. UML: `dict` · code: `dict | None` (app/logic/pay_calibrator.py:17)
-- [ ] `calibrate` parameters differ. UML: `+calibrate(case : dict, documented_pay : dict) : list` · code: `(case, forecast, documented_pay)` (app/logic/pay_calibrator.py:21)
-- [ ] `calibrate` return type differs. UML: `list` · code: `tuple[dict, list[dict]]` (app/logic/pay_calibrator.py:21)
-
-### Shared core (35)
-
-**`CaseReader`**
-
-- [ ] `__PRESENT_WORDS` (UML) is `_PRESENT_WORDS` in code: visibility (underscores) differs. UML: `-__PRESENT_WORDS : tuple = (...) «const»` · code: app/logic/case_reader.py:4
-- [ ] `forecasting_case` return type differs. UML: `tuple[dict, list]` · code: `tuple[dict | None, list[str]]` (app/logic/case_reader.py:53)
-- [ ] `read_year` static in one, not the other. UML: `static` · code: `instance` (app/logic/case_reader.py:38)
-
-**`Check`**
-
-- [ ] `__init__` parameters differ. UML: `+__init__(feature : str, check : str, label : str, theme : str, status : str = "passed", detail : str = "", explanation : str = "", group : str = "", sources : …` · code: `(feature, check, label, theme, status, detail, explanation, group, sources, supports, extra)` (app/model/check.py:16)
-
-**`ClaimedSource`**
-
-- [ ] `__init__` parameters differ. UML: `+__init__(source_type : str, counterparty : str | None, amount : float | None, occupation_mismatch : bool)` · code: `(source_type, counterparty, amount, occupation_mismatch, amount_explained, source_id, description, start_year, end_year, country, quote, linked_position_index, …` (app/model/claimed_source.py:21)
-
-**`Claims`**
-
-- [ ] `__init__` parameters differ. UML: `+__init__(declared_net_worth : float | None, expected_aum : float | None, pep_status : str, asset_composition : dict, wealth_countries : list[str], declared_cou…` · code: `(declared_net_worth, expected_aum, pep_status, asset_composition, wealth_countries, declared_counterparties, biggest_wealth_jump, wealth_jump_years, extra)` (app/model/claims.py:11)
-
-**`ClientRecord`**
-
-- [ ] `__claims` type differs. UML: `Claims` · code: `Claims | None` (app/model/client_record.py:36)
-
-**`Config`**
-
-- [ ] `__init__` parameter `policy` type differs. UML: `dict` · code: `dict | None` (app/model/config.py:11)
-- [ ] `__init__` parameter `vocabulary` type differs. UML: `dict` · code: `dict | None` (app/model/config.py:11)
-
-**`Declaration`**
-
-- [ ] `__init__` parameter `sources` type differs. UML: `list[dict]` · code: `list[dict] | None` (app/model/declaration.py:14)
-- [ ] `__init__` parameter `sources` default differs. UML: `[]` · code: `None` (app/model/declaration.py:14)
-
-**`Investment`**
-
-- [ ] `__year_acquired` type differs. UML: `int` · code: `int | None` (app/model/investment.py:17)
-- [ ] `__current_declared_value` type differs. UML: `float` · code: `float | None` (app/model/investment.py:19)
-- [ ] `__income_produced` type differs. UML: `float` · code: `float | None` (app/model/investment.py:20)
-- [ ] `__init__` parameters differ. UML: `+__init__(asset_type : str, country : str, year_acquired : int, price_paid : float | None, current_declared_value : float, payment_method : str | None, income_p…` · code: `(asset_type, country, year_acquired, price_paid, current_declared_value, payment_method, income_produced, extra)` (app/model/investment.py:7)
-
-**`Job`**
-
-- [ ] `__start_year` type differs. UML: `int` · code: `int | None` (app/model/job.py:14)
-- [ ] `__init__` parameters differ. UML: `+__init__(start_year : int, end_year : int | None, occupation : str, seniority : str, industry : str, employer_name : str, employer_size : str, country : str)` · code: `(start_year, end_year, occupation, seniority, industry, employer_name, employer_size, country, extra)` (app/model/job.py:10)
-- [ ] `__check_years` parameter `start_year` type differs. UML: `int` · code: `int | None` (app/model/job.py:89)
-
-**`RiskAnalysis`**
-
-- [ ] `__init__` parameter `policy` type differs. UML: `dict` · code: `dict | None` (app/logic/risk_analysis.py:20)
-- [ ] `__init__` parameter `policy` default differs. UML: `{}` · code: `None` (app/logic/risk_analysis.py:20)
-- [ ] `_check` parameter `sources` type differs. UML: `list[str]` · code: `list[str] | None` (app/logic/risk_analysis.py:32)
-- [ ] `_check` parameter `sources` default differs. UML: `[]` · code: `None` (app/logic/risk_analysis.py:32)
-- [ ] `_check` parameter `supports` type differs. UML: `list[str]` · code: `list[str] | None` (app/logic/risk_analysis.py:32)
-- [ ] `_check` parameter `supports` default differs. UML: `[]` · code: `None` (app/logic/risk_analysis.py:32)
-- [ ] `_jump_years` return type differs. UML: `list[int]` · code: `tuple[float | None, int | None]` (app/logic/risk_analysis.py:39)
-
-**`Verdict`**
-
-- [ ] `__init__` parameter `notes` type differs. UML: `list[str]` · code: `list[str] | None` (app/model/verdict.py:28)
-- [ ] `__init__` parameter `notes` default differs. UML: `[]` · code: `None` (app/model/verdict.py:28)
-- [ ] `__init__` parameter `not_run` type differs. UML: `list[str]` · code: `list[str] | None` (app/model/verdict.py:28)
-- [ ] `__init__` parameter `not_run` default differs. UML: `[]` · code: `None` (app/model/verdict.py:28)
-
-**`VerdictEngine`**
-
-- [ ] `__agreement` (UML) is `_agreement` in code: visibility (underscores) differs. UML: `-__agreement(checks : list[Check]) : dict` · code: app/logic/verdict_engine.py:133
-- [ ] `__type_patterns` (UML) is `_type_patterns` in code: visibility (underscores) differs. UML: `-__type_patterns(results : dict) : list` · code: app/logic/verdict_engine.py:76
-- [ ] `__evidence` (UML) is `_evidence` in code: visibility (underscores) differs. UML: `-__evidence(case : dict, results : dict) : dict` · code: app/logic/verdict_engine.py:401
-- [ ] `__init__` parameter `features` type differs. UML: `list[RiskAnalysis]` · code: `list[RiskAnalysis] | None` (app/logic/verdict_engine.py:49)
-- [ ] `__init__` parameter `config` type differs. UML: `Config` · code: `Config | None` (app/logic/verdict_engine.py:49)
-- [ ] `describe_piece` parameter `piece` type differs. UML: `str` · code: `str | None` (app/logic/verdict_engine.py:110)
+**Done.** Nothing left in this stage.
 
 ## Stage 4: In UML, missing in code (36)
 
@@ -798,11 +553,11 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 **`CaseReader`**
 
 - [ ] class-level `COMPOSITION_KEYS` exists in code but not in UML. UML: `—` · code: `['property', 'listed_equities', 'private_business', 'cash']` (app/logic/case_reader.py:4)
-- [ ] `_read_payment()` exists in code but not in UML. UML: `—` · code: `app/logic/case_reader.py:42` (app/logic/case_reader.py:42)
-- [ ] `_whole_number()` exists in code but not in UML. UML: `—` · code: `app/logic/case_reader.py:240` (app/logic/case_reader.py:240)
-- [ ] `_whole_percent()` exists in code but not in UML. UML: `—` · code: `app/logic/case_reader.py:209` (app/logic/case_reader.py:209)
-- [ ] `benchmark_input()` exists in code but not in UML. UML: `—` · code: `app/logic/case_reader.py:215` (app/logic/case_reader.py:215)
-- [ ] `crime_scan_input()` exists in code but not in UML. UML: `—` · code: `app/logic/case_reader.py:193` (app/logic/case_reader.py:193)
+- [ ] `_read_payment()` exists in code but not in UML. UML: `—` · code: `app/logic/case_reader.py:43` (app/logic/case_reader.py:43)
+- [ ] `_whole_number()` exists in code but not in UML. UML: `—` · code: `app/logic/case_reader.py:241` (app/logic/case_reader.py:241)
+- [ ] `_whole_percent()` exists in code but not in UML. UML: `—` · code: `app/logic/case_reader.py:210` (app/logic/case_reader.py:210)
+- [ ] `benchmark_input()` exists in code but not in UML. UML: `—` · code: `app/logic/case_reader.py:216` (app/logic/case_reader.py:216)
+- [ ] `crime_scan_input()` exists in code but not in UML. UML: `—` · code: `app/logic/case_reader.py:194` (app/logic/case_reader.py:194)
 
 **`Check`**
 
@@ -1044,7 +799,7 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `values_from_form()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:186` (app/interface/web_app.py:186)
 - [ ] `values_from_record()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:161` (app/interface/web_app.py:161)
 
-## Stage 6: Minor: default and starting values (91)
+## Stage 6: Minor: default and starting values (76)
 
 A parameter default the UML leaves out, or an attribute whose starting value differs.
 
@@ -1079,12 +834,7 @@ How to fix: **UML:** add or correct the `= value`. Where the code is computed, d
 - [ ] `__name` starts with a different value. UML: `""` · code: `Typology.__text('name', name)` (app/model/typology.py:18) *(computed in code: check by hand)*
 - [ ] `__indicators` starts with a different value. UML: `[]` · code: `[Typology.__indicator(indicator) for indicator in Typology.__list('indicators', indicators)]` (app/model/typology.py:19) *(computed in code: check by hand)*
 
-### Data (13)
-
-**`CloudSync`**
-
-- [ ] `__init__` parameter `local` has a default in code that UML does not show. UML: `—` · code: `None` (app/data/cloud_sync.py:22)
-- [ ] `__init__` parameter `remote` has a default in code that UML does not show. UML: `—` · code: `None` (app/data/cloud_sync.py:22)
+### Data (11)
 
 **`ConfigReader`**
 
@@ -1120,7 +870,7 @@ How to fix: **UML:** add or correct the `= value`. Where the code is computed, d
 - [ ] `__folder` starts with a different value. UML: `"data/documents"` · code: `folder if os.path.isabs(folder) else os.path.join(root, folder)` (app/data/document_store.py:24) *(computed in code: check by hand)*
 - [ ] `__reader_factory` starts with a different value. UML: `None` · code: `DocumentReaderFactory()` (app/data/document_store.py:25) *(pattern: UML writes `= None` for a part that `__init__` creates)*
 
-### Forecast (18)
+### Forecast (13)
 
 **`AssetPath`**
 
@@ -1148,17 +898,12 @@ How to fix: **UML:** add or correct the `= value`. Where the code is computed, d
 
 - [ ] `__future_paths` starts with a different value. UML: `None` · code: `FuturePaths()` (app/logic/onboarding_assessor.py:22) *(pattern: UML writes `= None` for a part that `__init__` creates)*
 - [ ] `__config` starts with a different value. UML: `None` · code: `Config()` (app/logic/onboarding_assessor.py:24) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__init__` parameter `future_paths` has a default in code that UML does not show. UML: `—` · code: `None` (app/logic/onboarding_assessor.py:20)
-- [ ] `__init__` parameter `policy` has a default in code that UML does not show. UML: `—` · code: `None` (app/logic/onboarding_assessor.py:20)
-- [ ] `__init__` parameter `config` has a default in code that UML does not show. UML: `—` · code: `None` (app/logic/onboarding_assessor.py:20)
 
 **`PayCalibrator`**
 
 - [ ] `__career_savings` starts with a different value. UML: `None` · code: `CareerSavings()` (app/logic/pay_calibrator.py:18) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__init__` parameter `career_savings` has a default in code that UML does not show. UML: `—` · code: `None` (app/logic/pay_calibrator.py:17)
-- [ ] `__init__` parameter `policy` has a default in code that UML does not show. UML: `—` · code: `None` (app/logic/pay_calibrator.py:17)
 
-### Shared core (47)
+### Shared core (39)
 
 **`App`**
 
@@ -1208,11 +953,6 @@ How to fix: **UML:** add or correct the `= value`. Where the code is computed, d
 - [ ] `__init__` parameter `nationality` has a default in code that UML does not show. UML: `—` · code: `''` (app/model/client_record.py:28)
 - [ ] `__init__` parameter `current_date` has a default in code that UML does not show. UML: `—` · code: `''` (app/model/client_record.py:28)
 
-**`Config`**
-
-- [ ] `__init__` parameter `policy` has a default in code that UML does not show. UML: `—` · code: `None` (app/model/config.py:11)
-- [ ] `__init__` parameter `vocabulary` has a default in code that UML does not show. UML: `—` · code: `None` (app/model/config.py:11)
-
 **`ConsoleUI`**
 
 - [ ] `__read` starts with a different value. UML: `input` · code: `read if read is not None else lambda question: input(question)` (app/interface/console_ui.py:36) *(computed in code: check by hand)*
@@ -1246,16 +986,10 @@ How to fix: **UML:** add or correct the `= value`. Where the code is computed, d
 **`Verdict`**
 
 - [ ] `__outcome` starts with a different value. UML: `""` · code: `"MANUAL_REVIEW"` (app/model/verdict.py:35)
-- [ ] `__init__` parameter `assessment_id` has a default in code that UML does not show. UML: `—` · code: `''` (app/model/verdict.py:28)
-- [ ] `__init__` parameter `client_ref` has a default in code that UML does not show. UML: `—` · code: `''` (app/model/verdict.py:28)
-- [ ] `__init__` parameter `assessed_at` has a default in code that UML does not show. UML: `—` · code: `''` (app/model/verdict.py:28)
-- [ ] `__init__` parameter `outcome` has a default in code that UML does not show. UML: `—` · code: `'MANUAL_REVIEW'` (app/model/verdict.py:28)
 
 **`VerdictEngine`**
 
 - [ ] `__config` starts with a different value. UML: `None` · code: `Config()` (app/logic/verdict_engine.py:51) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__init__` parameter `features` has a default in code that UML does not show. UML: `—` · code: `None` (app/logic/verdict_engine.py:49)
-- [ ] `__init__` parameter `config` has a default in code that UML does not show. UML: `—` · code: `None` (app/logic/verdict_engine.py:49)
 
 **`WebApp`**
 
@@ -1328,7 +1062,7 @@ Real class-to-class links in the code with no UML line between the two classes. 
 
 - [ ] The note on `App` says `caller = with_fallback(openai_caller(OpenAI()), gemini_caller(genai.Client()))` then `App(caller)`, but `main.py:22` is `App(with_fallback(openai_caller(), gemini_caller()))`: no `caller` variable, and the callers take no arguments. Fix in UML.
 
-## Appendix: values shortened with `...` (not checked, 17)
+## Appendix: values shortened with `...` (not checked, 20)
 
-`AssessmentRunner.STEPS`, `Band.MONEY_IN`, `Band.MONEY_OUT`, `Benchmark.BENCHMARK_LABELS`, `Benchmark.COMPOSITION_RULES`, `BenchmarkAI.ALLOWED_FIELDS`, `CaseFiles.__folder`, `ClientRepository.OLD_ASSET_KEYS`, `CloudSync.__state_path`, `ImageReader.IMAGE_TYPES`, `RelatedPartyTransaction.__KEYWORDS`, `ReportView.FIELD_NAMES`, `ReportView.OUTCOME_LABELS`, `VerdictEngine.MARKS`, `VerdictEngine.REPORT_LEGEND`, `VerdictEngine.THEMES`, `VerdictEngine.VERDICT_LABELS`
+`AssessmentRunner.STEPS`, `Band.MONEY_IN`, `Band.MONEY_OUT`, `Benchmark.BENCHMARK_LABELS`, `Benchmark.COMPOSITION_RULES`, `BenchmarkAI.ALLOWED_FIELDS`, `CaseFiles.__folder`, `CaseReader.__PRESENT_WORDS`, `ClientRepository.OLD_ASSET_KEYS`, `CloudSync.__state_path`, `CrimeScan.__COUNTRY_TO_ISO`, `ImageReader.IMAGE_TYPES`, `JsonRepository.DATA_DIR`, `RelatedPartyTransaction.__KEYWORDS`, `ReportView.FIELD_NAMES`, `ReportView.OUTCOME_LABELS`, `VerdictEngine.MARKS`, `VerdictEngine.REPORT_LEGEND`, `VerdictEngine.THEMES`, `VerdictEngine.VERDICT_LABELS`
 
