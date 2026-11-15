@@ -23,7 +23,7 @@ class CrimeScan(RiskAnalysis):
     The crime scan creates and owns its Indicators (composition).
     """
 
-    _COUNTRY_TO_ISO = {
+    __COUNTRY_TO_ISO = {
         "singapore": "SG",
         "malaysia": "MY",
         "hong kong": "HK",
@@ -164,7 +164,7 @@ class CrimeScan(RiskAnalysis):
                 self.__warnings.append(f"Removed {rid}: URL not found in web search results.")
                 continue
 
-            if not self._domain_is_trusted(report.url, trusted):
+            if not self.__domain_is_trusted(report.url, trusted):
                 self.__warnings.append(f"Removed {rid}: domain not in trusted sources.")
                 continue
 
@@ -281,7 +281,7 @@ class CrimeScan(RiskAnalysis):
             self.__warnings.append(f"Typology '{typ_id}': dropped — it could not be read ({error}).")
             return None
 
-    def _domain_is_trusted(self, url: str, trusted_domains: list[str]) -> bool:
+    def __domain_is_trusted(self, url: str, trusted_domains: list[str]) -> bool:
         """Return True if the URL's domain matches or is a subdomain of a trusted domain."""
         netloc = ResearchReport("", url).domain()
         for td in trusted_domains:
@@ -313,7 +313,7 @@ class CrimeScan(RiskAnalysis):
         match_count = sum(1 for mr in match_results if mr.category != "no_match")
         return {"breach_count": breach_count, "match_count": match_count, "match_results": match_results}
 
-    def _categorise_match(self, core_fired: list, core: list, supporting_fired: list) -> str:
+    def __categorise_match(self, core_fired: list, core: list, supporting_fired: list) -> str:
         all_core = len(core_fired) == len(core) and len(core) > 0
         n_sup = len(supporting_fired)
         if all_core:
@@ -343,16 +343,16 @@ class CrimeScan(RiskAnalysis):
             supporting = typology.supporting_indicators()
             core_fired = [i for i in core if indicator_results.get(i, False)]
             supporting_fired = [i for i in supporting if indicator_results.get(i, False)]
-            category = self._categorise_match(core_fired, core, supporting_fired)
+            category = self.__categorise_match(core_fired, core, supporting_fired)
             matches.append(MatchResult(typology, core_fired, supporting_fired, category))
         return matches
 
-    def _to_iso(self, value, warnings: list) -> str | None:
+    def __to_iso(self, value, warnings: list) -> str | None:
         """Convert a country name or code to ISO 3166-1 alpha-2. Pure, no I/O.
 
         - None/empty → None (no warning)
         - Already 2 uppercase letters → return as-is
-        - Lookup in CrimeScan._COUNTRY_TO_ISO (case-insensitive) → return code
+        - Lookup in CrimeScan.__COUNTRY_TO_ISO (case-insensitive) → return code
         - 2 letters, not uppercase → uppercase (e.g. "sg" → "SG")
         - Unrecognized → keep as-is + warning
         """
@@ -363,7 +363,7 @@ class CrimeScan(RiskAnalysis):
             return None
         if len(stripped) == 2 and stripped.isalpha() and stripped.isupper():
             return stripped
-        lookup = CrimeScan._COUNTRY_TO_ISO.get(stripped.lower())
+        lookup = CrimeScan.__COUNTRY_TO_ISO.get(stripped.lower())
         if lookup:
             return lookup
         if len(stripped) == 2 and stripped.isalpha():
@@ -405,8 +405,8 @@ class CrimeScan(RiskAnalysis):
 
         out["age"] = self._safe_int(record.get("age"))
         out["career_start_year"] = self._safe_int(record.get("career_start_year"))
-        out["country"] = self._to_iso(record.get("country"), warnings)
-        out["country_of_residence"] = self._to_iso(record.get("country_of_residence"), warnings)
+        out["country"] = self.__to_iso(record.get("country"), warnings)
+        out["country_of_residence"] = self.__to_iso(record.get("country_of_residence"), warnings)
 
         # declared_net_worth_sgd — check multiple possible field locations
         raw_nw = record.get("declared_net_worth_sgd")
@@ -438,23 +438,23 @@ class CrimeScan(RiskAnalysis):
 
         # Top-level wealth_countries (golden case format)
         for c in record.get("wealth_countries", []):
-            code = self._to_iso(c, warnings)
+            code = self.__to_iso(c, warnings)
             if code:
                 all_iso.add(code)
 
         for entry in record.get("career_timeline", []):
-            code = self._to_iso(entry.get("country"), warnings)
+            code = self.__to_iso(entry.get("country"), warnings)
             if code:
                 all_iso.add(code)
 
         for entry in record.get("asset_timeline", []):
-            code = self._to_iso(entry.get("country"), warnings)
+            code = self.__to_iso(entry.get("country"), warnings)
             if code:
                 all_iso.add(code)
 
         decl = record.get("declarations", {})
         for c in (decl or {}).get("wealth_countries", []):
-            code = self._to_iso(c, warnings)
+            code = self.__to_iso(c, warnings)
             if code:
                 all_iso.add(code)
 
@@ -467,7 +467,7 @@ class CrimeScan(RiskAnalysis):
         Pure function. Called after schema validation succeeds.
         Per source:
         - Valid ISO-2 (2 uppercase letters) → kept.
-        - Full name in CrimeScan._COUNTRY_TO_ISO → converted + warning.
+        - Full name in CrimeScan.__COUNTRY_TO_ISO → converted + warning.
         - 2 lowercase letters → uppercased + warning.
         - Unrecognizable string → set to None + warning.
         - None → kept.
@@ -485,7 +485,7 @@ class CrimeScan(RiskAnalysis):
             if len(stripped) == 2 and stripped.isalpha() and stripped.isupper():
                 cleaned.add_source(row)
                 continue
-            lookup = CrimeScan._COUNTRY_TO_ISO.get(stripped.lower())
+            lookup = CrimeScan.__COUNTRY_TO_ISO.get(stripped.lower())
             if lookup:
                 warnings.append(f"Declaration jurisdiction '{j}' converted to '{lookup}'.")
                 row["jurisdiction"] = lookup
