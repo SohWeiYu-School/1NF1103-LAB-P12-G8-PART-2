@@ -319,6 +319,13 @@ VIEW = """{% extends "base.html" %}
   <a class="button secondary" href="{{ url_for('home') }}" style="color:var(--muted); border-color:var(--line)">← Back</a>
 </div>
 
+{% if problems %}
+<div class="notes" style="margin-bottom:20px">
+  <strong>To fix before assessing (use Edit)</strong>
+  <ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
 {% if assessments is none %}
 <div class="panel" style="margin-bottom:20px">
   <h2>Assessment History</h2>

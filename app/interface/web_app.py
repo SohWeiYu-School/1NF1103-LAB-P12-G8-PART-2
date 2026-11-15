@@ -705,7 +705,7 @@ class WebApp:
             assessments = None
         return render_template("client_view.html", record=saved,
                                values=self.values_from_record(saved), SECTIONS=WebApp.SECTIONS,
-                               assessments=assessments)
+                               assessments=assessments, problems=record.problems())
 
     def view_assessment(self, assessment_id: str) -> str | Response:
         try:
@@ -750,7 +750,8 @@ class WebApp:
                     return redirect(url_for("view_client", client_ref=client_ref))
             return self.show_form(f"Edit {client_ref}", values, problems, field_errors, documents=documents)
  
-        return self.show_form(f"Edit {client_ref}", self.values_from_record(old), [])
+        # Shown as things to fix; they never stop the officer saving (POST checks again)
+        return self.show_form(f"Edit {client_ref}", self.values_from_record(old), client.problems())
 
     def edit_client_autofill(self, client_ref: str) -> str | Response:
         try:

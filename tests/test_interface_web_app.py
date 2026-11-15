@@ -142,6 +142,28 @@ def test_a_saved_client_can_be_viewed_and_an_unknown_one_is_not_found(web):
     assert client.get("/client/NO-SUCH-CLIENT").status_code == 404
 
 
+def _save_client_without_pep_answer(application) -> str:
+    record = sample_case()
+    record["claims"]["pep_status"] = ""
+    application.clients().save(record)
+    return record["client_ref"]
+
+
+def test_the_client_page_and_edit_form_list_the_claim_problems_to_fix(web):
+    application, _, client = web
+    client_ref = _save_client_without_pep_answer(application)
+    for url in (f"/client/{client_ref}", f"/client/{client_ref}/edit"):
+        page = client.get(url).get_data(as_text=True)
+        assert "The PEP question is not answered" in page
+
+
+def test_a_complete_client_page_lists_no_problems(web):
+    application, _, client = web
+    application.clients().save(sample_case())
+    page = client.get(f"/client/{sample_case()['client_ref']}").get_data(as_text=True)
+    assert "To fix before assessing" not in page
+
+
 def _flashes(client) -> list[str]:
     with client.session_transaction() as session:
         return [text for _, text in session.get("_flashes", [])]
