@@ -102,3 +102,28 @@ def test_a_check_round_trips_sources_even_when_empty():
 
 def test_outcomes_can_be_compared_by_severity():
     assert Verdict.SEVERITY["SERIOUS_RISK"] > Verdict.SEVERITY["RISKY"] > Verdict.SEVERITY["MANUAL_REVIEW"] > Verdict.SEVERITY["PASSED"]
+
+
+def test_a_check_reads_back_the_extra_details_a_feature_attached():
+    check = _check(status="failed")
+    check.set_extra("independent", True)
+    check.set_extra("signs", ["counterparty_unnamed"])
+    assert check.extra("independent") is True
+    assert check.extra("signs") == ["counterparty_unnamed"]
+    assert check.extra("match") is None and check.extra("match", "no_match") == "no_match"
+    assert list(check.to_dict())[-2:] == ["independent", "signs"]
+
+
+@pytest.mark.parametrize("name", ["", "status", "label", "sources", "supports", 3])
+def test_a_check_will_not_take_a_named_field_as_an_extra_detail(name):
+    with pytest.raises(ValueError):
+        _check().set_extra(name, "x")
+    with pytest.raises(ValueError):
+        _check(extra={name: "x"})
+
+
+def test_a_check_made_with_empty_lists_saves_them_after_its_extra_details():
+    check = Check("documents", "GIFT", "Gift", "people", "failed", "x", sources=[], supports=["fraud"],
+                  extra={"note": 1})
+    assert list(check.to_dict().items())[-3:] == [("supports", ["fraud"]), ("note", 1), ("sources", [])]
+    assert "sources" not in _check().to_dict() and "supports" not in _check().to_dict()
