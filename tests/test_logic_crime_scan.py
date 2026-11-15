@@ -139,3 +139,66 @@ def test_a_person_type_without_research_is_an_information_check():
     assert [(check.check, check.status, check.label) for check in checks] == [
         ("UNBACKED_TYPE", "info", "T3 Cash courier"), ("NO_PATTERNS", "info", "Known patterns")]
     assert all(isinstance(check, Check) and check.extra("signs") is None for check in checks)
+
+
+# ----- the declaration the forecast read, as the crime scan reads it --------------------------
+
+READING = Declaration.from_dict({"claimed_sources": [
+    {"source_id": "S1", "source_type": "employment", "description": "Salary as COO", "start_year": 1998,
+     "end_year": None, "amount": None, "country": "Singapore", "linked_position_index": 2,
+     "linked_asset_index": None, "quote": "salary", "counterparty": "Straits Harbour Logistics",
+     "occupation_mismatch": False},
+    {"source_id": "S2", "source_type": "inheritance_gift", "description": "Inherited from his late father",
+     "start_year": 2015, "end_year": 2015, "amount": 500000, "country": "sg", "linked_position_index": None,
+     "linked_asset_index": None, "quote": "inherited", "counterparty": None, "occupation_mismatch": True},
+    {"source_id": "S3", "source_type": "inheritance_gift", "description": "From his uncle", "start_year": None,
+     "end_year": None, "amount": None, "country": "Mordor", "linked_position_index": None,
+     "linked_asset_index": 0, "quote": "a gift", "counterparty": "Uncle", "occupation_mismatch": False},
+]})
+
+
+def test_crime_declaration_gives_a_new_declaration_in_the_saved_row_layout():
+    rows, warnings = CrimeScan(POLICY).crime_declaration(READING)
+    assert isinstance(rows, Declaration) and warnings == []
+    assert rows.to_scan_dict() == {"sources": [
+        {"source_id": "S1", "source_type": "employment", "description": "Salary as COO", "amount_sgd": None,
+         "start_year": 1998, "end_year": None, "jurisdiction": "Singapore",
+         "counterparty": "Straits Harbour Logistics", "evidence_sentence": "salary", "occupation_mismatch": False,
+         "amount_explained_by_forecast": True},
+        {"source_id": "S2", "source_type": "inheritance", "description": "Inherited from his late father",
+         "amount_sgd": 500000, "start_year": 2015, "end_year": 2015, "jurisdiction": "sg", "counterparty": None,
+         "evidence_sentence": "inherited", "occupation_mismatch": True, "amount_explained_by_forecast": False},
+        {"source_id": "S3", "source_type": "gift", "description": "From his uncle", "amount_sgd": None,
+         "start_year": None, "end_year": None, "jurisdiction": "Mordor", "counterparty": "Uncle",
+         "evidence_sentence": "a gift", "occupation_mismatch": False, "amount_explained_by_forecast": False}]}
+    assert READING.sources()[1].source_type == "inheritance_gift"      # the forecast's reading is unchanged
+
+
+def test_crime_declaration_of_no_reading_is_none():
+    assert CrimeScan(POLICY).crime_declaration(None) == (None, [])
+
+
+def test_the_crime_scans_signs_read_the_reshaped_sources():
+    rows, _ = CrimeScan(POLICY).crime_declaration(READING)
+    flags = CrimeScan(POLICY).flags(rows)
+    assert "gift_or_inheritance_unnamed" in flags           # S2 became an unnamed inheritance
+    assert "source_contradicts_occupation" in flags
+    assert "unvalued_source_present" in flags                 # S3 has no amount and no job behind it
+
+
+def test_normalise_jurisdictions_gives_a_new_declaration_and_leaves_the_old_one():
+    rows, _ = CrimeScan(POLICY).crime_declaration(READING)
+    cleaned, warnings = CrimeScan(POLICY).normalise_jurisdictions(rows)
+    assert [source.country for source in cleaned.sources()] == ["SG", "SG", None]
+    assert [source.country for source in rows.sources()] == ["Singapore", "sg", "Mordor"]
+    assert len(warnings) == 3
+    kept = cleaned.to_scan_dict()["sources"][1]
+    assert kept == {**rows.to_scan_dict()["sources"][1], "jurisdiction": "SG"}
+
+
+def test_run_takes_the_declaration_object_or_its_saved_rows():
+    typologies = CrimeScan(POLICY).read_typologies(fake_ai.typologies()["sector_typologies"])
+    as_object = CrimeScan(POLICY).run(CASE, {"typologies": typologies, "declaration": Declaration(UNNAMED["sources"])})
+    as_rows = CrimeScan(POLICY).run(CASE, {"typologies": typologies, "declaration": UNNAMED})
+    assert [m.to_dict() for m in as_object["match_results"]] == [m.to_dict() for m in as_rows["match_results"]]
+    assert as_object["breach_count"] == 1

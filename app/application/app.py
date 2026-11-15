@@ -32,6 +32,7 @@ from app.logic.case_timeline import CaseTimeline
 from app.logic.document_record_builder import DocumentRecordBuilder
 from app.model.client_record import ClientRecord
 from app.model.config import Config
+from app.model.declaration import Declaration
 from app.model.verdict import Verdict
 
 logger = logging.getLogger(__name__)
@@ -312,7 +313,7 @@ class App:
             "verdict": details,
             "report": verdict.report,
             "crime_scan": {"research": result["research"], "typologies": result["typology_response"],
-                           "declaration": result["crime_declaration"]},
+                           "declaration": App.__crime_declaration_layout(result["crime_declaration"])},
             "crime_result": App.__crime_result_layout(result["crime_result"]),
             "benchmark": result["benchmark"],
             "document_evidence": result["evidence"],
@@ -320,6 +321,11 @@ class App:
             "assessment": result["forecast_assessment"],
         })
         return verdict.assessment_id if saved else None
+
+    @staticmethod
+    def __crime_declaration_layout(declaration: Declaration | None) -> dict | None:
+        """The crime scan's reading of the declaration as it is saved: its rows {"sources": [...]}."""
+        return None if declaration is None else declaration.to_scan_dict()
 
     @staticmethod
     def __crime_result_layout(crime_result: dict | None) -> dict | None:

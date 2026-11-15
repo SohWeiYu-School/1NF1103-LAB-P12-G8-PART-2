@@ -20,6 +20,7 @@ from app.logic.document_evidence import DocumentEvidence
 from app.logic.forecast import Forecast
 from app.logic.verdict_engine import VerdictEngine
 from app.model.config import Config
+from app.model.declaration import Declaration
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +204,8 @@ class AssessmentRunner:
         step(12)
         forecast_assessment = self.__forecast.run(case, {"forecast": forecast}) if forecast else None
         declaration = partial.get("declaration")
-        crime_declaration, warnings = self.__crime_scan.crime_declaration(declaration)
+        crime_declaration, warnings = self.__crime_scan.crime_declaration(
+            Declaration.from_dict(declaration) if declaration else None)
         notes += warnings
         crime_result = None
         if typologies is not None and crime_declaration is not None:

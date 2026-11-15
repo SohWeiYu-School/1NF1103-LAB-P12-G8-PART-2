@@ -162,6 +162,11 @@ def test_the_saved_assessment_keeps_its_layout(app):
     assert saved["forecast"] == saved["assessment"] == json.loads(json.dumps(result["forecast_assessment"]))
     assert saved["crime_scan"]["typologies"] == result["typology_response"]
     assert saved["document_evidence"] == json.loads(json.dumps(result["evidence"]))
+    # the crime scan's reading of the declaration is saved as its rows, in the row layout
+    assert saved["crime_scan"]["declaration"] == json.loads(json.dumps(result["crime_declaration"].to_scan_dict()))
+    assert list(saved["crime_scan"]["declaration"]["sources"][0]) == [
+        "source_id", "source_type", "description", "amount_sgd", "start_year", "end_year", "jurisdiction",
+        "counterparty", "evidence_sentence", "occupation_mismatch", "amount_explained_by_forecast"]
 
 
 def _saved_assessment(app) -> dict:

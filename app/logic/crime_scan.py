@@ -109,8 +109,9 @@ class CrimeScan(RiskAnalysis):
 
     def run(self, case: dict, ai_data: dict) -> dict:
         """Match the typologies against the client. ai_data is {"typologies": list[Typology],
-        "declaration": {"sources": [...]}}. A raw typology reply may be given as "typology_response"
-        instead (the golden cases do); its typologies are read as they are, unverified."""
+        "declaration": Declaration}. A raw typology reply may be given as "typology_response", and the
+        declaration as its saved rows {"sources": [...]}, instead (the golden case files do); the
+        typologies are then read as they are, unverified."""
         typologies = ai_data.get("typologies")
         if typologies is None and ai_data.get("typology_response") is not None:
             typologies = self.read_typologies(ai_data["typology_response"].get("sector_typologies", []))
@@ -292,7 +293,7 @@ class CrimeScan(RiskAnalysis):
         s = org_string.replace(" and ", ",").replace("&", ",").replace("/", ",")
         return {p.strip().lower() for p in s.split(",") if p.strip()}
 
-    def _assess(self, typologies: list[Typology] | None, declaration: dict | None) -> dict:
+    def _assess(self, typologies: list[Typology] | None, declaration: Declaration | dict | None) -> dict:
         """Match every typology against the declaration.
 
         Returns {"breach_count", "match_count", "match_results": list[MatchResult]}.
@@ -302,7 +303,9 @@ class CrimeScan(RiskAnalysis):
             return {"breach_count": 0, "match_count": 0, "match_results": []}
 
         # Run all 5 indicators against each typology and collect match results
-        match_results = self.match_typologies(Declaration(declaration.get("sources", [])), typologies)
+        if isinstance(declaration, dict):                # the saved rows, from a case file
+            declaration = Declaration(declaration.get("sources", []))
+        match_results = self.match_typologies(declaration, typologies)
 
         # Count full breaches (critical/high/medium) and all matches including partial/weak
         breach_count = sum(1 for mr in match_results if mr.breached)
@@ -457,8 +460,8 @@ class CrimeScan(RiskAnalysis):
         out["all_jurisdictions"] = sorted(all_iso)
         return out, warnings
 
-    def normalise_jurisdictions(self, declaration: dict) -> tuple[dict, list[str]]:
-        """Post-process AI declaration output to ensure jurisdiction fields are ISO-2.
+    def normalise_jurisdictions(self, declaration: Declaration) -> tuple[Declaration, list[str]]:
+        """The crime scan's declaration with every jurisdiction as an ISO-2 code.
 
         Pure function. Called after schema validation succeeds.
         Per source:
@@ -467,70 +470,73 @@ class CrimeScan(RiskAnalysis):
         - 2 lowercase letters → uppercased + warning.
         - Unrecognizable string → set to None + warning.
         - None → kept.
-        Returns (cleaned_declaration, warnings).
+        Returns (a new Declaration, warnings); the one given is not changed.
         """
         warnings: list[str] = []
-        sources = []
-        for src in declaration.get("sources", []):
-            new_src = {**src}
-            j = src.get("jurisdiction")
+        cleaned = Declaration()
+        for source in declaration.sources():
+            row = source.to_scan_dict()
+            j = source.country
             if j is None:
-                sources.append(new_src)
+                cleaned.add_source(row)
                 continue
             stripped = str(j).strip()
             if len(stripped) == 2 and stripped.isalpha() and stripped.isupper():
-                sources.append(new_src)
+                cleaned.add_source(row)
                 continue
             lookup = CrimeScan._COUNTRY_TO_ISO.get(stripped.lower())
             if lookup:
                 warnings.append(f"Declaration jurisdiction '{j}' converted to '{lookup}'.")
-                new_src["jurisdiction"] = lookup
+                row["jurisdiction"] = lookup
             elif len(stripped) == 2 and stripped.isalpha():
                 upper = stripped.upper()
                 warnings.append(f"Declaration jurisdiction '{j}' uppercased to '{upper}'.")
-                new_src["jurisdiction"] = upper
+                row["jurisdiction"] = upper
             else:
                 warnings.append(f"Declaration jurisdiction '{j}' unrecognizable — set to null.")
-                new_src["jurisdiction"] = None
-            sources.append(new_src)
-        return {**declaration, "sources": sources}, warnings
+                row["jurisdiction"] = None
+            cleaned.add_source(row)
+        return cleaned, warnings
 
-    def crime_declaration(self, declaration: dict | None) -> tuple[dict | None, list[str]]:
-        """The declaration the forecast read (Step 0), as the crime scan's warning-sign rows.
+    def crime_declaration(self, declaration: Declaration | None) -> tuple[Declaration | None, list[str]]:
+        """The declaration the forecast read (Step 0), as the crime scan reads it.
 
-        The declaration is read by the AI ONCE; this only reshapes it. A salary, bonus or savings
-        source tied to one of his jobs needs no amount: the forecast works out what the job paid.
-        Returns ({"sources": [...]}, warnings) or (None, warnings) if there is no declaration.
+        The declaration is read by the AI ONCE; this only reshapes it into a new Declaration (the
+        one given is not changed): an inheritance_gift source becomes "inheritance" or "gift", and a
+        salary, bonus or savings source tied to one of his jobs needs no amount, because the
+        forecast works out what the job paid. Returns (Declaration, warnings), or (None, warnings)
+        if there is no declaration.
         """
         policy = self._policy
-        if not declaration:
+        if declaration is None:
             return None, []
         explained_by_career = set(policy.get("self_explained_source_types", []))
-        warnings, rows = [], []
-        for source in declaration.get("claimed_sources", []):
-            kind = source.get("source_type")
+        warnings: list[str] = []
+        rows = Declaration()
+        for source in declaration.sources():
+            kind = source.source_type
             if kind == "inheritance_gift":
-                kind = "inheritance" if "inherit" in str(source.get("description", "")).lower() else "gift"
-            read = "counterparty" in source
-            rows.append({
-                "source_id": source.get("source_id"),
+                kind = "inheritance" if "inherit" in str(source.description).lower() else "gift"
+            read = source.counterparty_read()
+            rows.add_source({
+                "source_id": source.source_id,
                 "source_type": kind,
-                "description": source.get("description", ""),
-                "amount_sgd": source.get("amount"),
-                "start_year": source.get("start_year"),
-                "end_year": source.get("end_year"),
-                "jurisdiction": source.get("country"),
+                "description": source.description,
+                "amount_sgd": source.amount,
+                "start_year": source.start_year,
+                "end_year": source.end_year,
+                "jurisdiction": source.country,
                 # an older saved reading has no counterparty: don't count it as "unnamed"
-                "counterparty": source.get("counterparty") if read else "(not read)",
-                "evidence_sentence": source.get("quote", ""),
-                "occupation_mismatch": bool(source.get("occupation_mismatch", False)),
-                "amount_explained_by_forecast": (source.get("source_type") in explained_by_career
-                                                 and source.get("linked_position_index") is not None),
+                "counterparty": source.counterparty if read else "(not read)",
+                "evidence_sentence": source.quote,
+                "occupation_mismatch": source.occupation_mismatch,
+                "amount_explained_by_forecast": (source.source_type in explained_by_career
+                                                 and source.linked_position_index is not None),
             })
             if not read and not warnings:
                 warnings.append("The saved declaration reading has no counterparties; run the assessment "
                                 "again with a fresh reading to check for unnamed people.")
-        return {"sources": rows}, warnings
+        return rows, warnings
 
     def _crime_checks(self, crime_result: dict | None, reports: list[ResearchReport] | None,
                       typologies: list[Typology] | None,

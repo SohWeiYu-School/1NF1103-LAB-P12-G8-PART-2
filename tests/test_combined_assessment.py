@@ -30,6 +30,7 @@ from app.logic.crime_scan import CrimeScan
 from app.logic.document_record_builder import DocumentRecordBuilder
 from app.logic.forecast import Forecast
 from app.logic.verdict_engine import VerdictEngine
+from app.model.declaration import Declaration
 from app.model.verdict import Verdict
 from tests import fake_ai, fake_services
 from tests.logic_fixtures import CONFIG, POLICY, sample_case
@@ -211,8 +212,8 @@ def test_incomplete_record_says_what_is_missing():
 def test_declaration_is_read_once_and_reused_by_the_crime_scan():
     declaration = json.loads(fake_ai.forecast_replies(client_record() | {"current_date": "2026-10-14"})
                              ["step0_declaration"])
-    rows, warnings = CrimeScan(POLICY).crime_declaration(declaration)
-    salary, advisory = rows["sources"]
+    rows, warnings = CrimeScan(POLICY).crime_declaration(Declaration.from_dict(declaration))
+    salary, advisory = rows.to_scan_dict()["sources"]
     assert salary["amount_explained_by_forecast"] is True      # the forecast works out what the job paid
     assert advisory["counterparty"] is None and advisory["amount_explained_by_forecast"] is False
     assert warnings == []
@@ -222,8 +223,8 @@ def test_old_saved_declaration_without_counterparties_does_not_count_as_unnamed(
     old = {"claimed_sources": [{"source_id": "S1", "source_type": "other", "description": "x", "start_year": None,
                                 "end_year": None, "amount": None, "country": "Singapore",
                                 "linked_position_index": None, "linked_asset_index": None, "quote": "x"}]}
-    rows, warnings = CrimeScan(POLICY).crime_declaration(old)
-    assert rows["sources"][0]["counterparty"] == "(not read)"
+    rows, warnings = CrimeScan(POLICY).crime_declaration(Declaration.from_dict(old))
+    assert rows.to_scan_dict()["sources"][0]["counterparty"] == "(not read)"
     assert warnings
 
 

@@ -1,6 +1,7 @@
 """Tests for logic_manager.prepare_case_for_matching and normalize_declaration_jurisdictions."""
 
 from app.logic.crime_scan import CrimeScan
+from app.model.declaration import Declaration
 
 
 def prepare_case_for_matching(record):
@@ -26,7 +27,7 @@ def _sample_record(**overrides):
 
 
 def _sample_declaration(sources):
-    return {"sources": sources}
+    return Declaration(sources)
 
 
 def _sample_source(jurisdiction):
@@ -160,35 +161,35 @@ def test_original_record_not_mutated():
 def test_valid_iso_code_kept():
     decl = _sample_declaration([_sample_source("SG")])
     out, warnings = normalize_declaration_jurisdictions(decl)
-    assert out["sources"][0]["jurisdiction"] == "SG"
+    assert out.to_scan_dict()["sources"][0]["jurisdiction"] == "SG"
     assert not warnings
 
 
 def test_full_name_converted_to_iso():
     decl = _sample_declaration([_sample_source("Singapore")])
     out, warnings = normalize_declaration_jurisdictions(decl)
-    assert out["sources"][0]["jurisdiction"] == "SG"
+    assert out.to_scan_dict()["sources"][0]["jurisdiction"] == "SG"
     assert any("converted" in w for w in warnings)
 
 
 def test_unrecognizable_jurisdiction_set_to_null():
     decl = _sample_declaration([_sample_source("Mordor")])
     out, warnings = normalize_declaration_jurisdictions(decl)
-    assert out["sources"][0]["jurisdiction"] is None
+    assert out.to_scan_dict()["sources"][0]["jurisdiction"] is None
     assert any("unrecognizable" in w for w in warnings)
 
 
 def test_null_jurisdiction_kept():
     decl = _sample_declaration([_sample_source(None)])
     out, warnings = normalize_declaration_jurisdictions(decl)
-    assert out["sources"][0]["jurisdiction"] is None
+    assert out.to_scan_dict()["sources"][0]["jurisdiction"] is None
     assert not warnings
 
 
 def test_lowercase_iso_uppercased():
     decl = _sample_declaration([_sample_source("sg")])
     out, warnings = normalize_declaration_jurisdictions(decl)
-    assert out["sources"][0]["jurisdiction"] == "SG"
+    assert out.to_scan_dict()["sources"][0]["jurisdiction"] == "SG"
     assert any("uppercased" in w for w in warnings)
 
 
