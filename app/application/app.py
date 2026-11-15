@@ -207,7 +207,7 @@ class App:
             choice = self.__ui.show_app_menu()
             if choice == "1":
                 record = self.__client_form.create_new_client(save_fn=self.save_client,
-                                                             upload_fn=self.__documents.upload)
+                                                             upload_fn=self.upload_document)
                 if record is not None:
                     self.__maybe_assess(record)
             elif choice == "2":
@@ -217,7 +217,7 @@ class App:
             elif choice == "3":
                 self.__client_form.find_existing_client(
                     find_fn=self.find_client, save_fn=self.save_client,
-                    download_fn=self.__documents.download, upload_fn=self.__documents.upload)
+                    download_fn=self.download_document, upload_fn=self.upload_document)
             elif choice == "4":
                 ref = self.__ui.ask_client_ref()
                 if ref is None:
@@ -461,7 +461,7 @@ class App:
                 self.__ui.show_message("\nClient discarded. Nothing was saved.")
                 return None
             if action == "edit":
-                record = builder.finish(self.__client_form.edit_existing_client(record, self.__documents.upload))
+                record = builder.finish(self.__client_form.edit_existing_client(record, self.upload_document))
                 for field in builder.missing_fields(record):
                     record = self.__fill_field(builder, record, field)
                 continue
@@ -469,7 +469,7 @@ class App:
 
         # 5. Keep the documents with the client, then save
         for path in paths:
-            stored = self.__documents.upload(path)
+            stored = self.upload_document(path)
             if stored is None:
                 self.__ui.show_error(f"Could not keep a copy of {os.path.basename(path)}.")
             else:
@@ -527,6 +527,24 @@ class App:
                     self.__report_view.show_verdict_report(verdict)
             else:
                 self.__report_view.show_onboarding(chosen["assessment"])     # saved before the combined verdict
+
+    def client_assessments(self, client_ref: str) -> list[dict]:
+        """Every saved assessment of one client, newest first. Nothing is hidden or caught here:
+        whatever the AssessmentRepository reports (a list, or an error it raises) comes straight back."""
+        return self.__assessments.for_client(client_ref)
+
+    def find_assessment(self, assessment_id: str) -> dict | None:
+        """The saved assessment with this id, or None if there is none."""
+        return self.__assessments.find(assessment_id)
+
+    def upload_document(self, file_path: str) -> str | None:
+        """Keep a copy of a supporting document. Returns its id (to save in the client's
+        document list), or None if it could not be copied."""
+        return self.__documents.upload(file_path)
+
+    def download_document(self, file_id: str, output_path: str) -> bool:
+        """Copy a kept document out to output_path. False if it could not be copied."""
+        return self.__documents.download(file_id, output_path)
 
     def sync_to_cloud(self) -> dict:
         """Back up clients and assessments to the cloud database.

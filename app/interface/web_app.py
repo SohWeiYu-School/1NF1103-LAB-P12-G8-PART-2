@@ -489,7 +489,7 @@ class WebApp:
                 path = os.path.join(folder, name)
                 uploaded.save(path)
                 read.append(self.__app.documents().read_for_extraction(path, name))
-                file_id = self.__app.documents().upload(path)
+                file_id = self.__app.upload_document(path)
                 if file_id is not None:
                     stored.append({"file_name": name, "file_id": file_id})
             finally:
@@ -686,13 +686,13 @@ class WebApp:
         if record is None:
             abort(404)
         saved = record.to_dict()                 # the page template reads the saved layout
-        assessments = self.__app.assessments().for_client(client_ref)
+        assessments = self.__app.client_assessments(client_ref)
         return render_template("client_view.html", record=saved,
                                values=self.values_from_record(saved), SECTIONS=WebApp.SECTIONS,
                                assessments=assessments)
 
     def view_assessment(self, assessment_id: str) -> str:
-        saved = self.__app.assessments().find(assessment_id)
+        saved = self.__app.find_assessment(assessment_id)
         if saved is None:
             abort(404)
         record = self.page_record(saved["client_ref"])
@@ -762,7 +762,7 @@ class WebApp:
             folder = tempfile.mkdtemp()
             path = os.path.join(folder, name)
             uploaded.save(path)
-            file_id = self.__app.documents().upload(path)
+            file_id = self.__app.upload_document(path)
             shutil.rmtree(folder, ignore_errors=True)
  
             if file_id is None:
@@ -799,7 +799,7 @@ class WebApp:
         name = secure_filename(document.get("file_name", "")) or "document"
         folder = tempfile.mkdtemp()
         path = os.path.join(folder, name)
-        ok = self.__app.documents().download(document.get("file_path") or file_id, path)   # local copy
+        ok = self.__app.download_document(document.get("file_path") or file_id, path)   # local copy
         data = b""
         if ok:
             with open(path, "rb") as handle:

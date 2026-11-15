@@ -361,3 +361,46 @@ def test_a_bad_rate_limit_setting_is_reported_at_start_not_crashed(tmp_path, mon
     application = App(ai_caller=None, root=str(root), data_folder=str(tmp_path / "data"))
     assert application.start(["--web"]) == 1                 # the web app is not started either
     assert "cooldown_seconds" in capsys.readouterr().out
+
+
+def test_client_assessments_gives_one_clients_assessments_newest_first(app):
+    older = {"assessment_id": "A1", "client_ref": "C-1", "assessed_at": "2025-01-01T00:00:00+00:00"}
+    newer = {"assessment_id": "A2", "client_ref": "C-1", "assessed_at": "2025-06-01T00:00:00+00:00"}
+    other = {"assessment_id": "A3", "client_ref": "C-2", "assessed_at": "2025-03-01T00:00:00+00:00"}
+    for saved in (older, newer, other):
+        assert app.assessments().save(saved)
+    assert app.client_assessments("C-1") == [newer, older]
+    assert app.client_assessments("C-9") == []
+
+
+def test_client_assessments_passes_on_an_error_from_the_repository(app, monkeypatch):
+    def broken(client_ref):
+        raise OSError("disk problem")
+    monkeypatch.setattr(app.assessments(), "for_client", broken)
+    with pytest.raises(OSError):
+        app.client_assessments("C-1")
+
+
+def test_find_assessment_gives_the_saved_assessment_or_none(app):
+    saved = {"assessment_id": "A1", "client_ref": "C-1", "assessed_at": "2025-01-01T00:00:00+00:00"}
+    assert app.assessments().save(saved)
+    assert app.find_assessment("A1") == saved
+    assert app.find_assessment("missing") is None
+
+
+def test_upload_and_download_document_round_trip_a_file(app, tmp_path):
+    source = tmp_path / "payslip.txt"
+    source.write_text("salary 5000", encoding="utf-8")
+    file_id = app.upload_document(str(source))
+    assert file_id is not None and file_id.endswith("payslip.txt")
+    target = tmp_path / "copy" / "payslip.txt"
+    assert app.download_document(file_id, str(target)) is True
+    assert target.read_text(encoding="utf-8") == "salary 5000"
+
+
+def test_upload_document_gives_none_for_a_file_that_does_not_exist(app, tmp_path):
+    assert app.upload_document(str(tmp_path / "missing.pdf")) is None
+
+
+def test_download_document_gives_false_for_an_unknown_document(app, tmp_path):
+    assert app.download_document("data/documents/nothing.pdf", str(tmp_path / "out.pdf")) is False
