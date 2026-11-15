@@ -20,14 +20,13 @@ class DocumentReaderFactory:
 
     def __init__(self, max_chars: int = 40_000) -> None:
         self.__max_chars: int = max_chars
-        self.__readers: dict[str, type[DocumentReader]] = dict(DocumentReaderFactory.READER_TYPES)
 
     def create(self, file_name: str) -> DocumentReader | None:
         """A reader for this file, or None if the file type cannot be read."""
         extension = os.path.splitext(file_name or "")[1].lower()
-        reader = self.__readers.get(extension)
+        reader = DocumentReaderFactory.READER_TYPES.get(extension)
         return reader(self.__max_chars) if reader else None
 
     def supported_types(self) -> list[str]:
         """Every file type a reader exists for, e.g. ['.csv', '.docx', ...]."""
-        return sorted(self.__readers)
+        return sorted(DocumentReaderFactory.READER_TYPES)

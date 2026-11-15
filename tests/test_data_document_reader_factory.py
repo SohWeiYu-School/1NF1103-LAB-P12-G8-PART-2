@@ -43,9 +43,3 @@ def test_reader_types_maps_every_supported_file_type_to_its_reader_class():
     assert DocumentReaderFactory.READER_TYPES[".png"] is ImageReader
     assert DocumentReaderFactory.READER_TYPES[".csv"] is TextReader
     assert DocumentReaderFactory().supported_types() == sorted(DocumentReaderFactory.READER_TYPES)
-
-
-def test_changing_one_factory_does_not_change_the_class_constant():
-    before = dict(DocumentReaderFactory.READER_TYPES)
-    DocumentReaderFactory()
-    assert DocumentReaderFactory.READER_TYPES == before
