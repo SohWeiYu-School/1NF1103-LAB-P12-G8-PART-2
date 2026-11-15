@@ -106,3 +106,22 @@ def test_income_up_to_adds_the_years_so_far():
 
 def test_an_asset_with_no_model_gets_no_path():
     assert AssetPath(MarketModel(FORECAST), []).build(RECORD, 2022) == []
+
+
+@pytest.mark.parametrize("pay", ["pay", [1], {"positions": "none"}, {"positions": [1]},
+                                 {"positions": [{"position_index": 0}]},
+                                 {"positions": [{"position_index": 0, "yearly": None}]}])
+def test_career_savings_rejects_a_pay_forecast_of_the_wrong_shape(pay):
+    with pytest.raises(ValueError, match="pay forecast"):
+        CareerSavings(pay)
+
+
+def test_asset_path_rejects_a_market_model_or_asset_models_of_the_wrong_type():
+    with pytest.raises(ValueError, match="market model must be a MarketModel"):
+        AssetPath({"markets": {}})
+    with pytest.raises(ValueError, match="asset models must be a list"):
+        AssetPath(MarketModel(), {"asset_index": 0})
+    with pytest.raises(ValueError, match="asset_index"):
+        AssetPath(MarketModel(), [{"exposures": []}])
+    with pytest.raises(ValueError, match="asset_index"):
+        AssetPath(MarketModel(), ["model"])

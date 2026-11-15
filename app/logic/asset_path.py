@@ -14,6 +14,12 @@ class AssetPath:
     """
 
     def __init__(self, market_model: MarketModel | None = None, asset_models: list[dict] | None = None) -> None:
+        if market_model is not None and not isinstance(market_model, MarketModel):
+            raise ValueError(f"the market model must be a MarketModel (or None), not {type(market_model).__name__}")
+        if asset_models is not None and not isinstance(asset_models, list):
+            raise ValueError(f"the asset models must be a list (or None), not {type(asset_models).__name__}")
+        if not all(isinstance(model, dict) and "asset_index" in model for model in asset_models or []):
+            raise ValueError("every asset model must be a dict with an asset_index")
         self.__market_model: MarketModel = market_model or MarketModel()
         self.__asset_models: list[dict] = sorted(asset_models or [], key=lambda model: model["asset_index"])
         self.__paths: list[dict] = []
