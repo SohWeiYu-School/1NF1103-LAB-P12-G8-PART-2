@@ -94,7 +94,7 @@ def test_a_forecast_that_cannot_run_is_reported_with_where_it_stopped(tmp_path):
     result, _ = _run(tmp_path, save_forecast=False,
                      on_failure=lambda step, reason: failures.append((step, reason)) or True)
     assert failures[0][0] == "The forecast"
-    assert "API key" in failures[0][1]
+    assert "The AI service is not available right now" in failures[0][1]
     assert result["forecast"] is None
     assert result["verdict"].outcome != "PASSED"          # an assessment with no forecast never passes
 
@@ -213,3 +213,36 @@ def test_the_files_handed_in_are_read_by_the_document_reader(tmp_path):
     assert len(fakes["documents"].sources) == 1
     assert failed[0] == "Reading the submitted documents"
     assert "Reading the submitted documents" in result["verdict"].not_run
+
+
+def _forecast_stop_reason(tmp_path, forecast_caller):
+    """Run with a forecast AI that has this caller and no saved replies; return (reason told to on_failure, notes, verdict)."""
+    from app.ai.response_cache import ResponseCache
+    from app.data.document_store import DocumentStore
+    from tests.logic_fixtures import CONFIG
+    cache = ResponseCache(str(tmp_path / "cache"))
+    runner = AssessmentRunner(CONFIG, fake_services.FixedAI(fake_ai.research()), fake_services.FixedAI(fake_ai.typologies()),
+                              fake_services.FixedAI(fake_ai.benchmark()), fake_services.FixedAI(None),
+                              fake_services.forecast_ai(cache, forecast_caller),
+                              DocumentStore("data/documents", root=str(tmp_path)), cache)
+    reasons = []
+    result = runner.run(sample_case(), on_failure=lambda step, reason: reasons.append((step, reason)) or True)
+    forecast_reasons = [reason for step, reason in reasons if step == "The forecast"]
+    assert len(forecast_reasons) == 1
+    return forecast_reasons[0], result["verdict"].notes, result["verdict"]
+
+
+def test_a_forecast_reply_that_fails_its_checks_is_shown_as_plain_words_and_logged(tmp_path, caplog):
+    reason, notes, verdict = _forecast_stop_reason(tmp_path, lambda prompt, schema=None, options=None: '{"bad": 1}')
+    assert "could not be used, so this step did not run" in reason
+    assert "reply failed checks" not in reason + " ".join(notes) + str(verdict.report)
+    assert "reply failed checks" in caplog.text                       # the real details are in the log
+    assert "The forecast" in verdict.not_run
+    assert verdict.outcome != "PASSED"
+
+
+def test_a_missing_ai_service_is_shown_as_plain_words(tmp_path):
+    reason, notes, verdict = _forecast_stop_reason(tmp_path, None)
+    assert "The AI service is not available right now. Please try again later." in reason
+    assert "OPENAI_API_KEY" not in reason + " ".join(notes) + str(verdict.report)
+    assert verdict.outcome != "PASSED"

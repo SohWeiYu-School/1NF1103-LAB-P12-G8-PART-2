@@ -170,8 +170,10 @@ class AssessmentRunner:
         forecast = run["forecast"] if run["ok"] else None
         stopped_at = None
         if forecast is None:
+            raw_error = run.get("failed_error") or "unknown error"
             stopped_at = (f"{self.__verdict_engine.describe_piece(case, run.get('failed_piece'))} "
-                          f"({run.get('failed_error') or 'unknown error'})")
+                          f"({self.__plain_reason(raw_error)})")
+            logger.error("AssessmentRunner: the forecast stopped at %s: %s", run.get("failed_piece"), raw_error)
             notes.append(f"The forecast stopped at {stopped_at}. Finished AI replies are saved, "
                          "so running again carries on from there.")
             if not failed("The forecast", stopped_at):
@@ -197,8 +199,9 @@ class AssessmentRunner:
                     findings = self.__benchmark.run(case, {"benchmark_input": bench_input,
                                                            "benchmark_ai": bench_ai})["findings"]
                 except (ZeroDivisionError, KeyError, TypeError) as error:
-                    reason = f"the AI's reply could not be worked out ({error!r})"
-                    notes.append(f"Peer benchmark couldn't be worked out from the AI's reply ({error!r}).")
+                    logger.error("AssessmentRunner: the benchmark reply could not be worked out: %r", error)
+                    reason = "the AI's reply could not be used, so this step did not run"
+                    notes.append("Peer benchmark couldn't be worked out from the AI's reply, so it did not run.")
         if findings is None and not failed("The peer benchmark", reason):
             return None
 
@@ -253,6 +256,18 @@ class AssessmentRunner:
             "evidence": evidence,
             "verdict": verdict,
         }
+
+    @staticmethod
+    def __plain_reason(error: str) -> str:
+        """A forecast error in words a client can read. The real text goes to the log, not the screen."""
+        text = str(error)
+        if text.startswith("reply failed checks"):
+            return "The AI's reply could not be used, so this step did not run."
+        if text.startswith("no AI service") or text.startswith("the AI request failed"):
+            return "The AI service is not available right now. Please try again later."
+        if text.startswith("could not prepare the request"):
+            return "A file this step needs could not be read, so this step did not run."
+        return "This step could not be completed."
 
     def __crime_categories(self) -> dict:
         """{code: description} of the crime categories a typology may belong to (every one but the honest one)."""
