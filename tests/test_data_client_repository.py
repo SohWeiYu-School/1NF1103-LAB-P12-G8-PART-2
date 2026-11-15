@@ -104,3 +104,10 @@ def test_a_record_with_the_wrong_shape_is_reported_as_a_damaged_file(tmp_path):
     path.write_text('[{"client_ref": "CL-1", "investments": 5}]', encoding="utf-8")
     with pytest.raises(ValueError, match="damaged"):
         _repository(tmp_path).load()
+
+
+def test_a_client_repository_rejects_an_empty_path_or_key(tmp_path):
+    with pytest.raises(ValueError):
+        ClientRepository(str(tmp_path / "x.json"), "")
+    with pytest.raises(ValueError):
+        ClientRepository("")

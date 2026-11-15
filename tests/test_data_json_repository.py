@@ -26,6 +26,19 @@ def test_the_interface_and_the_abstract_parent_cannot_be_created(tmp_path):
         JsonRepository(str(tmp_path / "x.json"), "id")
 
 
+def test_a_json_repository_needs_a_path_and_a_key_field(tmp_path):
+    with pytest.raises(TypeError):
+        _Notes(str(tmp_path / "x.json"))
+    with pytest.raises(ValueError, match="key field"):
+        _Notes(str(tmp_path / "x.json"), "")
+    with pytest.raises(ValueError, match="key field"):
+        _Notes(str(tmp_path / "x.json"), "   ")
+    with pytest.raises(ValueError, match="path"):
+        _Notes("", "note_id")
+    with pytest.raises(ValueError, match="path"):
+        _Notes(None, "note_id")
+
+
 def test_a_json_repository_is_a_repository(tmp_path):
     assert isinstance(_repository(tmp_path), Repository)
 

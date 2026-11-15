@@ -18,8 +18,15 @@ class JsonRepository(Repository):
 
     DATA_DIR: str = os.path.join(ROOT_DIR, "data", "local database")
 
-    def __init__(self, path: str = "", key_field: str = "") -> None:
+    def __init__(self, path: str, key_field: str) -> None:
+        """path and key_field must be given and cannot be empty (ValueError): a repository with
+        no file has nowhere to keep its records, and one with no key cannot tell them apart."""
         super().__init__()
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError("A JSON repository needs the path of its file (it cannot be empty).")
+        if not isinstance(key_field, str) or not key_field.strip():
+            raise ValueError("A JSON repository needs a key field, the field that tells one record "
+                             "from another (it cannot be empty).")
         self._path: str = path
         self._key_field: str = key_field
 
