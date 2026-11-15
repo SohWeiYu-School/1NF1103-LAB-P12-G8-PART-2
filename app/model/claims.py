@@ -12,7 +12,7 @@ class Claims:
                  asset_composition: dict | None = None, wealth_countries: list[str] | None = None,
                  declared_counterparties: list[str] | None = None, biggest_wealth_jump: float | None = None,
                  wealth_jump_years: int | None = None, extra: dict | None = None) -> None:
-        self.__check_positive(declared_net_worth)
+        self.__check_net_worth(declared_net_worth)
         self.__check_positive(expected_aum)
         self.__check_positive(biggest_wealth_jump)
         self.__check_positive(wealth_jump_years)
@@ -33,7 +33,7 @@ class Claims:
 
     @declared_net_worth.setter
     def declared_net_worth(self, value: float | None) -> None:
-        self.__check_positive(value)
+        self.__check_net_worth(value)
         self.__declared_net_worth = value
 
     @property
@@ -132,6 +132,11 @@ class Claims:
                 "biggest_wealth_jump": self.__biggest_wealth_jump,
                 "wealth_jump_years": self.__wealth_jump_years,
                 "declared_counterparties": list(self.__declared_counterparties)}
+
+    def __check_net_worth(self, value: float | None) -> None:
+        self.__check_positive(value)
+        if value is not None and value <= 0:
+            raise ValueError("declared net worth must be greater than 0 (or left empty if not given)")
 
     def __check_positive(self, value: float | None) -> None:
         if value is None:

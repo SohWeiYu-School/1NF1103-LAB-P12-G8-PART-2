@@ -48,6 +48,18 @@ def test_liquid_share_is_cash_plus_listed_equities():
     assert _claims(asset_composition=None).liquid_share() == 0
 
 
+def test_claims_reject_zero_net_worth_but_allow_not_given():
+    with pytest.raises(ValueError, match="greater than 0"):
+        _claims(declared_net_worth=0)
+    claims = _claims()
+    with pytest.raises(ValueError, match="greater than 0"):
+        claims.declared_net_worth = 0
+    claims.declared_net_worth = None
+    assert claims.declared_net_worth is None
+    claims.declared_net_worth = 1
+    assert claims.declared_net_worth == 1
+
+
 def test_claims_reject_negative_or_non_number_figures():
     with pytest.raises(ValueError):
         _claims(declared_net_worth=-1)
