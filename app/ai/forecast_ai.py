@@ -354,7 +354,7 @@ class ForecastAI(AIService):
         return errors
 
 
-    def _check_market_series(self, data: dict, market_id: str, history_years: list[int],
+    def __check_market_series(self, data: dict, market_id: str, history_years: list[int],
                             forecast_years: list[int]) -> list[str]:
         """Call 1 series: every year is there once, and the yearly changes are believable."""
         errors = [] if data["market_id"] == market_id else [f"market_id must be '{market_id}'"]
@@ -374,7 +374,7 @@ class ForecastAI(AIService):
         return errors
 
 
-    def _check_position_pay(self, data: dict, index: int, years: list[int]) -> list[str]:
+    def __check_position_pay(self, data: dict, index: int, years: list[int]) -> list[str]:
         """Call 2 job pay: right job, and one row for every year the job was held."""
         errors = [] if data["position_index"] == index else [f"position_index must be {index}"]
         errors += self._years_errors(f"job {index}", [row["year"] for row in data["yearly"]], years)
@@ -888,7 +888,7 @@ class ForecastAI(AIService):
                                     {**values, "market_id": market_id, "market_name": market["name"],
                                      "indicator": market["indicator"]},
                                     {"market": market, "client": self._client_facts(record)}, "market_series",
-                                    lambda data, m=market_id: self._check_market_series(data, m, list(range(start, end + 1)), years),
+                                    lambda data, m=market_id: self.__check_market_series(data, m, list(range(start, end + 1)), years),
                                     cache.get(name), web_search)
             results[name] = piece
             if not piece["ok"]:
@@ -917,7 +917,7 @@ class ForecastAI(AIService):
                                      "markets": self._markets_brief(markets),
                                      "market_changes": self._market_changes(markets, first, last)},
                                     "position_pay",
-                                    lambda data, i=index, y=list(range(first, last + 1)): self._check_position_pay(data, i, y),
+                                    lambda data, i=index, y=list(range(first, last + 1)): self.__check_position_pay(data, i, y),
                                     cache.get(name))
             results[name] = piece
             if not piece["ok"]:
