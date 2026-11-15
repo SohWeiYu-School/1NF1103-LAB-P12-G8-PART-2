@@ -27,7 +27,7 @@ class DocumentRecordBuilder:
         self.__policy: dict = self.__config.policy
         self.__today: str = today
 
-    def __age_from_birth(self, date_of_birth) -> int | None:
+    def __age_from_birth(self, date_of_birth: str | None) -> int | None:
         """Whole years between date_of_birth and today, or None if either can't be read."""
         today = self.__today
         try:
