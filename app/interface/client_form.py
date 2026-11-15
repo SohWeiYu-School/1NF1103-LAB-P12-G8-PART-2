@@ -4,7 +4,7 @@ import datetime
 import logging
 import os
 import uuid
-from typing import Any, Callable
+from typing import Callable
 
 from app.interface.console_ui import ConsoleUI
 from app.interface.report_view import ReportView
@@ -721,7 +721,6 @@ class ClientForm:
         return folder or None
 
     def find_existing_client(self, find_fn: Callable[[str], ClientRecord | None] | None = None,
-                             load_fn: Callable[..., Any] | None = None,
                              save_fn: Callable[[ClientRecord], bool] | None = None,
                              download_fn: Callable[[str, str], bool] | None = None,
                              upload_fn: Callable[[str], str | None] | None = None) -> None:
