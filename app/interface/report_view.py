@@ -42,15 +42,23 @@ class ReportView:
         "SERIOUS_RISK": "SERIOUS RISK",
     }
 
-    def __init__(self, ui: ConsoleUI | None = None) -> None:
-        self.__ui: ConsoleUI = ui or ConsoleUI()
+    MIN_WIDTH: int = 20
 
-    def _format_crime_section(self, crime_result: dict, typologies: list[Typology], width: int) -> list[str]:
-        """Build lines for the structured crime section inside the verdict report. crime_result is
+    def __init__(self, ui: ConsoleUI | None = None, width: int = REPORT_WIDTH) -> None:
+        """width is how many characters wide the verdict report and the evidence are laid out."""
+        if isinstance(width, bool) or not isinstance(width, int) or width < ReportView.MIN_WIDTH:
+            raise ValueError(f"the report width must be a whole number of at least {ReportView.MIN_WIDTH} "
+                             f"characters (got {width!r})")
+        self.__ui: ConsoleUI = ui or ConsoleUI()
+        self.__width: int = width
+
+    def __format_crime_section(self, crime: dict, typologies: list[Typology]) -> list[str]:
+        """Build lines for the structured crime section inside the verdict report. crime is
         CrimeScan.run's result: its match_results are MatchResult objects."""
+        width         = self.__width
         typ_lookup    = {t.typology_id: t for t in typologies}
-        match_results = crime_result.get("match_results", [])
-        match_count   = crime_result.get("match_count", 0)
+        match_results = crime.get("match_results", [])
+        match_count   = crime.get("match_count", 0)
         total         = len(match_results)
         div           = "  " + "\u2500" * (width - 2)
 
@@ -101,27 +109,27 @@ class ReportView:
         report = verdict.report
         head = report["header"]
         symbols = {entry["mark"]: entry["symbol"] for entry in report["legend"]}
-        rule = "\u2550" * ReportView.REPORT_WIDTH
+        rule = "\u2550" * self.__width
         lines = [rule, f"  COMBINED ASSESSMENT  {head['client_ref']}  {head['name']}  ({head['assessed_on']})", rule,
                  f"  VERDICT:      {head['verdict_label']}",
                  f"  Next step:    {head['next_step']}",
                  f"  Next review:  {head['next_review_date']}",
                  f"  Policy:       {head['policy_version']}", ""]
-        lines += textwrap.wrap(head["summary"], ReportView.REPORT_WIDTH - 2, initial_indent="  ", subsequent_indent="  ")
+        lines += textwrap.wrap(head["summary"], self.__width - 2, initial_indent="  ", subsequent_indent="  ")
         lines += ["", "  " + "   ".join(f"{e['symbol']} {e['meaning']}" for e in report["legend"])]
 
         def section(title: str, items: list[dict]) -> None:
-            lines.extend(["", f"  {title.upper()}", "  " + "\u2500" * (ReportView.REPORT_WIDTH - 2)])
+            lines.extend(["", f"  {title.upper()}", "  " + "\u2500" * (self.__width - 2)])
             for item in items:
-                lines.extend(textwrap.wrap(item["text"], ReportView.REPORT_WIDTH - 2,
+                lines.extend(textwrap.wrap(item["text"], self.__width - 2,
                                            initial_indent=f"  {symbols[item['mark']]} ", subsequent_indent="    "))
                 for sub in item["sub"]:
-                    lines.extend(textwrap.wrap(sub, ReportView.REPORT_WIDTH - 2, initial_indent="      ",
+                    lines.extend(textwrap.wrap(sub, self.__width - 2, initial_indent="      ",
                                                subsequent_indent="      "))
 
         for part in report["sections"]:
             if crime_result is not None and part["title"] == ReportView._CRIME_SECTION_TITLE:
-                lines += self._format_crime_section(crime_result, typologies or [], ReportView.REPORT_WIDTH)
+                lines += self.__format_crime_section(crime_result, typologies or [])
             else:
                 section(part["title"], part["items"])
         lines.extend(["", "  FULL EVIDENCE: " + " \u00b7 ".join(report.get("evidence_titles", [])), rule])
@@ -130,12 +138,12 @@ class ReportView:
     def format_evidence(self, verdict: Verdict) -> str:
         """The full evidence behind the verdict (the web app shows the same sections, collapsed)."""
         report = verdict.report
-        rule = "\u2550" * ReportView.REPORT_WIDTH
+        rule = "\u2550" * self.__width
         lines = [rule, f"  FULL EVIDENCE  {report['header']['client_ref']}", rule]
         for part in report["evidence"]:
             lines.extend(["", f"  {part['title']}"])
             for line in part["lines"]:
-                lines.extend(textwrap.wrap(line, ReportView.REPORT_WIDTH - 2, initial_indent="    ", subsequent_indent="      "))
+                lines.extend(textwrap.wrap(line, self.__width - 2, initial_indent="    ", subsequent_indent="      "))
         lines.append(rule)
         return "\n".join(lines)
 

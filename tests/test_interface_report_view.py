@@ -1,5 +1,7 @@
 """ReportView: the layout of what the officer reads."""
 
+import pytest
+
 from app.interface.console_ui import ConsoleUI
 from app.interface.report_view import ReportView
 from app.logic.benchmark import Benchmark
@@ -129,3 +131,20 @@ def test_a_match_whose_typology_is_not_listed_shows_no_description_or_quote():
     assert f"[HIGH MATCH]  {typologies[0].name}" in text
     assert typologies[0].description.split(".")[0] not in text
     assert typologies[0].source_quotes[0]["quote"] not in text
+
+
+def test_the_report_is_laid_out_at_the_width_it_is_given():
+    """96 characters unless another width is handed in; the crime section follows the same width."""
+    typologies, crime_result = _crime_scan()
+    for width in (96, 60):
+        view = ReportView(ConsoleUI(), width) if width != 96 else _view()
+        text = view.format_verdict_report(_report(), crime_result=crime_result, typologies=typologies)
+        text += "\n" + view.format_evidence(_report())
+        assert "═" * width + "\n" in text and "═" * (width + 1) not in text
+        assert "  " + "─" * (width - 2) in text
+
+
+@pytest.mark.parametrize("width", [0, 19, 60.5, True, "96"])
+def test_an_impossible_report_width_is_refused(width):
+    with pytest.raises(ValueError, match="the report width must be a whole number of at least 20"):
+        ReportView(ConsoleUI(), width)
