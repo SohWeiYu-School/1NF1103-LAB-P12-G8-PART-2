@@ -204,7 +204,7 @@ class VerdictEngine:
 
         results: reports (the trusted ResearchReports; None if the research did not run),
                  typologies (the Typology objects), crime_result (CrimeScan.run: its match_results are
-                 MatchResult objects), declaration (forecast Step 0),
+                 MatchResult objects), declaration (the Declaration forecast Step 0 read),
                  benchmark_input, benchmark_ai, benchmark_findings, forecast, forecast_assessment,
                  markets (Call 1, even if the forecast stopped later), evidence (the documents layer),
                  pay_adjustments (calibrate_pay), failed_step, not_run, notes, and the

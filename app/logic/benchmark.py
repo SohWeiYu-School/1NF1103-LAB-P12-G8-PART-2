@@ -8,6 +8,7 @@ from app.logic.formatter import Formatter
 from app.logic.market_model import MarketModel
 from app.model.check import Check
 from app.model.config import Config
+from app.model.declaration import Declaration
 
 
 class Benchmark(RiskAnalysis):
@@ -59,7 +60,7 @@ class Benchmark(RiskAnalysis):
 
     def checks(self, context: dict) -> list[Check]:
         """The benchmark's findings. context holds case, bench_input, ai_data, findings, honest,
-        assessment, declaration, markets and types."""
+        assessment, declaration (the forecast's Declaration), markets and types."""
         return self._benchmark_checks(
             context["case"], context.get("bench_input"), context.get("ai_data"), context.get("findings"),
             context.get("honest"), context.get("assessment"), context.get("declaration"),
@@ -224,7 +225,7 @@ class Benchmark(RiskAnalysis):
         return status not in policy["verdict"]["no_pep_values"]
 
     def _benchmark_checks(self, case: dict, bench_input: dict | None, ai_data: dict | None, findings: list[dict] | None,
-                         honest: dict | None, assessment: dict | None, declaration: dict | None,
+                         honest: dict | None, assessment: dict | None, declaration: Declaration | None,
                          markets: dict | None, types: list[dict]) -> list[Check]:
         """The peer benchmark's checks, each cross-checked against the forecast: a failure the
         honest forecast explains is marked "explained" and doesn't count towards the verdict."""
@@ -431,16 +432,15 @@ class Benchmark(RiskAnalysis):
             # Service providers were already excluded by run_benchmark — unknown comes from its finding
             unknown = self._counterparties([c for c in bench_input.get("declared_counterparties", [])
                                                 if c not in providers], ai_data.get("expected_counterparties", []))
-            sources = (declaration or {}).get("claimed_sources", [])
+            sources = declaration.sources() if declaration is not None else []
 
             def backed(name: str) -> bool:
                 low = name.lower()
-                return any((source.get("linked_position_index") is not None
-                            or source.get("linked_asset_index") is not None)
-                           and source.get("counterparty")
-                           and (low in source["counterparty"].lower() or source["counterparty"].lower() in low)
+                return any((source.linked_position_index is not None or source.linked_asset_index is not None)
+                           and source.counterparty
+                           and (low in source.counterparty.lower() or source.counterparty.lower() in low)
                            for source in sources)
-            explained = all(backed(name) for name in unknown) if declaration else None
+            explained = all(backed(name) for name in unknown) if declaration is not None else None
             status, why = failed_or_explained(
                 by_rule["COUNTERPARTIES"]["failed"], explained,
                 "Explained: each one is named in his declaration as linked to one of his jobs or assets.",

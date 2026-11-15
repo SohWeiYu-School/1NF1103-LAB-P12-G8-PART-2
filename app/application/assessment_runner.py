@@ -203,9 +203,9 @@ class AssessmentRunner:
         # 12. Test every story
         step(12)
         forecast_assessment = self.__forecast.run(case, {"forecast": forecast}) if forecast else None
-        declaration = partial.get("declaration")
-        crime_declaration, warnings = self.__crime_scan.crime_declaration(
-            Declaration.from_dict(declaration) if declaration else None)
+        reading = partial.get("declaration")
+        declaration = Declaration.from_dict(reading) if reading else None
+        crime_declaration, warnings = self.__crime_scan.crime_declaration(declaration)
         notes += warnings
         crime_result = None
         if typologies is not None and crime_declaration is not None:

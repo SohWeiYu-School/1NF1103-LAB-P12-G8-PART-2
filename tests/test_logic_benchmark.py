@@ -3,6 +3,7 @@
 from app.logic.benchmark import Benchmark
 from app.logic.risk_analysis import RiskAnalysis
 from app.model.check import Check
+from app.model.declaration import Declaration
 from tests import fake_ai
 from tests.logic_fixtures import CONFIG, POLICY, sample_case
 
@@ -89,3 +90,46 @@ def test_a_missing_wealth_jump_is_an_optional_skipped_check():
     jump = checks["JUMP_VS_ECONOMY"]
     assert (jump.status, jump.extra("optional")) == ("skipped", True)
     assert checks["TOTAL_WEALTH"].extra("optional") is False
+
+
+# ----- counterparties not usual for his career, cross-checked with his declaration ----------
+
+MANY_PEOPLE = {**BENCH_INPUT, "declared_counterparties": ["Lucky Star Trading", "Golden Dragon Holdings",
+                                                          "Meridian Harbour Bank"]}
+
+
+def _source(counterparty, job=None, asset=None, description="x"):
+    return {"source_id": "S1", "source_type": "business_income", "description": description, "start_year": 2010,
+            "end_year": None, "amount": 1000, "country": "Singapore", "linked_position_index": job,
+            "linked_asset_index": asset, "quote": "x", "counterparty": counterparty, "occupation_mismatch": False}
+
+
+def _counterparty_check(declaration):
+    feature = _feature()
+    findings = feature.run({}, {"benchmark_input": MANY_PEOPLE, "benchmark_ai": fake_ai.benchmark()})["findings"]
+    checks = feature.checks({"case": sample_case(), "bench_input": MANY_PEOPLE, "ai_data": fake_ai.benchmark(),
+                             "findings": findings, "declaration": declaration})
+    return next(check for check in checks if check.check == "COUNTERPARTIES")
+
+
+def test_counterparties_named_by_sources_linked_to_his_jobs_or_assets_are_explained():
+    declaration = Declaration.from_dict({"claimed_sources": [_source("Lucky Star Trading Pte Ltd", job=0),
+                                                             _source("Golden Dragon Holdings", asset=1)]})
+    assert _counterparty_check(declaration).status == "explained"
+
+
+def test_a_counterparty_named_only_by_an_unlinked_source_is_not_explained():
+    declaration = Declaration.from_dict({"claimed_sources": [_source("Lucky Star Trading", job=0),
+                                                             _source("Golden Dragon Holdings")]})
+    assert _counterparty_check(declaration).status == "failed"
+
+
+def test_only_the_sources_counterparty_names_someone_not_its_description():
+    declaration = Declaration.from_dict({"claimed_sources": [
+        _source("Lucky Star Trading", job=0), _source(None, asset=1, description="Golden Dragon Holdings")]})
+    assert _counterparty_check(declaration).status == "failed"
+
+
+def test_with_no_declaration_reading_the_counterparties_are_not_checked():
+    check = _counterparty_check(None)
+    assert check.status == "failed" and check.explanation
