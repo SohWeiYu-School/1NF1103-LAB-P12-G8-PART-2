@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from app.data.config_reader import ConfigReader
 
 
@@ -31,18 +33,34 @@ def test_a_file_is_read_once_and_kept(tmp_path):
     assert reader.read("policy") == {"policy_version": "1"}
 
 
-def test_a_missing_file_gives_an_empty_dict(tmp_path):
-    assert ConfigReader(str(tmp_path)).read("policy") == {}
+def test_a_missing_file_raises_an_os_error_not_an_empty_dict(tmp_path):
+    with pytest.raises(OSError):
+        ConfigReader(str(tmp_path)).read("policy")
 
 
-def test_a_damaged_file_gives_an_empty_dict(tmp_path):
+def test_a_damaged_file_raises_a_value_error_and_logs_the_details(tmp_path, caplog):
     (tmp_path / "policy.json").write_text("{not json", encoding="utf-8")
-    assert ConfigReader(str(tmp_path)).read("policy") == {}
+    with pytest.raises(ValueError):
+        ConfigReader(str(tmp_path)).read("policy")
+    assert "policy.json" in caplog.text
 
 
-def test_a_file_that_is_not_an_object_gives_an_empty_dict(tmp_path):
+def test_a_file_that_is_not_an_object_raises_a_value_error(tmp_path):
     _write(tmp_path, "policy", ["a", "list"])
+    with pytest.raises(ValueError):
+        ConfigReader(str(tmp_path)).read("policy")
+
+
+def test_a_file_that_really_holds_an_empty_object_is_read_as_empty(tmp_path):
+    _write(tmp_path, "policy", {})
     assert ConfigReader(str(tmp_path)).read("policy") == {}
+
+
+def test_problems_reports_a_file_that_cannot_be_read_instead_of_raising(tmp_path):
+    _write(tmp_path, "vocabulary", {})
+    (tmp_path / "policy.json").write_text("{not json", encoding="utf-8")
+    problems = ConfigReader(str(tmp_path)).problems()
+    assert len(problems) == 1 and "could not be read" in problems[0]
 
 
 def test_problems_names_every_missing_setting(tmp_path):

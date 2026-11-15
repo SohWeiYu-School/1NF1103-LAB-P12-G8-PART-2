@@ -378,6 +378,27 @@ def test_a_bad_rate_limit_setting_is_reported_at_start_not_crashed(tmp_path, mon
     assert "cooldown_seconds" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("damage", ["missing", "damaged", "not_an_object"])
+@pytest.mark.parametrize("start", [["--web"], []])
+def test_unreadable_settings_stop_the_app_with_a_message_and_nothing_runs(tmp_path, monkeypatch, capsys,
+                                                                          damage, start):
+    import shutil
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    root = tmp_path / "root"
+    shutil.copytree("config", root / "config")
+    policy = root / "config" / "policy.json"
+    if damage == "missing":
+        policy.unlink()
+    else:
+        policy.write_text("{broken" if damage == "damaged" else "[1, 2]")
+    application = App(ai_caller=None, root=str(root), data_folder=str(tmp_path / "data"))   # no crash
+    assert application.start(start) == 1
+    out = capsys.readouterr().out
+    assert App.SETTINGS_UNAVAILABLE in out
+    assert "Traceback" not in out and "policy.json" not in out         # technical details stay in the log
+
+
 def test_client_assessments_gives_one_clients_assessments_newest_first(app):
     older = {"assessment_id": "A1", "client_ref": "C-1", "assessed_at": "2025-01-01T00:00:00+00:00"}
     newer = {"assessment_id": "A2", "client_ref": "C-1", "assessed_at": "2025-06-01T00:00:00+00:00"}

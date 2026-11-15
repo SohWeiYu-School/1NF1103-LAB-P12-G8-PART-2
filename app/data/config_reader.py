@@ -23,30 +23,39 @@ class ConfigReader:
         self.__files: dict[str, dict] = {}
 
     def read(self, name: str) -> dict:
-        """The contents of config/<name>.json. Returns {} if the file is missing or damaged."""
+        """The contents of config/<name>.json. Logs the real details and raises OSError if the file is
+        missing or cannot be read, ValueError if it is damaged JSON or not a JSON object. An empty
+        result is never an error fallback: {} only comes back for a file that really holds {}."""
         if name in self.__files:
             return self.__files[name]
         path = os.path.join(self.__folder, f"{name}.json")
         try:
             with open(path, "r", encoding="utf-8") as handle:
                 data = json.load(handle)
-        except (OSError, json.JSONDecodeError) as error:
-            logger.error("Could not read config file %s: %s", path, error)
-            return {}
+        except OSError as error:
+            logger.error("Could not read config file %s: %r", path, error)
+            raise
+        except ValueError as error:                  # json.JSONDecodeError, and bad UTF-8
+            logger.error("Config file %s is damaged: %r", path, error)
+            raise ValueError(f"config/{name}.json is not valid JSON: {error}") from error
         if not isinstance(data, dict):
             logger.error("Config file %s does not hold a JSON object", path)
-            return {}
+            raise ValueError(f"config/{name}.json does not hold a JSON object")
         self.__files[name] = data
         return data
 
     def problems(self) -> list[str]:
-        """Anything missing from the config folder that would stop the app working."""
+        """Anything missing from the config folder that would stop the app working. A file that
+        cannot be read is itself a problem (named here, details in the log)."""
         problems = []
-        vocabulary = self.read("vocabulary")
+        try:
+            vocabulary = self.read("vocabulary")
+            policy = self.read("policy")
+        except (OSError, ValueError) as error:
+            return [f"The settings could not be read: {error}"]
         for key in ConfigReader.REQUIRED["vocabulary"]:
             if not vocabulary.get(key):
                 problems.append(f"config/vocabulary.json is missing '{key}'")
-        policy = self.read("policy")
         for key in ConfigReader.REQUIRED["policy"]:
             if key not in policy:
                 problems.append(f"config/policy.json is missing '{key}'")

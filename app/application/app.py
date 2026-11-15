@@ -60,6 +60,8 @@ class App:
     # Network libraries that log every connection step; only their warnings are kept.
     NOISY_LOGGERS: tuple[str, ...] = ("httpx", "httpcore", "httpx2", "httpcore2", "openai", "urllib3",
                                       "google_genai", "hpack", "pymongo")
+    # What the user is told when the settings files cannot be loaded (the real error goes to the log).
+    SETTINGS_UNAVAILABLE: str = "The app's settings could not be loaded. Please contact your administrator."
     CLIENT_COLLECTION: str = "client_cases"
     ASSESSMENT_COLLECTION: str = "ai_assessments"
     # What the user is told when saved records cannot be read (the real error goes to the log).
@@ -75,7 +77,15 @@ class App:
 
         # Settings (read by the Data Manager, held by a Domain Model object)
         self.__config_reader: ConfigReader = ConfigReader(os.path.join(root, "config"))
-        policy_file, vocabulary_file = (self.__config_reader.read(name) for name in ConfigReader.FILE_NAMES)
+        self.__settings_ok: bool = True
+        try:
+            policy_file, vocabulary_file = (self.__config_reader.read(name) for name in ConfigReader.FILE_NAMES)
+        except (OSError, ValueError) as error:
+            # App must not crash while it is built, and must not run on empty rules: start() and
+            # start_web() see this flag, tell the officer and stop. The reader has logged the details.
+            logger.error("App: the settings could not be loaded: %r", error)
+            self.__settings_ok = False
+            policy_file, vocabulary_file = {}, {}
         self.__config: Config = Config(policy_file, vocabulary_file)
         policy = self.__config.policy
 
@@ -164,6 +174,9 @@ class App:
             --web                   start the web app instead of the menu
         """
         self.__configure_logging()
+        if not self.__settings_ok:
+            self.__ui.show_error(App.SETTINGS_UNAVAILABLE)
+            return 1
         problems = self.__config_reader.problems()
         if problems:
             for problem in problems:
@@ -200,6 +213,9 @@ class App:
         """Start the web app. HOST and PORT in .env set where it listens (default 127.0.0.1:5000)."""
         from app.interface.web_app import WebApp    # imported here: WebApp itself imports App
         self.__configure_logging()
+        if not self.__settings_ok:
+            self.__ui.show_error(App.SETTINGS_UNAVAILABLE)
+            return 1
         WebApp(self, self.__limiter).start(host or os.getenv("HOST") or "127.0.0.1", port or int(os.getenv("PORT") or 5000))
         return 0
 
