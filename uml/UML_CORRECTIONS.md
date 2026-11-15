@@ -57,3 +57,46 @@ Layout: the AI service boxes grew, so the right-hand column was re-stacked and t
 (the Application folder also grew by 15 px, harmlessly). Connector bends next to the moved boxes were re-levelled so
 the lines keep their right angles (an independent review caught that they had gone diagonal), and three
 multiplicity labels were moved back beside their lines.
+
+## Stage 3, batch B: IO Manager and Application (2026-11-15): 45 corrections
+
+Code changed to match the diagram:
+- ConsoleUI is handed its `read`/`write` functions, and its helpers are private.
+- `keep_money` keeps an empty amount as `None` (CLAUDE.md §9).
+- `ask_money` refuses zero unless the caller allows it.
+- ClientForm and CaseBuilder helpers are private.
+- ReportView is handed its `width`, RateLimiter its cooldown, and WebApp its RateLimiter.
+- App's case and documents screens are private, and `App.today` is static.
+- `AssessmentRunner.run` names its parameter `files`.
+
+Everything below is the diagram being corrected:
+
+| Class | Member | Correction | Reason |
+|---|---|---|---|
+| ConsoleUI | `__init__(read, write)` | `Callable \| None = None` (the attributes fall back to `input`/`print`) | **T**: a default bound to `input` at class definition would ignore a swapped `builtins.input`, which App's console tests rely on |
+| ConsoleUI | `ask_int`, `ask_year` | `minimum`/`maximum : int \| None`, `allow_blank`, returns `int \| None` | **T**: callers pass "no limit" and blank-for-current answers |
+| ConsoleUI | `ask_choice`, `keep_text` | `+ allow_back`, `+ min_length` | **T**: the assessment list and the declaration edit pass them |
+| ConsoleUI | `keep_money` | `current : float \| None) : float \| None` | **T/R**: an empty amount is `None` (CLAUDE.md §9); this is the correction stage 2 deferred |
+| ConsoleUI | `money`, `money_range` | `value : float \| None`; `values : dict` (not `Band`) | **T**: forecast rows pass `None`; the range is given as a dict |
+| ConsoleUI | `+keep_countries(...)` | added | **B**: replaces ClientForm reaching into ConsoleUI's private `__only` |
+| ClientForm | `__init__` | `+ report_view` | **T**: App hands in the shared ReportView |
+| ClientForm | `create_new_client`, `edit_existing_client` | `+ save_fn`, `+ upload_fn` | **R**: ClientForm (IO Manager) may not import the Data Manager or App (§3), so App passes these functions in |
+| ClientForm | `__edit_*_record(record)` | `record : dict` | **T**: they edit the answers dict, which is checked as a whole afterwards |
+| ClientForm | `__ask_job` | `+ previous : bool = False` | **T**: a previous job must have an end year (the R1 data-loss fix) |
+| CaseBuilder | `__init__` and its 4 helpers | real parameters (`case_schema`, year limits, `allow_zero`) | **T**: `validate_case` needs the schema; jobs and assets have different date limits |
+| ReportView | `__init__`, `show_verdict_report`, `__format_crime_section` | real parameters (`width = REPORT_WIDTH`, `ask_for_evidence`, `crime_result`, `typologies`) | **T**: the crime cards need the crime result and typologies, which a Verdict doesn't hold |
+| ReportView | `+MIN_WIDTH` | added | **B**: the lower limit checked for `width` |
+| RateLimiter | `__init__` | `cooldown_seconds = DEFAULT_COOLDOWN_SECONDS, + enabled` | **T**: the policy can switch the limit off |
+| WebApp | `__app`, `__limiter`, `__init__` | `\| None = None` | **T**: without a limiter WebApp uses the App's own |
+| WebApp | `__jobs` | `dict[str, dict]` | **T**: it stores each job's status, not the thread |
+| WebApp | `view_client`, `edit_client_autofill` | `: str \| Response` | **T**: they redirect when a record can't be loaded |
+| App | `__ai_caller`, `__init__` | `Callable \| None`, `+ root`, `+ data_folder` | **T**: "no AI caller" is a real state; tests use a temporary data folder |
+| App | `__assessments` | `AssessmentRepository` (not `Repository`) | **T**: App and WebApp call `query`/`for_client`, which the Repository interface doesn't have |
+| App, AssessmentRunner | `CRITICAL_STEPS`, `STEPS` | `tuple[str, ...]` | **B**: immutable constants, shared safely by the web threads |
+| App | `list_assessments : list[dict]` | `: None` | **T**: it is an interactive menu screen; the web reads `assessments()` |
+| AssessmentRunner | `__init__` | the separate services, store and cache | **T**: it calls methods specific to each service; it also needs the DocumentStore and ResponseCache |
+| AssessmentRunner | `run : Verdict` | `files … \| None = None`, `: dict \| None` | **T**: App saves the research, typologies and other results a Verdict doesn't hold, and the runner is shared by parallel threads, so it can't keep them |
+
+Layout: the IO Manager boxes grew, so the right-hand column was re-stacked and `CaseBuilder` moved under
+`RateLimiter` (left column) to stay inside its folder. `RateLimiter` was widened so its `__init__` line isn't cut
+off. Connector bends were re-levelled, and multiplicity labels were moved out of grown boxes and back beside their lines.

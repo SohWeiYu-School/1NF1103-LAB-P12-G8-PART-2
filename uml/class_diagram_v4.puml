@@ -153,41 +153,41 @@ package "IO Manager (app/interface)" {
     -__ui : ConsoleUI = None
     -__today : str = ""
     --
-    +__init__(ui : ConsoleUI, today : str = "")
+    +__init__(ui : ConsoleUI | None = None, case_schema : dict | None = None)
     +build(record : ClientRecord, missing : list[str]) : dict | None
     +show_case_problems(where : str, problems : list) : None
-    -__jobs_from_record(record : ClientRecord) : list[dict]
-    -__assets_from_record(record : ClientRecord) : list[dict]
-    -__number_or_ask(value : float | None, question : str) : float
-    -__year_or_ask(value : int | None, question : str) : int
+    -__jobs_from_record(record : ClientRecord, this_year : int) : list[dict]
+    -__assets_from_record(record : ClientRecord, first_year : int, this_year : int) : list[dict]
+    -__number_or_ask(value : object, question : str, allow_zero : bool = True) : float
+    -__year_or_ask(value : object, question : str, minimum : int | None = None, maximum : int | None = None) : int
   }
   class ClientForm {
     -__ui : ConsoleUI = None
     +SOURCE_TAGS : dict = {...} «const»
     --
-    +__init__(ui : ConsoleUI)
-    +create_new_client() : ClientRecord | None
-    +edit_existing_client(record : ClientRecord) : ClientRecord
+    +__init__(ui : ConsoleUI | None = None, report_view : ReportView | None = None)
+    +create_new_client(save_fn : Callable[[ClientRecord], bool] | None = None, upload_fn : Callable[[str], str | None] | None = None) : ClientRecord | None
+    +edit_existing_client(record : ClientRecord, upload_fn : Callable[[str], str | None] | None = None) : ClientRecord
     +pick_client(records : list[dict]) : ClientRecord | None
     +generate_client_id() : str
     +ask_document_folder() : str | None
-    -__ask_job() : dict
+    -__ask_job(previous : bool = False) : dict
     -__ask_asset() : dict
     -__get_claims() : dict
-    -__edit_career_record(record : ClientRecord) : None
-    -__edit_asset_record(record : ClientRecord) : None
-    -__edit_sow_declaration(record : ClientRecord) : None
+    -__edit_career_record(record : dict) : None
+    -__edit_asset_record(record : dict) : None
+    -__edit_sow_declaration(record : dict) : None
   }
   class ConsoleUI {
-    -__read : Callable = input
-    -__write : Callable = print
+    -__read : Callable[[str], str] = input
+    -__write : Callable[[str], None] = print
     +LINE : str = "-" * 72 «const»
     +LETTERS : str = " '.-" «const»
     +MAX_EMPLOYEES : int = 10_000_000 «const»
     +PAYMENT_METHODS : list[str] = [...] «const»
     +PEP_OPTIONS : list[str] = [...] «const»
     --
-    +__init__(read : Callable = input, write : Callable = print)
+    +__init__(read : Callable[[str], str] | None = None, write : Callable[[str], None] | None = None)
     +show(text : str) : None
     +show_message(text : str) : None
     +show_error(text : str) : None
@@ -198,24 +198,25 @@ package "IO Manager (app/interface)" {
     +show_sync_result(stats : dict) : None
     +read_answer(question : str) : str
     +ask_text(question : str, min_length : int = 1) : str
-    +ask_int(question : str, minimum : int = 0) : int
+    +ask_int(question : str, minimum : int | None = None, maximum : int | None = None, allow_blank : bool = False) : int | None
     +ask_money(question : str, allow_zero : bool = False) : float
-    +ask_year(question : str, minimum : int, maximum : int) : int
-    +ask_choice(question : str, options : list) : int | None
+    +ask_year(question : str, minimum : int = 1940, maximum : int | None = None, allow_blank : bool = False) : int | None
+    +ask_choice(question : str, options : list[str], allow_back : bool = False) : int | None
     +ask_yes_no(question : str) : bool
     +ask_client_ref() : str | None
-    +keep_text(label : str, current : str) : str
-    +keep_money(label : str, current : float) : float
-    +money(value : float) : str
-    +money_range(band : Band) : str
+    +keep_text(label : str, current : str, min_length : int = 2) : str
+    +keep_money(label : str, current : float | None) : float | None
+    +money(value : float | None) : str
+    +money_range(values : dict) : str
     -__only(text : str, allowed : str) : bool
     -__parse_count(text : str) : int | None
+    +keep_countries(label : str, current : list[str]) : list[str]
   }
   class RateLimiter {
     -__cooldown_seconds : int = 60
     -__last_run : dict[str, float] = {}
     --
-    +__init__(cooldown_seconds : int = 60)
+    +__init__(cooldown_seconds : int = DEFAULT_COOLDOWN_SECONDS, enabled : bool = True)
     +check(user_key : str) : tuple[bool, int]
     +record(user_key : str) : None
   }
@@ -224,33 +225,34 @@ package "IO Manager (app/interface)" {
     -__width : int = 96
     +FIELD_NAMES : dict = {...} «const»
     +OUTCOME_LABELS : dict = {...} «const»
+    +MIN_WIDTH : int = 20 «const»
     --
-    +__init__(ui : ConsoleUI, width : int = 96)
-    +show_verdict_report(verdict : Verdict) : None
+    +__init__(ui : ConsoleUI | None = None, width : int = REPORT_WIDTH)
+    +show_verdict_report(verdict : Verdict, ask_for_evidence : bool = True, crime_result : dict | None = None, typologies : list[Typology] | None = None) : None
     +show_onboarding(assessment : dict) : None
     +show_assessment_list(records : list[dict]) : None
     +show_client_list(records : list[dict]) : None
     +show_ai_progress(results : dict) : None
     +display_client_record(record : ClientRecord) : None
     +format_evidence(verdict : Verdict) : str
-    -__format_crime_section(crime : dict) : list[str]
+    -__format_crime_section(crime : dict, typologies : list[Typology]) : list[str]
     -__display_section(title : str) : None
   }
   class WebApp {
-    -__app : App = None
-    -__limiter : RateLimiter = None
+    -__app : App | None = None
+    -__limiter : RateLimiter | None = None
     -__flask : Flask = Flask(__name__)
-    -__jobs : dict[str, Thread] = {}
+    -__jobs : dict[str, dict] = {}
     --
-    +__init__(app : App, limiter : RateLimiter)
+    +__init__(app : App | None = None, limiter : RateLimiter | None = None)
     +start(host : str = "0.0.0.0", port : int = 5000) : None
     +home() : str
     +find() : Response
     +new_client() : str | Response
     +new_client_autofill() : str
-    +view_client(client_ref : str) : str
+    +view_client(client_ref : str) : str | Response
     +edit_client(client_ref : str) : str | Response
-    +edit_client_autofill(client_ref : str) : str
+    +edit_client_autofill(client_ref : str) : str | Response
     +upload_documents(client_ref : str) : Response
     +download_document(client_ref : str, file_id : str) : Response
     +assess_client(client_ref : str) : Response
@@ -356,7 +358,7 @@ package "AI Manager (app/ai)" {
 
 package "Application (app/application)" {
   class App {
-    -__ai_caller : Callable = None
+    -__ai_caller : Callable | None = None
     -__config : Config = None
     -__ui : ConsoleUI = None
     -__report_view : ReportView = None
@@ -366,15 +368,15 @@ package "Application (app/application)" {
     -__case_files : CaseFiles = None
     -__limiter : RateLimiter = None
     -__clients : Repository = None
-    -__assessments : Repository = None
+    -__assessments : AssessmentRepository = None
     -__runner : AssessmentRunner = None
     -__documents : DocumentStore = None
     -__document_ai : DocumentAI = None
     -__response_cache : ResponseCache = None
     -__syncs : list[CloudSync] = []
-    +CRITICAL_STEPS : list[str] = [...] «const»
+    +CRITICAL_STEPS : tuple[str, ...] = ("Deciding the verdict",) «const»
     --
-    +__init__(ai_caller : Callable)
+    +__init__(ai_caller : Callable[[str, dict, dict], str | None] | None = None, root : str = ROOT_DIR, data_folder : str = "data")
     +start(arguments : list[str]) : int
     +run_menu() : None
     +run_case_file(path : str) : bool
@@ -384,7 +386,7 @@ package "Application (app/application)" {
     +save_client(record : ClientRecord) : bool
     +client_assessments(client_ref : str) : list[dict]
     +find_assessment(assessment_id : str) : dict | None
-    +list_assessments() : list[dict]
+    +list_assessments() : None
     +upload_document(record : ClientRecord, file_path : str) : dict | None
     +download_document(file_id : str, output_path : str) : bool
     +autofill_from_documents(paths : list[str]) : tuple[ClientRecord, list[str]]
@@ -400,10 +402,10 @@ package "Application (app/application)" {
     -__features : list[RiskAnalysis] = []
     -__verdict_engine : VerdictEngine = None
     -__config : Config = None
-    +STEPS : list[str] = [...] «const»
+    +STEPS : tuple[str, ...] = (...) «const»
     --
-    +__init__(ai : dict[str, AIService], config : Config)
-    +run(case : dict, files : list[dict], on_step : Callable = None, on_failure : Callable = None) : Verdict
+    +__init__(config : Config | None = None, research_ai : ResearchAI | None = None, typology_ai : TypologyAI | None = None, benchmark_ai : BenchmarkAI | None = None, document_ai : DocumentAI | None = None, forecast_ai : ForecastAI | None = None, document_store : DocumentStore | None = None, response_cache : ResponseCache | None = None)
+    +run(case : dict, files : list[dict] | None = None, on_step : Callable[[int, str], None] | None = None, on_failure : Callable[[str, str], bool] | None = None) : dict | None
     -__run_ai_steps(case : dict) : dict
   }
 }
