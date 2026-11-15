@@ -70,7 +70,7 @@ class Benchmark(RiskAnalysis):
     def _market_history(self, forecast: dict) -> dict:
         return MarketModel(forecast).history()
 
-    def _total_wealth(self, client_data, ai_data):
+    def __total_wealth(self, client_data, ai_data):
 
         declared = client_data["declared_net_worth"]
         expected = ai_data["expected_wealth"]
@@ -79,7 +79,7 @@ class Benchmark(RiskAnalysis):
 
         return result1
 
-    def _liquidity(self, client_data, ai_data):
+    def __liquidity(self, client_data, ai_data):
 
         declared = client_data["listed_equities"] + client_data["cash"]
         expected = ai_data["expected_liquidity"]
@@ -88,7 +88,7 @@ class Benchmark(RiskAnalysis):
 
         return result2
 
-    def _composition(self, client_data, ai_data):
+    def __composition(self, client_data, ai_data):
         results = []
         for rule_id, client_key, ai_key, label in Benchmark._COMPOSITION_PARTS:
             declared = client_data[client_key]
@@ -98,7 +98,7 @@ class Benchmark(RiskAnalysis):
                             "detail": f"{label}: declared {declared}%, expected {expected}%, diff {diff}%"})
         return results
 
-    def _velocity(self, client_data, ai_data):
+    def __velocity(self, client_data, ai_data):
         jump = client_data.get("biggest_wealth_jump")
         years = client_data.get("wealth_jump_years")
         expected = ai_data.get("expected_velocity")
@@ -107,7 +107,7 @@ class Benchmark(RiskAnalysis):
         per_year = jump / years
         return per_year / expected, per_year
 
-    def _counterparties(self, declared, expected):
+    def __counterparties(self, declared, expected):
         unknown = []
 
         for item in declared:
@@ -130,7 +130,7 @@ class Benchmark(RiskAnalysis):
 
         return country
 
-    def _jurisdiction(self, declared, expected):
+    def __jurisdiction(self, declared, expected):
         unknown = []
 
         for country in declared:
@@ -151,20 +151,20 @@ class Benchmark(RiskAnalysis):
         findings = []
 
         # 1. TOTAL WEALTH CHECK
-        result1 = self._total_wealth(client_data, ai_data)
+        result1 = self.__total_wealth(client_data, ai_data)
         findings.append({"rule_id": "TOTAL_WEALTH", "failed": result1 > Benchmark.LIMITS["total_wealth"],
                          "detail": f"Declared {client_data['declared_net_worth']:,}, expected {ai_data['expected_wealth']:,}, ratio {round(result1, 2)}"})
 
         # 2. LIQUIDITY CHECK
-        result2 = self._liquidity(client_data, ai_data)
+        result2 = self.__liquidity(client_data, ai_data)
         findings.append({"rule_id": "LIQUIDITY", "failed": result2 > Benchmark.LIMITS["liquidity"],
                          "detail": f"Declared {client_data['listed_equities'] + client_data['cash']}%, expected {ai_data['expected_liquidity']}%, ratio {round(result2, 2)}"})
 
         # 3. ASSET COMPOSITION CHECK
-        findings += self._composition(client_data, ai_data)
+        findings += self.__composition(client_data, ai_data)
 
         # 4. VELOCITY CHECK
-        ratio, per_year = self._velocity(client_data, ai_data)
+        ratio, per_year = self.__velocity(client_data, ai_data)
         if ratio is None:
             findings.append({"rule_id": "VELOCITY", "failed": False,
                              "detail": "Skipped — missing or invalid wealth timeline data"})
@@ -179,14 +179,14 @@ class Benchmark(RiskAnalysis):
             declared_counterparties = [c for c in declared_counterparties
                                        if not any(re.search(rf"\b{re.escape(w)}\b", c.lower()) for w in words)]
         expected_counterparties = ai_data.get("expected_counterparties", [])
-        unknown_counterparties = self._counterparties(declared_counterparties, expected_counterparties)
+        unknown_counterparties = self.__counterparties(declared_counterparties, expected_counterparties)
         findings.append({"rule_id": "COUNTERPARTIES", "failed": len(unknown_counterparties) > Benchmark.LIMITS["counterparties"],
                          "detail": f"Unknown counterparties: {unknown_counterparties or 'none'}"})
 
         # 6. JURISDICTION CHECK
         declared_countries = client_data.get("declared_countries", [])
         expected_countries = ai_data.get("expected_jurisdiction", [])
-        unknown_countries = self._jurisdiction(declared_countries, expected_countries)
+        unknown_countries = self.__jurisdiction(declared_countries, expected_countries)
         findings.append({"rule_id": "JURISDICTION", "failed": len(unknown_countries) > Benchmark.LIMITS["jurisdiction"],
                          "detail": f"Unknown countries: {unknown_countries or 'none'}"})
 
@@ -220,7 +220,7 @@ class Benchmark(RiskAnalysis):
                 best = (round(average, 1), last - years + 1, last)
         return best
 
-    def is_pep(self, case: dict) -> bool:
+    def __is_pep(self, case: dict) -> bool:
         policy = self._policy
         status = str(case.get("claims", {}).get("pep_status") or "").strip().lower()
         return status not in policy["verdict"]["no_pep_values"]
@@ -431,7 +431,7 @@ class Benchmark(RiskAnalysis):
             providers = [c for c in bench_input.get("declared_counterparties", [])
                          if any(re.search(rf"\b{re.escape(w)}\b", c.lower()) for w in words)]
             # Service providers were already excluded by run_benchmark — unknown comes from its finding
-            unknown = self._counterparties([c for c in bench_input.get("declared_counterparties", [])
+            unknown = self.__counterparties([c for c in bench_input.get("declared_counterparties", [])
                                                 if c not in providers], ai_data.get("expected_counterparties", []))
             sources = declaration.sources() if declaration is not None else []
 
@@ -455,7 +455,7 @@ class Benchmark(RiskAnalysis):
 
         # Countries not expected for his career, cross-checked with the forecast's countries
         if "JURISDICTION" in by_rule:
-            unknown = self._jurisdiction(bench_input.get("declared_countries", []),
+            unknown = self.__jurisdiction(bench_input.get("declared_countries", []),
                                              ai_data.get("expected_jurisdiction", []))
             explained = None
             if assessment:
@@ -473,7 +473,7 @@ class Benchmark(RiskAnalysis):
 
         # NEW: PEP status (a PEP always needs a person to look, and a public-office crime story matters more)
         status_text = str(claims.get("pep_status") or "None")
-        pep = self.is_pep(case)
+        pep = self.__is_pep(case)
         pep_types = [t for t in types if t["fits"] and t["category"] in settings["pep_crime_categories"]]
         checks.append(self._check(
             "PEP_STATUS", Benchmark.BENCHMARK_LABELS["PEP_STATUS"], "pattern", "failed" if pep else "passed",

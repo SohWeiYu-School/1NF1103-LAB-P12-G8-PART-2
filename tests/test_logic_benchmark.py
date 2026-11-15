@@ -57,11 +57,6 @@ def test_checks_are_stamped_benchmark_and_cover_total_wealth():
     assert total.status == "failed"            # with no forecast, nothing explains the gap
 
 
-def test_pep_status_follows_the_policy():
-    assert _feature().is_pep({"claims": {"pep_status": "Domestic PEP"}}) is True
-    assert _feature().is_pep({"claims": {"pep_status": "None"}}) is False
-
-
 def _benchmark_checks(**claims):
     feature = _feature()
     findings = feature.run({}, {"benchmark_input": BENCH_INPUT, "benchmark_ai": fake_ai.benchmark()})["findings"]
@@ -69,6 +64,11 @@ def _benchmark_checks(**claims):
     case["claims"].update(claims)
     return {check.check: check for check in feature.checks(
         {"case": case, "bench_input": BENCH_INPUT, "ai_data": fake_ai.benchmark(), "findings": findings})}
+
+
+def test_pep_status_follows_the_policy():
+    assert _benchmark_checks(pep_status="Domestic PEP")["PEP_STATUS"].failed()
+    assert not _benchmark_checks(pep_status="None")["PEP_STATUS"].failed()
 
 
 def test_every_benchmark_check_says_whether_it_is_independent_evidence():
