@@ -138,6 +138,16 @@ class App:
     def config(self) -> Config:
         return self.__config
 
+    @staticmethod
+    def typologies_checked(report: dict | None) -> bool:
+        """False when the report says the crime scan's research could not run, so the typologies it
+        shows were taken from the AI unchecked. Works for a fresh report and a saved one alike."""
+        for section in (report or {}).get("sections", []):
+            if section.get("title") == "Could not run":
+                if any(item.get("text") == AssessmentRunner.RESEARCH_STEP for item in section.get("items", [])):
+                    return False
+        return True
+
     def settings_ok(self) -> bool:
         """False when the settings files could not be loaded: no assessment can then be trusted."""
         return self.__settings_ok

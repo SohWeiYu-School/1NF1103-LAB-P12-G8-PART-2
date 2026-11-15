@@ -618,3 +618,13 @@ def test_an_app_with_broken_settings_says_so_and_refuses_to_assess(tmp_path, mon
 
 def test_an_app_with_good_settings_reports_settings_ok(app):
     assert app.settings_ok() is True
+
+
+def test_typologies_checked_reads_the_could_not_run_section():
+    research_failed = {"sections": [{"title": "Could not run",
+                                     "items": [{"mark": "skip", "text": AssessmentRunner.RESEARCH_STEP, "sub": []}]}]}
+    other_failed = {"sections": [{"title": "Could not run",
+                                  "items": [{"mark": "skip", "text": "The forecast", "sub": []}]}]}
+    assert App.typologies_checked(research_failed) is False
+    assert App.typologies_checked(other_failed) is True
+    assert App.typologies_checked({"sections": []}) is True and App.typologies_checked(None) is True
