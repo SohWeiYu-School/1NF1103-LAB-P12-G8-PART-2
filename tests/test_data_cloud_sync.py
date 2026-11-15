@@ -89,3 +89,21 @@ def test_a_damaged_state_file_means_everything_is_sent_again(tmp_path):
     sync.sync()
     (tmp_path / "sync_state.json").write_text("{broken", encoding="utf-8")
     assert sync.sync()["synced"] == 1
+
+
+def test_a_damaged_local_file_is_a_failed_sync_not_zero_records_synced(tmp_path):
+    local, remote, sync = _sync(tmp_path)
+    path = tmp_path / "sow_cases.json"
+    path.write_bytes(b"[{broken")
+    result = sync.sync()
+    assert result["synced"] == 0 and result["skipped"] == 0
+    assert len(result["errors"]) == 1 and "could not be read" in result["errors"][0]
+    assert remote.records == {}
+    assert path.read_bytes() == b"[{broken"
+    assert not (tmp_path / "sync_state.json").exists()
+
+
+def test_a_local_file_that_cannot_be_read_is_a_failed_sync(tmp_path):
+    local, remote, sync = _sync(tmp_path)
+    (tmp_path / "sow_cases.json").mkdir()                    # a folder where the file should be
+    assert sync.sync()["errors"]
