@@ -313,7 +313,7 @@ class CrimeScan(RiskAnalysis):
         match_count = sum(1 for mr in match_results if mr.category != "no_match")
         return {"breach_count": breach_count, "match_count": match_count, "match_results": match_results}
 
-    def __categorise_match(self, core_fired: list, core: list, supporting_fired: list) -> str:
+    def __categorise_match(self, core_fired: list[str], core: list[str], supporting_fired: list[str]) -> str:
         all_core = len(core_fired) == len(core) and len(core) > 0
         n_sup = len(supporting_fired)
         if all_core:
@@ -347,7 +347,7 @@ class CrimeScan(RiskAnalysis):
             matches.append(MatchResult(typology, core_fired, supporting_fired, category))
         return matches
 
-    def __to_iso(self, value: str | None, warnings: list) -> str | None:
+    def __to_iso(self, value: str | None, warnings: list[str]) -> str | None:
         """Convert a country name or code to ISO 3166-1 alpha-2. Pure, no I/O.
 
         - None/empty → None (no warning)
