@@ -57,15 +57,15 @@ class VerdictEngine:
         """The feature with this NAME, or None if the engine was not given one."""
         return next((feature for feature in self.__features if feature.NAME == name), None)
 
-    def _rows(self, name: str, context: dict) -> list[dict]:
-        """One feature's checks in their saved layout. A feature the engine was not given has none."""
+    def _feature_checks(self, name: str, context: dict) -> list[Check]:
+        """One feature's checks. A feature the engine was not given has none."""
         feature = self._feature(name)
-        return [check.to_dict() for check in feature.checks(context)] if feature else []
+        return list(feature.checks(context)) if feature else []
 
-    def _row(self, feature: str, check: str, label: str, theme: str, status: str, detail: str,
-             explanation: str = "", group: str = "") -> dict:
-        """One finding the engine adds itself, in the saved layout."""
-        return Check(feature, check, label, theme, status, detail, explanation, group).to_dict()
+    def _check(self, feature: str, check: str, label: str, theme: str, status: str, detail: str,
+               explanation: str = "", group: str = "") -> Check:
+        """One finding the engine adds itself."""
+        return Check(feature, check, label, theme, status, detail, explanation, group)
 
     def _is_pep(self, case: dict) -> bool:
         """True if the client is a politically exposed person (anything but the policy's "no" values)."""
@@ -129,35 +129,36 @@ class VerdictEngine:
             return f"how person type {parts[2]} reacts to events"
         return piece or "an early step"
 
-    def _agreement(self, checks: list[dict]) -> list[dict]:
+    def _agreement(self, checks: list[Check]) -> list[dict]:
         """Group the findings that count (failed, or a crime warning sign) by theme, most agreement first."""
         themes: dict = {}
         for check in checks:
-            if check["status"] not in ("failed", "weak"):
+            if check.status not in ("failed", "weak"):
                 continue
-            if check["feature"] == "crime" and check.get("signs"):
-                keys = {CrimeScan.SIGN_THEMES.get(sign, "pattern") for sign in check["signs"]}
-                if check["status"] == "failed":
+            signs = check.extra("signs") or []
+            if check.feature == "crime" and signs:
+                keys = {CrimeScan.SIGN_THEMES.get(sign, "pattern") for sign in signs}
+                if check.failed():
                     keys.add("pattern")
-            elif check["status"] == "failed":
-                keys = {check["theme"]}
+            elif check.failed():
+                keys = {check.theme}
             else:
                 continue
             for key in keys:
                 entry = themes.setdefault(key, {"theme": key, "title": VerdictEngine.THEMES[key], "features": [], "lines": []})
-                if check["feature"] not in entry["features"]:
-                    entry["features"].append(check["feature"])
-                detail = check["detail"]
-                if check["feature"] == "crime" and key != "pattern":   # only the warning signs of this theme
+                if check.feature not in entry["features"]:
+                    entry["features"].append(check.feature)
+                detail = check.detail
+                if check.feature == "crime" and key != "pattern":   # only the warning signs of this theme
                     detail = "warning signs fired: " + ", ".join(
-                        CrimeScan.SIGN_LABELS.get(sign, sign) for sign in check["signs"] if CrimeScan.SIGN_THEMES.get(sign) == key)
-                entry["lines"].append(f"{check['feature'].capitalize()}: {check['label']} - {detail}")
-                entry.setdefault("short", []).append(f"{check['feature'].capitalize()}: {check['label']}")
+                        CrimeScan.SIGN_LABELS.get(sign, sign) for sign in signs if CrimeScan.SIGN_THEMES.get(sign) == key)
+                entry["lines"].append(f"{check.feature.capitalize()}: {check.label} - {detail}")
+                entry.setdefault("short", []).append(f"{check.feature.capitalize()}: {check.label}")
         order = list(VerdictEngine.THEMES)
         return sorted(themes.values(), key=lambda t: (-len(t["features"]), order.index(t["theme"])))
 
-    def _documents(self, assessment: dict | None, bench: list[dict], crime: list[dict], typologies: list[dict] | None,
-                   case: dict, docs: list[dict] | None = None) -> list[dict]:
+    def _documents(self, assessment: dict | None, bench: list[Check], crime: list[Check], typologies: list[dict] | None,
+                   case: dict, docs: list[Check] | None = None) -> list[dict]:
         """Documents to ask for: first for what his own documents contradict, then the forecast's (failed
         checks, then the ones that rule out the most stories), the benchmark's failed checks, and the
         matched patterns' typical documents."""
@@ -174,24 +175,24 @@ class VerdictEngine:
 
         kinds = settings["document_evidence"]
         for check in docs or []:
-            if check["status"] in ("failed", "weak") and check["check"].lower() in kinds:
-                for code in kinds[check["check"].lower()]["documents"]:
+            if check.status in ("failed", "weak") and check.check.lower() in kinds:
+                for code in kinds[check.check.lower()]["documents"]:
                     if code in names:
-                        add(names[code], f"His documents show: {check['label'].lower()}")
+                        add(names[code], f"His documents show: {check.label.lower()}")
         for document in (assessment or {}).get("documents", []):
             add(document["document"], document["reason"])
         for check in bench:
-            if check["status"] != "failed":
+            if not check.failed():
                 continue
-            rule = "COMPOSITION" if check["check"].startswith("COMPOSITION") else check["check"]
+            rule = "COMPOSITION" if check.check.startswith("COMPOSITION") else check.check
             for code in settings["benchmark_documents"].get(rule, []):
                 if code in names:
-                    add(names[code], f"Benchmark check failed: {check['label'].lower()}")
+                    add(names[code], f"Benchmark check failed: {check.label.lower()}")
         by_id = {t.get("typology_id"): t for t in typologies or []}
         for check in crime:
-            if check["check"] == "TYPOLOGY" and check["status"] in ("failed", "weak"):
-                name = check["label"].split(" [")[0]
-                for document in by_id.get(check["typology_id"], {}).get("typical_documents", []):
+            if check.check == "TYPOLOGY" and check.status in ("failed", "weak"):
+                name = check.label.split(" [")[0]
+                for document in by_id.get(check.extra("typology_id"), {}).get("typical_documents", []):
                     add(document, f"Matches the known pattern: {name}")
         return wanted[:settings["max_documents"]]
 
@@ -226,23 +227,23 @@ class VerdictEngine:
             honest = self._feature("forecast").honest_numbers(case, forecast, assessment)
         types = self._type_patterns(forecast, assessment, parts.get("crime_result"), parts.get("typologies"))
         evidence = parts.get("evidence")
-        docs = self._rows("documents", {"evidence": evidence, "types": types})
+        docs = self._feature_checks("documents", {"evidence": evidence, "types": types})
         for t in types:                                 # which of his documents support each crime story
-            t["documents"] = [c["label"] for c in docs if c["status"] == "failed" and t["category"] in c.get("supports", [])]
-        bench = self._rows("benchmark", {
+            t["documents"] = [c.label for c in docs if c.failed() and t["category"] in c.supports]
+        bench = self._feature_checks("benchmark", {
             "case": case, "bench_input": parts.get("benchmark_input"), "ai_data": parts.get("benchmark_ai"),
             "findings": parts.get("benchmark_findings"), "honest": honest, "assessment": assessment,
             "declaration": parts.get("declaration"), "markets": parts.get("markets"), "types": types})
-        fore = self._rows("forecast", {
+        fore = self._feature_checks("forecast", {
             "case": case, "assessment": assessment, "honest": honest, "types": types,
             "failed_step": parts.get("failed_step"),
             "unmodelled": (forecast or {}).get("earnings", {}).get("fallback_assets")})
         for adjusted in reversed(parts.get("pay_adjustments") or []):
-            fore.insert(1, self._row("forecast", "PAY_FROM_DOCUMENTS", "Pay taken from his documents", "wealth", "info",
+            fore.insert(1, self._check("forecast", "PAY_FROM_DOCUMENTS", "Pay taken from his documents", "wealth", "info",
                                   f"The AI estimated {Formatter.sgd(adjusted['ai_pay'])} for {adjusted['year']}; "
                                   f"{adjusted['source_file'] or 'his documents'} shows {Formatter.sgd(adjusted['documented_pay'])}, "
                                   f"so his pay as {adjusted['job']} was scaled x{adjusted['ratio']:g} for every year of that job."))
-        crime = self._rows("crime", {
+        crime = self._feature_checks("crime", {
             "crime_result": parts.get("crime_result"), "research": parts.get("research"),
             "typologies": parts.get("typologies"), "types": types, "forecast_ran": forecast is not None})
         checks = bench + fore + crime + docs
@@ -252,10 +253,10 @@ class VerdictEngine:
         def flag(level: str, reason: str) -> None:
             triggers.append((level, reason))
 
-        unexplained = [c for c in bench if c["status"] == "failed" and c.get("independent")]
+        unexplained = [c for c in bench if c.failed() and c.extra("independent")]
         fitting = [t for t in types if t["fits"]]
         backed = [t for t in fitting if t["match"] in CrimeScan.FULL_MATCH]
-        contradicted = [c for c in docs if c["status"] == "failed"]
+        contradicted = [c for c in docs if c.failed()]
 
         if honest:
             t1 = honest["t1"]
@@ -263,7 +264,7 @@ class VerdictEngine:
                 agrees = ([f"{t['type_id']}'s warning signs fired ({CrimeScan.MATCH_LABELS[t['match']]} match)" for t in backed]
                           + [f"his documents support {t['type_id']} ({', '.join(t['documents']).lower()})"
                              for t in fitting if t["documents"]]
-                          + [f"the benchmark's {c['label'].lower()} check failed and the forecast can't explain it"
+                          + [f"the benchmark's {c.label.lower()} check failed and the forecast can't explain it"
                              for c in unexplained])
                 if fitting and agrees:
                     flag("SERIOUS_RISK", "The honest story can't explain his wealth, a crime story can ("
@@ -279,44 +280,44 @@ class VerdictEngine:
             elif not t1["fits_at_typical"]:
                 flag("RISKY", "The honest story only reaches his declared wealth at its optimistic edge.")
             for check in fore:
-                if check["check"] == "AFFORDABILITY" and check["status"] == "failed":
-                    flag("RISKY", f"He couldn't have afforded the {check['label'].split(':')[0]}: {check['detail']}.")
+                if check.check == "AFFORDABILITY" and check.failed():
+                    flag("RISKY", f"He couldn't have afforded the {check.label.split(':')[0]}: {check.detail}.")
             for t in backed:
                 flag("RISKY", f"{t['type_id']} {t['name']} fits his money AND its researched pattern's warning signs "
                             f"fired ({CrimeScan.MATCH_LABELS[t['match']]} match).")
             if assessment["borderline"]:
                 flag("MANUAL_REVIEW", "The result is borderline: it changes when every forecast moves 10%.")
-            other = [c for c in fore if c["status"] == "failed"
-                     and c["check"] in ("ASSET_VALUE", "ASSET_INCOME", "JURISDICTION", "UNQUANTIFIED_SOURCE", "WEALTH_JUMP")]
+            other = [c for c in fore if c.failed()
+                     and c.check in ("ASSET_VALUE", "ASSET_INCOME", "JURISDICTION", "UNQUANTIFIED_SOURCE", "WEALTH_JUMP")]
             if other:
                 flag("MANUAL_REVIEW", f"{len(other)} forecast check(s) failed: "
-                     + "; ".join(c["label"] for c in other[:4])
+                     + "; ".join(c.label for c in other[:4])
                      + (f"; and {len(other) - 4} more." if len(other) > 4 else "."))
 
         # What his own documents show against what he declared
         if contradicted:
-            found = "; ".join(c["label"].lower() for c in contradicted)
+            found = "; ".join(c.label.lower() for c in contradicted)
             others = []
             if honest and not honest["t1"]["fits"]:
                 others.append("the honest story can't explain his wealth")
             elif honest and not honest["t1"]["fits_at_typical"]:
                 others.append("the honest story only reaches his wealth at its optimistic edge")
             others += [f"{t['type_id']} {t['name']} fits his money" for t in fitting]
-            others += [f"the crime scan matched \"{c['label'].split(' [')[0]}\"" for c in crime
-                       if c["check"] == "TYPOLOGY" and c["status"] == "failed"]
-            others += [f"the benchmark's {c['label'].lower()} check failed" for c in unexplained]
-            others += [f"he couldn't have afforded the {c['label'].split(':')[0]}" for c in fore
-                       if c["check"] == "AFFORDABILITY" and c["status"] == "failed"]
+            others += [f"the crime scan matched \"{c.label.split(' [')[0]}\"" for c in crime
+                       if c.check == "TYPOLOGY" and c.failed()]
+            others += [f"the benchmark's {c.label.lower()} check failed" for c in unexplained]
+            others += [f"he couldn't have afforded the {c.label.split(':')[0]}" for c in fore
+                       if c.check == "AFFORDABILITY" and c.failed()]
             if len(contradicted) >= settings["min_serious_document_findings"] and others:
                 flag("SERIOUS_RISK", f"His documents contradict his declaration ({len(contradicted)} findings: {found}), "
                                    "and another check agrees: " + "; ".join(others[:3]) + ".")
             else:
                 flag("RISKY", f"His documents contradict his declaration: {found}.")
-        loose = [c for c in docs if c["status"] == "weak"]
+        loose = [c for c in docs if c.status == "weak"]
         if loose:
-            flag("MANUAL_REVIEW", "His documents show things to check: " + "; ".join(c["label"].lower() for c in loose) + ".")
+            flag("MANUAL_REVIEW", "His documents show things to check: " + "; ".join(c.label.lower() for c in loose) + ".")
 
-        if any(c["check"] == "AUM_FUNDING" and c["status"] == "failed" for c in bench):
+        if any(c.check == "AUM_FUNDING" and c.failed() for c in bench):
             flag("RISKY", "He plans to bring more money to the bank than his cash and shares can fund.")
         if self._is_pep(case):
             pep_types = [t for t in fitting if t["category"] in settings["pep_crime_categories"]]
@@ -325,19 +326,19 @@ class VerdictEngine:
                      + "; ".join(f"{t['type_id']} {t['name']}" for t in pep_types) + ").")
             else:
                 flag("MANUAL_REVIEW", f"He is a PEP ({case['claims']['pep_status']}): a KYC officer must review him.")
-        counted = [c for c in unexplained if c["check"] != "AUM_FUNDING"]      # AUM has its own rule above
+        counted = [c for c in unexplained if c.check != "AUM_FUNDING"]      # AUM has its own rule above
         if len(counted) >= settings["unexplained_benchmark_for_risky"]:
             flag("RISKY", f"{len(counted)} benchmark checks failed that the forecast can't explain: "
-                 + ", ".join(c["label"].lower() for c in counted) + ".")
+                 + ", ".join(c.label.lower() for c in counted) + ".")
         elif counted:
             flag("MANUAL_REVIEW", "Benchmark check(s) failed that the forecast can't explain: "
-                 + ", ".join(c["label"].lower() for c in counted) + ".")
+                 + ", ".join(c.label.lower() for c in counted) + ".")
         built = {t["typology_id"] for t in fitting if t["typology_id"]}
         for check in crime:
-            if check["check"] == "TYPOLOGY" and check.get("match") not in (None, "no_match"):
-                level = settings["pattern_alone"].get(check["match"], "PASSED")
-                if level != "PASSED" and check["typology_id"] not in built:
-                    flag(level, f"Known pattern \"{check['label'].split(' [')[0]}\": {check['detail']}.")
+            if check.check == "TYPOLOGY" and check.extra("match") not in (None, "no_match"):
+                level = settings["pattern_alone"].get(check.extra("match"), "PASSED")
+                if level != "PASSED" and check.extra("typology_id") not in built:
+                    flag(level, f"Known pattern \"{check.label.split(' [')[0]}\": {check.detail}.")
         for part in parts.get("not_run", []):
             flag("MANUAL_REVIEW", f"{part} couldn't run, so a person must check what it would have covered.")
         if not any(parts.get(key) for key in ("forecast", "crime_result", "benchmark_findings", "benchmark_ai")):
@@ -360,7 +361,7 @@ class VerdictEngine:
 
         groups: dict = {}
         for check in bench + fore + docs:
-            groups.setdefault((check["feature"], check["group"]), []).append(check["status"])
+            groups.setdefault((check.feature, check.group), []).append(check.status)
         clean = [group for (feature, group), statuses in groups.items()
                  if statuses and all(s == "passed" for s in statuses)]
 
@@ -376,10 +377,10 @@ class VerdictEngine:
             "summary": summary,
             "reasons": reasons,
             "agreement": self._agreement(checks),
-            "benchmark": bench,
-            "forecast": fore,
-            "crime": crime,
-            "document_findings": docs,
+            "benchmark": [check.to_dict() for check in bench],   # the saved layout from here on
+            "forecast": [check.to_dict() for check in fore],
+            "crime": [check.to_dict() for check in crime],
+            "document_findings": [check.to_dict() for check in docs],
             "types": types,
             "documents": (self._documents(assessment, bench, crime, parts.get("typologies"), case, docs)
                           if level != "PASSED" else []),
