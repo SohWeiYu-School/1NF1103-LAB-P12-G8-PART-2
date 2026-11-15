@@ -39,8 +39,14 @@ class ClientRepository(JsonRepository):
         return self._write_all(records)
 
     def load(self) -> list[dict]:
-        """Every client, in the current layout. Raises OSError or ValueError if the file cannot be read."""
-        return [self.__standardise(record) for record in super().load()]
+        """Every client, in the current layout. Raises OSError or ValueError if the file cannot be read,
+        or if a record in it has the wrong shape (e.g. "investments" is not a list)."""
+        records = super().load()
+        try:
+            return [self.__standardise(record) for record in records]
+        except (TypeError, AttributeError) as error:
+            logger.error("ClientRepository.load: a record in %s has the wrong shape: %r", self._path, error)
+            raise ValueError(f"The file {self._path} is damaged: a client record has the wrong shape.") from error
 
     def __standardise(self, record: dict) -> dict:
         """Bring a record saved in an older layout up to the one layout every screen uses:

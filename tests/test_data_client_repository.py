@@ -97,3 +97,10 @@ def test_a_file_that_cannot_be_read_stops_load_and_save(tmp_path):
     with pytest.raises(OSError):
         repository.load()
     assert repository.save({"client_ref": "SOW-1"}) is False
+
+
+def test_a_record_with_the_wrong_shape_is_reported_as_a_damaged_file(tmp_path):
+    path = tmp_path / "sow_cases.json"
+    path.write_text('[{"client_ref": "CL-1", "investments": 5}]', encoding="utf-8")
+    with pytest.raises(ValueError, match="damaged"):
+        _repository(tmp_path).load()
