@@ -49,4 +49,15 @@ class ConfigReader:
         for key in ConfigReader.REQUIRED["policy"]:
             if key not in policy:
                 problems.append(f"config/policy.json is missing '{key}'")
+        limits = policy.get("assessment_rate_limit", {})
+        if not isinstance(limits, dict):
+            problems.append("config/policy.json 'assessment_rate_limit' must be an object")
+        else:
+            cooldown = limits.get("cooldown_seconds", 60)
+            if isinstance(cooldown, bool) or not isinstance(cooldown, int) or cooldown < 0:
+                problems.append("config/policy.json 'assessment_rate_limit.cooldown_seconds' must be a whole "
+                                f"number of seconds, 0 or more (got {cooldown!r})")
+            if not isinstance(limits.get("enabled", True), bool):
+                problems.append("config/policy.json 'assessment_rate_limit.enabled' must be true or false "
+                                f"(got {limits.get('enabled')!r})")
         return problems

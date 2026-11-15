@@ -47,3 +47,17 @@ def test_problems_names_every_missing_setting(tmp_path):
     assert "config/vocabulary.json is missing 'document_codes'" in problems
     assert "config/policy.json is missing 'routing'" in problems
     assert "config/vocabulary.json is missing 'signal_codes'" not in problems
+
+
+def test_a_rate_limit_setting_that_cannot_be_right_is_reported(tmp_path):
+    """CLAUDE.md §9: config is validated. A cooldown that is text, a fraction or negative, or an
+    'enabled' that is not true/false, is reported instead of crashing the app later."""
+    import shutil
+    folder = tmp_path / "config"
+    shutil.copytree("config", folder)
+    policy = json.loads((folder / "policy.json").read_text())
+    policy["assessment_rate_limit"] = {"enabled": "yes", "cooldown_seconds": "60"}
+    (folder / "policy.json").write_text(json.dumps(policy))
+    problems = ConfigReader(str(folder)).problems()
+    assert any("cooldown_seconds" in p and "'60'" in p for p in problems)
+    assert any("enabled" in p and "'yes'" in p for p in problems)
