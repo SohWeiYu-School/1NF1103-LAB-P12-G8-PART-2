@@ -26,11 +26,8 @@ class DocumentRecordBuilder:
     def __init__(self, config: Config | None = None, today: str = "") -> None:
         if config is not None and not isinstance(config, Config):
             raise ValueError(f"the config must be a Config (or None), not {type(config).__name__}")
-        try:
-            if not isinstance(today, str) or (today and (len(today) != 10 or not datetime.date.fromisoformat(today))):
-                raise ValueError
-        except ValueError:
-            raise ValueError(f"today must be empty or a real date written YYYY-MM-DD, not {today!r}") from None
+        if not isinstance(today, str) or (today and not CaseReader.is_iso_date(today)):
+            raise ValueError(f"today must be empty or a real date written YYYY-MM-DD, not {today!r}")
         self.__config: Config = config or Config({}, {})
         self.__policy: dict = self.__config.policy
         self.__today: str = today
@@ -287,6 +284,8 @@ class DocumentRecordBuilder:
         """Things worth a second look in a record filled from documents. Empty list = nothing spotted."""
         record = client.to_dict()
         today = self.__today
+        if not today:
+            raise ValueError("today's date is needed to check a record: make the DocumentRecordBuilder with it")
         warnings = []
         this_year = int(today[:4])
         age = record.get("career", {}).get("age")

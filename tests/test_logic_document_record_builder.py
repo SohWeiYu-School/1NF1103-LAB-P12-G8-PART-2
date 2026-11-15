@@ -240,3 +240,14 @@ def test_the_builder_rejects_a_config_that_is_not_a_config():
     with pytest.raises(ValueError, match="config must be a Config"):
         DocumentRecordBuilder({"policy": {}}, "2026-10-14")
     assert DocumentRecordBuilder(None, "") is not None
+
+
+def test_the_builder_rejects_the_iso_week_form_of_a_date():
+    with pytest.raises(ValueError, match="today must be empty or a real date"):
+        DocumentRecordBuilder(CONFIG, "2026-W42-1")
+
+
+def test_a_builder_with_no_date_cannot_check_a_record_and_says_so():
+    record, _, _ = DocumentRecordBuilder(CONFIG, "2026-10-14").build(READING, "SOW-DOC-1")
+    with pytest.raises(ValueError, match="today's date is needed"):
+        DocumentRecordBuilder(CONFIG).check(record)
