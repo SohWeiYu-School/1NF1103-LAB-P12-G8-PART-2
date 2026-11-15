@@ -23,6 +23,12 @@ class ClaimedSource:
                  description: str = "", start_year: int | None = None, end_year: int | None = None,
                  country: str | None = None, quote: str = "", linked_position_index: int | None = None,
                  linked_asset_index: int | None = None, layout: tuple[str, ...] = READING_KEYS) -> None:
+        self.__check_text(source_type, "type", False)
+        self.__check_text(description, "description", False)
+        self.__check_text(quote, "quote", False)
+        self.__check_text(counterparty, "counterparty", True)
+        self.__check_text(source_id, "id", True)
+        self.__check_text(country, "country", True)
         self.__check_amount(amount)
         self.__check_year(start_year, "start year")
         self.__check_year(end_year, "end year")
@@ -63,11 +69,11 @@ class ClaimedSource:
             occupation_mismatch=details.get("occupation_mismatch") is True,
             amount_explained=bool(details.get("amount_explained_by_forecast")),
             source_id=details.get("source_id"),
-            description=details.get("description", ""),
+            description=details.get("description") or "",
             start_year=details.get("start_year"),
             end_year=details.get("end_year"),
             country=details["jurisdiction"] if "jurisdiction" in details else details.get("country"),
-            quote=details["evidence_sentence"] if "evidence_sentence" in details else details.get("quote", ""),
+            quote=(details["evidence_sentence"] if "evidence_sentence" in details else details.get("quote")) or "",
             linked_position_index=details.get("linked_position_index"),
             linked_asset_index=details.get("linked_asset_index"),
             layout=tuple(layout))
@@ -161,6 +167,13 @@ class ClaimedSource:
                 "counterparty": self.__counterparty, "evidence_sentence": self.__quote,
                 "occupation_mismatch": self.__occupation_mismatch,
                 "amount_explained_by_forecast": self.__amount_explained}
+
+    def __check_text(self, value: object, label: str, or_none: bool) -> None:
+        """Text fields hold text. The optional ones (counterparty, id, country) may also be None."""
+        if value is None and or_none:
+            return
+        if not isinstance(value, str):
+            raise ValueError(f"a source's {label} must be text, not {type(value).__name__}")
 
     def __check_amount(self, amount: float | None) -> None:
         if amount is None:

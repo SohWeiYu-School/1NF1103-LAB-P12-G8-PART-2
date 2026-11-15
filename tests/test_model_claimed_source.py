@@ -114,3 +114,24 @@ def test_the_scan_row_names_the_readings_facts_in_the_saved_layout():
     assert (row["amount_sgd"], row["jurisdiction"], row["evidence_sentence"]) == (125000.5, "Hong Kong",
                                                                                   "some advisory work")
     assert row["amount_explained_by_forecast"] is False
+
+
+def test_a_null_text_field_in_a_dict_reads_as_empty_text():
+    source = ClaimedSource.from_dict({"source_type": "salary", "description": None, "quote": None})
+    assert source.description == ""
+    assert source.quote == ""
+    assert source.to_dict()["description"] == ""
+
+
+def test_text_fields_reject_non_text():
+    with pytest.raises(ValueError, match="description must be text"):
+        ClaimedSource(description=None)
+    with pytest.raises(ValueError, match="quote must be text"):
+        ClaimedSource(quote=5)
+    with pytest.raises(ValueError, match="type must be text"):
+        ClaimedSource(source_type=["salary"])
+    with pytest.raises(ValueError, match="country must be text"):
+        ClaimedSource(country=3)
+    with pytest.raises(ValueError, match="description must be text"):
+        ClaimedSource.from_dict({"description": 12})
+    assert ClaimedSource(country=None, counterparty=None, source_id=None).country is None
