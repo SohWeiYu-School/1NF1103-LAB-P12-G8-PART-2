@@ -4,7 +4,7 @@ import datetime
 import logging
 import os
 import uuid
-from typing import Callable
+from typing import Any, Callable
 
 from app.interface.console_ui import ConsoleUI
 from app.interface.report_view import ReportView
@@ -160,7 +160,7 @@ class ClientForm:
         self.__ui.show("\n=== Source of Wealth Declaration ===")
         return self.__ui.ask_text("Describe how the client accumulated their wealth (min 50 characters)", min_length=50)
 
-    def get_supporting_documents(self, upload_fn=None) -> list:
+    def get_supporting_documents(self, upload_fn: Callable[[str], str | None] | None = None) -> list[dict[str, str]]:
         """
         Ask whether the client has supporting documents.
 
@@ -304,7 +304,7 @@ class ClientForm:
 
         return client_record
 
-    def ask_missing_field(self, field: dict):
+    def ask_missing_field(self, field: dict) -> str | int | float | list[str] | dict[str, float]:
         """Ask for one detail the documents didn't give. field comes from logic_manager.missing_client_fields."""
         label, kind = field["label"], field["kind"]
         if kind == "words":
@@ -351,7 +351,7 @@ class ClientForm:
                 continue
             return choice == 1
 
-    def edit_client_profile(self, record):
+    def edit_client_profile(self, record: dict) -> None:
         """Edit name, nationality and current career info."""
         self.__ui.show("\n=== Edit Client Profile ===")
         self.__ui.show("Press Enter to keep the existing value.")
@@ -377,7 +377,7 @@ class ClientForm:
 
         self.__ui.show("\nClient profile updated.")
 
-    def add_career_record(self, record):
+    def add_career_record(self, record: dict) -> None:
         """Add a job to career_history."""
         self.__ui.show("\n=== Add Career Record ===")
         record.setdefault("career_history", []).append(self.__ask_job())
@@ -420,7 +420,7 @@ class ClientForm:
         career["country"]       = self.__ui.keep_words("Country", career.get("country", ""))
         self.__ui.show("\nCareer record updated.")
 
-    def add_asset_record(self, record):
+    def add_asset_record(self, record: dict) -> None:
         """Add an entry to investments."""
         self.__ui.show("\n=== Add Investment / Asset ===")
         record.setdefault("investments", []).append(self.__ask_asset())
@@ -480,7 +480,7 @@ class ClientForm:
             self.__ui.show_error("Please enter a 3-letter currency code like SGD.")
         self.__ui.show("\nAsset updated.")
 
-    def edit_asset_composition(self, record):
+    def edit_asset_composition(self, record: dict) -> None:
         """Edit asset composition inside claims."""
         self.__ui.show("\n=== Edit Asset Composition ===")
         composition = record.setdefault("claims", {}).setdefault("asset_composition", {})
@@ -488,7 +488,7 @@ class ClientForm:
         record["claims"]["asset_composition"] = self.__ui.ask_composition(current=composition)
         self.__ui.show("\nAsset composition updated.")
 
-    def edit_client_declarations(self, record):
+    def edit_client_declarations(self, record: dict) -> None:
         """Edit claims fields."""
         self.__ui.show("\n=== Edit Financial Claims ===")
         claims = record.setdefault("claims", {})
@@ -517,7 +517,7 @@ class ClientForm:
         if v: record["sow_declaration"] = v
         self.__ui.show("\nDeclaration updated.")
 
-    def add_supporting_documents(self, record, upload_fn=None):
+    def add_supporting_documents(self, record: dict, upload_fn: Callable[[str], str | None] | None = None) -> None:
         """Add supporting documents to an existing client."""
 
         new_documents = self.get_supporting_documents(upload_fn)
@@ -683,7 +683,11 @@ class ClientForm:
         folder = folder.strip('"').strip("'")          # paths dragged into the terminal come quoted
         return folder or None
 
-    def find_existing_client(self, find_fn=None, load_fn=None, save_fn=None, download_fn=None, upload_fn=None):
+    def find_existing_client(self, find_fn: Callable[[str], ClientRecord | None] | None = None,
+                             load_fn: Callable[..., Any] | None = None,
+                             save_fn: Callable[[ClientRecord], bool] | None = None,
+                             download_fn: Callable[[str, str], bool] | None = None,
+                             upload_fn: Callable[[str], str | None] | None = None) -> None:
         """Find, display, edit and manage an existing client from local records.
         find_fn gives a ClientRecord or None (and raises ValueError if the saved record cannot be
         read); save_fn is given the edited ClientRecord."""
