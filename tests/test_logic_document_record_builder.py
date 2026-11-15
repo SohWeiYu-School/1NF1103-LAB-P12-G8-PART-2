@@ -266,6 +266,15 @@ def test_a_dropped_optional_end_year_is_named_without_the_bad_value_and_marked_t
     assert "(2001-present)" in entry["message"] and "2200" in entry["message"]        # the label shows no bad value
     assert "(blank" not in entry["message"] and "(2001-2200)" not in entry["message"]
     assert "end year: the value read from the documents (2200) is not possible" in entry["message"]
+    assert entry["message"].endswith("You can enter it, or leave it empty.")   # an optional detail may stay empty
+
+
+def test_a_dropped_wealth_jump_years_says_what_the_years_are_for():
+    reading = {**READING, "claims": {**READING["claims"], "wealth_jump_years": -2}}
+    _, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    assert len(dropped) == 1
+    assert dropped[0]["optional_field"]["label"] == "Biggest wealth increase: over how many years"
+    assert dropped[0]["message"].endswith("You can enter it, or leave it empty.")
 
 
 def test_a_dropped_composition_share_is_labelled_and_shown_as_a_percent():

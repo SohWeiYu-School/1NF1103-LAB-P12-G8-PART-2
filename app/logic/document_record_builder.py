@@ -172,9 +172,11 @@ class DocumentRecordBuilder:
             else:
                 label = " ".join(str(part) for part in path[-1:]).replace("_", " ")
             label = label[:1].upper() + label[1:]
-            dropped.append({"path": list(path), "optional_field": None if tuple(path) in required else optional.get(tuple(path)),
+            optional_field = None if tuple(path) in required else optional.get(tuple(path))
+            ask = "You can enter it, or leave it empty." if optional_field else "Please enter it."
+            dropped.append({"path": list(path), "optional_field": optional_field,
                             "message": f"{label}: the value read from the documents ({value}) is not possible "
-                                       f"({error}), so it was left empty. Please enter it."})
+                                       f"({error}), so it was left empty. {ask}"})
         return cleaned, dropped
 
     @staticmethod
@@ -369,7 +371,7 @@ class DocumentRecordBuilder:
                   for i, job in enumerate(record.get("career_history", []))]
         return fields + [
             self._field(["claims", "biggest_wealth_jump"], "Biggest single-period wealth increase (SGD)", "money"),
-            self._field(["claims", "wealth_jump_years"], "Over how many years", "money"),
+            self._field(["claims", "wealth_jump_years"], "Biggest wealth increase: over how many years", "money"),
             self._field(["claims", "declared_counterparties"], "Known counterparties", "countries"),
         ]
 
