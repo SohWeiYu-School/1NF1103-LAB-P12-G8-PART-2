@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `9292801` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `8e7a42f` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -705,7 +705,7 @@ How to fix: **UML:** add or correct the `= value`. Where the code is computed, d
 
 ## Stage 7: Relationships (0)
 
-131 of 133 UML arrows are confirmed in the code by the pattern check (its known blind spots are listed in uml/FOLLOW_UPS.md #44).
+148 of 150 UML arrows are confirmed in the code by the pattern check (its known blind spots are listed in uml/FOLLOW_UPS.md #44).
 
 How to fix: mostly **UML** (redraw an arrow, change a verb or multiplicity, add missing arrows). Where an arrow shows a model class but the code passes a plain `dict`, the team has to decide: either the diagram drops the arrow, or the code starts using the model class (a bigger change).
 
@@ -719,42 +719,24 @@ Real class-to-class links in the code that the drawing rule says to draw, with n
 - `Typology -- "1..*" ResearchReport : cites`: linked by report id: a Typology keeps the ids of the ResearchReports it cites (source_ids), not the objects; the link is real in the data, so the diagram keeps it
 - `VerdictEngine ..> MatchResult : uses`: checked by hand: __type_patterns reads m.typology, match.category and calls match.fired() on the MatchResult objects in crime_result (app/logic/verdict_engine.py:82, 102-103); the scan cannot see it because the class name is never written there
 
-### Not drawn, by the drawing rule (32)
+### Not drawn, by the drawing rule (14)
 
-An arrow is drawn when a class stores, creates or directly works with another class. Links that are only reached through another object's method, and reads of another class's constant, are not drawn (see uml/UML_CORRECTIONS.md, stage 7).
+An arrow is drawn when a class stores, creates or directly works with another class, including calling methods on an object it gets back from another call. Not drawn: reads of another class's constant, and objects a class only passes on (checked by hand). See uml/UML_CORRECTIONS.md, stage 7.
 
 - App → CaseTimeline: constant only
-- AssessmentRunner → Declaration: reached through another object
-- AssessmentRunner → ResearchReport: reached through another object
-- AssessmentRunner → Typology: reached through another object
-- Benchmark → ClaimedSource: reached through another object
+- AssessmentRunner → Declaration: only passed on: the declaration goes straight into CrimeScan's methods (assessment_runner.py:212-216)
+- AssessmentRunner → ResearchReport: only passed on: the reports go straight into CrimeScan.verify_typology_sources (assessment_runner.py:143, 158)
+- AssessmentRunner → Verdict: only passed on: the Verdict from combine() is put into the result dict unchanged (assessment_runner.py:229, 242-)
 - CaseBuilder → ClientForm: constant only
-- CaseBuilder → Investment: reached through another object
-- CaseBuilder → Job: reached through another object
-- ClientForm → DocumentStore: reached through another object
-- CrimeScan → ClaimedSource: reached through another object
+- ClientForm → DocumentStore: false match: record.documents() returns a list of document entries, not the DocumentStore (client_form.py:763)
 - DocumentRecordBuilder → CaseReader: constant only
-- Forecast → AssetPath: reached through another object
-- Forecast → CareerSavings: reached through another object
-- Forecast → ClientRecord: reached through another object
-- FuturePaths → ClientRecord: reached through another object
-- GiftOrInheritanceUnnamed → ClaimedSource: reached through another object
-- OnboardingAssessor → AssetPath: reached through another object
-- OnboardingAssessor → ClaimedSource: reached through another object
+- Forecast → ClientRecord: only passed on: the case is handed to AssetPath.build (forecast.py:146, 270)
+- FuturePaths → ClientRecord: only passed on: the record is handed to AssetPath.build (future_paths.py:72)
 - OnboardingAssessor → Verdict: constant only
 - PayCalibrator → MarketModel: constant only
-- RelatedPartyTransaction → ClaimedSource: reached through another object
-- ReportView → DocumentStore: reached through another object
-- ReportView → Investment: reached through another object
-- ReportView → Job: reached through another object
-- SourceContradictsOccupation → ClaimedSource: reached through another object
-- UnvaluedSource → ClaimedSource: reached through another object
+- ReportView → DocumentStore: false match: record.documents() returns a list of document entries, not the DocumentStore (report_view.py:270)
 - VerdictEngine → FuturePaths: constant only
-- WebApp → AssessmentRepository: reached through another object
 - WebApp → ClientForm: constant only
-- WebApp → DocumentRecordBuilder: reached through another object
-- WebApp → DocumentStore: reached through another object
-- WebApp → Repository: reached through another object
 
 ## Appendix: values shortened with `...` (checked by pattern: class name or folder, 54)
 

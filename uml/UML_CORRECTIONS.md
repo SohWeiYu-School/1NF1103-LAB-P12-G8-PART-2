@@ -254,6 +254,31 @@ The review found no arrow that states something false about the code. It found t
 | `VerdictEngine ..> MatchResult : uses` | added | **T**: the engine reads `typology` and `category` and calls `fired()` on the match results (`verdict_engine.py:82, 102-103`). The scan cannot see this link (no type hint), so it is listed as checked by hand |
 | Lines into `CaseReader`, `Forecast` and `Formatter` | re-routed | **B**: two "1" labels sat on the same spot over an arrowhead, and two arrows shared one end point on Forecast. The router now keeps arrow ends at least 25 px apart and avoids running along other lines more strongly |
 
-Open question for Marcus (follow-up #43): the drawing rule's "reached through another object" case. Two reviewed arrows (`AssessmentRunner ..> Verdict`, `DocumentStore ..> DocumentReader`) rest on an object the class gets back from a method and then works with, which is the same evidence that puts some links under "Not drawn".
+### Follow-up #43 settled: Marcus chose option A (2026-11-15)
+
+The drawing rule now reads: draw an arrow when a class stores, creates or directly works with another class, **including calling methods on an object it gets back from another call**. A class that only passes an object on, without calling anything on it, gets no arrow. All 25 links the scan had marked "reached through another object" were checked by hand against the code:
+
+| Arrow | Change | Evidence |
+|---|---|---|
+| `AssessmentRunner ..> Typology : uses` | added | calls `typology.to_dict()` on the typologies CrimeScan returns (`assessment_runner.py:166`) |
+| `Benchmark ..> ClaimedSource : uses` | added | reads `counterparty` and the linked indexes of each declared source (`benchmark.py:436-442`) |
+| `CrimeScan ..> ClaimedSource : uses` | added | calls `source.to_scan_dict()` and reads `source.country` (`crime_scan.py:478-499`) |
+| `Forecast ..> CareerSavings : uses` | added | calls `.rows()` on `future_paths.career_savings()` (`forecast.py:145, 270`) |
+| `Forecast ..> AssetPath : uses` | added | calls `.build()` on `future_paths.asset_path()` (`forecast.py:146, 270`) |
+| `OnboardingAssessor ..> AssetPath : uses` | added | calls `.income_up_to()` on `future_paths.asset_path()` (`onboarding_assessor.py:78`) |
+| `OnboardingAssessor ..> ClaimedSource : uses` | added | reads `source.country` and `source.amount` (`onboarding_assessor.py:90, 106`) |
+| `GiftOrInheritanceUnnamed`, `SourceContradictsOccupation`, `UnvaluedSource`, `RelatedPartyTransaction ..> ClaimedSource : checks` | 4 added | each `fires()` calls methods or reads fields on every declared source (`indicator.py:32, 57, 70, 88`) |
+| `CaseBuilder ..> Job`, `CaseBuilder ..> Investment : uses` | 2 added | calls `.to_dict()` on `record.jobs()` / `record.investments()` (`case_builder.py:87, 133`) |
+| `ReportView ..> Job`, `ReportView ..> Investment : uses` | 2 added | the same (`report_view.py:226, 235`) |
+| `WebApp ..> DocumentRecordBuilder : uses` | added | calls `.build()` on `app.record_builder()` (`web_app.py:408, 523`) |
+| `WebApp ..> DocumentStore : uses` | added | calls `.owns()` and `.read_for_extraction()` on `app.documents()` (`web_app.py:471, 491`) |
+| `WebApp ..> Repository : loads from` | added | calls `.load()` on `app.clients()` and `app.assessments()` (`web_app.py:639, 891`); one line covers both repositories |
+| `AssessmentRunner ..> Verdict : uses` | **removed** (was in the reviewed diagram) | **T** under the agreed rule: the runner gets the Verdict from `combine()` and only puts it into its result dict, without calling anything on it (`assessment_runner.py:229-242`) |
+
+Not drawn after checking (listed with their reasons in `UML_DIFFERENCES.md`): `AssessmentRunner → Declaration / ResearchReport / Verdict` and `Forecast / FuturePaths → ClientRecord` only pass the object on. `ClientForm → DocumentStore` and `ReportView → DocumentStore` were false matches by the scan: `record.documents()` returns a list of document entries, not the DocumentStore.
+
+Reason code for the 18 added arrows: **T** (the class really works with the other class). Several of these links only appeared after the dict → model refactor, so the original diagram was not wrong when it was reviewed; the code changed after the review.
+
+Checker: `relcheck.py` now reads the hand-checked "only passed on" links from `not_drawn_checked.json`. Any new link of this kind that nobody has checked is reported as **missing**, so it gets looked at instead of being hidden.
 
 Tools: the new arrows are routed automatically (`uml_arrows.py`: right-angled paths that never cross a class box), and `layout_check` reports 0.

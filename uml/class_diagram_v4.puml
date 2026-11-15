@@ -868,7 +868,7 @@ AssessmentRunner *-- "1" CaseReader
 AssessmentRunner *-- "1" VerdictEngine
 AssessmentRunner *-- "4" RiskAnalysis
 AssessmentRunner -- Config : reads policy
-AssessmentRunner ..> Verdict : uses
+AssessmentRunner ..> Typology : uses
 AssessmentRunner o-- "0..1" DocumentStore : reads documents from
 AssessmentRunner o-- "0..1" ResponseCache : caches in
 AssessmentRunner o-- "1..*" AIService
@@ -878,6 +878,7 @@ AssetPath ..> CaseTimeline : creates
 Benchmark -- Config : reads names
 Benchmark --|> RiskAnalysis
 Benchmark ..> CaseTimeline : creates
+Benchmark ..> ClaimedSource : uses
 Benchmark ..> Declaration : uses
 Benchmark ..> Formatter : uses
 Benchmark ..> MarketModel : uses
@@ -885,6 +886,8 @@ BenchmarkAI --|> AIService
 CareerSavings ..> Band : uses
 CaseBuilder -- ConsoleUI : asks via
 CaseBuilder ..> ClientRecord : uses
+CaseBuilder ..> Investment : uses
+CaseBuilder ..> Job : uses
 ClientForm -- ConsoleUI : prints via
 ClientForm -- ReportView : shows via
 ClientForm ..> ClientRecord : creates
@@ -901,6 +904,7 @@ CloudSync -- Repository : local
 CounterpartyUnnamed --|> Indicator
 CrimeScan *-- "5" Indicator
 CrimeScan --|> RiskAnalysis
+CrimeScan ..> ClaimedSource : uses
 CrimeScan ..> Declaration : creates
 CrimeScan ..> MatchResult : creates
 CrimeScan ..> ResearchReport : creates
@@ -922,7 +926,9 @@ Forecast *-- "1" OnboardingAssessor
 Forecast *-- "1" PayCalibrator
 Forecast -- Config : reads names
 Forecast --|> RiskAnalysis
+Forecast ..> AssetPath : uses
 Forecast ..> Band : uses
+Forecast ..> CareerSavings : uses
 Forecast ..> CaseTimeline : creates
 Forecast ..> Formatter : uses
 ForecastAI --|> AIService
@@ -934,6 +940,7 @@ FuturePaths -- MarketModel : projects with
 FuturePaths ..> Band : uses
 FuturePaths ..> CaseTimeline : creates
 GiftOrInheritanceUnnamed --|> Indicator
+GiftOrInheritanceUnnamed ..> ClaimedSource : checks
 ImageReader --|> DocumentReader
 Indicator ..> Declaration : reads
 JsonRepository ..|> Repository
@@ -941,23 +948,30 @@ MatchResult -- Typology : matches
 MongoRepository --|> DatabaseRepository
 OnboardingAssessor -- Config : reads names
 OnboardingAssessor -- FuturePaths : tests against
+OnboardingAssessor ..> AssetPath : uses
 OnboardingAssessor ..> Band : uses
 OnboardingAssessor ..> CaseTimeline : creates
+OnboardingAssessor ..> ClaimedSource : uses
 PayCalibrator -- CareerSavings : adjusts
 PayCalibrator ..> CaseTimeline : creates
 PdfReader --|> DocumentReader
 RelatedPartyTransaction --|> Indicator
+RelatedPartyTransaction ..> ClaimedSource : checks
 ReportView -- ConsoleUI : prints via
 ReportView ..> ClientRecord : uses
+ReportView ..> Investment : uses
+ReportView ..> Job : uses
 ReportView ..> Typology : uses
 ReportView ..> Verdict : uses
 ResearchAI --|> AIService
 RiskAnalysis ..> Check : creates
 SourceContradictsOccupation --|> Indicator
+SourceContradictsOccupation ..> ClaimedSource : checks
 TextReader --|> DocumentReader
 Typology -- "1..*" ResearchReport : cites
 TypologyAI --|> AIService
 UnvaluedSource --|> Indicator
+UnvaluedSource ..> ClaimedSource : checks
 Verdict o-- "0..*" Check
 VerdictEngine -- Config : reads policy
 VerdictEngine ..> CaseTimeline : creates
@@ -971,6 +985,9 @@ VerdictEngine o-- "1..*" RiskAnalysis
 WebApp -- App : calls
 WebApp -- RateLimiter : checks with
 WebApp ..> ClientRecord : uses
+WebApp ..> DocumentRecordBuilder : uses
+WebApp ..> DocumentStore : uses
+WebApp ..> Repository : loads from
 WebApp ..> Typology : uses
 WordReader --|> DocumentReader
 
