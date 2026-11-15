@@ -51,3 +51,60 @@ def test_verdict_notes_and_not_run_are_copied():
 
 def test_outcomes_can_be_compared_by_severity():
     assert Verdict.SEVERITY["SERIOUS_RISK"] > Verdict.SEVERITY["RISKY"] > Verdict.SEVERITY["MANUAL_REVIEW"] > Verdict.SEVERITY["PASSED"]
+
+
+def _explanation(**changes) -> dict:
+    explanation = {"name": "Daniel Tan", "assessed_on": "2026-09-24", "policy_version": "v1",
+                   "verdict_label": "RISKY", "summary": "Why.", "reasons": [{"level": "RISKY", "text": "Why."}],
+                   "agreement": [], "types": [], "documents": [{"document": "Payslips", "reason": "Pay"}],
+                   "clean": ["Liquidity"], "evidence": [{"title": "Research reports", "lines": []}]}
+    explanation.update(changes)
+    return explanation
+
+
+def test_an_explanation_must_hold_every_part_and_nothing_else():
+    verdict = Verdict("a1", "SOW-1", "2026-09-24", "RISKY")
+    with pytest.raises(ValueError, match="missing: summary"):
+        verdict.explanation = {key: value for key, value in _explanation().items() if key != "summary"}
+    with pytest.raises(ValueError, match="not allowed: extra"):
+        verdict.explanation = _explanation(extra=1)
+    with pytest.raises(ValueError):
+        verdict.explanation = ["not", "a", "dict"]
+    verdict.explanation = _explanation()
+    assert verdict.explanation == _explanation()
+
+
+def test_a_check_from_an_unknown_feature_is_refused():
+    with pytest.raises(ValueError, match="'payroll'"):
+        Verdict().add_check(Check("payroll", "PAY", "Pay", "wealth"))
+
+
+def test_details_cannot_be_laid_out_without_an_explanation():
+    with pytest.raises(ValueError, match="no explanation"):
+        Verdict("a1", "SOW-1", "2026-09-24", "RISKY").details()
+
+
+def test_details_give_the_saved_layout_with_every_check_under_its_feature():
+    verdict = Verdict("a1", "SOW-1", "2026-09-24T01:02:03+00:00", "RISKY", "Escalate", "2027-03-24",
+                      notes=["a note"], not_run=["The forecast"])
+    checks = [Check("forecast", "STABILITY", "Stability", "wealth"), _check("failed"),
+              Check("documents", "NO_DOCUMENTS", "Supporting documents", "pattern", "info", sources=[]),
+              Check("crime", "CRIME_SCAN", "Crime scan", "pattern", "skipped"), _check("passed")]
+    for check in checks:
+        verdict.add_check(check)
+    verdict.explanation = _explanation()
+    details = verdict.details()
+    assert list(details) == ["client_ref", "name", "assessed_on", "policy_version", "verdict", "verdict_label",
+                             "next_step", "next_review_date", "summary", "reasons", "agreement", "benchmark",
+                             "forecast", "crime", "document_findings", "types", "documents", "clean", "not_run",
+                             "notes", "evidence"]
+    assert (details["client_ref"], details["verdict"], details["next_step"], details["next_review_date"]) == (
+        "SOW-1", "RISKY", "Escalate", "2027-03-24")
+    assert details["assessed_on"] == "2026-09-24"           # the case's date, not when it was saved
+    assert details["benchmark"] == [checks[1].to_dict(), checks[4].to_dict()]
+    assert details["forecast"] == [checks[0].to_dict()]
+    assert details["crime"] == [checks[3].to_dict()]
+    assert details["document_findings"] == [checks[2].to_dict()]
+    assert (details["notes"], details["not_run"]) == (["a note"], ["The forecast"])
+    for key in ("summary", "reasons", "agreement", "types", "documents", "clean", "evidence", "policy_version"):
+        assert details[key] == _explanation()[key]
