@@ -1,5 +1,8 @@
 """CaseReader: turns a saved client record into the case the features read."""
 
+import datetime
+import re
+
 
 class CaseReader:
     """Reads a client record, whichever layout it was saved in, into one forecasting case:
@@ -13,7 +16,20 @@ class CaseReader:
     COMPOSITION_KEYS: list[str] = ["property", "listed_equities", "private_business", "cash"]
 
     def __init__(self, today: str = "") -> None:
+        if not isinstance(today, str) or (today and not CaseReader.__is_iso_date(today)):
+            raise ValueError(f"today must be empty or a real date written YYYY-MM-DD, not {today!r}")
         self.__today: str = today
+
+    @staticmethod
+    def __is_iso_date(text: str) -> bool:
+        """True for a real calendar date written YYYY-MM-DD."""
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+            return False
+        try:
+            datetime.date.fromisoformat(text)
+        except ValueError:
+            return False
+        return True
 
     @staticmethod
     def read_amount(text: str | int | float | None) -> float | None:

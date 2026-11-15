@@ -78,3 +78,13 @@ def test_read_year_accepts_a_number_or_text_as_the_records_hold_both():
     assert reader.read_year("2017") == 2017
     assert reader.read_year(2017) == 2017
     assert reader.read_year(None) is None
+
+
+@pytest.mark.parametrize("today", ["banana", "2026-13-01", "2026-02-30", "20261014", "2026-1-5", 20261014, None])
+def test_today_must_be_empty_or_a_real_iso_date(today):
+    with pytest.raises(ValueError, match="today must be empty or a real date"):
+        CaseReader(today)
+
+
+def test_an_empty_or_real_date_is_accepted():
+    assert CaseReader() is not None and CaseReader("") is not None and CaseReader("2026-10-14") is not None
