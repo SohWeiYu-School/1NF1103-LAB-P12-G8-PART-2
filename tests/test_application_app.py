@@ -346,3 +346,18 @@ def test_the_crime_result_is_saved_in_the_match_layout(tmp_path, monkeypatch):
         "typology_id", "name", "source_ids", "breached", "category", "core_indicators", "core_fired",
         "supporting_indicators", "supporting_fired", "typical_documents"]
     assert saved["crime_scan"]["typologies"] == result["typology_response"]           # the reply, as it came
+
+
+def test_a_bad_rate_limit_setting_is_reported_at_start_not_crashed(tmp_path, monkeypatch, capsys):
+    """App must not crash while it is built; start() reports the setting and stops."""
+    import shutil
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    root = tmp_path / "root"
+    shutil.copytree("config", root / "config")
+    policy = json.loads((root / "config" / "policy.json").read_text())
+    policy["assessment_rate_limit"] = {"enabled": True, "cooldown_seconds": 60.5}
+    (root / "config" / "policy.json").write_text(json.dumps(policy))
+    application = App(ai_caller=None, root=str(root), data_folder=str(tmp_path / "data"))
+    assert application.start(["--web"]) == 1                 # the web app is not started either
+    assert "cooldown_seconds" in capsys.readouterr().out

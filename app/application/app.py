@@ -105,9 +105,14 @@ class App:
         self.__client_form: ClientForm = ClientForm(self.__ui, self.__report_view)
         schema = self.__case_files.load(os.path.join(root, "app", "schemas", "case_input.schema.json"), default={})
         self.__case_builder: CaseBuilder = CaseBuilder(self.__ui, schema)
-        limits = policy.get("assessment_rate_limit", {})
-        self.__rate_limiter: RateLimiter = RateLimiter(
-            limits.get("cooldown_seconds", RateLimiter.DEFAULT_COOLDOWN_SECONDS), limits.get("enabled", True))
+        limits = policy.get("assessment_rate_limit", {}) if isinstance(policy.get("assessment_rate_limit", {}), dict) else {}
+        try:
+            self.__rate_limiter: RateLimiter = RateLimiter(
+                limits.get("cooldown_seconds", RateLimiter.DEFAULT_COOLDOWN_SECONDS), limits.get("enabled", True))
+        except ValueError as error:
+            # start() reports the setting through ConfigReader.problems() and stops; App itself must not crash.
+            logger.error("App: the assessment rate limit setting is not valid, using the default: %s", error)
+            self.__rate_limiter = RateLimiter()
 
     # ----- what the front ends are given ----------------------------------------------
 
@@ -155,13 +160,13 @@ class App:
             --web                   start the web app instead of the menu
         """
         self.__configure_logging()
-        if "--web" in arguments:
-            return self.start_web()
         problems = self.__config_reader.problems()
         if problems:
             for problem in problems:
                 self.__ui.show_error(problem)
             return 1
+        if "--web" in arguments:
+            return self.start_web()
         if not self.ai_available():
             self.__ui.show_error("No OPENAI_API_KEY set: only saved AI replies can be used.")
         if "--demo" in arguments:
