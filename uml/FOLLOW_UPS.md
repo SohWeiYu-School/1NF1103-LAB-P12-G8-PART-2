@@ -17,6 +17,12 @@ because they are outside that step's scope. Each needs its own small fix later.
 | 10 | R2 review | `VerdictEngine` helpers `_feature`, `_feature_checks`, `_check` use one underscore but the class has no children (should be `__`); its `_check(feature, …)` differs from `RiskAnalysis._check(check, …)` | `app/logic/verdict_engine.py:56-68` | Naming (stage 3) |
 | 11 | R2 review | `Check` carries feature details (`signs`, `match`, `typology_id`, `independent`, `optional`) through `extra()`/`set_extra()`/`FIELDS`, which the UML `Check` box doesn't show | `app/model/check.py` | UML update (stage 5) |
 | 12 | R2 review | `Forecast.document_request` is `(failures: list[dict], candidates) -> list[dict]`; the UML says `(failures : list[Check]) : dict`. It runs on the assessor's raw failure records before any checks exist | `app/logic/forecast.py` | Stage 3/4 decision |
+| 13 | R3 review | `ClientRecord.record_assessment(verdict, case)` (in the UML) writes the UTC timestamp into `last_assessed_on`, but App has always written the case date, so App doesn't call it. Fix the method to use the case date and have App call it | `app/model/client_record.py:143`, `app/application/app.py:295-317` | UML-first fix (stage 4) |
+| 14 | R3 review | `Verdict.details()` groups checks by `check.feature`; a future feature stamping another feature's name would land in the wrong group | `app/model/verdict.py:121-151` | Latent risk |
+| 15 | R3 review | `Verdict.details()` / `explanation` hand out the stored lists by reference, so a caller could change the Verdict | `app/model/verdict.py:87-88, 141-150` | Encapsulation nit |
+| 16 | R3 review | The web result page stamps its own `datetime.now()` instead of `verdict.assessed_at`, so the shown time can differ slightly from the saved one | `app/interface/web_app.py:598` | Consistency nit |
+| 17 | R3 review | `Verdict` gained `explanation`, `details()`, `EXPLANATION_KEYS`, `CHECK_GROUPS`, which the UML box doesn't show | `app/model/verdict.py` | UML update (stage 5) |
+| 18 | R3 review | `AssessmentRunner.run` returns a result dict carrying the Verdict (the UML says `: Verdict`), because App saves research, typologies, crime/benchmark/forecast results that a Verdict doesn't hold | `app/application/assessment_runner.py` | UML correction (stage 3/7) |
 
 Fixed straight away (not listed above): the R1 review's two bugs, (a) "changes could not be kept" followed by
 "Changes saved successfully" in `find_existing_client`, and (b) an open "previous" job replacing the current
