@@ -9,8 +9,8 @@ class CaseReader:
     today is the assessment date used when the record has none.
     """
 
-    __PRESENT_WORDS = ("", "present", "now", "current", "-", "none")
-    COMPOSITION_KEYS = ["property", "listed_equities", "private_business", "cash"]
+    __PRESENT_WORDS: tuple[str, ...] = ("", "present", "now", "current", "-", "none")
+    COMPOSITION_KEYS: list[str] = ["property", "listed_equities", "private_business", "cash"]
 
     def __init__(self, today: str = "") -> None:
         self.__today: str = today
@@ -40,7 +40,7 @@ class CaseReader:
         value = CaseReader.read_amount(text)
         return int(value) if value is not None and 1900 <= value <= 2100 else None
 
-    def _read_payment(self, text) -> str | None:
+    def _read_payment(self, text: str | None) -> str | None:
         """'Cash', 'mortgage', 'bank loan', 'sold my flat' -> cash / loan / asset_sale."""
         words = str(text or "").lower()
         if any(w in words for w in ("loan", "mortgage", "financ", "borrow")):
@@ -207,7 +207,7 @@ class CaseReader:
             "declaration_text":     sow if isinstance(sow, str) else (sow or {}).get("declaration_text", ""),
         }
 
-    def _whole_percent(self, value) -> int | None:
+    def _whole_percent(self, value: int | float | None) -> int | None:
         """A share of wealth as a whole-number percent: 0.45 (stored fraction) or 45 -> 45."""
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return None
