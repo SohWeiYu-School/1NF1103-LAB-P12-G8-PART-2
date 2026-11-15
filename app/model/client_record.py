@@ -148,9 +148,11 @@ class ClientRecord:
     # ----- checks only the whole record can make ------------------------------
 
     def problems(self) -> list[str]:
-        """What is wrong with the record. Empty list = nothing."""
+        """What is wrong with the record, claims included (a record with no claims has none to
+        add). Empty list = nothing."""
         return (self.__check_schema() + self.__check_job_order()
-                + self.__check_one_current_job() + self.__check_asset_years())
+                + self.__check_one_current_job() + self.__check_asset_years()
+                + (self.__claims.problems() if self.__claims else []))
 
     def warnings(self, policy: dict) -> list[str]:
         """Things worth a second look. Empty list = nothing spotted."""

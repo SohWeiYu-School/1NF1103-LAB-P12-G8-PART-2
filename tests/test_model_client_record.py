@@ -123,6 +123,22 @@ def test_an_asset_bought_before_the_career_started_is_a_problem():
     assert any("Asset 2 was bought in 1990" in problem for problem in record.problems())
 
 
+def test_the_claims_problems_are_the_records_problems():
+    record = _record()
+    record.set_claims({"declared_net_worth": None, "pep_status": "  "})
+    problems = record.problems()
+    assert "Declared net worth is missing." in problems
+    assert any("The PEP question is not answered" in problem for problem in problems)
+
+
+def test_a_complete_record_has_no_claims_problems():
+    assert not any("PEP" in problem or "net worth" in problem for problem in _record().problems())
+
+
+def test_a_record_with_no_claims_has_only_its_own_problems():
+    assert ClientRecord("SOW-1", "Daniel Tan", "Malaysian", "2026-09-24").problems() == []
+
+
 def test_a_missing_name_is_a_problem():
     assert ClientRecord("SOW-1", "", "Malaysian", "2026-09-24").problems() == ["The record has no name."]
 
