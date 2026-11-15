@@ -209,7 +209,7 @@ After the review, the checker also verifies abbreviated values: `X(...)` must na
 
 Layout: CrimeScan, Forecast, FuturePaths and DocumentStore were widened so the longer lines fit. The App→DocumentStore line ends beside the wider box, and the IO Manager folder was trimmed so it no longer overlaps the Application folder. `layout_check` reports 0.
 
-## Stage 7: relationships (2026-11-15): 28 arrow edits and the main.py note
+## Stage 7: relationships (2026-11-15): 27 arrow edits and the main.py note
 
 No code changed in this stage.
 
