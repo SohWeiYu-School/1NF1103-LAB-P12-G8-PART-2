@@ -7,6 +7,7 @@ No API key and no network: every test runs a real App whose AI is a made-up call
 (tests/fake_ai.caller); the forecast runs on made-up saved replies through its real checks.
 """
 
+import copy
 import datetime
 import json
 import logging
@@ -373,7 +374,7 @@ def test_pay_comes_from_his_tax_notices_not_the_ai_guess(run):
     assert "S$186,000" in line["detail"]
     case = result["case"]
     forecast, adjusted = Forecast(POLICY, CONFIG).calibrate_pay(
-        case, json.loads(json.dumps(result["forecast"])), result["evidence"]["documented_pay"])
+        case, copy.deepcopy(result["forecast"]), result["evidence"]["documented_pay"])
     assert adjusted == []                          # already calibrated: applying it again changes nothing
     current = next(p for p in result["forecast"]["earnings"]["positions"]
                    if p["position_index"] == len(case["career_history"]) - 1)

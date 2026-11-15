@@ -10,6 +10,8 @@ import jsonschema
 
 from app.ai.ai_service import AIService
 from app.ai.response_cache import ResponseCache
+from app.model.claimed_source import ClaimedSource
+from app.model.declaration import Declaration
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +55,9 @@ class ForecastAI(AIService):
         return self._run_forecast(source["record"], source.get("cache"), source.get("typologies"),
                                   source.get("on_step"))
 
-    def read_declaration(self, record: dict, cache: dict | None = None) -> dict | None:
-        """Step 0 on its own: the free-text declaration as a list of claimed sources, or None."""
+    def read_declaration(self, record: dict, cache: dict | None = None) -> Declaration | None:
+        """Step 0 on its own: the free-text declaration as a Declaration of claimed sources, or
+        None if the AI gave no usable reading."""
         return self._read_declaration(record, cache or {}, {})
 
     def _payload(self, source: dict) -> dict:
@@ -326,6 +329,8 @@ class ForecastAI(AIService):
                 errors.append(f"{source['source_id']}: linked_asset_index {asset} doesn't exist")
             if source["start_year"] and source["end_year"] and source["start_year"] > source["end_year"]:
                 errors.append(f"{source['source_id']}: start_year is after end_year")
+            if source["amount"] is not None and source["amount"] < 0:
+                errors.append(f"{source['source_id']}: amount cannot be negative (use null if not stated)")
         return errors
 
 
@@ -477,7 +482,7 @@ class ForecastAI(AIService):
         return data
 
 
-    def _repair_person_types(self, data: dict, record: dict, source_records: list[dict]) -> dict:
+    def _repair_person_types(self, data: dict, record: dict, source_records: list[ClaimedSource]) -> dict:
         """Fix the years the code can work out itself, before the reply is checked.
 
         T1 (honest) always covers his whole career and every forecast year. A crime type's
@@ -490,7 +495,7 @@ class ForecastAI(AIService):
         last_forecast_year = self._future_years(record)[-1]
         jobs = self._career_positions(record)
         assets = record.get("investments", [])
-        sources = {s["source_id"]: s for s in source_records}
+        sources = {s.source_id: s for s in source_records}
         for person_type in data.get("person_types", []):
             if person_type.get("type_id") == ForecastAI.BASELINE_TYPE:
                 person_type["open_from"], person_type["open_to"] = start, last_forecast_year
@@ -512,8 +517,8 @@ class ForecastAI(AIService):
             if isinstance(asset_index, int) and 0 <= asset_index < len(assets):
                 windows.append((int(assets[asset_index]["year_acquired"]), last_forecast_year))
             source = sources.get(person_type.get("enabled_by_source_id"))
-            if source:
-                windows.append((int(source.get("start_year") or start), last_forecast_year))
+            if source is not None:
+                windows.append((int(source.start_year or start), last_forecast_year))
             if not windows:
                 continue
 
@@ -531,7 +536,7 @@ class ForecastAI(AIService):
         return data
 
 
-    def _check_person_types(self, data: dict, record: dict, source_records: list[dict]) -> list[str]:
+    def _check_person_types(self, data: dict, record: dict, source_records: list[ClaimedSource]) -> list[str]:
         """Call 3 list: T1 is the honest person, the rest are crime types.
 
         Each crime type is ONE standard category from the vocabulary, tied to the job, asset
@@ -543,7 +548,7 @@ class ForecastAI(AIService):
         start, end = self._career_years(record)
         last_forecast_year = self._future_years(record)[-1]
         jobs = self._career_positions(record)
-        sources = {s["source_id"]: s for s in source_records}
+        sources = {s.source_id: s for s in source_records}
         assets = record.get("investments", [])
         errors = []
 
@@ -613,9 +618,9 @@ class ForecastAI(AIService):
             if source_id is not None:
                 if source_id not in sources:
                     errors.append(f"{type_id}: enabled_by_source_id '{source_id}' is not a declared source")
-                elif sources[source_id].get("start_year") and first < int(sources[source_id]["start_year"]):
+                elif sources[source_id].start_year and first < int(sources[source_id].start_year):
                     errors.append(f"{type_id}: open_from {first} is before declared source {source_id} "
-                                  f"started ({sources[source_id]['start_year']})")
+                                  f"started ({sources[source_id].start_year})")
         return errors
 
 
@@ -837,17 +842,24 @@ class ForecastAI(AIService):
     # Each step takes the saved replies (cache), adds its results to `results`,
     # and returns its data, or None as soon as one piece fails.
 
-    def _read_declaration(self, record: dict, cache: dict, results: dict) -> dict | None:
-        """Step 0: free-text declaration -> structured list of claimed sources."""
+    def _read_declaration(self, record: dict, cache: dict, results: dict) -> Declaration | None:
+        """Step 0: free-text declaration -> a Declaration of claimed sources (None if it failed)."""
         jobs, assets = len(self._career_positions(record)), len(record.get("investments", []))
         result = self._ask("step0_declaration", "declaration", {},
                                  self._client_facts(record, include_declaration=True), "declaration",
                                  lambda data: self._check_declaration(data, jobs, assets), cache.get("step0_declaration"))
         results[result["call"]] = result
-        return result["data"] if result["ok"] else None
+        if not result["ok"]:
+            return None
+        try:
+            return Declaration.from_dict(result["data"])
+        except ValueError as error:      # the checks above should make this impossible
+            result.update(ok=False, error=f"the declaration reading could not be used: {error}")
+            logger.error("step0_declaration: %s", result["error"])
+            return None
 
 
-    def _forecast_markets(self, record: dict, declaration: dict,
+    def _forecast_markets(self, record: dict, declaration: Declaration,
                          cache: dict, results: dict) -> dict | None:
         """Call 1: choose the markets, then recall and forecast each one."""
         start, end = self._career_years(record)
@@ -859,7 +871,8 @@ class ForecastAI(AIService):
         # 1a. Which markets matter for this client
         name = "call1_markets.list"
         listing = self._ask(name, "markets_list", values,
-                                  {"client": self._client_facts(record), "claimed_sources": declaration["claimed_sources"]},
+                                  {"client": self._client_facts(record),
+                                   "claimed_sources": declaration.to_dict()["claimed_sources"]},
                                   "markets_list", lambda data: self._check_markets_list(data, years),
                                   cache.get(name), web_search)
         results[name] = listing
@@ -956,7 +969,7 @@ class ForecastAI(AIService):
                 for t in typologies or [] if t.get("typology_id")]
 
 
-    def _forecast_types(self, record: dict, declaration: dict, markets: dict,
+    def _forecast_types(self, record: dict, declaration: Declaration, markets: dict,
                        earnings: dict, cache: dict, results: dict,
                        typologies: list[dict] | None = None) -> dict | None:
         """Call 3: the person types, then one behaviour forecast per type.
@@ -974,13 +987,14 @@ class ForecastAI(AIService):
                   "last_forecast_year": years[-1], "baseline_type": ForecastAI.BASELINE_TYPE,
                   "honest_category": self._settings()["honest_category"],
                   "max_crime_types": self._settings()["max_crime_types"]}
-        claimed_sources = declaration["claimed_sources"]
+        claimed_sources = declaration.sources()
+        reading = declaration.to_dict()["claimed_sources"]          # the reading, as the prompts show it
 
         # 3a. The list of types (years are repaired first, then checked)
         name = "call3_types.list"
         listing = self._ask(name, "person_types", values,
                                   {"client": self._client_facts(record, include_declaration=True),
-                                   "claimed_sources": declaration["claimed_sources"],
+                                   "claimed_sources": reading,
                                    "markets": self._markets_brief(markets),
                                    "career_outlook": earnings["future_pay"]["career_outlook"],
                                    "researched_typologies": researched,
@@ -1007,7 +1021,7 @@ class ForecastAI(AIService):
             open_years = (person_type["open_from"], person_type["open_to"])
             name = f"call3_types.behaviour.{type_id}"
             behaviour_data = {"this_type": person_type, "all_types": self._types_brief(types),
-                              "claimed_sources": declaration["claimed_sources"],
+                              "claimed_sources": reading,
                               "markets": self._markets_brief(markets), "client": self._client_facts(record)}
             if person_type.get("typology_id") in researched_by_id:
                 behaviour_data["researched_pattern"] = researched_by_id[person_type["typology_id"]]

@@ -5,11 +5,14 @@ import pytest
 from app.logic.future_paths import FuturePaths
 from app.logic.market_model import MarketModel
 from app.logic.onboarding_assessor import OnboardingAssessor
+from app.model.declaration import Declaration
 from tests.logic_fixtures import CONFIG, POLICY, sample_case, sample_forecast
 
 
-def _evaluate(case, scale=1.0, **options):
+def _evaluate(case, scale=1.0, declaration=None, **options):
     forecast = sample_forecast(case, **options)
+    if declaration is not None:
+        forecast["declaration"] = declaration
     paths = FuturePaths(MarketModel(forecast), forecast, POLICY)
     assessor = OnboardingAssessor(paths, POLICY, CONFIG)
     savings = paths.career_savings().rows(1998, 2026)
@@ -57,6 +60,32 @@ def test_a_source_with_no_amount_and_nothing_behind_it_is_unquantified():
     sources = {source["source_id"]: source for source in _evaluate(sample_case())["sources"]}
     assert sources["S1"]["failed"] is False       # salary tied to his current job
     assert sources["S2"]["failed"] is True        # "some advisory work": no amount, no job, no asset
+
+
+def _source(source_id, country, amount=None, job=None, asset=None, kind="advisory_fees"):
+    return {"source_id": source_id, "source_type": kind, "description": f"about {source_id}", "start_year": 2010,
+            "end_year": 2012, "amount": amount, "country": country, "linked_position_index": job,
+            "linked_asset_index": asset, "quote": f"quote {source_id}", "counterparty": None,
+            "occupation_mismatch": False}
+
+
+def test_a_declared_source_puts_its_country_behind_a_named_country():
+    case = sample_case()
+    case["claims"]["wealth_countries"] = ["Singapore", "Panama"]
+    declaration = Declaration.from_dict({"claimed_sources": [_source("S1", "Panama", amount=1000)]})
+    jurisdiction = _evaluate(case, declaration=declaration)["jurisdiction"]
+    assert "panama" not in jurisdiction["unexplained_countries"]
+
+
+def test_each_declared_source_is_checked_from_the_declaration():
+    declaration = Declaration.from_dict({"claimed_sources": [
+        _source("S1", "Hong Kong"), _source("S2", "Singapore", amount=5000), _source("S3", "Singapore", asset=0),
+        _source("S4", "Singapore", job=1), _source("S5", "Singapore", kind="employment")]})
+    sources = _evaluate(sample_case(), declaration=declaration)["sources"]
+    assert [source["failed"] for source in sources] == [True, False, False, False, False]
+    assert sources[0] == {"rule_id": "UNQUANTIFIED_SOURCE", "source_id": "S1", "source_type": "advisory_fees",
+                          "failed": True, "quote": "quote S1",
+                          "detail": "S1 about S1 (2010-2012, Hong Kong): no amount and no job or asset behind it"}
 
 
 def test_only_a_crime_type_explaining_him_is_serious_risk():

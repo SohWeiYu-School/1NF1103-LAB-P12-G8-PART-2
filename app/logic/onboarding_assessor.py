@@ -87,7 +87,7 @@ class OnboardingAssessor:
         """Countries he named with nothing behind them, and linked countries on a risk list."""
         behind = {self.__config.same_country(job.get("country", "")) for job in CaseTimeline(record).positions()}
         behind |= {self.__config.same_country(asset.get("country", "")) for asset in record.get("investments", [])}
-        behind |= {self.__config.same_country(source["country"]) for source in forecast["declaration"]["claimed_sources"]}
+        behind |= {self.__config.same_country(source.country) for source in forecast["declaration"].sources()}
         named = {self.__config.same_country(country) for country in record.get("claims", {}).get("wealth_countries", [])}
         unexplained = sorted(named - behind)
         listed = sorted(j["country"] for j in forecast["markets"]["jurisdictions"]
@@ -103,17 +103,17 @@ class OnboardingAssessor:
         policy = self.__policy
         explained_by_career = set(policy.get("self_explained_source_types", []))
         findings = []
-        for source in forecast["declaration"]["claimed_sources"]:
-            unquantified = (source["amount"] is None and source["linked_position_index"] is None
-                            and source["linked_asset_index"] is None
-                            and source["source_type"] not in explained_by_career)
-            years = f"{source['start_year'] or '?'}-{source['end_year'] or '?'}"
+        for source in forecast["declaration"].sources():
+            unquantified = (source.amount is None and source.linked_position_index is None
+                            and source.linked_asset_index is None
+                            and source.source_type not in explained_by_career)
+            years = f"{source.start_year or '?'}-{source.end_year or '?'}"
             findings.append({
-                "rule_id": "UNQUANTIFIED_SOURCE", "source_id": source["source_id"],
-                "source_type": source["source_type"], "failed": unquantified,
-                "detail": f"{source['source_id']} {source['description']} ({years}, {source['country']}): "
+                "rule_id": "UNQUANTIFIED_SOURCE", "source_id": source.source_id,
+                "source_type": source.source_type, "failed": unquantified,
+                "detail": f"{source.source_id} {source.description} ({years}, {source.country}): "
                           + ("no amount and no job or asset behind it" if unquantified else "backed"),
-                "quote": source["quote"]})
+                "quote": source.quote})
         return findings
 
     def _fit_for_type(self, type_id: str, wealth_now: dict, affordability: list[dict], asset_checks: list[dict],

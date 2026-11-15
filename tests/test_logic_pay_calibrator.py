@@ -37,10 +37,15 @@ def test_documented_pay_moves_the_estimate_to_the_documented_figure():
     assert adjusted[0]["source_file"] == "tax_2025.pdf"
 
 
+def _layout(forecast):
+    """The forecast with its Declaration written out, so two forecasts can be compared."""
+    return {**forecast, "declaration": forecast["declaration"].to_dict()}
+
+
 def test_the_original_forecast_is_not_changed():
     before = copy.deepcopy(FORECAST)
     _calibrate([{"year": 2025, "amount": _typical_pay(FORECAST, 2025) * 1.5}])
-    assert FORECAST == before
+    assert _layout(FORECAST) == _layout(before)
 
 
 def test_the_current_jobs_future_pay_is_scaled_too():

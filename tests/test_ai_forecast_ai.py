@@ -6,6 +6,8 @@ import os
 import pytest
 
 from app.ai.forecast_ai import ForecastAI
+from app.model.claimed_source import ClaimedSource
+from app.model.declaration import Declaration
 from app.data.config_reader import ConfigReader
 from tests import fake_ai
 
@@ -133,10 +135,64 @@ def test_the_ai_never_sees_the_name_or_the_declared_figures(case):
     assert "Chief Operating Officer" in sent
 
 
-def test_read_declaration_gives_the_claimed_sources(case):
-    declaration = _service().read_declaration(case, fake_ai.forecast_replies(case))
-    assert [source["source_id"] for source in declaration["claimed_sources"]] == ["S1", "S2"]
+def test_read_declaration_gives_a_declaration_of_the_claimed_sources(case):
+    replies = fake_ai.forecast_replies(case)
+    declaration = _service().read_declaration(case, replies)
+    assert isinstance(declaration, Declaration)
+    assert all(isinstance(source, ClaimedSource) for source in declaration.sources())
+    assert [source.source_id for source in declaration.sources()] == ["S1", "S2"]
+    assert json.dumps(declaration.to_dict()) == replies["step0_declaration"]      # nothing lost or reordered
     assert _service().read_declaration(case, {}) is None
+
+
+def test_the_run_keeps_the_declaration_object_in_the_forecast(case):
+    run = _service().run({"record": case, "cache": fake_ai.forecast_replies(case)})
+    assert isinstance(run["forecast"]["declaration"], Declaration)
+    assert run["partial"]["declaration"] is run["forecast"]["declaration"]
+
+
+def test_the_prompts_show_the_claimed_sources_exactly_as_the_ai_read_them(case):
+    replies = fake_ai.forecast_replies(case)
+    reading = json.loads(replies["step0_declaration"])
+    reading["claimed_sources"][1] = dict(sorted(reading["claimed_sources"][1].items()))  # keys in another order
+    del reading["claimed_sources"][0]["counterparty"]                                    # an older reading
+    replies["step0_declaration"] = json.dumps(reading)
+    shown = json.dumps(reading["claimed_sources"], indent=2, ensure_ascii=False)
+    for piece in ("call1_markets.list", "call3_types.list", "call3_types.behaviour.T1"):
+        saved = dict(replies)
+        caller = _Caller([saved.pop(piece)])
+        assert _service(caller).run({"record": case, "cache": saved})["ok"]
+        sent = caller.prompts[0].split("DATA:")[1]
+        assert "\n".join("  " + line for line in shown.splitlines()).lstrip() in sent, piece
+
+
+def test_a_declaration_reading_with_a_negative_amount_is_sent_back(case):
+    replies = fake_ai.forecast_replies(case)
+    reading = json.loads(replies.pop("step0_declaration"))
+    good = json.dumps(reading)
+    reading["claimed_sources"][1]["amount"] = -5
+    caller = _Caller([json.dumps(reading), good])
+    declaration = _service(caller).read_declaration(case, {})
+    assert caller.prompts[1].count("S2: amount cannot be negative") == 1
+    assert [source.amount for source in declaration.sources()] == [None, None]
+
+
+def test_a_crime_type_must_be_enabled_by_a_declared_source_and_start_after_it(case):
+    declaration = Declaration.from_dict(json.loads(fake_ai.forecast_replies(case)["step0_declaration"]))
+    start, last = _service()._career_years(case)[0], _service()._future_years(case)[-1]
+    honest = {"type_id": "T1", "category": SETTINGS["honest_category"], "open_from": start, "open_to": last,
+              "rule_out_documents": [{"document_code": "DOC_TAX_RETURNS", "also_rules_out": []}],
+              "enabled_by_position_index": None, "enabled_by_asset_index": None, "enabled_by_source_id": None}
+    crime = {**honest, "type_id": "T2", "category": "TAX_EVASION", "open_from": 2010, "open_to": 2012,
+             "enabled_by_source_id": "S2"}
+    errors = _service()._check_person_types({"person_types": [honest, crime]}, case, declaration.sources())
+    assert any("before declared source S2 started (2018)" in error for error in errors)
+    unknown = {**crime, "enabled_by_source_id": "S9", "open_from": 2019}
+    errors = _service()._check_person_types({"person_types": [honest, unknown]}, case, declaration.sources())
+    assert any("'S9' is not a declared source" in error for error in errors)
+    overlapping = {**crime, "open_to": last}
+    repaired = _service()._repair_person_types({"person_types": [honest, overlapping]}, case, declaration.sources())
+    assert repaired["person_types"][1]["open_from"] == 2018                 # moved to when S2 started
 
 
 def test_ranges_labelled_back_to_front_are_put_in_order():
