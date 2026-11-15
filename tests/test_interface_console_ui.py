@@ -130,7 +130,7 @@ def test_keep_money_keeps_the_current_value_on_enter_and_reads_a_new_amount(caps
     assert ui.keep_money("Price paid", 250000.0) == 250000.0
     assert ui.keep_money("Price paid", None) is None
     assert ui.keep_money("Price paid", None) == 1500000.0
-    assert ask.asked[0] == "Price paid [250000.0]: " and ask.asked[1] == "Price paid [None]: "
+    assert ask.asked[0] == "Price paid [250000.0]: " and ask.asked[1] == "Price paid []: "      # an empty amount shows as [], as it always did
     assert capsys.readouterr().out.count("[ERROR]") == 2
 
 

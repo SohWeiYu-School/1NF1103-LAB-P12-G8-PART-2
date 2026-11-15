@@ -294,7 +294,8 @@ class ConsoleUI:
     def keep_money(self, label: str, current: float | None) -> float | None:
         """Enter keeps the current amount; None means there is no amount yet (and stays None)."""
         while True:
-            v = self.__read(f"{label} [{current}]: ").strip().replace(",", "")
+            shown = "" if current is None else current      # an empty amount shows as [], as it always did
+            v = self.__read(f"{label} [{shown}]: ").strip().replace(",", "")
             if not v:
                 return current
             try:
