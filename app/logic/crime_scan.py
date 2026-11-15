@@ -347,7 +347,7 @@ class CrimeScan(RiskAnalysis):
             matches.append(MatchResult(typology, core_fired, supporting_fired, category))
         return matches
 
-    def __to_iso(self, value, warnings: list) -> str | None:
+    def __to_iso(self, value: str | None, warnings: list) -> str | None:
         """Convert a country name or code to ISO 3166-1 alpha-2. Pure, no I/O.
 
         - None/empty → None (no warning)
