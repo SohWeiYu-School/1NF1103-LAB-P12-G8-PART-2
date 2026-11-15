@@ -362,11 +362,14 @@ class ClientForm:
         if "blank =" not in label:
             label += " (press Enter to leave it empty)"
         if field["path"][-1] == "wealth_jump_years":
-            return self.__ui.ask_int(label, minimum=1, allow_blank=True)
+            return self.__ui.ask_int(label, minimum=1, maximum=60, allow_blank=True)   # the form's limits
         if kind == "year":
             return self.__ui.ask_year(label, allow_blank=True)
         if kind == "money":
-            return self.__ui.ask_money(label, allow_zero=True, allow_blank=True)
+            return self.__ui.ask_money(label, allow_zero=False, allow_blank=True)
+        if field["path"][-1] == "declared_counterparties":                  # firm names, as the form takes them
+            answer = self.__ui.read_answer(f"{label}, comma-separated: ").strip()
+            return [name.strip() for name in answer.split(",") if name.strip()]
         if kind == "countries":
             return self.__ui.ask_countries(label, allow_blank=True)
         return self.__ui.ask_text(label)

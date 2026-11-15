@@ -252,8 +252,19 @@ def test_a_dropped_optional_detail_is_asked_for_and_enter_leaves_it_empty(monkey
     jump = {"path": ["claims", "biggest_wealth_jump"], "label": "Biggest jump (SGD)", "kind": "money"}
     years = {"path": ["claims", "wealth_jump_years"], "label": "Over how many years", "kind": "money"}
     people = {"path": ["claims", "declared_counterparties"], "label": "Known counterparties", "kind": "countries"}
-    _type(monkeypatch, "2010", "", "2,500,000", "", "3", "", "Acme, Beta", "")
+    _type(monkeypatch, "2010", "", "2,500,000", "", "3", "", "Tan & Co, DBS Bank (HK)", "")
     assert form.ask_optional_field(year) == 2010 and form.ask_optional_field(year) is None
     assert form.ask_optional_field(jump) == 2_500_000 and form.ask_optional_field(jump) is None
     assert form.ask_optional_field(years) == 3 and form.ask_optional_field(years) is None
-    assert form.ask_optional_field(people) == ["Acme", "Beta"] and form.ask_optional_field(people) == []
+    assert form.ask_optional_field(people) == ["Tan & Co", "DBS Bank (HK)"] and form.ask_optional_field(people) == []
+
+
+def test_a_dropped_optional_detail_keeps_the_limits_of_the_new_client_form(monkeypatch, capsys):
+    form = _form()
+    jump = {"path": ["claims", "biggest_wealth_jump"], "label": "Biggest jump (SGD)", "kind": "money"}
+    years = {"path": ["claims", "wealth_jump_years"], "label": "Over how many years", "kind": "money"}
+    #       jump: 0 refused, then 1m     years: 500 and 0 refused, then 4
+    _type(monkeypatch, "0", "1,000,000", "500", "0", "4")
+    assert form.ask_optional_field(jump) == 1_000_000
+    assert form.ask_optional_field(years) == 4
+    assert "above zero" in capsys.readouterr().out.lower()
