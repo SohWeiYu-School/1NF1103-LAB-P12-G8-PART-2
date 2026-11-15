@@ -388,3 +388,19 @@ The review found every added member and every line faithful to the code. Its fix
   The DocumentEvidence → CaseReader composition now goes straight down, so it no longer seems to merge with that trunk.
 - `Repository` stays `«interface»` (Marcus, follow-up #53): it stores nothing and only lists `save`/`load`/`find`; its
   empty `__init__` is there only for CLAUDE.md §1. No diagram change.
+
+## Group 1 validation fixes (2026-11-16): code changed, the diagram follows it
+
+No reviewed member was corrected: the code changed (follow-ups #5, #21, #27, #29, #47, #48, #51, #55), and the
+diagram was updated to show the new and changed members, so the scan stays at 0. Reason code for these diagram edits:
+**T** for public signatures (they are the real interface), **B** for the new private helpers.
+- Changed: `JsonRepository.__init__(path : str, key_field : str)` (no `""` defaults); `DocumentRecordBuilder.build`
+  returns a third item, the dropped fields; `ClientForm.generate_client_id(is_taken_fn)` and `create_new_client(..., is_taken_fn)`;
+  `ConsoleUI.keep_money(..., allow_zero)`, `ask_money(..., allow_blank)`, `ask_countries(..., allow_blank)`; `CaseReader.is_iso_date`
+  is public and static (it was a private helper) because `DocumentRecordBuilder` uses it too.
+- Added: `App.client_ref_taken`, `ClientForm.MAX_ID_TRIES`, `ClientForm.ask_optional_field`, `ConsoleUI.show_dropped_fields`,
+  `ConsoleUI.show_optional_intro`, `WebApp.values_from_reading`, and private helpers in AssessmentRunner, DocumentRecordBuilder,
+  MarketModel, ClaimedSource and Claims.
+- New arrow: `DocumentRecordBuilder ..> CaseReader : uses` (it calls `CaseReader.is_iso_date`).
+- Layout: ConsoleUI grew into ReportView, so `ClientForm` moved to the left IO column under `CaseBuilder`; the lines
+  around it were re-routed. layout_check 0.
