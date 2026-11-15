@@ -481,9 +481,9 @@ package "Logic Manager (app/logic)" {
     +verify_research(research : dict) : list[ResearchReport]
     +verify_typology_sources(typologies : list[dict], reports : list[ResearchReport]) : list[Typology]
     +match_typologies(declaration : Declaration, typologies : list[Typology]) : list[MatchResult]
-    -__categorise_match(core_fired : list, core : list, supporting_fired : list) : str
+    -__categorise_match(core_fired : list[str], core : list[str], supporting_fired : list[str]) : str
     -__domain_is_trusted(url : str, trusted_domains : list[str]) : bool
-    -__to_iso(value : str | None, warnings : list) : str | None
+    -__to_iso(value : str | None, warnings : list[str]) : str | None
   }
   class DocumentEvidence {
     --
@@ -762,10 +762,10 @@ package "Domain Model (app/model)" {
   class Investment {
     -__asset_type : str = "" {get}
     -__country : str = "" {get}
-    -__year_acquired : int | None = 0 {get, set}
+    -__year_acquired : int | None = None {get, set}
     -__price_paid : float | None = None {get, set}
-    -__current_declared_value : float | None = 0.0 {get, set}
-    -__income_produced : float | None = 0.0 {get, set}
+    -__current_declared_value : float | None = None {get, set}
+    -__income_produced : float | None = None {get, set}
     -__payment_method : str | None = None {get}
     --
     +__init__(asset_type : str = "", country : str = "", year_acquired : int | None = None, price_paid : float | None = None, current_declared_value : float | None = None, payment_method : str | None = None, income_produced : float | None = None, extra : dict | None = None)
@@ -775,7 +775,7 @@ package "Domain Model (app/model)" {
     -__check_payment_method(method : str | None) : None
   }
   class Job {
-    -__start_year : int | None = 0 {get, set}
+    -__start_year : int | None = None {get, set}
     -__end_year : int | None = None {get, set}
     -__occupation : str = "" {get}
     -__seniority : str = "" {get}

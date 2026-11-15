@@ -118,21 +118,23 @@ labels inside boxes, and reports 0. Its fixes:
 - The App→CaseBuilder line is vertical.
 - Three "1" labels sit beside their lines again.
 
-## Stage 3, batches C+D: Logic Manager, Data Manager and Domain Model (2026-11-15): 85 corrections
+## Stage 3, batches C+D: Logic Manager, Data Manager and Domain Model (2026-11-15): 84 corrections
+
+The count is the changed member lines in `class_diagram_v4.puml`.
 
 Code changed to match the diagram:
 - Each class's diagram helpers are private (`__x`): Benchmark, CrimeScan (including its country table), DocumentRecordBuilder, Forecast, OnboardingAssessor, CaseReader (`__PRESENT_WORDS`) and VerdictEngine (`__agreement`, `__type_patterns`, `__evidence`).
 - `CaseReader.read_year` is static.
-- The untyped private helpers the renames exposed now have types: Benchmark's six rule helpers, `DocumentRecordBuilder.__age_from_birth` and `CrimeScan.__to_iso`.
+- The untyped private helpers the renames exposed now have types: Benchmark's six rule helpers, `DocumentRecordBuilder.__age_from_birth`, and CrimeScan's `__to_iso` and `__categorise_match` (lists of strings, as the diagram had them).
 
 Everything below is the diagram being corrected:
 
 | Class | Member | Correction | Reason |
 |---|---|---|---|
-| 18 classes (the Indicator family, RiskAnalysis, CrimeScan, Benchmark, Forecast, MarketModel, CareerSavings, Declaration, Config, ...) | `__init__(policy : dict = {})` and similar | `dict \| None = None` / `list \| None = None` | **T**: a `{}` or `[]` default is one object shared by every instance in Python. The code creates a new one in `__init__` |
-| Check, Claims, Job, Investment, ClaimedSource, Typology, ResearchReport, MatchResult, Verdict | `__init__` | every parameter has a default; `+ extra : dict \| None` where the class keeps unknown keys | **T**: `from_dict` builds partly filled objects from saved files and documents, and `to_dict` must give back the keys it was given (R1–R5 round-trip tests) |
+| 16 classes: the 6 Indicator classes, RiskAnalysis, CrimeScan, DocumentEvidence, Benchmark, Forecast, MarketModel, CareerSavings, Check, Declaration, Verdict | `__init__(policy : dict = {})` and similar | `dict \| None = None` / `list \| None = None` | **T**: a `{}` or `[]` default is one object shared by every instance in Python. The code creates a new one in `__init__` |
+| Check, Claims, Job, Investment, ClaimedSource, Typology, ResearchReport, MatchResult, Verdict, Config | `__init__` | every parameter has a default; `+ extra : dict \| None` where the class keeps unknown keys | **T**: `from_dict` builds partly filled objects from saved files and documents, and `to_dict` must give back the keys it was given (R1–R5 round-trip tests) |
 | ClaimedSource, Typology, ResearchReport | `__init__` | the fields merged in R4/R5 (`source_id`, `quote`, `crime_category`, `source_quotes`, `organisation`, ...) | **T**: the two declaration shapes and the AI's typology/report replies carry these, and the report shows them |
-| Job, Investment | `__start_year`, `__year_acquired`, `__current_declared_value`, `__income_produced` | `int \| None` / `float \| None` | **R**: an unknown year or amount is `None`, not a fake `0` (CLAUDE.md §9). The `0` starting values are a stage 6 item |
+| Job, Investment | `__start_year`, `__year_acquired`, `__current_declared_value`, `__income_produced` | `int \| None` / `float \| None` | **R**: an unknown year or amount is `None`, not a fake `0` (CLAUDE.md §9). The starting values are `None` too, as in the code |
 | ClientRecord, CloudSync | `__claims`, `__local`, `__remote` | `\| None` | **T**: each can really be absent (no declaration yet; no database configured) |
 | CloudSync, ConfigReader, DocumentStore, JsonRepository | folder/path parameters and `DATA_DIR` | paths built from `ROOT_DIR`; DocumentStore `+ root` | **T**: a relative path depends on the folder the app is started from. Tests pass a temporary root |
 | UnvaluedSource | `NAME` | `"unvalued_source_present"` | **T**: the saved name that the policy and saved checks use |
@@ -142,8 +144,8 @@ Everything below is the diagram being corrected:
 | AssetPath, CareerSavings, FuturePaths, MarketModel, OnboardingAssessor, PayCalibrator, Forecast | method parameters | the rows, paths and scenario each method is handed (`savings_rows`, `paths`, `scale`, `shocks`, ...) | **R**: these were drawn as values kept on the object. The forecast classes are pure and shared, so they receive them as inputs (CLAUDE.md §5; the concurrency fixes #19 and #25) |
 | OnboardingAssessor, Forecast, FuturePaths, PayCalibrator, RiskAnalysis | return types | the real ones (`tuple[str, bool]`, `list[dict]`, `tuple[float \| None, int \| None]`, ...) | **T**: callers unpack and read these shapes |
 | CaseReader | `forecasting_case` | `: tuple[dict \| None, list[str]]` | **T**: `None` when the record can't be forecast; the list holds the reasons |
-| CrimeScan | `__domain_is_trusted`, `__to_iso`, `__categorise_match` | `+ trusted_domains`; `value : str \| None, + warnings`, `: str \| None` | **T**: the trusted list comes from the policy; an unknown country is reported as a warning |
-| VerdictEngine | `__init__`, `describe_piece`, `__agreement`, `__type_patterns`, `__evidence` | `\| None` defaults; the real inputs and `list[dict]` returns | **T**: the report builds its cards from these lists, and the inputs are the step results, any of which may be missing (not run) |
-| Benchmark | six rule helpers | `client_data`/`ai_data`; real return types | **B**: private helpers; now typed in the code |
+| CrimeScan | `__domain_is_trusted`, `__to_iso` | `+ trusted_domains`; `value : str \| None, + warnings : list[str]`, `: str \| None` | **T**: the trusted list comes from the policy; an unknown country is reported as a warning |
+| VerdictEngine | `__init__`, `describe_piece`, `__agreement`, `__type_patterns`, `__evidence` | `\| None` defaults; the real inputs and `list[dict]` returns | **T** for the `\| None` types and `list[dict]` returns: any step result may be missing (not run), and the report builds its cards from these lists. **B** for the private helpers taking the separate step results instead of one `results` dict: a design choice below review level |
+| Benchmark | six rule helpers | real return types (`float`, `list[dict]`, a tuple, `list[str]`); parameters `client_data`/`ai_data` | **T** for the return types: the diagram's `: dict` was wrong for all six. **B** for the parameter names on private helpers; the code's types were added to match |
 
 Layout: the Logic Manager boxes grew. `FuturePaths` was widened, `AssetPath` and `CareerSavings` moved down 40 px, and the lines out of FuturePaths, Benchmark→Config and ForecastAI→Declaration were re-routed around the grown boxes. `UnvaluedSource` and `JsonRepository` were widened, and two multiplicity labels (CrimeScan→Indicator, Verdict→Check) sit next to their target box again. `layout_check` reports 0.

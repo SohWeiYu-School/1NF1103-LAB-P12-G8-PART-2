@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `295f6de` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `3cd8c8f` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -27,9 +27,9 @@ Checked code at commit `295f6de` against `uml/class_diagram_v4.puml`, which is c
 | 3 | Same member, different details | 0 | Decide per item |
 | 4 | In UML, missing in code | 36 | Decide per item |
 | 5 | In code, missing from UML | 485 | UML |
-| 6 | Minor: default and starting values | 76 | UML |
+| 6 | Minor: default and starting values | 72 | UML |
 | 7 | Relationships (arrows, verbs, multiplicities) and the main.py note | 42 | Mostly UML |
-| | **Total** | **639** | |
+| | **Total** | **635** | |
 
 Pairs where only the underscores differ (`__x` in UML, `_x` in code) are merged into one item in stage 3, so the total is lower than the raw count of differences.
 
@@ -799,7 +799,7 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `values_from_form()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:186` (app/interface/web_app.py:186)
 - [ ] `values_from_record()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:161` (app/interface/web_app.py:161)
 
-## Stage 6: Minor: default and starting values (76)
+## Stage 6: Minor: default and starting values (72)
 
 A parameter default the UML leaves out, or an attribute whose starting value differs.
 
@@ -903,7 +903,7 @@ How to fix: **UML:** add or correct the `= value`. Where the code is computed, d
 
 - [ ] `__career_savings` starts with a different value. UML: `None` · code: `CareerSavings()` (app/logic/pay_calibrator.py:18) *(pattern: UML writes `= None` for a part that `__init__` creates)*
 
-### Shared core (39)
+### Shared core (35)
 
 **`App`**
 
@@ -959,16 +959,6 @@ How to fix: **UML:** add or correct the `= value`. Where the code is computed, d
 - [ ] `__write` starts with a different value. UML: `print` · code: `write if write is not None else lambda text: print(text)` (app/interface/console_ui.py:37) *(computed in code: check by hand)*
 - [ ] `show` parameter `text` has a default in code that UML does not show. UML: `—` · code: `''` (app/interface/console_ui.py:159)
 - [ ] `show_ai_unavailable` parameter `feature` has a default in code that UML does not show. UML: `—` · code: `'Assessment'` (app/interface/console_ui.py:67)
-
-**`Investment`**
-
-- [ ] `__year_acquired` starts with a different value. UML: `0` · code: `None` (app/model/investment.py:17)
-- [ ] `__current_declared_value` starts with a different value. UML: `0.0` · code: `None` (app/model/investment.py:19)
-- [ ] `__income_produced` starts with a different value. UML: `0.0` · code: `None` (app/model/investment.py:20)
-
-**`Job`**
-
-- [ ] `__start_year` starts with a different value. UML: `0` · code: `None` (app/model/job.py:14)
 
 **`RateLimiter`**
 

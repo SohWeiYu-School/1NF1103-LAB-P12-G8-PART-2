@@ -40,6 +40,7 @@ because they are outside that step's scope. Each needs its own small fix later.
 | 33 | Stage 3B review | ConfigReader hard-codes the default cooldown 60 (duplicating `RateLimiter.DEFAULT_COOLDOWN_SECONDS`); App falls back silently (no log) when `assessment_rate_limit` is not a dict | `app/data/config_reader.py:56`, `app/application/app.py:108` | Nit |
 | 34 | Stage 3B review | `ClientForm.find_existing_client(find_fn, load_fn, save_fn, download_fn, upload_fn)` is untyped, and `load_fn` is never used | `app/interface/client_form.py:640` | Typing (CLAUDE.md §1) |
 | 35 | Stage 3B review | `keep_int`/`keep_count` are untyped and still show `[None]` for a missing age or employer size (keep_money now shows `[]`) | `app/interface/console_ui.py:280,370` | Typing + cosmetic |
+| 36 | Stage 3C+D review | Labels that `layout_check` doesn't catch: "tests against" touches FuturePaths' left border; the FuturePaths→CaseTimeline line strikes through the "1" above FuturePaths; Benchmark→MarketModel "uses" is crossed by a line and its "1" sits on a vertical line; "reads policy" overlaps MarketModel's border; "grows with" is crossed by a vertical line. All text is still readable | `uml/class_diagram_v4.drawio` | Layout (stage 7, when the arrows are redone) |
 
 Fixed straight away (not listed above): the R1 review's two bugs, (a) "changes could not be kept" followed by
 "Changes saved successfully" in `find_existing_client`, and (b) an open "previous" job replacing the current
