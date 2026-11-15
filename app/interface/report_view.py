@@ -173,10 +173,39 @@ class ReportView:
             return f"{value:,}"
         return str(value)
 
+    def __display_section(self, title: str) -> None:
+        """Print a formatted section heading."""
+        self.__ui.show("\n" + "=" * 60)
+        self.__ui.show(title)
+        self.__ui.show("=" * 60)
+
+    def show_client_list(self, records: list[dict]) -> None:
+        """Print a compact table of all saved clients."""
+        if not records:
+            self.__ui.show("\n  No clients saved yet.\n")
+            return
+        W = 68
+        self.__ui.show("\n" + "─" * W)
+        self.__ui.show(f"  {'#':<4}{'Reference':<18}{'Name':<28}Industry")
+        self.__ui.show("─" * W)
+        for i, r in enumerate(records, start=1):
+            ref      = r.get("client_ref", "—")
+            name     = r.get("name") or r.get("client_profile", {}).get("full_name", "—")
+            industry = r.get("career", {}).get("industry") or r.get("client_profile", {}).get("industry", "—")
+            self.__ui.show(f"  {i:<4}{ref:<18}{name:<28}{industry}")
+        self.__ui.show("─" * W + "\n")
+
+    def show_ai_progress(self, results: dict) -> None:
+        """One line per AI request: where the reply came from and whether it passed the checks."""
+        for name, result in results.items():
+            source = "saved reply" if result["from_cache"] else f"API, {result['attempts']} attempt(s)"
+            status = "ok" if result["ok"] else "FAILED"
+            self.__ui.show(f"  {name:<40} {source:<20} {status}")
+
     def display_client_record(self, record: ClientRecord) -> None:
         """Display all information collected for the client."""
 
-        self.__ui.display_section("CLIENT INFORMATION REVIEW")
+        self.__display_section("CLIENT INFORMATION REVIEW")
 
         self.__ui.show(f"Client Reference: {record.client_ref}")
 
@@ -184,7 +213,7 @@ class ReportView:
         # Client Profile
         # -------------------------------------------------
 
-        self.__ui.display_section("CLIENT PROFILE")
+        self.__display_section("CLIENT PROFILE")
         self.__ui.show(f"Name:        {record.profile.name or '—'}")
         self.__ui.show(f"Nationality: {record.profile.nationality or '—'}")
 
@@ -192,7 +221,7 @@ class ReportView:
         # Career History
         # -------------------------------------------------
 
-        self.__ui.display_section("CAREER HISTORY")
+        self.__display_section("CAREER HISTORY")
 
         for index, career in enumerate([job.to_dict() for job in record.jobs()], start=1):
             self.__ui.show(f"\n--- Job {index} ---")
@@ -205,7 +234,7 @@ class ReportView:
 
         investments = [asset.to_dict() for asset in record.investments()]
         if investments:
-            self.__ui.display_section("INVESTMENTS")
+            self.__display_section("INVESTMENTS")
             for index, inv in enumerate(investments, start=1):
                 self.__ui.show(f"\n--- Investment {index} ---")
                 for key, value in inv.items():
@@ -219,7 +248,7 @@ class ReportView:
 
         claims = record.claims.to_dict() if record.claims is not None else {}
         if claims:
-            self.__ui.display_section("CLAIMS")
+            self.__display_section("CLAIMS")
             for key, value in claims.items():
                 self.__ui.show(f"{self._field_name(key)}: {self._field_value(key, value)}")
 
@@ -229,14 +258,14 @@ class ReportView:
 
         sow = record.sow_declaration
         if sow:
-            self.__ui.display_section("SOURCE OF WEALTH DECLARATION")
+            self.__display_section("SOURCE OF WEALTH DECLARATION")
             self.__ui.show(sow)
 
         # -------------------------------------------------
         # Supporting Documents
         # -------------------------------------------------
 
-        self.__ui.display_section("SUPPORTING DOCUMENTS")
+        self.__display_section("SUPPORTING DOCUMENTS")
 
         documents = record.documents()
 

@@ -1,10 +1,11 @@
 """The messages the console shows when the AI fails: friendly, and never the technical detail."""
 
 from app.interface.console_ui import ConsoleUI
+from app.interface.report_view import ReportView
 
 _ui = ConsoleUI()
 show_ai_unavailable = _ui.show_ai_unavailable
-show_ai_progress = _ui.show_ai_progress
+show_ai_progress = ReportView(_ui).show_ai_progress
 show_unexpected_error = _ui.show_unexpected_error
 
 

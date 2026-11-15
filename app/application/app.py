@@ -234,7 +234,7 @@ class App:
             elif choice == "5":
                 self.list_assessments()
             elif choice == "6":
-                self.__ui.show_client_list(self.__clients.load())
+                self.__report_view.show_client_list(self.__clients.load())
                 self.__ui.read_answer("Press Enter to continue...")
             elif choice == "7":
                 self.__ui.show_message("\n--- Synchronizing Local Data to Cloud Database ---")

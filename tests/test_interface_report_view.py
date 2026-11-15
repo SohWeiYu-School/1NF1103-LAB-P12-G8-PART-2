@@ -148,3 +148,17 @@ def test_the_report_is_laid_out_at_the_width_it_is_given():
 def test_an_impossible_report_width_is_refused(width):
     with pytest.raises(ValueError, match="the report width must be a whole number of at least 20"):
         ReportView(ConsoleUI(), width)
+
+
+def test_show_client_list_says_so_when_no_clients_are_saved(capsys):
+    _view().show_client_list([])
+    assert "No clients saved yet." in capsys.readouterr().out
+
+
+def test_show_client_list_has_a_row_for_every_client(capsys):
+    _view().show_client_list([
+        {"client_ref": "CL-1", "name": "Ada Tan", "career": {"industry": "Banking"}},
+        {"client_ref": "CL-2", "client_profile": {"full_name": "Ben Lim", "industry": "Shipping"}}])
+    shown = capsys.readouterr().out
+    assert "CL-1" in shown and "Ada Tan" in shown and "Banking" in shown
+    assert "CL-2" in shown and "Ben Lim" in shown and "Shipping" in shown

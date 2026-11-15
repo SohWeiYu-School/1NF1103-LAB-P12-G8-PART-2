@@ -92,29 +92,6 @@ class ConsoleUI:
         """One progress line of the combined assessment (the web app shows the same steps)."""
         self.__write(f"  [{number:>2}/{total}] {label}...")
 
-    def display_section(self, title: str):
-        """Print a formatted section heading."""
-
-        self.__write("\n" + "=" * 60)
-        self.__write(title)
-        self.__write("=" * 60)
-
-    def show_client_list(self, records: list) -> None:
-        """Print a compact table of all saved clients."""
-        if not records:
-            self.__write("\n  No clients saved yet.\n")
-            return
-        W = 68
-        self.__write("\n" + "─" * W)
-        self.__write(f"  {'#':<4}{'Reference':<18}{'Name':<28}Industry")
-        self.__write("─" * W)
-        for i, r in enumerate(records, start=1):
-            ref      = r.get("client_ref", "—")
-            name     = r.get("name") or r.get("client_profile", {}).get("full_name", "—")
-            industry = r.get("career", {}).get("industry") or r.get("client_profile", {}).get("industry", "—")
-            self.__write(f"  {i:<4}{ref:<18}{name:<28}{industry}")
-        self.__write("─" * W + "\n")
-
     def show_documents_found(self, paths: list[str]) -> None:
         self.__write(f"\nFound {len(paths)} document(s):")
         for path in paths:
@@ -355,13 +332,6 @@ class ConsoleUI:
     def ask_client_ref(self) -> str | None:
         ref = self.ask_text("Client reference (e.g. CL-1A2B3C4D, 0 to go back)")
         return None if ref == "0" else ref
-
-    def show_ai_progress(self, results: dict) -> None:
-        """One line per AI request: where the reply came from and whether it passed the checks."""
-        for name, result in results.items():
-            source = "saved reply" if result["from_cache"] else f"API, {result['attempts']} attempt(s)"
-            status = "ok" if result["ok"] else "FAILED"
-            self.show(f"  {name:<40} {source:<20} {status}")
 
     def read_number(self, text: object) -> float | None:
         """Read an amount typed in the form: '1,650,000', 'S$1.65m', '2.5 million', '410k'. None if unreadable."""
