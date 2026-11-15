@@ -94,7 +94,7 @@ class DocumentStore:
         except Exception as error:   # a damaged or password-protected file
             logger.warning("DocumentStore.read_for_extraction: %s: %s", name, repr(error))
             return {"file_name": name, "kind": "error",
-                    "error": f"{name}: could not be read ({error.__class__.__name__})."}
+                    "error": f"{name}: could not be read. It may be damaged or password-protected."}
 
     def list_folder(self, folder: str) -> list[str] | None:
         """The readable documents directly inside a folder (not sub-folders), sorted by name.

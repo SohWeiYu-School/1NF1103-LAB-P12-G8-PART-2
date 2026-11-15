@@ -52,12 +52,14 @@ def test_a_file_type_with_no_reader_is_reported(tmp_path):
     assert "this file type can't be read" in result["error"]
 
 
-def test_a_damaged_file_is_reported_instead_of_crashing(tmp_path):
+def test_a_damaged_file_is_reported_instead_of_crashing(tmp_path, caplog):
     path = tmp_path / "broken.docx"
     path.write_bytes(b"not a real word file")
     result = _store(tmp_path).read_for_extraction(str(path))
     assert result["kind"] == "error"
-    assert result["error"].startswith("broken.docx: could not be read (")
+    assert result["error"] == "broken.docx: could not be read. It may be damaged or password-protected."
+    assert "Error" not in result["error"]                       # no exception class name on screen
+    assert "broken.docx" in caplog.text and "Error" in caplog.text    # the real details are in the log
 
 
 def test_read_all_reads_each_saved_document_under_its_uploaded_name(tmp_path):
