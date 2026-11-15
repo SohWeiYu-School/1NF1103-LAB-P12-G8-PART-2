@@ -16,10 +16,13 @@ verify_typology_sources returns (cleaned_typologies, warnings):
 """
 
 from app.logic.crime_scan import CrimeScan
+from app.model.research_report import ResearchReport
 
 
 def verify_typology_sources(typologies, clean_research, policy):
-    return CrimeScan(policy).verify_typology_sources(typologies, clean_research)
+    """The research dict's reports become ResearchReports, as verify_research hands them over."""
+    reports = [ResearchReport.from_dict(report, clean_research["retrieved_at"]) for report in clean_research["reports"]]
+    return CrimeScan(policy).verify_typology_sources(typologies, reports)
 
 
 def _sample_policy(max_age=10):

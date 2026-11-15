@@ -128,10 +128,10 @@ class AssessmentRunner:
         research = self.__research_ai.run({"case": crime_input, "domains": policy.get("trusted_sources", [])})
         notes += self.__research_ai.warnings()
         step(3)
-        clean_research = None
+        reports = None
         if research is not None:
-            clean_research, warnings = self.__crime_scan.verify_research(research)
-            notes += warnings
+            reports = self.__crime_scan.verify_research(research)
+            notes += self.__crime_scan.warnings()
         step(4)
         typology_response = self.__typology_ai.run({"case": crime_input, "research": research,
                                                     "categories": self.__crime_categories()})
@@ -143,8 +143,8 @@ class AssessmentRunner:
                 return None
         else:
             typologies = typology_response.get("sector_typologies", [])
-            if clean_research is not None:
-                typologies, warnings = self.__crime_scan.verify_typology_sources(typologies, clean_research)
+            if reports is not None:
+                typologies, warnings = self.__crime_scan.verify_typology_sources(typologies, reports)
                 notes += warnings
 
         # 6-10. Forecast: the declaration is read once here, and the crime types are built from the typologies
@@ -209,7 +209,7 @@ class AssessmentRunner:
         step(13)
         try:
             verdict = self.__engine.combine(case, {
-                "research": clean_research if clean_research is not None else research,
+                "reports": reports,
                 "typologies": typologies, "crime_result": crime_result, "declaration": declaration,
                 "benchmark_input": bench_input, "benchmark_ai": bench_ai, "benchmark_findings": findings,
                 "forecast": forecast, "forecast_assessment": forecast_assessment,

@@ -199,7 +199,8 @@ class VerdictEngine:
     def combine(self, case: dict, results: dict) -> Verdict:
         """ONE Verdict from the crime scan, the benchmark, the forecast and the documents.
 
-        results: research, typologies (verified list), crime_result, declaration (forecast Step 0),
+        results: reports (the trusted ResearchReports; None if the research did not run),
+                 typologies (verified list), crime_result, declaration (forecast Step 0),
                  benchmark_input, benchmark_ai, benchmark_findings, forecast, forecast_assessment,
                  markets (Call 1, even if the forecast stopped later), evidence (the documents layer),
                  pay_adjustments (calibrate_pay), failed_step, not_run, notes, and the
@@ -250,7 +251,7 @@ class VerdictEngine:
                                   f"{adjusted['source_file'] or 'his documents'} shows {Formatter.sgd(adjusted['documented_pay'])}, "
                                   f"so his pay as {adjusted['job']} was scaled x{adjusted['ratio']:g} for every year of that job."))
         crime = self._feature_checks("crime", {
-            "crime_result": results.get("crime_result"), "research": results.get("research"),
+            "crime_result": results.get("crime_result"), "reports": results.get("reports"),
             "typologies": results.get("typologies"), "types": types, "forecast_ran": forecast is not None})
         checks = bench + fore + crime + docs
 
@@ -405,10 +406,10 @@ class VerdictEngine:
             if not evidence.get("findings"):            # the findings already say what the notes say
                 lines += [f"Reader's note: {note}" for note in evidence.get("notes", [])]
             sections.append({"title": "What his documents show", "lines": lines})
-        reports = (results.get("research") or {}).get("reports", [])
+        reports = results.get("reports") or []
         sections.append({"title": "Research reports", "lines": [
-            f"[{r.get('report_id', '?')}] {r.get('organisation', '')}{' (' + str(r['year']) + ')' if r.get('year') else ''}"
-            f" - {r.get('title', '')}" for r in reports] or ["No research reports were found."]})
+            f"[{r.report_id or '?'}] {r.organisation}{' (' + str(r.year) + ')' if r.year else ''}"
+            f" - {r.title}" for r in reports] or ["No research reports were found."]})
         typology_lines = []
         for t in results.get("typologies") or []:
             typology_lines.append(f"{t.get('name')} ({self.__config.category_name(t.get('crime_category', ''))})")

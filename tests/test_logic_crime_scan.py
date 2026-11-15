@@ -4,6 +4,7 @@ from app.logic.crime_scan import CrimeScan
 from app.logic.risk_analysis import RiskAnalysis
 from app.model.check import Check
 from app.model.declaration import Declaration
+from app.model.research_report import ResearchReport
 from tests import fake_ai
 from tests.logic_fixtures import POLICY
 
@@ -44,14 +45,16 @@ def test_research_from_a_site_that_is_not_trusted_is_dropped():
     research = fake_ai.research()
     research["reports"].append({**research["reports"][0], "report_id": "R2", "url": "https://random-blog.example/ml"})
     research["api_sources"].append({"url": "https://random-blog.example/ml", "title": "Blog"})
-    clean, warnings = CrimeScan(POLICY).verify_research(research)
-    assert [report["report_id"] for report in clean["reports"]] == ["R1"]
-    assert warnings
+    scan = CrimeScan(POLICY)
+    reports = scan.verify_research(research)
+    assert [report.report_id for report in reports] == ["R1"]
+    assert all(isinstance(report, ResearchReport) for report in reports)
+    assert scan.warnings()
 
 
 def test_a_typology_whose_quote_is_not_in_its_report_is_dropped():
     scan = CrimeScan(POLICY)
-    clean, _ = scan.verify_research(fake_ai.research())
+    clean = scan.verify_research(fake_ai.research())
     typologies = fake_ai.typologies()["sector_typologies"]
     kept, _ = scan.verify_typology_sources(typologies, clean)
     assert len(kept) == 1
@@ -63,10 +66,10 @@ def test_a_typology_whose_quote_is_not_in_its_report_is_dropped():
 
 def test_checks_are_check_objects_that_keep_the_signs_that_fired():
     scan = CrimeScan(POLICY)
-    clean, _ = scan.verify_research(fake_ai.research())
+    clean = scan.verify_research(fake_ai.research())
     typologies, _ = scan.verify_typology_sources(fake_ai.typologies()["sector_typologies"], clean)
     result = scan.run(CASE, {"typology_response": {"sector_typologies": typologies}, "declaration": UNNAMED})
-    checks = scan.checks({"crime_result": result, "research": clean, "typologies": typologies, "types": []})
+    checks = scan.checks({"crime_result": result, "reports": clean, "typologies": typologies, "types": []})
     assert all(isinstance(check, Check) and check.feature == "crime" for check in checks)
     typology = next(check for check in checks if check.check == "TYPOLOGY")
     assert typology.extra("signs") == ["counterparty_unnamed", "unvalued_source_present"]
@@ -85,7 +88,7 @@ def test_a_crime_scan_that_could_not_run_gives_one_skipped_check():
 def test_a_person_type_without_research_is_an_information_check():
     scan = CrimeScan(POLICY)
     types = [{"type_id": "T3", "name": "Cash courier", "typology_id": None, "fits": False}]
-    checks = scan.checks({"crime_result": {"match_results": []}, "research": {"reports": []}, "types": types})
+    checks = scan.checks({"crime_result": {"match_results": []}, "reports": [], "types": types})
     assert [(check.check, check.status, check.label) for check in checks] == [
         ("UNBACKED_TYPE", "info", "T3 Cash courier"), ("NO_PATTERNS", "info", "Known patterns")]
     assert all(isinstance(check, Check) and check.extra("signs") is None for check in checks)

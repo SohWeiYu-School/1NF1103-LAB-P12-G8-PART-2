@@ -103,6 +103,7 @@ class CrimeScan(RiskAnalysis):
             GiftOrInheritanceUnnamed(self._policy), CounterpartyUnnamed(self._policy),
             SourceContradictsOccupation(self._policy), UnvaluedSource(self._policy),
             RelatedPartyTransaction(self._policy)]
+        self.__warnings: list[str] = []
 
     def run(self, case: dict, ai_data: dict) -> dict:
         """Match the typologies against the client. ai_data is {"typology_response", "declaration"}."""
@@ -110,76 +111,69 @@ class CrimeScan(RiskAnalysis):
         return self._results
 
     def checks(self, context: dict) -> list[Check]:
-        """The crime scan's findings. context holds crime_result, research, typologies, types, forecast_ran."""
+        """The crime scan's findings. context holds crime_result, reports (the trusted ResearchReports, or
+        None if the research did not run), typologies, types, forecast_ran."""
         return self._crime_checks(
-            context.get("crime_result"), context.get("research"), context.get("typologies"),
+            context.get("crime_result"), context.get("reports"), context.get("typologies"),
             context.get("types") or [], context.get("forecast_ran", True))
 
     def flags(self, declaration: Declaration) -> list[str]:
         """The names of the warning signs that fire for this declaration."""
         return [indicator.NAME for indicator in self.__indicators if indicator.fires(declaration)]
 
-    def verify_research(self, research: dict) -> tuple[dict, list[str]]:
-        """Filter research reports by grounding, domain trust, and uniqueness.
+    def warnings(self) -> list[str]:
+        """What the last verify_research call removed or could not read."""
+        return list(self.__warnings)
 
-        Pure function — no I/O, no network.
+    def verify_research(self, research: dict) -> list[ResearchReport]:
+        """The research reports that can be trusted, as ResearchReport objects. Pure: no I/O.
 
         Rules applied in order per report:
         1. URL must be in research["api_sources"] (actually retrieved by web search).
         2. URL domain must be in policy["trusted_sources"].
         3. Duplicate URLs are dropped (first kept).
-        4. Surviving reports are renumbered R1, R2, ...
-
-        Returns (clean_research_dict, warnings).
+        Kept reports keep their ids (R1, R3, ... gaps are fine). Each removal is in warnings().
         """
-        policy = self._policy
         api_urls = {s["url"] for s in research.get("api_sources", [])}
-        trusted = policy.get("trusted_sources", [])
-        warnings: list[str] = []
+        trusted = self._policy.get("trusted_sources", [])
+        retrieved_at = research.get("retrieved_at") or ""
+        self.__warnings = []
         seen_urls: set[str] = set()
-        kept: list[dict] = []
+        kept: list[ResearchReport] = []
 
-        for report in research.get("reports", []):
-            url = report.get("url", "")
-            rid = report.get("report_id", "?")
-
-            if url not in api_urls:
-                warnings.append(
-                    f"Removed {rid}: URL not found in web search results."
-                )
+        for data in research.get("reports", []):
+            rid = data.get("report_id", "?") if isinstance(data, dict) else "?"
+            try:
+                report = ResearchReport.from_dict(data, retrieved_at)
+            except ValueError as error:
+                logger.warning("CrimeScan: research report %s cannot be read: %s", rid, error)
+                self.__warnings.append(f"Removed {rid}: the report could not be read ({error}).")
                 continue
 
-            if not self._domain_is_trusted(url, trusted):
-                warnings.append(
-                    f"Removed {rid}: domain not in trusted sources."
-                )
+            if report.url not in api_urls:
+                self.__warnings.append(f"Removed {rid}: URL not found in web search results.")
                 continue
 
-            if url in seen_urls:
-                warnings.append(
-                    f"Removed {rid}: duplicate URL."
-                )
+            if not self._domain_is_trusted(report.url, trusted):
+                self.__warnings.append(f"Removed {rid}: domain not in trusted sources.")
                 continue
 
-            seen_urls.add(url)
+            if report.url in seen_urls:
+                self.__warnings.append(f"Removed {rid}: duplicate URL.")
+                continue
+
+            seen_urls.add(report.url)
             kept.append(report)
-
-        clean_research = {
-            "reports": kept,
-            "api_sources": research.get("api_sources", []),
-            "retrieved_at": research.get("retrieved_at", ""),
-            "model": research.get("model", ""),
-        }
-        return clean_research, warnings
+        return kept
 
     def verify_typology_sources(self, typologies: list[dict],
-        clean_research: dict) -> tuple[list[dict], list[str]]:
-        """Verify and clean AI typology source citations against filtered research reports.
+        reports: list[ResearchReport]) -> tuple[list[dict], list[str]]:
+        """Verify and clean AI typology source citations against the trusted research reports.
 
         Pure function — no I/O, no network.
 
         For each typology:
-        1. source_ids not found in clean_research are removed.
+        1. source_ids not found in the reports are removed.
         2. source_quotes whose quote does not appear (after normalisation) in the
            cited report's excerpts are removed.
         3. Typologies with no verified quotes left are dropped entirely.
@@ -190,13 +184,8 @@ class CrimeScan(RiskAnalysis):
         Returns (cleaned_typologies, warnings).
         """
         policy = self._policy
-        report_map = {r["report_id"]: r for r in clean_research.get("reports", [])}
+        report_map = {report.report_id: report for report in reports}
         max_age = policy.get("source_max_age_years", 10)
-
-        try:
-            reference_year = int(clean_research.get("retrieved_at", "")[:4])
-        except (ValueError, IndexError):
-            reference_year = 0
 
         cleaned: list[dict] = []
         warnings: list[str] = []
@@ -222,8 +211,7 @@ class CrimeScan(RiskAnalysis):
                         f"Typology '{typ_id}': quote from {rid} invalid — report not found."
                     )
                     continue
-                excerpts = report_map[rid].get("excerpts", [])
-                if self._report_contains_quote(excerpts, quote):
+                if report_map[rid].contains_quote(quote):
                     valid_quotes.append({"report_id": rid, "quote": quote})
                 else:
                     warnings.append(
@@ -238,10 +226,7 @@ class CrimeScan(RiskAnalysis):
             # Check 3: corroborated (valid ID + verified quote, independent orgs)
             quote_ids = {q["report_id"] for q in valid_quotes}
             grounded_ids = [sid for sid in valid_ids if sid in quote_ids]
-            org_sets = [
-                self._split_org_names(report_map[sid].get("organisation", ""))
-                for sid in grounded_ids
-            ]
+            org_sets = [self._split_org_names(report_map[sid].organisation) for sid in grounded_ids]
             corroborated = any(
                 org_sets[i].isdisjoint(org_sets[j])
                 for i in range(len(org_sets))
@@ -252,7 +237,8 @@ class CrimeScan(RiskAnalysis):
             # Missing/invalid year IS a warning (data quality problem).
             outdated_ids: list[str] = []
             for sid in valid_ids:
-                year = report_map[sid].get("year")
+                year = report_map[sid].year
+                reference_year = report_map[sid].retrieved_year()
                 if not isinstance(year, int) or year <= 0:
                     warnings.append(
                         f"Typology '{typ_id}': source {sid} has no valid year (age check skipped)."
@@ -269,10 +255,6 @@ class CrimeScan(RiskAnalysis):
             })
 
         return cleaned, warnings
-
-    def _report_contains_quote(self, excerpts: list[str], quote: str) -> bool:
-        """True if the quote appears in an excerpt, ignoring case, spacing and curly quote marks."""
-        return ResearchReport("", "", excerpts).contains_quote(quote)
 
     def _domain_is_trusted(self, url: str, trusted_domains: list[str]) -> bool:
         """Return True if the URL's domain matches or is a subdomain of a trusted domain."""
@@ -550,7 +532,8 @@ class CrimeScan(RiskAnalysis):
                                 "again with a fresh reading to check for unnamed people.")
         return {"sources": rows}, warnings
 
-    def _crime_checks(self, crime_result: dict | None, research: dict | None, typologies: list[dict] | None,
+    def _crime_checks(self, crime_result: dict | None, reports: list[ResearchReport] | None,
+                      typologies: list[dict] | None,
                      types: list[dict], forecast_ran: bool) -> list[Check]:
         """The crime scan's patterns in the shared shape: how well each one matches, and which
         person type was built from it."""
@@ -591,7 +574,7 @@ class CrimeScan(RiskAnalysis):
                                           "Not backed by research: built from his background only.",
                                           group="Crime stories"))
         if not crime_result.get("match_results"):
-            reports = len((research or {}).get("reports", []))
             checks.append(self._check("NO_PATTERNS", "Known patterns", "pattern", "info",
-                                      f"No verified patterns for his industry ({reports} research report(s) found)."))
+                                      f"No verified patterns for his industry ({len(reports or [])} research "
+                                      "report(s) found)."))
         return checks
