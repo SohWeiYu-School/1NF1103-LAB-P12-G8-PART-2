@@ -269,19 +269,19 @@ package "AI Manager (app/ai)" {
     #_provider : str = ""
     #_model : str = ""
     #_temperature : float = 0.0
-    #_ai_caller : Callable[[str, dict, dict], str | None] = None
-    #_response_cache : ResponseCache = None
+    #_ai_caller : Callable[[str, dict, dict], str | None] | None = None
+    #_response_cache : ResponseCache | None = None
     +PROMPT_NAME : str = "" «const»
     +SCHEMA_NAME : str = "" «const»
     --
-    +__init__(provider : str = "", ai_caller : Callable = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache = None)
+    +__init__(provider : str = "", ai_caller : Callable[[str, dict, dict], str | None] | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None)
     +run(source : dict) : dict | None
     {abstract} #_payload(source : dict) : dict
-    #_post_process(data : dict) : dict
-    #_complete(prompt : str, schema : dict, options : dict = {}) : dict | None
-    #_build_prompt(instructions : str, user_text : str) : str
-    #_redact_names(text : str, names : list[str]) : str
-    -__parse_reply(raw : str) : dict | None
+    #_post_process(data : dict, options : dict | None = None) : dict
+    #_complete(prompt : str, schema : dict, options : dict | None = None) : dict | None
+    #_build_prompt(instructions : str, user_text : str, schema : dict | None = None) : str
+    #_redact_names(text : str, names : list[str], honorifics : list[str] | None = None) : str
+    -__parse_reply(raw : str | None) : dict | None
     -__validate_reply(data : dict, schema : dict) : bool
   }
   class BenchmarkAI {
@@ -289,7 +289,7 @@ package "AI Manager (app/ai)" {
     +PROMPT_NAME : str = "benchmark" «const»
     +SCHEMA_NAME : str = "benchmark" «const»
     --
-    +__init__(provider : str, ai_caller : Callable, model : str, temperature : float, response_cache : ResponseCache)
+    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None)
     #_payload(source : dict) : dict
   }
   class DocumentAI {
@@ -297,27 +297,27 @@ package "AI Manager (app/ai)" {
     +PROMPT_NAME : str = "document_extract" «const»
     +SCHEMA_NAME : str = "document_extract" «const»
     --
-    +__init__(provider : str, ai_caller : Callable, model : str, temperature : float, response_cache : ResponseCache, max_chars : int = 40_000)
+    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None, max_chars : int = 40_000)
     #_payload(source : dict) : dict
   }
   class ForecastAI {
     -__forecast_years : int = 4
     --
-    +__init__(provider : str, ai_caller : Callable, model : str, temperature : float, response_cache : ResponseCache, forecast_years : int = 4)
+    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None, forecast_years : int = 4, settings : dict | None = None, vocabulary : dict | None = None)
     +run(source : dict) : dict | None
-    +read_declaration(record : dict) : Declaration
+    +read_declaration(record : dict) : Declaration | None
     #_payload(source : dict) : dict
-    #_post_process(data : dict) : dict
-    -__forecast_markets(record : dict) : dict
-    -__forecast_earnings(record : dict, markets : dict) : dict
-    -__forecast_types(record : dict, markets : dict) : dict
-    -__forecast_events(record : dict, markets : dict, types : dict) : dict
-    -__check_declaration(data : dict) : list[str]
+    #_post_process(data : dict, options : dict | None = None) : dict
+    -__forecast_markets(record : dict, declaration : Declaration, cache : dict, results : dict) : dict | None
+    -__forecast_earnings(record : dict, markets : dict, cache : dict, results : dict) : dict | None
+    -__forecast_types(record : dict, declaration : Declaration, markets : dict, earnings : dict, cache : dict, results : dict, typologies : list[dict] | None = None) : dict | None
+    -__forecast_events(record : dict, markets : dict, types : dict, cache : dict, results : dict) : dict | None
+    -__check_declaration(data : dict, job_count : int, asset_count : int) : list[str]
     -__check_markets(data : dict) : list[str]
     -__check_pay(data : dict) : list[str]
-    -__check_asset_model(data : dict) : list[str]
-    -__check_person_types(data : dict) : list[str]
-    -__check_events(data : dict) : list[str]
+    -__check_asset_model(data : dict, index : int, years : list[int], market_ids : set) : list[str]
+    -__check_person_types(data : dict, record : dict, source_records : list[ClaimedSource]) : list[str]
+    -__check_events(data : dict, forecast_years : list[int], market_ids : set) : list[str]
     -__repair(data : dict, errors : list[str]) : dict
   }
   class ResearchAI {
@@ -326,9 +326,9 @@ package "AI Manager (app/ai)" {
     +PROMPT_NAME : str = "research" «const»
     +SCHEMA_NAME : str = "research_response" «const»
     --
-    +__init__(provider : str, ai_caller : Callable, model : str, temperature : float, response_cache : ResponseCache, max_reports : int = 8, max_excerpts : int = 5)
+    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None, max_reports : int = 8, max_excerpts : int = 5)
     #_payload(source : dict) : dict
-    #_post_process(data : dict) : dict
+    #_post_process(data : dict, options : dict | None = None) : dict
     -__trim_reports(data : dict) : dict
     -__add_report_ids(data : dict) : dict
   }
@@ -336,20 +336,20 @@ package "AI Manager (app/ai)" {
     -__folder : str = "data/cache"
     --
     +__init__(folder : str = "data/cache")
-    +get(kind : str, payload : dict, model : str) : dict | None
+    +get(kind : str, payload : dict, model : str, prompt_version : str = "") : dict | None
     +put(kind : str, key : str, data : dict) : None
     +load_raw_replies(ref : str) : dict
     +save_raw_replies(ref : str, replies : dict) : int
-    -__key(kind : str, payload : dict, model : str) : str
+    -__key(kind : str, payload : dict, model : str, prompt_version : str = "") : str
   }
   class TypologyAI {
     -__max_patterns : int = 5
     +PROMPT_NAME : str = "typology" «const»
     +SCHEMA_NAME : str = "typology_response" «const»
     --
-    +__init__(provider : str, ai_caller : Callable, model : str, temperature : float, response_cache : ResponseCache, max_patterns : int = 5)
+    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None, max_patterns : int = 5)
     #_payload(source : dict) : dict
-    #_post_process(data : dict) : dict
+    #_post_process(data : dict, options : dict | None = None) : dict
     -__build_typology_reports(research : dict) : list
   }
 }
