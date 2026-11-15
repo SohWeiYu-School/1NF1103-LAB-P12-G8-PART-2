@@ -18,7 +18,7 @@ class MongoRepository(DatabaseRepository):
     DB_NAME: str = "sow_risk_db"
     TIMEOUT_MS: int = 2000
 
-    def __init__(self, collection_name: str = "", key_field: str = "", uri: str = "") -> None:
+    def __init__(self, collection_name: str, key_field: str, uri: str = "") -> None:
         super().__init__(collection_name, key_field, uri)
         self.__client: MongoClient | None = None
 
@@ -54,7 +54,7 @@ class MongoRepository(DatabaseRepository):
             return list(self.__collection().find(query, {"_id": 0}))
         except PyMongoError as error:
             logger.error("MongoRepository: could not read %s: %s", self._collection_name, repr(error))
-            return []
+            raise ConnectionError(f"The {self._collection_name} database could not be read.") from error
 
     def _store_file(self, path: str, name: str) -> str:
         try:

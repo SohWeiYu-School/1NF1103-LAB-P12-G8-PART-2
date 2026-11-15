@@ -32,8 +32,10 @@ def test_an_offline_database_fails_safely():
     database = FakeDatabase(online=False)
     assert database.is_online() is False
     assert database.save({"client_ref": "SOW-1"}) is False
-    assert database.load() == []
-    assert database.find("SOW-1") is None
+    with pytest.raises(ConnectionError):
+        database.load()
+    with pytest.raises(ConnectionError):
+        database.find("SOW-1")
     assert database.upload_local_documents({"supporting_documents": [{"file_path": "x.pdf"}]}) == 0
 
 
@@ -64,7 +66,8 @@ def test_mongo_that_cannot_be_reached_is_offline(monkeypatch):
     monkeypatch.setattr(mongo_repository, "MongoClient", unreachable)
     repository = MongoRepository("client_cases", "client_ref", "mongodb://nowhere")
     assert repository.is_online() is False
-    assert repository.load() == []
+    with pytest.raises(ConnectionError):
+        repository.load()
 
 
 class _Collection:
@@ -105,3 +108,49 @@ def test_an_old_assessment_with_no_id_is_matched_on_client_and_time(monkeypatch)
     repository = MongoRepository("ai_assessments", "assessment_id", "mongodb://test")
     repository.save({"client_ref": "SOW-1", "assessed_at": "2026-01-10"})
     assert client.collection.writes[0][0] == {"client_ref": "SOW-1", "assessed_at": "2026-01-10"}
+
+
+def test_an_empty_collection_is_no_records_not_an_error():
+    database = FakeDatabase()
+    assert database.load() == []
+    assert database.find("SOW-1") is None
+
+
+def test_an_offline_read_is_logged_and_never_looks_like_an_empty_collection(caplog):
+    database = FakeDatabase(online=False)
+    with pytest.raises(ConnectionError, match="cannot be reached"):
+        database.load()
+    assert "cannot be reached" in caplog.text
+    assert database.find("") is None            # no reference asked for: nothing to look up
+
+
+def test_mongo_with_no_address_raises_on_read():
+    with pytest.raises(ConnectionError):
+        MongoRepository("client_cases", "client_ref", "").load()
+
+
+def test_a_mongo_read_error_raises_and_is_logged(monkeypatch, caplog):
+    from pymongo.errors import PyMongoError
+
+    class _Failing(_Collection):
+        def find(self, query, fields):
+            raise PyMongoError("boom: mongodb+srv://secret")
+
+    client = _Client()
+    client.collection = _Failing()
+    monkeypatch.setattr(mongo_repository, "MongoClient", lambda *args, **kwargs: client)
+    repository = MongoRepository("client_cases", "client_ref", "mongodb://test")
+    with pytest.raises(ConnectionError) as raised:
+        repository.load()
+    assert "secret" not in str(raised.value)
+    assert "boom" in caplog.text
+    with pytest.raises(ConnectionError):
+        repository.find("SOW-1")
+
+
+@pytest.mark.parametrize("collection, key", [("", "client_ref"), ("client_cases", ""), ("client_cases", "  ")])
+def test_a_repository_without_a_collection_or_key_field_is_rejected(collection, key):
+    with pytest.raises(ValueError):
+        MongoRepository(collection, key, "mongodb://test")
+    with pytest.raises(ValueError):
+        FakeDatabase(collection, key)
