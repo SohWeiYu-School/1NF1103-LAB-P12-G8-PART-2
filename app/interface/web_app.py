@@ -95,6 +95,8 @@ class WebApp:
     def __init__(self, app: App | None = None, limiter: RateLimiter | None = None) -> None:
         """limiter decides how often one browser may start an assessment. Without one, the App's
         own limiter (made from the policy) is used."""
+        if app is not None and not app.settings_ok():
+            raise RuntimeError(App.SETTINGS_UNAVAILABLE)
         self.__app: App | None = app
         self.__limiter: RateLimiter | None = limiter if limiter is not None else \
             (app.rate_limiter() if app is not None else None)
@@ -569,11 +571,11 @@ class WebApp:
 
     def show_form(self, heading: str, values: dict, problems: list, field_errors: dict = None,
                   documents: list | None = None, autofilled: list | None = None,
-                  notes: list | None = None):
+                  notes: list | None = None, notes_title: str = ""):
         return render_template("client_form.html", heading=heading, values=values,
                                problems=problems, SECTIONS=WebApp.SECTIONS,
                                field_errors=field_errors or {}, documents=documents or [],
-                               autofilled=autofilled or [], notes=notes or [])
+                               autofilled=autofilled or [], notes=notes or [], notes_title=notes_title)
 
     def __run_in_background(self, job_id: str, record: ClientRecord, case: dict) -> None:
         """The assessment, in the background: App.assess, the very method the command
@@ -751,7 +753,8 @@ class WebApp:
             return self.show_form(f"Edit {client_ref}", values, problems, field_errors, documents=documents)
  
         # Shown as things to fix; they never stop the officer saving (POST checks again)
-        return self.show_form(f"Edit {client_ref}", self.values_from_record(old), client.problems())
+        return self.show_form(f"Edit {client_ref}", self.values_from_record(old), [],
+                              notes=client.problems(), notes_title="To complete or check")
 
     def edit_client_autofill(self, client_ref: str) -> str | Response:
         try:
@@ -858,7 +861,10 @@ class WebApp:
         case, missing = self.__app.read_case(record)
         problems = self.__app.validate_case(case) if case is not None else []
         if case is None or problems:
-            flash("Complete the client record before assessing (Edit): " + "; ".join(missing or problems))
+            if missing and record.problems():       # the client page lists these in full under "To complete or check"
+                flash("Complete the client record before assessing: see the list below.")
+            else:
+                flash("Complete the client record before assessing (Edit): " + "; ".join(missing or problems))
             return redirect(url_for("view_client", client_ref=client_ref))
         job_id = uuid.uuid4().hex
         self.__jobs[job_id] = {

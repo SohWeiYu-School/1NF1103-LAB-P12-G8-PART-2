@@ -3,6 +3,7 @@ behind it has a made-up AI caller and keeps its files in a temporary folder."""
 
 import io
 import re
+import shutil
 import time
 
 import pytest
@@ -161,7 +162,7 @@ def test_a_complete_client_page_lists_no_problems(web):
     application, _, client = web
     application.clients().save(sample_case())
     page = client.get(f"/client/{sample_case()['client_ref']}").get_data(as_text=True)
-    assert "To fix before assessing" not in page
+    assert "To complete or check" not in page
 
 
 def _flashes(client) -> list[str]:
@@ -410,6 +411,7 @@ def test_the_wealth_split_is_left_alone_if_partly_typed(web):
 
 def test_only_this_apps_document_references_are_accepted(tmp_path, monkeypatch):
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    shutil.copytree("config", tmp_path / "config")                     # the settings App needs
     site = WebApp(App(None, root=str(tmp_path), data_folder="data"))     # laid out as in production
     assert site._is_stored_document("data/documents/ab12cd34_cv.pdf")
     assert site._is_stored_document("0123456789abcdef01234567")
@@ -556,3 +558,30 @@ def test_an_assessment_that_could_not_be_saved_says_so_and_leaves_the_client_unc
     assert "This assessment was NOT saved" in page
     assert application.clients().find(record["client_ref"]) == before
     assert path.read_bytes() == b"[{broken"
+
+
+def test_the_web_app_refuses_an_app_whose_settings_could_not_be_loaded(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    broken = App(_no_answer, root=str(tmp_path), data_folder=str(tmp_path / "data"))    # no config folder here
+    with pytest.raises(RuntimeError, match="settings could not be loaded"):
+        WebApp(broken)
+
+
+def test_a_blocked_assessment_flashes_a_short_message_and_the_page_lists_the_items(web):
+    application, _, client = web
+    client_ref = _save_client_without_pep_answer(application)
+    client.post(f"/client/{client_ref}/assess")
+    flashes = _flashes(client)
+    assert flashes == ["Complete the client record before assessing: see the list below."]
+    page = client.get(f"/client/{client_ref}").get_data(as_text=True)
+    assert "The PEP question is not answered" in page and "To complete or check" in page
+
+
+def test_the_edit_form_shows_the_items_in_the_notes_box_not_the_errors_box(web):
+    application, _, client = web
+    client_ref = _save_client_without_pep_answer(application)
+    page = client.get(f"/client/{client_ref}/edit").get_data(as_text=True)
+    assert "The PEP question is not answered" in page
+    assert "To complete or check" in page
+    assert "issue found" not in page and "issues found" not in page and "fix the fields highlighted" not in page

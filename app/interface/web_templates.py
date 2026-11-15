@@ -204,7 +204,7 @@ FORM = """{% extends "base.html" %}
     {% endif %}
     {% if notes %}
     <div class="notes">
-      <strong>Notes from reading the documents</strong>
+      <strong>{{ notes_title or 'Notes from reading the documents' }}</strong>
       <ul>{% for n in notes %}<li>{{ n }}</li>{% endfor %}</ul>
     </div>
     {% endif %}
@@ -321,7 +321,7 @@ VIEW = """{% extends "base.html" %}
 
 {% if problems %}
 <div class="notes" style="margin-bottom:20px">
-  <strong>To fix before assessing (use Edit)</strong>
+  <strong>To complete or check (use Edit)</strong>
   <ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
 </div>
 {% endif %}
