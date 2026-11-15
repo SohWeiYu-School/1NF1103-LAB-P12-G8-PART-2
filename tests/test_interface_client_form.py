@@ -98,3 +98,32 @@ def test_a_new_client_that_could_not_be_saved_is_reported(monkeypatch, capsys):
     _type(monkeypatch, *NEW_CLIENT_ANSWERS, "y", "")
     assert _form().create_new_client(save_fn=lambda client: False) is None
     assert "could not be saved" in capsys.readouterr().out
+
+
+def test_an_edit_that_could_not_be_kept_is_not_saved_or_reported_as_saved(monkeypatch, capsys):
+    """When the edited answers don't make a valid record, edit_existing_client returns the same
+    record unchanged; the officer must not then be told the changes were saved."""
+    form = _form()
+    record = ClientRecord.from_dict(sample_case())
+    saved = []
+    monkeypatch.setattr(form, "edit_existing_client", lambda client, upload_fn=None: client)
+    _type(monkeypatch, record.client_ref, "1", "3", "")
+    form.find_existing_client(find_fn=lambda ref: record, save_fn=lambda client: saved.append(client) or True)
+    out = capsys.readouterr().out
+    assert saved == []
+    assert "Nothing was saved" in out and "Changes saved successfully" not in out
+
+
+def test_a_previous_job_needs_an_end_year_so_it_cannot_replace_the_current_job(monkeypatch, capsys):
+    """The current job is asked for in the profile. A previous job left open would be treated as
+    the current job when the record is saved, so its end year is required."""
+    previous_job = ("y", "2005", "", "2010", "Clerk", "Junior", "Retail", "Shop", "20", "Singapore", "n")
+    answers = NEW_CLIENT_ANSWERS[:10] + previous_job + NEW_CLIENT_ANSWERS[11:]
+    saved = []
+    _type(monkeypatch, *answers, "y", "2", "")
+    _form().create_new_client(save_fn=lambda client: saved.append(client) or True)
+    assert len(saved) == 1
+    record = saved[0]
+    career = record.to_dict()["career"]
+    assert career["occupation"] == "Chief Operating Officer" and career["employer_name"] == "Straits Harbour"
+    assert [job.end_year for job in record.jobs()] == [2010]

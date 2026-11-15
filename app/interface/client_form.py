@@ -65,9 +65,14 @@ class ClientForm:
                   "country_of_residence": residence, "age": age, "career_start_year": start}
         return {"name": name, "nationality": nationality, "career": career}
 
-    def _ask_job(self) -> dict:
+    def _ask_job(self, previous: bool = False) -> dict:
+        """One job. A previous job must have an end year: the current job is asked for in the
+        profile, so an open "previous" job would replace it when the record is saved."""
         start_year = self.__ui.ask_year("Start year")
-        end_year   = self.__ui.ask_year("End year (leave blank if current)", minimum=start_year, allow_blank=True)
+        if previous:
+            end_year = self.__ui.ask_year("End year", minimum=start_year)
+        else:
+            end_year = self.__ui.ask_year("End year (leave blank if current)", minimum=start_year, allow_blank=True)
         return {
             "start_year": start_year, "end_year": end_year,
             "occupation":    self.__ui.ask_words("Job title", ConsoleUI.LABEL),
@@ -84,7 +89,7 @@ class ClientForm:
         prompt = "\nDoes the client have a previous job to add?"
         while self.__ui.ask_yes_no(prompt):
             self.__ui.show("\n=== Previous Job ===")
-            career_history.append(self._ask_job())
+            career_history.append(self._ask_job(previous=True))
             prompt = "\nAdd another previous job?"
         return career_history
 
@@ -532,7 +537,8 @@ class ClientForm:
 
     def edit_existing_client(self, client: ClientRecord, upload_fn=None) -> ClientRecord:
         """Allow the user to edit or add information to an existing client. Returns the edited
-        record; if the changes do not make a valid record, says why and returns the record unchanged."""
+        record as a new ClientRecord. If the changes do not make a valid record, it says why and
+        returns the SAME object it was given, unchanged, so the caller knows not to save."""
 
         record = client.to_dict()     # the answers are edited in the saved layout, then checked as a whole
 
@@ -695,20 +701,25 @@ class ClientForm:
 
             if choice == "1":
 
-                client_record = self.edit_existing_client(client_record, upload_fn)
+                edited = self.edit_existing_client(client_record, upload_fn)
 
-                self.__ui.show("\nSaving changes locally...")
-
-                success = save_fn(client_record) if save_fn else False
-
-                if success:
-                    self.__ui.show(
-                        "\nChanges saved successfully."
-                    )
+                if edited is client_record:
+                    # The changes did not make a valid record: edit_existing_client has said why.
+                    self.__ui.show("\nNothing was saved.")
                 else:
-                    self.__ui.show(
-                        "\nERROR: Changes could not be saved."
-                    )
+                    client_record = edited
+                    self.__ui.show("\nSaving changes locally...")
+
+                    success = save_fn(client_record) if save_fn else False
+
+                    if success:
+                        self.__ui.show(
+                            "\nChanges saved successfully."
+                        )
+                    else:
+                        self.__ui.show(
+                            "\nERROR: Changes could not be saved."
+                        )
 
                 self.__ui.show("\n=== UPDATED CLIENT RECORD ===")
 
