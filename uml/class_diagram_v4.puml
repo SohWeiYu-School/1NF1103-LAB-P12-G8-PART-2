@@ -212,6 +212,7 @@ package "IO Manager (app/interface)" {
     +get_investments() : list
     +get_sow_declaration() : str
     +get_supporting_documents(upload_fn : Callable[[str], str | None] | None = None) : list[dict[str, str]]
+    +ask_optional_field(field : dict) : int | float | list[str] | None
   }
   class ConsoleUI {
     -__read : Callable[[str], str] = lambda question: input(...)
@@ -234,13 +235,13 @@ package "IO Manager (app/interface)" {
     +read_answer(question : str) : str
     +ask_text(question : str, min_length : int = 1) : str
     +ask_int(question : str, minimum : int | None = None, maximum : int | None = None, allow_blank : bool = False) : int | None
-    +ask_money(question : str, allow_zero : bool = False) : float
+    +ask_money(question : str, allow_zero : bool = False, allow_blank : bool = False) : float | None
     +ask_year(question : str, minimum : int = 1940, maximum : int | None = None, allow_blank : bool = False) : int | None
     +ask_choice(question : str, options : list[str], allow_back : bool = False) : int | None
     +ask_yes_no(question : str) : bool
     +ask_client_ref() : str | None
     +keep_text(label : str, current : str, min_length : int = 2) : str
-    +keep_money(label : str, current : float | None) : float | None
+    +keep_money(label : str, current : float | None, allow_zero : bool = True) : float | None
     +money(value : float | None) : str
     +money_range(values : dict) : str
     -__only(text : str, allowed : str) : bool
@@ -249,7 +250,7 @@ package "IO Manager (app/interface)" {
     -__words_error(allowed : str) : str
     +ask_composition(current : dict | None = None) : dict
     +ask_count(question : str) : int
-    +ask_countries(question : str) : list
+    +ask_countries(question : str, allow_blank : bool = False) : list
     +ask_currency() : str
     +ask_document_record_action() : str
     +ask_words(question : str, allowed : str = LETTERS, min_length : int = 2) : str
@@ -262,6 +263,7 @@ package "IO Manager (app/interface)" {
     +show_missing_intro(count : int) : None
     +show_unexpected_error() : None
     +show_dropped_fields(messages : list[str]) : None
+    +show_optional_intro(count : int) : None
   }
   class RateLimiter {
     -__cooldown_seconds : int = 60
@@ -610,7 +612,7 @@ package "Application (app/application)" {
     -__create_runner(policy : dict) : AssessmentRunner
     {static} -__crime_declaration_layout(declaration : Declaration | None) : dict | None
     {static} -__crime_result_layout(crime_result : dict | None) : dict | None
-    -__fill_field(builder : DocumentRecordBuilder, record : ClientRecord, field : dict) : ClientRecord
+    -__fill_field(builder : DocumentRecordBuilder, record : ClientRecord, field : dict, optional : bool = False) : ClientRecord
     -__handle_failure_quietly(step : str, error : str) : bool
     -__require_settings() : None
     -__saved_verdict(saved : dict) : Verdict | None
@@ -723,7 +725,7 @@ package "Logic Manager (app/logic)" {
     #_whole_percent(value : int | float | None) : int | None
     +benchmark_input(record : dict, case_input : dict) : tuple[dict, list[str]]
     +crime_scan_input(record : dict) : dict
-    {static} -__is_iso_date(text : str) : bool
+    {static} +is_iso_date(text : str) : bool
   }
   class CaseTimeline {
     -__record : dict = {}
@@ -792,7 +794,7 @@ package "Logic Manager (app/logic)" {
     +SUMMARY_SECTIONS : dict[str, str] = {...} «const»
     --
     +__init__(config : Config | None = None, today : str = "")
-    +build(extracted : dict, client_ref : str) : tuple[ClientRecord, list[str], list[str]]
+    +build(extracted : dict, client_ref : str) : tuple[ClientRecord, list[str], list[dict]]
     +missing_fields(record : ClientRecord) : list[dict]
     +summarise(client : ClientRecord, doc_client : ClientRecord) : list[dict]
     -__age_from_birth(date_of_birth : str | None) : int | None
@@ -812,7 +814,7 @@ package "Logic Manager (app/logic)" {
     +set_path(record : ClientRecord, path : list[str | int], value : Any) : ClientRecord
     -__leaf_paths(record : dict) : list[list[str | int]]
     {static} -__set(record : dict, path : list[str | int], value : Any) : None
-    -__without_impossible_fields(record : dict) : tuple[dict, list[str]]
+    -__without_impossible_fields(record : dict) : tuple[dict, list[dict]]
   }
   class Forecast {
     -__forecast : dict = {}
@@ -1372,6 +1374,7 @@ DocumentEvidence *-- "1" CaseReader
 DocumentEvidence --|> RiskAnalysis
 DocumentReaderFactory ..> DocumentReader : creates
 DocumentRecordBuilder -- Config : reads policy
+DocumentRecordBuilder ..> CaseReader : uses
 DocumentRecordBuilder ..> ClientRecord : creates
 DocumentStore *-- "1" DocumentReaderFactory
 DocumentStore ..> DocumentReader : uses
