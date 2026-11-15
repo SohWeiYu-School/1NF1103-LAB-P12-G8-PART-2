@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `10496f6` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `7739c4c` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -26,10 +26,10 @@ Checked code at commit `10496f6` against `uml/class_diagram_v4.puml`, which is c
 | 2 | Graded code rules: types and `__init__` | 0 | Code |
 | 3 | Same member, different details | 221 | Decide per item |
 | 4 | In UML, missing in code | 41 | Decide per item |
-| 5 | In code, missing from UML | 394 | UML |
+| 5 | In code, missing from UML | 396 | UML |
 | 6 | Minor: default and starting values | 106 | UML |
 | 7 | Relationships (arrows, verbs, multiplicities) and the main.py note | 49 | Mostly UML |
-| | **Total** | **811** | |
+| | **Total** | **813** | |
 
 Pairs where only the underscores differ (`__x` in UML, `_x` in code) are merged into one item in stage 3, so the total is lower than the raw count of differences.
 
@@ -324,7 +324,7 @@ How to fix: Decide per item. If the code is the better design, update the UML. I
 
 **`Check`**
 
-- [ ] `__init__` parameters differ. UML: `+__init__(feature : str, check : str, label : str, theme : str, status : str = "passed", detail : str = "", explanation : str = "", group : str = "", sources : …` · code: `(feature, check, label, theme, status, detail, explanation, group, sources, supports, extra)` (app/model/check.py:13)
+- [ ] `__init__` parameters differ. UML: `+__init__(feature : str, check : str, label : str, theme : str, status : str = "passed", detail : str = "", explanation : str = "", group : str = "", sources : …` · code: `(feature, check, label, theme, status, detail, explanation, group, sources, supports, extra)` (app/model/check.py:16)
 
 **`ClaimedSource`**
 
@@ -417,7 +417,7 @@ How to fix: Decide per item. If the code is the better design, update the UML. I
 - [ ] `_check` parameter `sources` default differs. UML: `[]` · code: `None` (app/logic/risk_analysis.py:32)
 - [ ] `_check` parameter `supports` type differs. UML: `list[str]` · code: `list[str] | None` (app/logic/risk_analysis.py:32)
 - [ ] `_check` parameter `supports` default differs. UML: `[]` · code: `None` (app/logic/risk_analysis.py:32)
-- [ ] `_jump_years` return type differs. UML: `list[int]` · code: `tuple[float | None, int | None]` (app/logic/risk_analysis.py:38)
+- [ ] `_jump_years` return type differs. UML: `list[int]` · code: `tuple[float | None, int | None]` (app/logic/risk_analysis.py:39)
 
 **`Verdict`**
 
@@ -428,10 +428,10 @@ How to fix: Decide per item. If the code is the better design, update the UML. I
 
 **`VerdictEngine`**
 
-- [ ] `__report` (UML) is `report` in code: visibility (underscores) differs. UML: `-__report(verdict : Verdict) : dict` · code: app/logic/verdict_engine.py:478
+- [ ] `__report` (UML) is `report` in code: visibility (underscores) differs. UML: `-__report(verdict : Verdict) : dict` · code: app/logic/verdict_engine.py:479
 - [ ] `__agreement` (UML) is `_agreement` in code: visibility (underscores) differs. UML: `-__agreement(checks : list[Check]) : dict` · code: app/logic/verdict_engine.py:132
 - [ ] `__type_patterns` (UML) is `_type_patterns` in code: visibility (underscores) differs. UML: `-__type_patterns(results : dict) : list` · code: app/logic/verdict_engine.py:75
-- [ ] `__evidence` (UML) is `_evidence` in code: visibility (underscores) differs. UML: `-__evidence(case : dict, results : dict) : dict` · code: app/logic/verdict_engine.py:392
+- [ ] `__evidence` (UML) is `_evidence` in code: visibility (underscores) differs. UML: `-__evidence(case : dict, results : dict) : dict` · code: app/logic/verdict_engine.py:393
 - [ ] `__init__` parameter `features` type differs. UML: `list[RiskAnalysis]` · code: `list[RiskAnalysis] | None` (app/logic/verdict_engine.py:48)
 - [ ] `__init__` parameter `config` type differs. UML: `Config` · code: `Config | None` (app/logic/verdict_engine.py:48)
 - [ ] `describe_piece` parameter `piece` type differs. UML: `str` · code: `str | None` (app/logic/verdict_engine.py:109)
@@ -538,7 +538,7 @@ How to fix: Either the work was done under another name (then update the UML), o
 - [ ] `start()` missing in code. UML: `+start(host : str = "0.0.0.0", port : int = 5000) : None` · code: `—` (app/interface/web_app.py:26)
 - [ ] `__run_in_background()` missing in code. UML: `-__run_in_background(job_id : str, record : ClientRecord) : None` · code: `—` (app/interface/web_app.py:26)
 
-## Stage 5: In code, missing from UML (394)
+## Stage 5: In code, missing from UML (396)
 
 The code grew past the diagram, mostly helper methods and constants.
 
@@ -790,7 +790,7 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `_check_declared_sources()` exists in code but not in UML. UML: `—` · code: `app/logic/onboarding_assessor.py:100` (app/logic/onboarding_assessor.py:100)
 - [ ] `_fit_for_type()` exists in code but not in UML. UML: `—` · code: `app/logic/onboarding_assessor.py:119` (app/logic/onboarding_assessor.py:119)
 
-### Shared core (233)
+### Shared core (235)
 
 **`AIService`**
 
@@ -898,8 +898,12 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 
 **`Check`**
 
-- [ ] `__extra` exists in code but not in UML. UML: `—` · code: `dict = dict(extra or {})` (app/model/check.py:29)
-- [ ] `from_dict()` exists in code but not in UML. UML: `—` · code: `app/model/check.py:91` (app/model/check.py:91)
+- [ ] `__empty_lists` exists in code but not in UML. UML: `—` · code: `list[str] = [name for name, value in (('sources', sources), ('supports', supports)) if value is not None and (not value)]` (app/model/check.py:33)
+- [ ] `__extra` exists in code but not in UML. UML: `—` · code: `dict = {}` (app/model/check.py:36)
+- [ ] class-level `FIELDS` exists in code but not in UML. UML: `—` · code: `tuple[str, ...] = ('feature', 'check', 'label', 'theme', 'status', 'detail', 'explanation', 'group', 'sources', 'supports')` (app/model/check.py:4)
+- [ ] `extra()` exists in code but not in UML. UML: `—` · code: `app/model/check.py:88` (app/model/check.py:88)
+- [ ] `from_dict()` exists in code but not in UML. UML: `—` · code: `app/model/check.py:114` (app/model/check.py:114)
+- [ ] `set_extra()` exists in code but not in UML. UML: `—` · code: `app/model/check.py:92` (app/model/check.py:92)
 
 **`ClaimedSource`**
 
@@ -1026,9 +1030,7 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 
 **`RiskAnalysis`**
 
-- [ ] `_as_checks()` exists in code but not in UML. UML: `—` · code: `app/logic/risk_analysis.py:52` (app/logic/risk_analysis.py:52)
-- [ ] `_best_honest_jump()` exists in code but not in UML. UML: `—` · code: `app/logic/risk_analysis.py:56` (app/logic/risk_analysis.py:56)
-- [ ] `_row()` exists in code but not in UML. UML: `—` · code: `app/logic/risk_analysis.py:47` (app/logic/risk_analysis.py:47)
+- [ ] `_best_honest_jump()` exists in code but not in UML. UML: `—` · code: `app/logic/risk_analysis.py:48` (app/logic/risk_analysis.py:48)
 
 **`Verdict`**
 
@@ -1041,14 +1043,14 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `__policy` exists in code but not in UML. UML: `—` · code: `dict = self.__config.policy` (app/logic/verdict_engine.py:51)
 - [ ] class-level `ORIGINAL_BENCHMARK` exists in code but not in UML. UML: `—` · code: `['TOTAL_WEALTH', 'LIQUIDITY', 'COMPOSITION_PROPERTY', 'COMPOSITION_EQUITIES', 'COMPOSITION_BUSINESS', 'COMPOSITION_CASH', 'VELOCITY', 'COUNTERPARTIES', 'JURISDI…` (app/logic/verdict_engine.py:14)
 - [ ] class-level `_ROUTINE_NOTES` exists in code but not in UML. UML: `—` · code: `('converted to', 'renumbered', 'kept first')` (app/logic/verdict_engine.py:14)
-- [ ] `_benchmark_items()` exists in code but not in UML. UML: `—` · code: `app/logic/verdict_engine.py:462` (app/logic/verdict_engine.py:462)
-- [ ] `_documents()` exists in code but not in UML. UML: `—` · code: `app/logic/verdict_engine.py:159` (app/logic/verdict_engine.py:159)
+- [ ] `_benchmark_items()` exists in code but not in UML. UML: `—` · code: `app/logic/verdict_engine.py:463` (app/logic/verdict_engine.py:463)
+- [ ] `_check()` exists in code but not in UML. UML: `—` · code: `app/logic/verdict_engine.py:65` (app/logic/verdict_engine.py:65)
+- [ ] `_documents()` exists in code but not in UML. UML: `—` · code: `app/logic/verdict_engine.py:160` (app/logic/verdict_engine.py:160)
 - [ ] `_feature()` exists in code but not in UML. UML: `—` · code: `app/logic/verdict_engine.py:56` (app/logic/verdict_engine.py:56)
+- [ ] `_feature_checks()` exists in code but not in UML. UML: `—` · code: `app/logic/verdict_engine.py:60` (app/logic/verdict_engine.py:60)
 - [ ] `_is_pep()` exists in code but not in UML. UML: `—` · code: `app/logic/verdict_engine.py:70` (app/logic/verdict_engine.py:70)
-- [ ] `_items()` exists in code but not in UML. UML: `—` · code: `app/logic/verdict_engine.py:457` (app/logic/verdict_engine.py:457)
-- [ ] `_row()` exists in code but not in UML. UML: `—` · code: `app/logic/verdict_engine.py:65` (app/logic/verdict_engine.py:65)
-- [ ] `_rows()` exists in code but not in UML. UML: `—` · code: `app/logic/verdict_engine.py:60` (app/logic/verdict_engine.py:60)
-- [ ] `decide()` exists in code but not in UML. UML: `—` · code: `app/logic/verdict_engine.py:198` (app/logic/verdict_engine.py:198)
+- [ ] `_items()` exists in code but not in UML. UML: `—` · code: `app/logic/verdict_engine.py:458` (app/logic/verdict_engine.py:458)
+- [ ] `decide()` exists in code but not in UML. UML: `—` · code: `app/logic/verdict_engine.py:199` (app/logic/verdict_engine.py:199)
 - [ ] `features()` exists in code but not in UML. UML: `—` · code: `app/logic/verdict_engine.py:53` (app/logic/verdict_engine.py:53)
 
 **`WebApp`**
@@ -1350,7 +1352,7 @@ How to fix: mostly **UML** (redraw an arrow, change a verb or multiplicity, add 
 
 ### Wrong verb (1)
 
-- [ ] `VerdictEngine ..> Verdict : creates`: never creates one, only uses it (verb should be 'uses') (app/logic/verdict_engine.py:198 (used in method in decide))
+- [ ] `VerdictEngine ..> Verdict : creates`: never creates one, only uses it (verb should be 'uses') (app/logic/verdict_engine.py:199 (used in method in decide))
 
 ### Wrong multiplicity (2)
 
