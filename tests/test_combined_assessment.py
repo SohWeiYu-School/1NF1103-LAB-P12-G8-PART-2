@@ -48,7 +48,9 @@ class Run:
         self.folder = folder
 
     def app(self, **replies) -> App:
-        return App(fake_ai.caller(**replies), data_folder=str(self.folder))
+        caller = fake_ai.caller(**replies)
+        self.last_caller = caller                       # the made-up AI, so a test can read what it was asked
+        return App(caller, data_folder=str(self.folder))
 
     def save_fake_forecast(self, record: dict, **options) -> dict:
         """Save made-up forecast replies for this client, as if the AI had answered before."""
@@ -66,7 +68,6 @@ class Run:
         if typologies is not None:
             replies["typologies_reply"] = typologies
         application = self.app(**replies)
-        self.last_caller_app = application
         return application.assess(case, documents, show_failures=False)
 
 
@@ -340,7 +341,7 @@ def quiet_peers() -> tuple[dict, dict]:
 def run_marcus(run: Run, record: dict, reading: dict, benchmark=None, typologies=None, **options) -> dict:
     case = run.save_fake_forecast(record, **options)
     result = run(case, benchmark, typologies, record["supporting_documents"], documents_reply=reading)
-    caller = run.last_caller_app._App__ai_caller
+    caller = run.last_caller
     sent = [options for key, options in caller.asked if key == "jobs"][0]["parts"]
     documents = [part for part in sent if part["type"] == "text" and part["text"].startswith("<document")]
     assert len(documents) == 9                                     # every document is read, as text
@@ -460,7 +461,7 @@ def test_every_ai_call_uses_the_one_model(run, tmp_path):
     record, reading = marcus()
     case = run.save_fake_forecast(record)
     run(case, documents=record["supporting_documents"], documents_reply=reading)
-    caller = run.last_caller_app._App__ai_caller
+    caller = run.last_caller
     asked = {key for key, _ in caller.asked}
     assert {"reports", "sector_typologies", "expected_wealth", "jobs"} <= asked
     assert {options.get("model") for _, options in caller.asked} == {"fake-model"}
