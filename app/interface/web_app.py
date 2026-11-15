@@ -635,7 +635,15 @@ class WebApp:
                                crime_result=crime_result, typologies_by_id=typologies_by_id, benchmark=benchmark)
 
     def home(self) -> str:
-        return render_template("home.html", clients=self.__app.clients().load())
+        """The client list. If the saved clients cannot be read the page says so and shows no list
+        (it never shows "No clients yet" for a read failure)."""
+        try:
+            clients = self.__app.clients().load()
+        except (OSError, ValueError) as error:
+            logger.error("WebApp.home: the client records cannot be read: %r", error)
+            flash(App.CLIENTS_UNAVAILABLE)
+            clients = None
+        return render_template("home.html", clients=clients)
 
     def find(self) -> Response:
         client_ref = request.args.get("ref", "").strip().upper()
@@ -685,13 +693,23 @@ class WebApp:
         if record is None:
             abort(404)
         saved = record.to_dict()                 # the page template reads the saved layout
-        assessments = self.__app.client_assessments(client_ref)
+        try:
+            assessments = self.__app.client_assessments(client_ref)
+        except (OSError, ValueError) as error:
+            logger.error("WebApp.view_client: the saved assessments cannot be read: %r", error)
+            flash(App.ASSESSMENTS_UNAVAILABLE)
+            assessments = None
         return render_template("client_view.html", record=saved,
                                values=self.values_from_record(saved), SECTIONS=WebApp.SECTIONS,
                                assessments=assessments)
 
-    def view_assessment(self, assessment_id: str) -> str:
-        saved = self.__app.find_assessment(assessment_id)
+    def view_assessment(self, assessment_id: str) -> str | Response:
+        try:
+            saved = self.__app.find_assessment(assessment_id)
+        except (OSError, ValueError) as error:
+            logger.error("WebApp.view_assessment: the saved assessments cannot be read: %r", error)
+            flash(App.ASSESSMENTS_UNAVAILABLE)
+            return redirect(url_for("home"))
         if saved is None:
             abort(404)
         record = self.page_record(saved["client_ref"])
@@ -887,7 +905,13 @@ class WebApp:
                            benchmark=r.get("benchmark"))
 
     def list_assessments_view(self) -> str:
-        return render_template("assessments.html", assessments=self.__app.assessments().load())
+        try:
+            assessments = self.__app.assessments().load()
+        except (OSError, ValueError) as error:
+            logger.error("WebApp.list_assessments_view: the saved assessments cannot be read: %r", error)
+            flash(App.ASSESSMENTS_UNAVAILABLE)
+            assessments = None
+        return render_template("assessments.html", assessments=assessments)
 
     def sync_to_cloud(self) -> Response:
         stats = self.__app.sync_to_cloud()

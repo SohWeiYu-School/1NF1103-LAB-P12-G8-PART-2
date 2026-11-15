@@ -451,3 +451,69 @@ def test_the_new_client_form_has_no_date_box_because_assessments_are_dated_today
     _, _, client = web
     page = client.get("/client/new").get_data(as_text=True)
     assert 'name="client.current_date"' not in page
+
+
+# ----- a read failure is reported, never shown as "no records" ------------------------------------
+
+def _damage(tmp_path, name):
+    path = tmp_path / "local database" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"[{broken")
+    return path
+
+
+def test_the_home_page_says_the_client_database_cannot_be_read_and_shows_no_empty_list(web, tmp_path):
+    _, _, client = web
+    path = _damage(tmp_path, "sow_cases.json")
+    page = client.get("/").get_data(as_text=True)
+    assert "We can&#39;t load the client database right now. Please try again later." in page
+    assert "No clients yet" not in page
+    assert "damaged" not in page and "JSONDecodeError" not in page
+    assert path.read_bytes() == b"[{broken"
+
+
+def test_an_empty_client_list_still_says_no_clients_yet(web):
+    _, _, client = web
+    page = client.get("/").get_data(as_text=True)
+    assert "No clients yet" in page and "cannot be read" not in page
+
+
+def test_the_assessments_page_says_the_saved_assessments_cannot_be_read(web, tmp_path):
+    _, _, client = web
+    _damage(tmp_path, "ai_assessments.json")
+    page = client.get("/assessments").get_data(as_text=True)
+    assert "We can&#39;t load the saved assessments right now. Please try again later." in page
+    assert "No assessments saved yet" not in page
+
+
+def test_a_client_page_says_the_assessment_history_cannot_be_read(web, tmp_path):
+    application, _, client = web
+    application.clients().save(sample_case())
+    _damage(tmp_path, "ai_assessments.json")
+    page = client.get(f"/client/{sample_case()['client_ref']}").get_data(as_text=True)
+    assert page.count("We can&#39;t load the saved assessments right now.") == 1
+    assert "assessment history cannot be shown" in page
+
+
+def test_opening_a_saved_assessment_from_a_damaged_file_goes_home_with_a_message(web, tmp_path):
+    _, _, client = web
+    _damage(tmp_path, "ai_assessments.json")
+    reply = client.get("/assessment/A1")
+    assert reply.status_code == 302 and reply.headers["Location"].endswith("/")
+    assert App.ASSESSMENTS_UNAVAILABLE in _flashes(client)
+
+
+def test_a_client_page_for_a_damaged_client_file_says_the_database_cannot_be_read(web, tmp_path):
+    _, _, client = web
+    _damage(tmp_path, "sow_cases.json")
+    reply = client.get("/client/CL-1")
+    assert reply.status_code == 302
+    assert App.CLIENTS_UNAVAILABLE in _flashes(client)
+
+
+def test_saving_a_new_client_into_a_damaged_file_says_it_was_not_saved_and_keeps_the_file(web, tmp_path):
+    _, site, client = web
+    path = _damage(tmp_path, "sow_cases.json")
+    reply = client.post("/client/new", data=_form_fields(site, sample_case()))
+    assert b"could not be saved" in reply.data
+    assert path.read_bytes() == b"[{broken"

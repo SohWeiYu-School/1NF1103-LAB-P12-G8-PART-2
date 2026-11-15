@@ -83,7 +83,9 @@ HOME = """{% extends "base.html" %}
 </div>
 
 <div class="panel" style="padding:0; overflow:hidden">
-  {% if not clients %}
+  {% if clients is none %}
+    <p class="muted" style="padding:20px 22px; margin:0">The list of clients cannot be shown because the client database could not be read.</p>
+  {% elif not clients %}
     <p class="muted" style="padding:20px 22px; margin:0">No clients yet — click <strong>+ New client</strong> in the top right to add the first one.</p>
   {% else %}
   <table>
@@ -317,7 +319,12 @@ VIEW = """{% extends "base.html" %}
   <a class="button secondary" href="{{ url_for('home') }}" style="color:var(--muted); border-color:var(--line)">← Back</a>
 </div>
 
-{% if assessments %}
+{% if assessments is none %}
+<div class="panel" style="margin-bottom:20px">
+  <h2>Assessment History</h2>
+  <p class="muted">The assessment history cannot be shown because the saved assessments could not be read.</p>
+</div>
+{% elif assessments %}
 <div class="panel" style="margin-bottom:20px">
   <h2>Assessment History</h2>
   <table>
@@ -545,7 +552,9 @@ ASSESSMENTS = """{% extends "base.html" %}
   <a class="button secondary" href="{{ url_for('home') }}">Back to clients</a>
 </div>
 <div class="panel">
-  {% if not assessments %}
+  {% if assessments is none %}
+    <p class="muted">The saved assessments cannot be shown because they could not be read.</p>
+  {% elif not assessments %}
     <p class="muted">No assessments saved yet. Open a client and click Run Assessment.</p>
   {% else %}
   <table>
