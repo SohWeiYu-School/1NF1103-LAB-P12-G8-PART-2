@@ -107,3 +107,23 @@ def test_archiving_an_unknown_or_already_archived_assessment_does_nothing(tmp_pa
     assert repository.archive("A-1") is True
     assert repository.archive("A-1") is False          # already archived
     assert len(repository.find("A-1")["archive_log"]) == 1
+
+
+def test_a_damaged_archive_log_is_ignored_instead_of_breaking_the_lists(tmp_path):
+    repository = _repository(tmp_path)
+    repository.save({"client_ref": "SOW-1", "assessment_id": "A-1", "archive_log": "oops"})
+    repository.save({"client_ref": "SOW-1", "assessment_id": "A-2", "archive_log": [1, 2]})
+    repository.save({"client_ref": "SOW-1", "assessment_id": "A-3", "archive_log": {"action": "archived"}})
+    assert len(repository.for_client("SOW-1")) == 3
+    assert len(repository.query("")) == 3
+    assert repository.archive("A-1") is False          # a damaged log is never added to
+    assert repository.find("A-1")["archive_log"] == "oops"
+
+
+def test_an_archive_reason_that_is_too_long_or_not_text_is_refused(tmp_path):
+    repository = _repository(tmp_path)
+    repository.save({"client_ref": "SOW-1", "assessment_id": "A-1"})
+    assert repository.archive("A-1", "x" * 201) is False
+    assert repository.archive("A-1", "bad\x00reason") is False
+    assert repository.find("A-1").get("archive_log") is None
+    assert repository.archive("A-1", "x" * 200) is True
