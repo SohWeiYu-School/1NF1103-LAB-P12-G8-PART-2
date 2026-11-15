@@ -192,17 +192,19 @@ No code changed in this stage. The code's values are the right ones in every cas
 
 13 of the 75 items were checker false alarms. The checker can't work out a starting value that the code computes (for example a value passed through a checking helper, or a module constant such as `REPORT_WIDTH`). The scan now also builds each class with no arguments and reads its real starting values (`runtime_starts.py` in the check tools). A diagram value counts as correct when it matches that real value. Examples: `ResearchReport.__url = ""`, `RateLimiter.__cooldown_seconds = 60`, `ReportView.__width = 96`.
 
+After the review, the checker also verifies abbreviated values: `X(...)` must name the class the code builds (directly or through a private helper returning it), and `".../folder"` must be the code's folder. Before, any value containing `...` was skipped.
+
 | Class | Member | Correction | Reason |
 |---|---|---|---|
 | 15 classes: App, AssessmentRunner, AssetPath, Benchmark, CaseBuilder, ClientForm, ClientRecord, DocumentStore, Forecast, FuturePaths, MatchResult, OnboardingAssessor, PayCalibrator, ReportView, VerdictEngine | parts that `__init__` creates | `= None` → what is created, e.g. `= Config()`, `= ConsoleUI()`, `= ClientRepository(...)`, `= [CloudSync(...), CloudSync(...)]` | **T**: the part always exists once the object is built. `None` suggested it could be missing. `(...)` means it is built with arguments; `()` with none |
 | ConfigReader, DocumentStore, ResponseCache | `__folder` | `".../config"`, `".../data/documents"`, `".../data/cache"` | **T**: the folder is made absolute from the project folder, so the app works from any start folder (as `JsonRepository.DATA_DIR`, stage 3) |
 | JsonRepository, DatabaseRepository | `_key_field` | `""` | **T**: the base classes don't know their key; `ClientRepository` and `AssessmentRepository` pass `"client_ref"` / `"assessment_id"` |
-| JsonRepository, DatabaseRepository, MongoRepository, ClientProfile, ClientRecord | `__init__` | parameter defaults shown (`= ""`) | **B**: every parameter has a default so an object can be built empty and filled from saved data (CLAUDE.md §1) |
+| JsonRepository, DatabaseRepository, MongoRepository, ClientProfile, ClientRecord | `__init__` | parameter defaults shown (`= ""`) | **B**: every parameter has a default so an object can be built empty and filled from saved data (every attribute then has a default, CLAUDE.md §1) |
 | ConsoleUI | `show`, `show_ai_unavailable` | `text : str = ""`, `feature : str = "Assessment"` | **B**: defaults below review level |
 | ConsoleUI | `__read`, `__write` | `lambda question: input(...)`, `lambda text: print(...)` | **T**: `input`/`print` are looked up when called, so a swapped `builtins.input` (the console tests) still works (stage 3 batch B) |
-| Claims | `__pep_status` | `""` (not `"no"`) | **R**: an unanswered PEP question is unknown, not a fake "no" (CLAUDE.md §9) |
-| Verdict | `__outcome` | `"MANUAL_REVIEW"` (not `""`) | **R**: a verdict that is not finished must never look passed or blank; the safe default is a person checking it (§9) |
-| CrimeScan | `__indicators` | `[GiftOrInheritanceUnnamed(...), ...]` | **T**: CrimeScan builds its six indicators in `__init__` |
-| WebApp | `__flask` | `Flask(...)` | **T**: `__init__` builds the Flask app and registers every route before keeping it |
+| Claims | `__pep_status` | `""` (not `"no"`) | **T**: the code's default is `""`. Note: `""` is in `Claims.NO_PEP_VALUES`, so a blank status counts as "not a PEP" (follow-up #41) |
+| Verdict | `__outcome` | `"MANUAL_REVIEW"` (not `""`) | **T**: `""` is impossible (the outcome check rejects it). The safe default for an unfinished verdict is a person checking it |
+| CrimeScan | `__indicators` | `[GiftOrInheritanceUnnamed(...), ...]` | **T**: CrimeScan builds its five indicators in `__init__` |
+| WebApp | `__flask` | `Flask(...)` | **B**: `Flask(__name__)` was not wrong; the checker flagged it because the code builds it in a local variable first. `(...)` matches the convention above |
 
 Layout: CrimeScan, Forecast, FuturePaths and DocumentStore were widened so the longer lines fit. The App→DocumentStore line ends beside the wider box, and the IO Manager folder was trimmed so it no longer overlaps the Application folder. `layout_check` reports 0.
