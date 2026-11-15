@@ -21,7 +21,7 @@ class ForecastAI(AIService):
 
     The steps run in order: Step 0 reads the declaration, Call 1 the markets, Call 2 the
     earnings and assets, Call 3 the person types, Call 4 the future events. Each reply is
-    checked by a _check_* method; what the code can fix by itself is fixed by a _repair_*
+    checked by its check method; what the code can fix by itself is fixed by a _repair_*
     method first. A reply that fails its checks is sent back with the reasons and asked
     again. The run stops at the first step that cannot be completed, and what finished
     is kept so the next run resumes there.
@@ -55,10 +55,11 @@ class ForecastAI(AIService):
         return self._run_forecast(source["record"], source.get("cache"), source.get("typologies"),
                                   source.get("on_step"))
 
-    def read_declaration(self, record: dict, cache: dict | None = None) -> Declaration | None:
-        """Step 0 on its own: the free-text declaration as a Declaration of claimed sources, or
-        None if the AI gave no usable reading."""
-        return self._read_declaration(record, cache or {}, {})
+    def read_declaration(self, record: dict) -> Declaration | None:
+        """Step 0 on its own: asks the AI to read the free-text declaration and gives it as a
+        Declaration of claimed sources, or None if the AI gave no usable reading.
+        (run() is what reuses saved replies; this always asks.)"""
+        return self._read_declaration(record, {}, {})
 
     def _payload(self, source: dict) -> dict:
         """The facts the AI may see about the client (no name, no declared figures)."""
@@ -313,7 +314,7 @@ class ForecastAI(AIService):
     # Each check_* returns a list of problems (empty = fine); the problems are sent back to
     # the AI on the retry. Each repair_* first fixes what the code can work out by itself.
 
-    def _check_declaration(self, data: dict, job_count: int, asset_count: int) -> list[str]:
+    def __check_declaration(self, data: dict, job_count: int, asset_count: int) -> list[str]:
         """Step 0: sources have unique ids, link to real jobs/assets, and years are in order."""
         errors = []
         ids = [s["source_id"] for s in data["claimed_sources"]]
@@ -385,7 +386,7 @@ class ForecastAI(AIService):
         return self._years_errors("future pay", [row["year"] for row in data["yearly"]], forecast_years)
 
 
-    def _check_asset_model(self, data: dict, index: int, years: list[int], market_ids: set) -> list[str]:
+    def __check_asset_model(self, data: dict, index: int, years: list[int], market_ids: set) -> list[str]:
         """Call 2 asset: follows known markets, and its numbers sit inside the sense limits."""
         settings = self._settings()
         errors = [] if data["asset_index"] == index else [f"asset_index must be {index}"]
@@ -536,7 +537,7 @@ class ForecastAI(AIService):
         return data
 
 
-    def _check_person_types(self, data: dict, record: dict, source_records: list[ClaimedSource]) -> list[str]:
+    def __check_person_types(self, data: dict, record: dict, source_records: list[ClaimedSource]) -> list[str]:
         """Call 3 list: T1 is the honest person, the rest are crime types.
 
         Each crime type is ONE standard category from the vocabulary, tied to the job, asset
@@ -694,7 +695,7 @@ class ForecastAI(AIService):
         return errors
 
 
-    def _check_events(self, data: dict, forecast_years: list[int], market_ids: set) -> list[str]:
+    def __check_events(self, data: dict, forecast_years: list[int], market_ids: set) -> list[str]:
         """Call 4 list: the right number of events, each in a forecast year and hitting a known market."""
         events = data["events"]
         ids = [e["event_id"] for e in events]
@@ -847,7 +848,7 @@ class ForecastAI(AIService):
         jobs, assets = len(self._career_positions(record)), len(record.get("investments", []))
         result = self._ask("step0_declaration", "declaration", {},
                                  self._client_facts(record, include_declaration=True), "declaration",
-                                 lambda data: self._check_declaration(data, jobs, assets), cache.get("step0_declaration"))
+                                 lambda data: self.__check_declaration(data, jobs, assets), cache.get("step0_declaration"))
         results[result["call"]] = result
         if not result["ok"]:
             return None
@@ -859,8 +860,8 @@ class ForecastAI(AIService):
             return None
 
 
-    def _forecast_markets(self, record: dict, declaration: Declaration,
-                         cache: dict, results: dict) -> dict | None:
+    def __forecast_markets(self, record: dict, declaration: Declaration,
+                           cache: dict, results: dict) -> dict | None:
         """Call 1: choose the markets, then recall and forecast each one."""
         start, end = self._career_years(record)
         years = self._future_years(record)
@@ -897,8 +898,8 @@ class ForecastAI(AIService):
         return markets
 
 
-    def _forecast_earnings(self, record: dict, markets: dict,
-                          cache: dict, results: dict) -> dict | None:
+    def __forecast_earnings(self, record: dict, markets: dict,
+                            cache: dict, results: dict) -> dict | None:
         """Call 2: expected pay for every job, future pay, and how each asset behaves."""
         _, end = self._career_years(record)
         years = self._future_years(record)
@@ -948,7 +949,7 @@ class ForecastAI(AIService):
                                      "markets": self._markets_brief(markets),
                                      "market_changes": self._market_changes(markets, bought, end)},
                                     "asset_model",
-                                    lambda data, i=index, y=list(range(bought, end + 1)): self._check_asset_model(
+                                    lambda data, i=index, y=list(range(bought, end + 1)): self.__check_asset_model(
                                         self._repair_asset_model(data, market_ids), i, y, market_ids),
                                     cache.get(name))
             results[name] = piece
@@ -969,9 +970,9 @@ class ForecastAI(AIService):
                 for t in typologies or [] if t.get("typology_id")]
 
 
-    def _forecast_types(self, record: dict, declaration: Declaration, markets: dict,
-                       earnings: dict, cache: dict, results: dict,
-                       typologies: list[dict] | None = None) -> dict | None:
+    def __forecast_types(self, record: dict, declaration: Declaration, markets: dict,
+                         earnings: dict, cache: dict, results: dict,
+                         typologies: list[dict] | None = None) -> dict | None:
         """Call 3: the person types, then one behaviour forecast per type.
 
         The types are T1 (honest) plus crime types. The crime types are built first from the crime
@@ -1000,7 +1001,7 @@ class ForecastAI(AIService):
                                    "researched_typologies": researched,
                                    "crime_categories": self._crime_categories()},
                                   "person_types",
-                                  lambda data: self._check_person_types(
+                                  lambda data: self.__check_person_types(
                                       self._repair_person_types(self._link_typologies(data, researched), record, claimed_sources),
                                       record, claimed_sources),
                                   cache.get(name))
@@ -1041,8 +1042,8 @@ class ForecastAI(AIService):
         return types
 
 
-    def _forecast_events(self, record: dict, markets: dict, types: dict,
-                        cache: dict, results: dict) -> dict | None:
+    def __forecast_events(self, record: dict, markets: dict, types: dict,
+                          cache: dict, results: dict) -> dict | None:
         """Call 4: specific future events, then how each type would react to them."""
         years = self._future_years(record)
         settings = self._settings()
@@ -1054,7 +1055,7 @@ class ForecastAI(AIService):
                                    "max_events": settings["max_events"]},
                                   {"markets": self._markets_brief(markets), "market_outlooks": self._market_outlooks(markets),
                                    "person_types": self._types_brief(types), "client": self._client_facts(record)},
-                                  "events", lambda data: self._check_events(data, years, set(markets["series"])),
+                                  "events", lambda data: self.__check_events(data, years, set(markets["series"])),
                                   cache.get(name))
         results[name] = listing
         if not listing["ok"]:
@@ -1124,22 +1125,22 @@ class ForecastAI(AIService):
             return self._stopped(run, "step0_declaration")
         partial["declaration"] = declaration
         start("call1_markets")
-        markets = self._forecast_markets(record, declaration, cache, results)
+        markets = self.__forecast_markets(record, declaration, cache, results)
         if markets is None:
             return self._stopped(run, "call1_markets")
         partial["markets"] = markets
         start("call2_earnings")
-        earnings = self._forecast_earnings(record, markets, cache, results)
+        earnings = self.__forecast_earnings(record, markets, cache, results)
         if earnings is None:
             return self._stopped(run, "call2_earnings")
         partial["earnings"] = earnings
         start("call3_types")
-        types = self._forecast_types(record, declaration, markets, earnings, cache, results, typologies)
+        types = self.__forecast_types(record, declaration, markets, earnings, cache, results, typologies)
         if types is None:
             return self._stopped(run, "call3_types")
         partial["types"] = types
         start("call4_events")
-        events = self._forecast_events(record, markets, types, cache, results)
+        events = self.__forecast_events(record, markets, types, cache, results)
         if events is None:
             return self._stopped(run, "call4_events")
         partial["events"] = events

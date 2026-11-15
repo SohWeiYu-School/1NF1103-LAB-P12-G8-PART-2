@@ -464,19 +464,26 @@ def test_web_search_is_switched_from_env(run, monkeypatch):
     assert application.forecast_settings()["web_search"] == POLICY["forecasting"]["web_search"]
 
 
-def test_the_bishan_reply_from_the_log_is_repaired_not_rejected():
-    markets = {"ECO_SG", "PROP_BISHAN", "PROP_SG", "FX_SGD", "IND_PARTS", "STOCK_SG"}
-    reply = {"asset_index": 0, "exposures": [
-        {"market_id": m, "sensitivity": {"low": 2, "typical": 5 - n * 0.5, "high": 10}} for n, m in enumerate(sorted(markets))],
-        "own_growth_pct": {"low": 0, "typical": 1, "high": 2},
-        "income_yield_by_year": [{"year": y, "yield_pct": {"low": 2, "typical": 3, "high": 4}} for y in range(2010, 2027)],
-        "future_income_yield_pct": {s: {"low": 2, "typical": 3, "high": 4} for s in ("steady", "boom", "downturn")},
-        "valuation_basis": "Bishan property index"}
-    service = fake_services.forecast_ai(None)
-    repaired = service._repair_asset_model(reply, markets)
+def test_the_bishan_reply_from_the_log_is_repaired_not_rejected(run):
+    case = run.save_fake_forecast(client_record())
+    replies = fake_ai.forecast_replies(case)
+    listing = json.loads(replies["call1_markets.list"])
+    for m in ("PROP_BISHAN", "FX_SGD", "IND_PARTS", "STOCK_SG"):
+        listing["relevant_markets"].append({**listing["relevant_markets"][0], "market_id": m})
+        replies[f"call1_markets.series.{m}"] = json.dumps({**json.loads(replies["call1_markets.series.ECO_SG"]),
+                                                           "market_id": m})
+    replies["call1_markets.list"] = json.dumps(listing)
+    markets = {m["market_id"] for m in listing["relevant_markets"]}
+    reply = json.loads(replies["call2_earnings.asset.0"])
+    reply.update(exposures=[{"market_id": m, "sensitivity": {"low": 2, "typical": 5 - n * 0.5, "high": 10}}
+                            for n, m in enumerate(sorted(markets))],
+                 valuation_basis="Bishan property index")
+    replies["call2_earnings.asset.0"] = json.dumps(reply)
+    result = fake_services.forecast_ai(None).run({"record": case, "cache": replies})
+    assert result["ok"] and result["results"]["call2_earnings.asset.0"]["from_cache"]   # passed after the repair
+    repaired = result["forecast"]["earnings"]["assets"][0]
     assert len(repaired["exposures"]) == POLICY["forecasting"]["max_asset_exposures"]
     assert all(v <= 3.0 for e in repaired["exposures"] for v in e["sensitivity"].values())
-    assert service._check_asset_model(repaired, 0, list(range(2010, 2027)), markets) == []
 
 
 def test_one_asset_the_ai_cant_describe_doesnt_stop_the_forecast(run):
