@@ -16,12 +16,12 @@ class CaseReader:
     COMPOSITION_KEYS: list[str] = ["property", "listed_equities", "private_business", "cash"]
 
     def __init__(self, today: str = "") -> None:
-        if not isinstance(today, str) or (today and not CaseReader.__is_iso_date(today)):
+        if not isinstance(today, str) or (today and not CaseReader.is_iso_date(today)):
             raise ValueError(f"today must be empty or a real date written YYYY-MM-DD, not {today!r}")
         self.__today: str = today
 
     @staticmethod
-    def __is_iso_date(text: str) -> bool:
+    def is_iso_date(text: str) -> bool:
         """True for a real calendar date written YYYY-MM-DD."""
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
             return False
@@ -79,6 +79,8 @@ class CaseReader:
         missing: list[str] = []
         career = record.get("career") or {}
         claims = record.get("claims") or {}
+        if not today:
+            raise ValueError("today's date is needed to turn a record into a case: make the CaseReader with it")
         this_year = int(today[:4])
 
         def text(value, label: str) -> str:

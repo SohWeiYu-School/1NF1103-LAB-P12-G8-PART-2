@@ -88,3 +88,13 @@ def test_today_must_be_empty_or_a_real_iso_date(today):
 
 def test_an_empty_or_real_date_is_accepted():
     assert CaseReader() is not None and CaseReader("") is not None and CaseReader("2026-10-14") is not None
+
+
+def test_a_reader_with_no_date_cannot_make_a_case_and_says_so():
+    with pytest.raises(ValueError, match="today's date is needed"):
+        CaseReader().forecasting_case(sample_case())
+
+
+def test_is_iso_date_only_accepts_year_month_day():
+    assert CaseReader.is_iso_date("2026-10-14")
+    assert not CaseReader.is_iso_date("2026-W42-1") and not CaseReader.is_iso_date("20261014")
