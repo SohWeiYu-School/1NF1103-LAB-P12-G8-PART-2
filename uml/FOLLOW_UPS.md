@@ -29,6 +29,12 @@ because they are outside that step's scope. Each needs its own small fix later.
 | 22 | R4 review | The golden harness builds its failure message with `mr['typology_id']`, which would raise TypeError on a real failure and hide it; use `mr.typology.typology_id` | `tests/cases/test_golden_cases.py:46` | Test nit |
 | 23 | R4 review | `CrimeScan._prepare_case` is dead code (only its own tests call it); the unreadable-typology warning embeds the raw ValueError text | `crime_scan.py:385, 305, 477` | Nit |
 | 24 | R4 review | The model classes gained fields/methods beyond their UML boxes (ResearchReport, Typology, MatchResult; CrimeScan `warnings()`, `read_typologies`) | `app/model/*.py`, `crime_scan.py` | UML update (stage 5) |
+| 25 | R5 review | **Fixed** (lock in AssessmentRunner around Forecast.run and combine, with a parallel-run test): the shared Forecast's per-run state could put one client's figures into another client's verdict in parallel web runs | `app/logic/forecast.py:57-63`, `app/application/assessment_runner.py` | Concurrency bug (existed before R5) |
+| 26 | R5 review | `ForecastAI`'s defensive `Declaration.from_dict` fallback is likely unreachable; if ever hit, the raw reply stays cached and the step can't recover without clearing it | `app/ai/forecast_ai.py:853-859` | Nit |
+| 27 | R5 review | `ClaimedSource` text fields aren't type-checked; a non-AI dict with `"description": null` gives a str-typed attribute holding None | `app/model/claimed_source.py:51-73` | §9 tightening |
+| 28 | R5 review | The saved-rows path in `CrimeScan.run` now raises ValueError on a malformed case-file row (string year, negative amount) instead of accepting it; only test/case-file inputs reach it | `app/logic/crime_scan.py:306` | Nit |
+| 29 | R5 review | The stop reason shown to the user includes raw check text (e.g. `reply failed checks: S3: …`), more technical than §9 asks | `app/application/assessment_runner.py:170` | §9 wording (existed before R5) |
+| 30 | R5 review | `ClaimedSource`/`Declaration` gained fields and methods beyond their UML boxes (source_id, description, years, country, quote, linked indexes, from_dict/to_dict/to_scan_dict, …) | `app/model/claimed_source.py`, `declaration.py` | UML update (stage 5) |
 
 Fixed straight away (not listed above): the R1 review's two bugs, (a) "changes could not be kept" followed by
 "Changes saved successfully" in `find_existing_client`, and (b) an open "previous" job replacing the current
