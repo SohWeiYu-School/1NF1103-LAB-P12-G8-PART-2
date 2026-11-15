@@ -111,9 +111,9 @@ class CrimeScan(RiskAnalysis):
 
     def checks(self, context: dict) -> list[Check]:
         """The crime scan's findings. context holds crime_result, research, typologies, types, forecast_ran."""
-        return self._as_checks(self._crime_checks(
+        return self._crime_checks(
             context.get("crime_result"), context.get("research"), context.get("typologies"),
-            context.get("types") or [], context.get("forecast_ran", True)))
+            context.get("types") or [], context.get("forecast_ran", True))
 
     def flags(self, declaration: Declaration) -> list[str]:
         """The names of the warning signs that fire for this declaration."""
@@ -551,12 +551,12 @@ class CrimeScan(RiskAnalysis):
         return {"sources": rows}, warnings
 
     def _crime_checks(self, crime_result: dict | None, research: dict | None, typologies: list[dict] | None,
-                     types: list[dict], forecast_ran: bool) -> list[dict]:
+                     types: list[dict], forecast_ran: bool) -> list[Check]:
         """The crime scan's patterns in the shared shape: how well each one matches, and which
         person type was built from it."""
         if crime_result is None:
-            return [self._row("crime", "CRIME_SCAN", "Crime scan", "pattern", "skipped",
-                           "The warning signs couldn't be checked (no typologies or no declaration reading).")]
+            return [self._check("CRIME_SCAN", "Crime scan", "pattern", "skipped",
+                                "The warning signs couldn't be checked (no typologies or no declaration reading).")]
         built = {t["typology_id"]: t for t in types if t["typology_id"]}
         quotes = {t.get("typology_id"): (t.get("source_quotes") or [{}])[0] for t in typologies or []}
         checks = []
@@ -578,19 +578,20 @@ class CrimeScan(RiskAnalysis):
             sources = ", ".join(match.get("source_ids", []))
             detail = f"{CrimeScan.MATCH_LABELS.get(category, category)} match: {signs}"
             explanation = link + (f' "{quote["quote"]}" [{quote.get("report_id", "")}]' if quote.get("quote") else "")
-            check = self._row("crime", "TYPOLOGY", f"{match.get('name') or match['typology_id']}"
-                           + (f" [{sources}]" if sources else ""), "pattern", status, detail, explanation.strip(),
-                           group="Patterns")
-            check["signs"] = fired
-            check["match"] = category
-            check["typology_id"] = match["typology_id"]
+            check = self._check("TYPOLOGY", f"{match.get('name') or match['typology_id']}"
+                                + (f" [{sources}]" if sources else ""), "pattern", status, detail, explanation.strip(),
+                                group="Patterns")
+            check.set_extra("signs", fired)               # the verdict and the report read these three
+            check.set_extra("match", category)
+            check.set_extra("typology_id", match["typology_id"])
             checks.append(check)
         for person in types:
             if not person["typology_id"]:
-                checks.append(self._row("crime", "UNBACKED_TYPE", f"{person['type_id']} {person['name']}", "pattern", "info",
-                                     "Not backed by research: built from his background only.", group="Crime stories"))
+                checks.append(self._check("UNBACKED_TYPE", f"{person['type_id']} {person['name']}", "pattern", "info",
+                                          "Not backed by research: built from his background only.",
+                                          group="Crime stories"))
         if not crime_result.get("match_results"):
             reports = len((research or {}).get("reports", []))
-            checks.append(self._row("crime", "NO_PATTERNS", "Known patterns", "pattern", "info",
-                                 f"No verified patterns for his industry ({reports} research report(s) found)."))
+            checks.append(self._check("NO_PATTERNS", "Known patterns", "pattern", "info",
+                                      f"No verified patterns for his industry ({reports} research report(s) found)."))
         return checks

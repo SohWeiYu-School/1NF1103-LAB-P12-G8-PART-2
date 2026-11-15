@@ -69,9 +69,23 @@ def test_checks_are_check_objects_that_keep_the_signs_that_fired():
     checks = scan.checks({"crime_result": result, "research": clean, "typologies": typologies, "types": []})
     assert all(isinstance(check, Check) and check.feature == "crime" for check in checks)
     typology = next(check for check in checks if check.check == "TYPOLOGY")
-    assert typology.to_dict()["signs"] == ["counterparty_unnamed", "unvalued_source_present"]
+    assert typology.extra("signs") == ["counterparty_unnamed", "unvalued_source_present"]
+    assert typology.extra("match") == result["match_results"][0]["category"]
+    assert typology.extra("typology_id") == typologies[0]["typology_id"]
+    assert (typology.group, typology.theme) == ("Patterns", "pattern")
+    saved = typology.to_dict()                      # the saved layout keeps them after the shared fields
+    assert list(saved)[-3:] == ["signs", "match", "typology_id"]
 
 
 def test_a_crime_scan_that_could_not_run_gives_one_skipped_check():
     checks = CrimeScan(POLICY).checks({"crime_result": None})
     assert [check.status for check in checks] == ["skipped"]
+
+
+def test_a_person_type_without_research_is_an_information_check():
+    scan = CrimeScan(POLICY)
+    types = [{"type_id": "T3", "name": "Cash courier", "typology_id": None, "fits": False}]
+    checks = scan.checks({"crime_result": {"match_results": []}, "research": {"reports": []}, "types": types})
+    assert [(check.check, check.status, check.label) for check in checks] == [
+        ("UNBACKED_TYPE", "info", "T3 Cash courier"), ("NO_PATTERNS", "info", "Known patterns")]
+    assert all(isinstance(check, Check) and check.extra("signs") is None for check in checks)
