@@ -47,6 +47,12 @@ class VerdictEngine:
                           "COMPOSITION_BUSINESS", "COMPOSITION_CASH", "VELOCITY", "COUNTERPARTIES", "JURISDICTION"]
 
     def __init__(self, features: list[RiskAnalysis] | None = None, config: Config | None = None) -> None:
+        if features is not None and not isinstance(features, list):
+            raise ValueError(f"the features must be a list (or None), not {type(features).__name__}")
+        if not all(isinstance(feature, RiskAnalysis) for feature in features or []):
+            raise ValueError("every feature must be a RiskAnalysis (crime scan, documents, benchmark or forecast)")
+        if config is not None and not isinstance(config, Config):
+            raise ValueError(f"the config must be a Config (or None), not {type(config).__name__}")
         self.__features: list[RiskAnalysis] = list(features or [])
         self.__config: Config = config or Config()
         self.__policy: dict = self.__config.policy

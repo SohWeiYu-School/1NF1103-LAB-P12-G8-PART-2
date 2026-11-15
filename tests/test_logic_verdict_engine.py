@@ -283,3 +283,12 @@ def test_with_no_research_the_evidence_says_no_reports_were_found(parts):
     evidence = {part["title"]: part["lines"] for part in verdict.explanation["evidence"]}
     assert evidence["Research reports"] == ["No research reports were found."]
     assert evidence["Sector typologies"] == ["No verified typologies."]
+
+
+def test_the_verdict_engine_rejects_wrong_typed_features_and_config():
+    with pytest.raises(ValueError, match="features must be a list"):
+        VerdictEngine("crime scan")
+    with pytest.raises(ValueError, match="every feature must be a RiskAnalysis"):
+        VerdictEngine([CrimeScan(POLICY), "forecast"])
+    with pytest.raises(ValueError, match="config must be a Config"):
+        VerdictEngine([], {"policy": {}})
