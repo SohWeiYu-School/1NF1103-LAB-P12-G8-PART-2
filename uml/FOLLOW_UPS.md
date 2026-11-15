@@ -53,7 +53,9 @@ because they are outside that step's scope. Each needs its own small fix later.
 | 46 | Clean-up implementer | `ConfigReader.read()` returns `{}` for a missing or damaged config file, the same "error looks like empty" pattern as #37 (partly covered: `problems()` reports missing keys at start-up) | `app/data/config_reader.py` | §9 |
 | 47 | Clean-up implementer | `JsonRepository.__init__` still defaults `key_field` to `""` (abstract; children always pass one) | `app/data/json_repository.py` | §1 validation (small) |
 | 48 | Clean-up implementer | `ClientForm.generate_client_id` / `new_client_ref` never check the repository for an existing id | `app/interface/client_form.py` | Validation |
+| 49 | Clean-up review | The blank-PEP guard in `VerdictEngine._is_pep` / `Benchmark.__is_pep` (for a policy that still lists `""`) has no test of its own, and the "no PEP" answers live in two lists (`Claims.NO_PEP_VALUES` and `policy.json` `verdict.no_pep_values`) that can drift apart | `app/logic/verdict_engine.py`, `app/logic/benchmark.py`, `app/model/claims.py`, `config/policy.json` | Tests / single source |
+| 50 | Clean-up review | `tests/test_combined_assessment.py:343,463` reach into `_App__ai_caller` (a private name), against §7 (existed before) | `tests/test_combined_assessment.py` | Tests (§7) |
 
-Fixed straight away (not listed above): the R1 review's two bugs, (a) "changes could not be kept" followed by
+Fixed straight away (not listed above): the clean-up review's bug, a failed assessment save hidden on the web while the client record still got the new outcome (App now saves the assessment first and WebApp says "This assessment was NOT saved"), plus a client record with the wrong shape crashing the home page, a query crash on an older record, an unclear sync error and a misleading "check the database connection" message. Also the R1 review's two bugs, (a) "changes could not be kept" followed by
 "Changes saved successfully" in `find_existing_client`, and (b) an open "previous" job replacing the current
 job in the CLI New Client form.
