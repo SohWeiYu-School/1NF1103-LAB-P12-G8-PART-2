@@ -517,7 +517,8 @@ def test_the_report_says_why_the_forecast_stopped(run):
     run.cache().save_raw_replies(case["client_ref"], {k: {"raw": v} for k, v in replies.items()})
     verdict = run(case)["verdict"].details()
     item = check(verdict, "forecast", "FORECAST")
-    assert "the list of person types" in item["detail"] and "The AI service is not available right now" in item["detail"]
+    assert "the list of person types" in item["detail"] and "the AI service is not available right now" in item["detail"]
+    assert ".)" not in item["detail"] and ".," not in item["detail"]
     assert "The forecast" in verdict["not_run"]
 
 

@@ -259,15 +259,17 @@ class AssessmentRunner:
 
     @staticmethod
     def __plain_reason(error: str) -> str:
-        """A forecast error in words a client can read. The real text goes to the log, not the screen."""
+        """A forecast error as a short phrase a client can read, with no full stop of its own because it
+        is placed inside a sentence: "stopped at X (the AI service is not available ...)". The real text
+        goes to the log, not the screen."""
         text = str(error)
         if text.startswith("reply failed checks"):
-            return "The AI's reply could not be used, so this step did not run."
+            return "the AI's reply could not be used, so this step did not run"
         if text.startswith("no AI service") or text.startswith("the AI request failed"):
-            return "The AI service is not available right now. Please try again later."
+            return "the AI service is not available right now, please try again later"
         if text.startswith("could not prepare the request"):
-            return "A file this step needs could not be read, so this step did not run."
-        return "This step could not be completed."
+            return "a file this step needs could not be read, so this step did not run"
+        return "this step could not be completed"
 
     def __crime_categories(self) -> dict:
         """{code: description} of the crime categories a typology may belong to (every one but the honest one)."""

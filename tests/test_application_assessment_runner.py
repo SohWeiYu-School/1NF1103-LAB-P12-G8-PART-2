@@ -94,7 +94,7 @@ def test_a_forecast_that_cannot_run_is_reported_with_where_it_stopped(tmp_path):
     result, _ = _run(tmp_path, save_forecast=False,
                      on_failure=lambda step, reason: failures.append((step, reason)) or True)
     assert failures[0][0] == "The forecast"
-    assert "The AI service is not available right now" in failures[0][1]
+    assert "the AI service is not available right now" in failures[0][1]
     assert result["forecast"] is None
     assert result["verdict"].outcome != "PASSED"          # an assessment with no forecast never passes
 
@@ -243,6 +243,8 @@ def test_a_forecast_reply_that_fails_its_checks_is_shown_as_plain_words_and_logg
 
 def test_a_missing_ai_service_is_shown_as_plain_words(tmp_path):
     reason, notes, verdict = _forecast_stop_reason(tmp_path, None)
-    assert "The AI service is not available right now. Please try again later." in reason
+    assert "the AI service is not available right now, please try again later" in reason
+    sentence = next(note for note in notes if note.startswith("The forecast stopped at"))
+    assert ".)" not in sentence and ")." in sentence and ". ." not in sentence      # reads cleanly, no double stops
     assert "OPENAI_API_KEY" not in reason + " ".join(notes) + str(verdict.report)
     assert verdict.outcome != "PASSED"
