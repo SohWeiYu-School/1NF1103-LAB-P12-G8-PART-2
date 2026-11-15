@@ -77,7 +77,7 @@ class ReportView:
             sup_inds   = mr.typology.supporting_indicators()
             sup_fired  = set(mr.supporting_fired)
 
-            unchecked = "" if typ_data is None or typ_data.verified else "  (not checked against research)"
+            unchecked = "" if mr.typology.verified else "  (not checked against research)"
             lines += ["", f"  [{label}]  {name}{unchecked}"]
 
             desc = (typ_data.description if typ_data else "").strip()

@@ -148,6 +148,9 @@ def test_an_unchecked_typology_is_marked_in_the_crime_section():
     assert f"[HIGH MATCH]  {unchecked[0].name}  (not checked against research)" in text
     checked = _view().format_verdict_report(_report(), crime_result=_crime_scan()[1], typologies=typologies)
     assert "not checked against research" not in checked
+    # the mark comes from the match's own typology, so it shows even without the typology list
+    without_list = _view().format_verdict_report(_report(), crime_result=crime_result, typologies=[])
+    assert "(not checked against research)" in without_list
 
 
 def test_a_match_whose_typology_is_not_listed_shows_no_description_or_quote():
