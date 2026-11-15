@@ -9,7 +9,7 @@ class CaseReader:
     today is the assessment date used when the record has none.
     """
 
-    _PRESENT_WORDS = ("", "present", "now", "current", "-", "none")
+    __PRESENT_WORDS = ("", "present", "now", "current", "-", "none")
     COMPOSITION_KEYS = ["property", "listed_equities", "private_business", "cash"]
 
     def __init__(self, today: str = "") -> None:
@@ -35,7 +35,8 @@ class CaseReader:
         except ValueError:
             return None
 
-    def read_year(self, text: str | int | float | None) -> int | None:
+    @staticmethod
+    def read_year(text: str | int | float | None) -> int | None:
         value = CaseReader.read_amount(text)
         return int(value) if value is not None and 1900 <= value <= 2100 else None
 
@@ -81,8 +82,8 @@ class CaseReader:
             if start is None or start > this_year:
                 missing.append(f"{label} start year")
             end_text = "" if entry.get("end_year") is None else str(entry.get("end_year")).strip().lower()
-            end = None if end_text in CaseReader._PRESENT_WORDS else self.read_year(entry.get("end_year"))
-            if end_text not in CaseReader._PRESENT_WORDS and (end is None or end > this_year or (start and end < start)):
+            end = None if end_text in CaseReader.__PRESENT_WORDS else self.read_year(entry.get("end_year"))
+            if end_text not in CaseReader.__PRESENT_WORDS and (end is None or end > this_year or (start and end < start)):
                 missing.append(f"{label} end year")
             jobs.append({
                 "start_year": start, "end_year": end,
