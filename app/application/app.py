@@ -85,7 +85,7 @@ class App:
         self.__case_files: CaseFiles = CaseFiles(os.path.join(root, "data", "sample"))   # shipped with the code
         uri = os.getenv("MONGODB_URI") or ""
         state_path = os.path.join(database_dir, "sync_state.json")
-        self.__cloud_syncs: list[CloudSync] = [
+        self.__syncs: list[CloudSync] = [
             CloudSync(self.__clients, MongoRepository(App.CLIENT_COLLECTION, "client_ref", uri), state_path),
             CloudSync(self.__assessments, MongoRepository(App.ASSESSMENT_COLLECTION, "assessment_id", uri),
                       state_path)]
@@ -107,12 +107,12 @@ class App:
         self.__case_builder: CaseBuilder = CaseBuilder(self.__ui, schema)
         limits = policy.get("assessment_rate_limit", {}) if isinstance(policy.get("assessment_rate_limit", {}), dict) else {}
         try:
-            self.__rate_limiter: RateLimiter = RateLimiter(
+            self.__limiter: RateLimiter = RateLimiter(
                 limits.get("cooldown_seconds", RateLimiter.DEFAULT_COOLDOWN_SECONDS), limits.get("enabled", True))
         except ValueError as error:
             # start() reports the setting through ConfigReader.problems() and stops; App itself must not crash.
             logger.error("App: the assessment rate limit setting is not valid, using the default: %s", error)
-            self.__rate_limiter = RateLimiter()
+            self.__limiter = RateLimiter()
 
     # ----- what the front ends are given ----------------------------------------------
 
@@ -196,7 +196,7 @@ class App:
         """Start the web app. HOST and PORT in .env set where it listens (default 127.0.0.1:5000)."""
         from app.interface.web_app import WebApp    # imported here: WebApp itself imports App
         self.__configure_logging()
-        WebApp(self, self.__rate_limiter).run(host or os.getenv("HOST") or "127.0.0.1", port or int(os.getenv("PORT") or 5000))
+        WebApp(self, self.__limiter).run(host or os.getenv("HOST") or "127.0.0.1", port or int(os.getenv("PORT") or 5000))
         return 0
 
     def run_menu(self) -> None:
@@ -208,11 +208,11 @@ class App:
                 record = self.__client_form.create_new_client(save_fn=self.save_client,
                                                              upload_fn=self.__documents.upload)
                 if record is not None:
-                    self.__assess_if_allowed(record)
+                    self.__maybe_assess(record)
             elif choice == "2":
                 record = self.__new_client_from_documents()
                 if record is not None:
-                    self.__assess_if_allowed(record)
+                    self.__maybe_assess(record)
             elif choice == "3":
                 self.__client_form.find_existing_client(
                     find_fn=self.find_client, save_fn=self.save_client,
@@ -229,7 +229,7 @@ class App:
                 if record is None:
                     self.__ui.show_error(f"No client found with reference {ref}.")
                     continue
-                self.__assess_if_allowed(record)
+                self.__maybe_assess(record)
             elif choice == "5":
                 self.list_assessments()
             elif choice == "6":
@@ -531,7 +531,7 @@ class App:
         """Back up clients and assessments to the cloud database.
         Returns {"cases_synced", "assessments_synced", "skipped", "errors"}."""
         stats = {"cases_synced": 0, "assessments_synced": 0, "skipped": 0, "errors": []}
-        for name, sync in zip(("cases_synced", "assessments_synced"), self.__cloud_syncs):
+        for name, sync in zip(("cases_synced", "assessments_synced"), self.__syncs):
             result = sync.sync()
             stats[name] = result["synced"]
             stats["skipped"] += result["skipped"]
@@ -550,7 +550,7 @@ class App:
         return self.__documents
 
     def rate_limiter(self) -> RateLimiter:
-        return self.__rate_limiter
+        return self.__limiter
 
     def response_cache(self) -> ResponseCache:
         return self.__response_cache
@@ -607,13 +607,13 @@ class App:
                    "App: step failed (%s): %s (%s)", "stopping" if critical else "carrying on", step, error)
         return not critical
 
-    def __assess_if_allowed(self, record: ClientRecord) -> None:
+    def __maybe_assess(self, record: ClientRecord) -> None:
         """Check the rate limit; if clear, run the assessment."""
-        allowed, wait = self.__rate_limiter.check("cli")
+        allowed, wait = self.__limiter.check("cli")
         if not allowed:
             self.__ui.show_rate_limit_error(wait)
             return
-        self.__rate_limiter.record("cli")
+        self.__limiter.record("cli")
         self.assess_client_record(record)
 
     def __fill_field(self, builder: DocumentRecordBuilder, record: ClientRecord, field: dict) -> ClientRecord:
