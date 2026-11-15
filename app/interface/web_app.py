@@ -530,10 +530,11 @@ class WebApp:
                 flash(f"The documents were read, but the details cannot be used because {error}. "
                       "Nothing was filled in.")
                 return self.show_form(heading, values, [], documents=documents, notes=notes)
-            if dropped:
-                logger.warning("WebApp.autofill_form: left out of the AI's reading: %s", " | ".join(dropped))
+            dropped_messages = [entry["message"] for entry in dropped]
+            if dropped_messages:
+                logger.warning("WebApp.autofill_form: left out of the AI's reading: %s", " | ".join(dropped_messages))
             values, filled = self.fill_blanks(values, self.values_from_reading(record, extracted))
-            notes += dropped
+            notes += dropped_messages
             notes += extracted.get("notes") or []
             # the same second-look checks the command line shows after reading documents
             notes += builder.check(record)

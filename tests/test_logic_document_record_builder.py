@@ -70,9 +70,11 @@ def test_an_impossible_value_is_left_empty_and_named_while_every_good_field_is_k
     record, found, dropped = builder.build(reading, "SOW-DOC-1")
     assert record.profile.age is None
     assert record.profile.name == READING["client"]["name"]
-    assert len(dropped) == 1
-    assert dropped[0].startswith("Age: the value read from the documents (12) is not possible (age must be between 18 and 120)")
-    assert dropped[0].endswith("so it was left empty. Please enter it.")
+    assert len(dropped) == 1 and dropped[0]["path"] == ["career", "age"]
+    assert dropped[0]["optional_field"] is None                      # a required field is asked with the missing ones
+    message = dropped[0]["message"]
+    assert message.startswith("Age: the value read from the documents (12) is not possible (age must be between 18 and 120)")
+    assert message.endswith("so it was left empty. Please enter it.")
     assert "career.age" not in found
     assert ["career", "age"] in [field["path"] for field in builder.missing_fields(record)]
 
@@ -90,7 +92,7 @@ def test_several_impossible_values_in_jobs_assets_and_claims_are_each_dropped_on
     assert saved["claims"]["declared_net_worth"] is None
     assert saved["claims"]["expected_aum"] == READING["claims"]["expected_aum_sgd"]
     assert len(dropped) == 3
-    assert any("price paid" in message and "(-5)" in message for message in dropped)
+    assert any("price paid" in entry["message"] and "(-5)" in entry["message"] for entry in dropped)
 
 
 def test_a_reading_with_nothing_impossible_drops_nothing():
@@ -251,3 +253,23 @@ def test_a_builder_with_no_date_cannot_check_a_record_and_says_so():
     record, _, _ = DocumentRecordBuilder(CONFIG, "2026-10-14").build(READING, "SOW-DOC-1")
     with pytest.raises(ValueError, match="today's date is needed"):
         DocumentRecordBuilder(CONFIG).check(record)
+
+
+def test_a_dropped_optional_end_year_is_named_without_the_bad_value_and_marked_to_be_asked():
+    reading = {**READING, "jobs": [{**READING["jobs"][0], "start_year": 2001, "end_year": 2200}]}
+    record, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    assert record.to_dict()["career_history"][0]["end_year"] is None
+    assert len(dropped) == 1
+    entry = dropped[0]
+    assert entry["optional_field"]["path"] == ["career_history", 0, "end_year"]
+    assert "blank = current job" in entry["optional_field"]["label"]
+    assert "(2001-present)" in entry["message"] and "2200" in entry["message"]        # the label shows no bad value
+    assert "(blank" not in entry["message"] and "(2001-2200)" not in entry["message"]
+    assert "end year: the value read from the documents (2200) is not possible" in entry["message"]
+
+
+def test_a_dropped_composition_share_is_labelled_and_shown_as_a_percent():
+    reading = {**READING, "composition": {**READING["composition"], "property": 150}}
+    _, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    assert len(dropped) == 1
+    assert dropped[0]["message"].startswith("Asset composition: property: the value read from the documents (150%) is not possible")

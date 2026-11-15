@@ -2,6 +2,7 @@
 
 import copy
 import datetime
+import re
 from typing import Any
 
 from app.logic.case_reader import CaseReader
@@ -46,10 +47,12 @@ class DocumentRecordBuilder:
     def _blank(self, value: Any) -> bool:
         return value is None or (isinstance(value, str) and not value.strip()) or value == []
 
-    def build(self, extracted: dict, client_ref: str) -> tuple[ClientRecord, list[str], list[str]]:
+    def build(self, extracted: dict, client_ref: str) -> tuple[ClientRecord, list[str], list[dict]]:
         """Build a client record (the same layout the New Client form saves) from the AI's
         reading of the documents. Returns (record, paths of the fields that came from the documents,
-        one plain message for each field that was dropped).
+        one entry for each field that was dropped: {"path", "message", "optional_field"}; the message
+        is plain text, and optional_field is the field to ask for when the form does not insist on
+        it, else None).
 
         Every job, including the current one (end_year None), goes into career_history, and
         the current job is copied into "career". The AI only helps and the officer checks everything:
@@ -111,7 +114,7 @@ class DocumentRecordBuilder:
             "sow_declaration": extracted.get("sow_declaration"),
             "supporting_documents": [],
         }
-        dropped: list[str] = []
+        dropped: list[dict] = []
         try:
             client = ClientRecord.from_dict(self.__finish_layout(record))
         except (ValueError, TypeError):
@@ -131,16 +134,18 @@ class DocumentRecordBuilder:
         paths += [["claims", "asset_composition", key] for key in record["claims"]["asset_composition"]]
         return paths + [["sow_declaration"]]
 
-    def __without_impossible_fields(self, record: dict) -> tuple[dict, list[str]]:
-        """The record with each impossible value left empty, and a message for each one. A value
-        is impossible when a record holding only that value (everything else empty) is rejected."""
+    def __without_impossible_fields(self, record: dict) -> tuple[dict, list[dict]]:
+        """The record with each impossible value left empty, and one entry for each: {"path", "message",
+        "optional_field"}. optional_field is the field (path, label, kind) when the form does not insist on
+        it, so it will not be asked for with the missing details and the caller has to ask for it; it is
+        None for a required field. A value is impossible when a record holding only that value
+        (everything else empty) is rejected."""
         empty = copy.deepcopy(record)
         paths = self.__leaf_paths(record)
         for path in paths:
             self.__set(empty, path, [] if isinstance(self.get_path(record, path), list) else None)
         ClientRecord.from_dict(self.__finish_layout(empty))      # an empty record must be possible; else raise
-        names = {tuple(field["path"]): field for field in self._required_fields(record) + self._optional_fields(record)}
-        cleaned, dropped = copy.deepcopy(record), []
+        cleaned, found = copy.deepcopy(record), []
         for path in paths:
             value = self.get_path(record, path)
             if self._blank(value):
@@ -151,11 +156,25 @@ class DocumentRecordBuilder:
                 ClientRecord.from_dict(self.__finish_layout(trial))
             except (ValueError, TypeError) as error:
                 self.__set(cleaned, path, [] if isinstance(value, list) else None)
-                field = names.get(tuple(path))
-                label = (f"{field['group']}: " if field and field["group"] else "") + (
-                    field["short"] if field else " ".join(str(part) for part in path[2:] or path[-1:]).replace("_", " "))
-                dropped.append(f"{label[:1].upper() + label[1:]}: the value read from the documents ({value}) is not "
-                               f"possible ({error}), so it was left empty. Please enter it.")
+                found.append((path, value, error))
+        # the labels come from the cleaned record, so a job is named without its impossible value
+        required = {tuple(field["path"]): field for field in self._required_fields(cleaned)}
+        optional = {tuple(field["path"]): field for field in self._optional_fields(cleaned)}
+        dropped = []
+        for path, value, error in found:
+            field = required.get(tuple(path)) or optional.get(tuple(path))
+            if path[:2] == ["claims", "asset_composition"]:
+                label = f"Asset composition: {path[2].replace('_', ' ')}"
+                value = f"{value * 100:g}%" if isinstance(value, (int, float)) else value
+            elif field:
+                short = re.sub(r" \(blank[^)]*\)$", "", field["short"])
+                label = (f"{field['group']}: " if field["group"] else "") + short
+            else:
+                label = " ".join(str(part) for part in path[-1:]).replace("_", " ")
+            label = label[:1].upper() + label[1:]
+            dropped.append({"path": list(path), "optional_field": None if tuple(path) in required else optional.get(tuple(path)),
+                            "message": f"{label}: the value read from the documents ({value}) is not possible "
+                                       f"({error}), so it was left empty. Please enter it."})
         return cleaned, dropped
 
     @staticmethod

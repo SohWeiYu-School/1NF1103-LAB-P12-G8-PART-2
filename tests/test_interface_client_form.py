@@ -244,3 +244,16 @@ def test_typing_zero_for_net_worth_or_aum_in_the_edit_screen_is_refused_and_aske
     edited = _form().edit_existing_client(ClientRecord.from_dict(sample_case()))
     assert edited.claims.declared_net_worth == 2_000_000 and edited.claims.expected_aum == 1_000_000
     assert capsys.readouterr().out.count("above zero") == 2
+
+
+def test_a_dropped_optional_detail_is_asked_for_and_enter_leaves_it_empty(monkeypatch):
+    form = _form()
+    year = {"path": ["career_history", 0, "end_year"], "label": "Job 1: end year (blank = current job)", "kind": "year"}
+    jump = {"path": ["claims", "biggest_wealth_jump"], "label": "Biggest jump (SGD)", "kind": "money"}
+    years = {"path": ["claims", "wealth_jump_years"], "label": "Over how many years", "kind": "money"}
+    people = {"path": ["claims", "declared_counterparties"], "label": "Known counterparties", "kind": "countries"}
+    _type(monkeypatch, "2010", "", "2,500,000", "", "3", "", "Acme, Beta", "")
+    assert form.ask_optional_field(year) == 2010 and form.ask_optional_field(year) is None
+    assert form.ask_optional_field(jump) == 2_500_000 and form.ask_optional_field(jump) is None
+    assert form.ask_optional_field(years) == 3 and form.ask_optional_field(years) is None
+    assert form.ask_optional_field(people) == ["Acme", "Beta"] and form.ask_optional_field(people) == []

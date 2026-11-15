@@ -507,13 +507,20 @@ class App:
             extracted = {}
             document_record, _, dropped = builder.build(extracted, client_ref)
         if dropped:
-            logger.warning("App.__new_client_from_documents: left out of the AI's reading: %s", " | ".join(dropped))
-            self.__ui.show_dropped_fields(dropped)
+            messages = [entry["message"] for entry in dropped]
+            logger.warning("App.__new_client_from_documents: left out of the AI's reading: %s", " | ".join(messages))
+            self.__ui.show_dropped_fields(messages)
         record = document_record
         missing = builder.missing_fields(record)
         self.__ui.show_missing_intro(len(missing))
         for field in missing:
             record = self.__fill_field(builder, record, field)
+        # a dropped detail the form does not insist on is asked for too: the message said to enter it
+        optional = [entry["optional_field"] for entry in dropped if entry["optional_field"]]
+        if optional:
+            self.__ui.show_optional_intro(len(optional))
+            for field in optional:
+                record = self.__fill_field(builder, record, field, optional=True)
 
         # 4. Summary to check, edit until right, then save or discard
         notes = list(extracted.get("notes") or []) + list(warnings)
@@ -716,10 +723,15 @@ class App:
         self.__limiter.record("cli")
         self.assess_client_record(record)
 
-    def __fill_field(self, builder: DocumentRecordBuilder, record: ClientRecord, field: dict) -> ClientRecord:
-        """Ask the officer for one missing detail until the record accepts it."""
+    def __fill_field(self, builder: DocumentRecordBuilder, record: ClientRecord, field: dict,
+                     optional: bool = False) -> ClientRecord:
+        """Ask the officer for one missing detail until the record accepts it. An optional detail
+        may be left empty by pressing Enter (the record is then unchanged)."""
         while True:
             try:
+                if optional:
+                    answer = self.__client_form.ask_optional_field(field)
+                    return record if answer in (None, []) else builder.set_path(record, field["path"], answer)
                 return builder.set_path(record, field["path"], self.__client_form.ask_missing_field(field))
             except ValueError as error:
                 logger.warning("App: %s was not accepted: %r", field["label"], error)

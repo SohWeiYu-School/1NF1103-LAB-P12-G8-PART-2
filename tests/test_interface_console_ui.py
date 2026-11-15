@@ -174,3 +174,9 @@ def test_keep_money_can_refuse_zero_and_asks_again_straight_away(capsys):
     out = capsys.readouterr().out
     assert "above zero" in out and "can't be negative" in out
     assert ConsoleUI(read=_answers("0")).keep_money("Yearly income", 5.0) == 0.0      # zero is still fine by default
+
+
+def test_ask_money_and_ask_countries_can_allow_enter_for_no_answer():
+    assert ConsoleUI(read=_answers("")).ask_money("Jump", allow_zero=True, allow_blank=True) is None
+    assert ConsoleUI(read=_answers("")).ask_countries("Countries", allow_blank=True) == []
+    assert ConsoleUI(read=_answers("", "5")).ask_money("Net worth") == 5.0       # not allowed by default: asked again

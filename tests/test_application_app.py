@@ -368,6 +368,40 @@ def test_an_impossible_value_in_the_reading_is_left_empty_named_and_asked_for_wh
     assert saved.profile.name == reading["client"]["name"] and saved.profile.age == 45
 
 
+def _documents_with_a_bad_end_year(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    monkeypatch.setattr("app.interface.client_form.tk", None)
+    folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documents", "marcus_lim")
+    with open(folder + "_expected_extract.json", encoding="utf-8") as handle:
+        reading = json.load(handle)
+    reading["jobs"][0]["end_year"] = 2200                      # a past job the AI read as ending in 2200
+    return App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path)), folder
+
+
+def test_a_dropped_optional_end_year_is_asked_for_and_the_answer_is_kept(tmp_path, monkeypatch, capsys):
+    app, folder = _documents_with_a_bad_end_year(tmp_path, monkeypatch)
+    #       menu  folder  income of asset 3  end year of job 1  save  back  leave
+    _answers(monkeypatch, "2", folder, "0", "2003", "1", "3", "8")
+    app.run_menu()
+    out = capsys.readouterr().out
+    assert "end year: the value read from the documents (2200) is not possible" in out
+    assert "(2001-present)" in out and "blank = current job" in out         # the prompt says what blank means
+    # the officer sees the dropped details before being asked for anything
+    assert out.index("left empty") < out.index("required detail(s) weren't") < out.index("optional detail(s)")
+    saved = app.clients().load()[0]
+    assert saved["career_history"][0]["end_year"] == 2003
+    assert sum(job["end_year"] is None for job in saved["career_history"]) == 1
+
+
+def test_enter_on_a_dropped_optional_field_leaves_it_empty_and_does_not_block_saving(tmp_path, monkeypatch, capsys):
+    app, folder = _documents_with_a_bad_end_year(tmp_path, monkeypatch)
+    _answers(monkeypatch, "2", folder, "0", "", "1", "3", "8")
+    app.run_menu()
+    assert "Client saved. Reference: CL-" in capsys.readouterr().out
+    assert app.clients().load()[0]["career_history"][0]["end_year"] is None
+
+
 def test_the_crime_result_is_saved_in_the_match_layout(tmp_path, monkeypatch):
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MONGODB_URI", "")

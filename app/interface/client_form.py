@@ -354,6 +354,23 @@ class ClientForm:
             return self.__ui.ask_text("Describe how the client accumulated their wealth", min_length=50)
         return self.__ui.ask_text(label)
 
+    def ask_optional_field(self, field: dict) -> int | float | list[str] | None:
+        """Ask for a detail the form does not insist on, whose value read from the documents was not
+        possible. Enter leaves it empty (None, or [] for a list), and the prompt says what that means:
+        for an end year, a blank is the current job."""
+        label, kind = field["label"], field["kind"]
+        if "blank =" not in label:
+            label += " (press Enter to leave it empty)"
+        if field["path"][-1] == "wealth_jump_years":
+            return self.__ui.ask_int(label, minimum=1, allow_blank=True)
+        if kind == "year":
+            return self.__ui.ask_year(label, allow_blank=True)
+        if kind == "money":
+            return self.__ui.ask_money(label, allow_zero=True, allow_blank=True)
+        if kind == "countries":
+            return self.__ui.ask_countries(label, allow_blank=True)
+        return self.__ui.ask_text(label)
+
     def ask_after_save(self, record: ClientRecord) -> bool:
         """After a client is saved: view the saved details, run the assessment, or go back.
         Returns True if the assessment should run now."""

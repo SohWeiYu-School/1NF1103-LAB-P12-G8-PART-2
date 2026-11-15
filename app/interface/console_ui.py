@@ -104,6 +104,11 @@ class ConsoleUI:
             for message in messages:
                 self.__write(f"   ! {message}")
 
+    def show_optional_intro(self, count: int) -> None:
+        """Before asking for the details that were dropped but are not required."""
+        self.__write(f"\n{count} optional detail(s) read from the documents were not possible. "
+                     "You can enter them now, or press Enter to leave one empty:")
+
     def show_missing_intro(self, count: int) -> None:
         if count:
             self.__write(f"\n{count} required detail(s) weren't in the documents. Please fill them in:")
@@ -153,10 +158,13 @@ class ConsoleUI:
             else:
                 return number
 
-    def ask_money(self, question: str, allow_zero: bool = False) -> float:
-        """An amount above zero, or zero too when allow_zero is True. Commas are allowed."""
+    def ask_money(self, question: str, allow_zero: bool = False, allow_blank: bool = False) -> float | None:
+        """An amount above zero, or zero too when allow_zero is True. Commas are allowed.
+        With allow_blank, pressing Enter gives None (no amount)."""
         while True:
             answer = self.read_answer(f"{question}: ").strip().replace(",", "")
+            if allow_blank and answer == "":
+                return None
             try:
                 amount = float(answer)
             except ValueError:
@@ -295,9 +303,13 @@ class ConsoleUI:
                 return v
             self.show_error(self.__words_error(allowed))
 
-    def ask_countries(self, question: str) -> list:
+    def ask_countries(self, question: str, allow_blank: bool = False) -> list:
+        """Country names separated by commas, letters only. With allow_blank, Enter gives []."""
         while True:
-            items = [c.strip() for c in self.ask_text(question).split(",") if c.strip()]
+            answer = self.read_answer(f"{question}: ").strip()
+            if allow_blank and answer == "":
+                return []
+            items = [c.strip() for c in answer.split(",") if c.strip()]
             if items and all(self.__only(c, ConsoleUI.LETTERS) for c in items):
                 return items
             self.show_error("Enter country names separated by commas, letters only (no numbers).")
