@@ -21,13 +21,13 @@ class RateLimiter:
             raise ValueError(f"the rate limit's enabled setting must be true or false (got {enabled!r})")
         self.__enabled: bool = enabled
         self.__cooldown_seconds: int = cooldown_seconds
-        self.__last_started: dict[str, float] = {}     # user key -> when their last assessment started
+        self.__last_run: dict[str, float] = {}     # user key -> when their last assessment started
 
     def check(self, user_key: str) -> tuple[bool, int]:
         """(True, 0) if this user may start an assessment now, otherwise (False, seconds left to wait)."""
         if not self.__enabled:
             return True, 0
-        last = self.__last_started.get(user_key)
+        last = self.__last_run.get(user_key)
         if last is None:
             return True, 0
         elapsed = time.time() - last
@@ -37,8 +37,8 @@ class RateLimiter:
 
     def record(self, user_key: str) -> None:
         """Note that this user has just started an assessment. The cooldown starts now."""
-        self.__last_started[user_key] = time.time()
+        self.__last_run[user_key] = time.time()
 
     def reset(self) -> None:
         """Forget every user (used when the settings change and in tests)."""
-        self.__last_started.clear()
+        self.__last_run.clear()
