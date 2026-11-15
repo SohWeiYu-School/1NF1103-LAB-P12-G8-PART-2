@@ -202,6 +202,13 @@ class ReportView:
 
         self.__ui.show(f"Client Reference: {record.client_ref}")
 
+        # Things to fix: shown, never a reason to refuse the save (the officer can complete them later)
+        problems = record.problems()
+        if problems:
+            self.__display_section("TO FIX")
+            for problem in problems:
+                self.__ui.show(f"  - {problem}")
+
         # -------------------------------------------------
         # Client Profile
         # -------------------------------------------------

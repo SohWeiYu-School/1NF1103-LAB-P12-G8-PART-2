@@ -91,6 +91,21 @@ def test_showing_a_client_record_prints_through_the_console(capsys):
     assert "Daniel Tan" in out and "SOW-1" in out and "Salary savings." in out
 
 
+def test_a_client_record_lists_its_claim_problems_to_fix(capsys):
+    record = ClientRecord.from_dict({"client_ref": "SOW-1", "name": "Daniel Tan", "nationality": "Malaysian",
+                                     "career": {"occupation": "COO"}, "career_history": [], "investments": [],
+                                     "claims": {"pep_status": ""}, "sow_declaration": "Salary savings."})
+    _view().display_client_record(record)
+    out = capsys.readouterr().out
+    assert "TO FIX" in out
+    assert "The PEP question is not answered" in out and "Declared net worth is missing." in out
+
+
+def test_a_complete_client_record_shows_nothing_to_fix(capsys):
+    _view().display_client_record(ClientRecord.from_dict(sample_case()))
+    assert "TO FIX" not in capsys.readouterr().out
+
+
 def test_a_client_record_shows_every_job_asset_and_document(capsys):
     _view().display_client_record(ClientRecord.from_dict({**sample_case(), "supporting_documents": [
         {"file_name": "payslip.pdf", "file_id": "f1"}]}))
