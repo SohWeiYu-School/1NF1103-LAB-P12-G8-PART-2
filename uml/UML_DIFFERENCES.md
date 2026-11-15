@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `3d08f04` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `00fba40` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -26,10 +26,10 @@ Checked code at commit `3d08f04` against `uml/class_diagram_v4.puml`, which is c
 | 2 | Graded code rules: types and `__init__` | 0 | Code |
 | 3 | Same member, different details | 0 | Decide per item |
 | 4 | In UML, missing in code | 0 | Decide per item |
-| 5 | In code, missing from UML | 469 | UML |
+| 5 | In code, missing from UML | 471 | UML |
 | 6 | Minor: default and starting values | 0 | UML |
 | 7 | Relationships (arrows, verbs, multiplicities) and the main.py note | 0 | Mostly UML |
-| | **Total** | **469** | |
+| | **Total** | **471** | |
 
 Pairs where only the underscores differ (`__x` in UML, `_x` in code) are merged into one item in stage 3, so the total is lower than the raw count of differences.
 
@@ -65,7 +65,7 @@ How to fix: Either the work was done under another name (then update the UML), o
 
 **Done.** Nothing left in this stage.
 
-## Stage 5: In code, missing from UML (469)
+## Stage 5: In code, missing from UML (471)
 
 The code grew past the diagram, mostly helper methods and constants.
 
@@ -366,7 +366,7 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `_check_declared_sources()` exists in code but not in UML. UML: `—` · code: `app/logic/onboarding_assessor.py:100` (app/logic/onboarding_assessor.py:100)
 - [ ] `_fit_for_type()` exists in code but not in UML. UML: `—` · code: `app/logic/onboarding_assessor.py:119` (app/logic/onboarding_assessor.py:119)
 
-### Shared core (262)
+### Shared core (264)
 
 **`AIService`**
 
@@ -387,42 +387,44 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 
 **`App`**
 
-- [ ] `__config_reader` exists in code but not in UML. UML: `—` · code: `ConfigReader = ConfigReader(os.path.join(root, 'config'))` (app/application/app.py:77)
-- [ ] `__root` exists in code but not in UML. UML: `—` · code: `str = root` (app/application/app.py:72)
+- [ ] `__config_reader` exists in code but not in UML. UML: `—` · code: `ConfigReader = ConfigReader(os.path.join(root, 'config'))` (app/application/app.py:79)
+- [ ] `__root` exists in code but not in UML. UML: `—` · code: `str = root` (app/application/app.py:74)
+- [ ] `__settings_ok` exists in code but not in UML. UML: `—` · code: `bool = True` (app/application/app.py:80)
 - [ ] class-level `ASSESSMENTS_UNAVAILABLE` exists in code but not in UML. UML: `—` · code: `str = "We can't load the saved assessments right now. Please try again later."` (app/application/app.py:44)
 - [ ] class-level `ASSESSMENT_COLLECTION` exists in code but not in UML. UML: `—` · code: `str = 'ai_assessments'` (app/application/app.py:44)
 - [ ] class-level `CLIENTS_UNAVAILABLE` exists in code but not in UML. UML: `—` · code: `str = "We can't load the client database right now. Please try again later."` (app/application/app.py:44)
 - [ ] class-level `CLIENT_COLLECTION` exists in code but not in UML. UML: `—` · code: `str = 'client_cases'` (app/application/app.py:44)
 - [ ] class-level `NOISY_LOGGERS` exists in code but not in UML. UML: `—` · code: `tuple[str, ...] = ('httpx', 'httpcore', 'httpx2', 'httpcore2', 'openai', 'urllib3', 'google_genai', 'hpack', 'pymongo')` (app/application/app.py:44)
+- [ ] class-level `SETTINGS_UNAVAILABLE` exists in code but not in UML. UML: `—` · code: `str = "The app's settings could not be loaded. Please contact your administrator."` (app/application/app.py:44)
 - [ ] @property `config` in code is not shown in UML. UML: `—` · code: `getter` (app/application/app.py:44)
-- [ ] `__ai_model()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:613` (app/application/app.py:613)
-- [ ] `__configure_logging()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:693` (app/application/app.py:693)
-- [ ] `__create_document_ai()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:617` (app/application/app.py:617)
-- [ ] `__create_runner()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:623` (app/application/app.py:623)
-- [ ] `__crime_declaration_layout()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:355` (app/application/app.py:355)
-- [ ] `__crime_result_layout()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:360` (app/application/app.py:360)
-- [ ] `__fill_field()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:669` (app/application/app.py:669)
-- [ ] `__handle_failure_quietly()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:653` (app/application/app.py:653)
-- [ ] `__saved_verdict()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:681` (app/application/app.py:681)
-- [ ] `__show_step()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:678` (app/application/app.py:678)
-- [ ] `ai_available()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:149` (app/application/app.py:149)
-- [ ] `assess()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:281` (app/application/app.py:281)
-- [ ] `assessments()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:596` (app/application/app.py:596)
-- [ ] `clients()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:593` (app/application/app.py:593)
-- [ ] `documents()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:599` (app/application/app.py:599)
-- [ ] `forecast_settings()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:136` (app/application/app.py:136)
-- [ ] `new_client_ref()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:521` (app/application/app.py:521)
-- [ ] `rate_limiter()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:602` (app/application/app.py:602)
-- [ ] `read_amount()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:529` (app/application/app.py:529)
-- [ ] `read_case()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:276` (app/application/app.py:276)
-- [ ] `read_documents()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:508` (app/application/app.py:508)
-- [ ] `record_builder()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:517` (app/application/app.py:517)
-- [ ] `response_cache()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:605` (app/application/app.py:605)
-- [ ] `runner()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:608` (app/application/app.py:608)
-- [ ] `save_assessment()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:314` (app/application/app.py:314)
-- [ ] `start_web()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:199` (app/application/app.py:199)
-- [ ] `steps()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:127` (app/application/app.py:127)
-- [ ] `validate_case()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:525` (app/application/app.py:525)
+- [ ] `__ai_model()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:629` (app/application/app.py:629)
+- [ ] `__configure_logging()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:709` (app/application/app.py:709)
+- [ ] `__create_document_ai()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:633` (app/application/app.py:633)
+- [ ] `__create_runner()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:639` (app/application/app.py:639)
+- [ ] `__crime_declaration_layout()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:371` (app/application/app.py:371)
+- [ ] `__crime_result_layout()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:376` (app/application/app.py:376)
+- [ ] `__fill_field()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:685` (app/application/app.py:685)
+- [ ] `__handle_failure_quietly()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:669` (app/application/app.py:669)
+- [ ] `__saved_verdict()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:697` (app/application/app.py:697)
+- [ ] `__show_step()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:694` (app/application/app.py:694)
+- [ ] `ai_available()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:159` (app/application/app.py:159)
+- [ ] `assess()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:297` (app/application/app.py:297)
+- [ ] `assessments()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:612` (app/application/app.py:612)
+- [ ] `clients()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:609` (app/application/app.py:609)
+- [ ] `documents()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:615` (app/application/app.py:615)
+- [ ] `forecast_settings()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:146` (app/application/app.py:146)
+- [ ] `new_client_ref()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:537` (app/application/app.py:537)
+- [ ] `rate_limiter()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:618` (app/application/app.py:618)
+- [ ] `read_amount()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:545` (app/application/app.py:545)
+- [ ] `read_case()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:292` (app/application/app.py:292)
+- [ ] `read_documents()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:524` (app/application/app.py:524)
+- [ ] `record_builder()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:533` (app/application/app.py:533)
+- [ ] `response_cache()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:621` (app/application/app.py:621)
+- [ ] `runner()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:624` (app/application/app.py:624)
+- [ ] `save_assessment()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:330` (app/application/app.py:330)
+- [ ] `start_web()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:212` (app/application/app.py:212)
+- [ ] `steps()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:137` (app/application/app.py:137)
+- [ ] `validate_case()` exists in code but not in UML. UML: `—` · code: `app/application/app.py:541` (app/application/app.py:541)
 
 **`AssessmentRunner`**
 
@@ -556,9 +558,9 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] class-level `__OWN_KEYS` exists in code but not in UML. UML: `—` · code: `tuple[str, ...] = ('client_ref', 'name', 'nationality', 'current_date', 'career', 'career_history', 'investments', 'claims', 'sow_declaration', 'supporting_docu…` (app/model/client_record.py:12)
 - [ ] @property `claims` in code is not shown in UML. UML: `—` · code: `getter` (app/model/client_record.py:12)
 - [ ] @property `declaration` in code is not shown in UML. UML: `—` · code: `getter` (app/model/client_record.py:12)
-- [ ] `__this_year()` exists in code but not in UML. UML: `—` · code: `app/model/client_record.py:160` (app/model/client_record.py:160)
-- [ ] `__whole()` exists in code but not in UML. UML: `—` · code: `app/model/client_record.py:325` (app/model/client_record.py:325)
-- [ ] `__whole_percent()` exists in code but not in UML. UML: `—` · code: `app/model/client_record.py:337` (app/model/client_record.py:337)
+- [ ] `__this_year()` exists in code but not in UML. UML: `—` · code: `app/model/client_record.py:162` (app/model/client_record.py:162)
+- [ ] `__whole()` exists in code but not in UML. UML: `—` · code: `app/model/client_record.py:327` (app/model/client_record.py:327)
+- [ ] `__whole_percent()` exists in code but not in UML. UML: `—` · code: `app/model/client_record.py:339` (app/model/client_record.py:339)
 - [ ] `career_start_year()` exists in code but not in UML. UML: `—` · code: `app/model/client_record.py:131` (app/model/client_record.py:131)
 - [ ] `investments()` exists in code but not in UML. UML: `—` · code: `app/model/client_record.py:85` (app/model/client_record.py:85)
 
@@ -616,11 +618,11 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] class-level `_CRIME_SECTION_TITLE` exists in code but not in UML. UML: `—` · code: `'Crime - known patterns for his industry'` (app/interface/report_view.py:12)
 - [ ] `_field_name()` exists in code but not in UML. UML: `—` · code: `app/interface/report_view.py:157` (app/interface/report_view.py:157)
 - [ ] `_field_value()` exists in code but not in UML. UML: `—` · code: `app/interface/report_view.py:160` (app/interface/report_view.py:160)
-- [ ] `_summary_value()` exists in code but not in UML. UML: `—` · code: `app/interface/report_view.py:282` (app/interface/report_view.py:282)
-- [ ] `format_assessment_list()` exists in code but not in UML. UML: `—` · code: `app/interface/report_view.py:372` (app/interface/report_view.py:372)
-- [ ] `format_onboarding()` exists in code but not in UML. UML: `—` · code: `app/interface/report_view.py:331` (app/interface/report_view.py:331)
+- [ ] `_summary_value()` exists in code but not in UML. UML: `—` · code: `app/interface/report_view.py:289` (app/interface/report_view.py:289)
+- [ ] `format_assessment_list()` exists in code but not in UML. UML: `—` · code: `app/interface/report_view.py:379` (app/interface/report_view.py:379)
+- [ ] `format_onboarding()` exists in code but not in UML. UML: `—` · code: `app/interface/report_view.py:338` (app/interface/report_view.py:338)
 - [ ] `format_verdict_report()` exists in code but not in UML. UML: `—` · code: `app/interface/report_view.py:105` (app/interface/report_view.py:105)
-- [ ] `show_document_summary()` exists in code but not in UML. UML: `—` · code: `app/interface/report_view.py:296` (app/interface/report_view.py:296)
+- [ ] `show_document_summary()` exists in code but not in UML. UML: `—` · code: `app/interface/report_view.py:303` (app/interface/report_view.py:303)
 
 **`ResponseCache`**
 
@@ -675,7 +677,7 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `_documents_on_save()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:664` (app/interface/web_app.py:664)
 - [ ] `_is_stored_document()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:470` (app/interface/web_app.py:470)
 - [ ] `_same_entry()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:419` (app/interface/web_app.py:419)
-- [ ] `_steps()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:954` (app/interface/web_app.py:954)
+- [ ] `_steps()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:955` (app/interface/web_app.py:955)
 - [ ] `autofill_form()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:500` (app/interface/web_app.py:500)
 - [ ] `build_record()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:223` (app/interface/web_app.py:223)
 - [ ] `check_record()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:394` (app/interface/web_app.py:394)
@@ -686,8 +688,8 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `flash_unexpected_error()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:567` (app/interface/web_app.py:567)
 - [ ] `flask()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:128` (app/interface/web_app.py:128)
 - [ ] `get_record()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:534` (app/interface/web_app.py:534)
-- [ ] `handle_404()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:944` (app/interface/web_app.py:944)
-- [ ] `handle_exception()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:947` (app/interface/web_app.py:947)
+- [ ] `handle_404()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:945` (app/interface/web_app.py:945)
+- [ ] `handle_exception()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:948` (app/interface/web_app.py:948)
 - [ ] `page_record()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:539` (app/interface/web_app.py:539)
 - [ ] `pending_documents()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:474` (app/interface/web_app.py:474)
 - [ ] `read_amount()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:213` (app/interface/web_app.py:213)
