@@ -103,9 +103,9 @@ def test_a_step_that_fails_is_left_out_and_the_assessment_carries_on(app, capsys
     fake_services.save_forecast_replies(app.response_cache(), case)
     result = app.assess(case)                        # no AI: research, typologies and benchmark all fail
     assert result is not None
-    assert "The peer benchmark" in result["verdict"]["not_run"]
+    assert "The peer benchmark" in result["verdict"].not_run
     assert "could not be completed and is left out" in capsys.readouterr().out
-    assert result["verdict"]["verdict"] != "PASSED"
+    assert result["verdict"].outcome != "PASSED"
 
 
 def test_a_critical_step_that_fails_stops_the_assessment(app, capsys):
@@ -128,15 +128,39 @@ def test_saving_an_assessment_writes_the_outcome_onto_the_client_record(app):
     assert missing == []
     fake_services.save_forecast_replies(app.response_cache(), case)
     result = app.assess(case)
+    verdict = result["verdict"]
     assessment_id = app.save_assessment(result, record)
-    assert record.review_status.outcome == result["verdict"]["verdict"]     # the record passed in is updated
+    assert record.review_status.outcome == verdict.outcome     # the record passed in is updated
     saved_record = app.clients().find(record.client_ref)
-    assert saved_record["outcome"] == result["verdict"]["verdict"]
-    assert saved_record["routing"] == result["verdict"]["next_step"]
-    assert saved_record["next_review_date"] == result["verdict"]["next_review_date"]
+    assert saved_record["outcome"] == verdict.outcome
+    assert saved_record["routing"] == verdict.next_step
+    assert saved_record["next_review_date"] == verdict.next_review_date
+    assert saved_record["last_assessed_on"] == case["current_date"]     # the case's date, not a timestamp
     saved = app.assessments().find(assessment_id)
     assert saved["client_ref"] == record.client_ref
-    assert saved["report"] == result["report"]
+    assert saved["report"] == verdict.report
+
+
+def test_the_saved_assessment_keeps_its_layout(app):
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record)
+    case, _ = app.read_case(record)
+    fake_services.save_forecast_replies(app.response_cache(), case)
+    result = app.assess(case)
+    verdict = result["verdict"]
+    assessment_id = app.save_assessment(result, record)
+    saved = app.assessments().find(assessment_id)
+    assert assessment_id == verdict.assessment_id
+    assert list(saved) == ["assessment_id", "client_ref", "kind", "assessed_at", "outcome", "verdict", "report",
+                           "crime_scan", "crime_result", "benchmark", "document_evidence", "forecast", "assessment"]
+    assert (saved["client_ref"], saved["kind"], saved["assessed_at"], saved["outcome"]) == (
+        verdict.client_ref, "onboarding", verdict.assessed_at, verdict.outcome)
+    assert saved["verdict"] == json.loads(json.dumps(verdict.details()))      # every check, reason and note
+    assert list(saved["verdict"]) == list(verdict.details())
+    assert saved["verdict"]["benchmark"] and saved["verdict"]["forecast"] and saved["verdict"]["reasons"]
+    assert saved["forecast"] == saved["assessment"] == json.loads(json.dumps(result["forecast_assessment"]))
+    assert saved["crime_scan"]["typologies"] == result["typology_response"]
+    assert saved["document_evidence"] == json.loads(json.dumps(result["evidence"]))
 
 
 def test_the_menu_can_list_clients_and_leave(app, monkeypatch, capsys):

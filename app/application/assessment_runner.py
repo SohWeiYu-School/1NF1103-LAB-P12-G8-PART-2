@@ -1,6 +1,8 @@
 """AssessmentRunner: runs one assessment, step by step."""
 
 import logging
+import uuid
+from datetime import datetime, timezone
 from typing import Callable
 
 from app.ai.benchmark_ai import BenchmarkAI
@@ -87,8 +89,11 @@ class AssessmentRunner:
         on_step(number, label)  is told each step in STEPS as it starts.
         on_failure(step, reason)  is told each step that could not be completed and answers
                                   True to carry on without it or False to stop.
-        Returns the result (case, verdict, report and the evidence behind them), or None if
-        on_failure stopped the assessment.
+        Returns the result: the Verdict (under "verdict", with its report) and the evidence
+        behind it (case, research, typologies, crime result, benchmark, forecast ...), which
+        App saves and the web page shows. None if on_failure stopped the assessment.
+        The Verdict is given a new assessment id and the time it was made here, because the
+        VerdictEngine makes no ids and reads no clock.
         """
         def step(number: int) -> None:
             if on_step is not None:
@@ -210,8 +215,8 @@ class AssessmentRunner:
                 "forecast": forecast, "forecast_assessment": forecast_assessment,
                 "markets": partial.get("markets"), "evidence": evidence, "pay_adjustments": pay_adjustments,
                 "failed_step": stopped_at, "not_run": not_run, "notes": notes,
+                "assessment_id": str(uuid.uuid4()), "assessed_at": datetime.now(timezone.utc).isoformat(),
             })
-            details = verdict.details()
         except (KeyError, TypeError, ValueError, ZeroDivisionError) as error:
             logger.exception("AssessmentRunner: the verdict could not be worked out")
             failed("Deciding the verdict", repr(error))
@@ -228,8 +233,7 @@ class AssessmentRunner:
             "forecast": forecast,
             "forecast_assessment": forecast_assessment,
             "evidence": evidence,
-            "verdict": details,
-            "report": verdict.report,
+            "verdict": verdict,
         }
 
     def __crime_categories(self) -> dict:

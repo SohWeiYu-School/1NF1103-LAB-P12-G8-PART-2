@@ -94,13 +94,14 @@ def check(verdict: dict, feature: str, name: str) -> dict:
 def test_one_verdict_with_reasons_from_every_feature(run):
     case = run.save_fake_forecast(client_record())
     result = run(case)
-    verdict = result["verdict"]
+    assert isinstance(result["verdict"], Verdict)        # the object, carrying its report
+    verdict = result["verdict"].details()
     assert verdict["verdict"] in ("PASSED", "MANUAL_REVIEW", "RISKY", "SERIOUS_RISK")
     assert verdict["reasons"], "the verdict must say why"
     assert {c["feature"] for c in verdict["benchmark"]} == {"benchmark"}
     assert verdict["forecast"] and verdict["crime"]
     assert verdict["not_run"] == []
-    titles = [s["title"] for s in result["report"]["sections"]]
+    titles = [s["title"] for s in result["verdict"].report["sections"]]
     assert titles[0] == "Why"
     assert any(t.startswith("Benchmark") for t in titles) and any(t.startswith("Forecast") for t in titles)
     assert any(t.startswith("Crime") for t in titles)
@@ -108,7 +109,7 @@ def test_one_verdict_with_reasons_from_every_feature(run):
 
 def test_crime_type_is_built_from_the_researched_typology(run):
     case = run.save_fake_forecast(client_record())
-    verdict = run(case)["verdict"]
+    verdict = run(case)["verdict"].details()
     t2 = next(t for t in verdict["types"] if t["type_id"] == "T2")
     assert t2["typology_id"] == "trade_based_laundering"
     assert t2["match"] == "high"                      # its warning signs fired in the declaration
@@ -120,7 +121,7 @@ def test_crime_type_is_built_from_the_researched_typology(run):
 def test_serious_risk_needs_the_honest_story_to_fail_and_a_second_feature(run):
     # tiny honest pay, big crime money: only T2 explains him, and its warning signs fired
     case = run.save_fake_forecast(client_record(), pay_scale=0.2, crime_money=900_000)
-    verdict = run(case)["verdict"]
+    verdict = run(case)["verdict"].details()
     assert verdict["verdict"] == "SERIOUS_RISK"
     assert "another check agrees" in verdict["summary"]
 
@@ -134,14 +135,14 @@ def test_without_a_second_feature_it_stays_risky(run):
     peers = fake_ai.benchmark(expected_wealth=20_000_000)
     peers.update(expected_velocity=5_000_000, expected_counterparties=["Straits Harbour Logistics Pte Ltd"],
                  expected_jurisdiction=["Singapore", "Hong Kong", "United Arab Emirates"])
-    verdict = run(case, benchmark=peers, typologies=quiet)["verdict"]
+    verdict = run(case, benchmark=peers, typologies=quiet)["verdict"].details()
     assert verdict["verdict"] == "RISKY"
     assert "no other check agrees" in verdict["summary"]
 
 
 def test_a_benchmark_failure_the_forecast_explains_does_not_count(run):
     case = run.save_fake_forecast(client_record())
-    verdict = run(case)["verdict"]                    # peers have ~2.4M, he declares 16.5M
+    verdict = run(case)["verdict"].details()                    # peers have ~2.4M, he declares 16.5M
     total = check(verdict, "benchmark", "TOTAL_WEALTH")
     assert total["status"] == "explained"            # ...but the honest forecast reaches it
     assert total["explanation"].startswith("Explained")
@@ -150,7 +151,7 @@ def test_a_benchmark_failure_the_forecast_explains_does_not_count(run):
 
 def test_new_benchmark_checks_are_there(run):
     case = run.save_fake_forecast(client_record())
-    verdict = run(case)["verdict"]
+    verdict = run(case)["verdict"].details()
     names = {c["check"] for c in verdict["benchmark"]}
     assert {"PEP_STATUS", "AUM_FUNDING", "UNEXPLAINED_GAP", "JUMP_VS_ECONOMY"} <= names
     assert {"WEALTH_JUMP", "LIQUID_WEALTH"} <= {c["check"] for c in verdict["forecast"]}
@@ -158,7 +159,7 @@ def test_new_benchmark_checks_are_there(run):
 
 def test_a_pep_is_never_passed(run):
     case = run.save_fake_forecast(client_record(pep_status="Foreign PEP"))
-    verdict = run(case)["verdict"]
+    verdict = run(case)["verdict"].details()
     assert check(verdict, "benchmark", "PEP_STATUS")["status"] == "failed"
     assert SEVERITY[verdict["verdict"]] >= SEVERITY["MANUAL_REVIEW"]
     assert any("PEP" in r["text"] for r in verdict["reasons"])
@@ -166,14 +167,14 @@ def test_a_pep_is_never_passed(run):
 
 def test_money_for_the_bank_he_cant_fund_is_risky(run):
     case = run.save_fake_forecast(client_record(expected_aum=30_000_000))
-    verdict = run(case)["verdict"]
+    verdict = run(case)["verdict"].details()
     assert check(verdict, "benchmark", "AUM_FUNDING")["status"] == "failed"
     assert SEVERITY[verdict["verdict"]] >= SEVERITY["RISKY"]
 
 
 def test_a_part_that_cant_run_means_a_person_must_look(run):
     case = run.save_fake_forecast(client_record())
-    verdict = run(case, benchmark_reply=None)["verdict"]
+    verdict = run(case, benchmark_reply=None)["verdict"].details()
     assert "The peer benchmark" in verdict["not_run"]
     assert SEVERITY[verdict["verdict"]] >= SEVERITY["MANUAL_REVIEW"]
     # the checks that don't need the peer benchmark still run
@@ -182,7 +183,7 @@ def test_a_part_that_cant_run_means_a_person_must_look(run):
 
 def test_same_inputs_give_the_same_verdict(run):
     case = run.save_fake_forecast(client_record())
-    assert run(case)["report"] == run(case)["report"]
+    assert run(case)["verdict"].report == run(case)["verdict"].report
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +337,7 @@ def test_marcus_lim_documents_make_it_serious_risk(run):
     record, reading = marcus()
     record["claims"]["expected_aum"] = 3_000_000     # fundable, so only the documents can add evidence
     peers, quiet = quiet_peers()
-    verdict = run_marcus(run, record, reading, peers, quiet)["verdict"]
+    verdict = run_marcus(run, record, reading, peers, quiet)["verdict"].details()
     assert verdict["verdict"] == "SERIOUS_RISK"
     assert any(r["level"] == "SERIOUS_RISK" and "documents contradict his declaration" in r["text"]
                for r in verdict["reasons"])
@@ -351,7 +352,7 @@ def test_without_documents_the_same_client_is_not_serious(run):
     record["claims"]["expected_aum"] = 3_000_000
     case = run.save_fake_forecast(record)
     peers, quiet = quiet_peers()
-    verdict = run(case, peers, quiet)["verdict"]
+    verdict = run(case, peers, quiet)["verdict"].details()
     assert verdict["verdict"] != "SERIOUS_RISK"
     assert verdict["document_findings"][0]["check"] == "NO_DOCUMENTS"
 
@@ -359,7 +360,7 @@ def test_without_documents_the_same_client_is_not_serious(run):
 def test_unreadable_documents_mean_a_person_must_look(run):
     record, reading = marcus()
     case = run.save_fake_forecast(record)
-    verdict = run(case, documents=record["supporting_documents"], documents_reply=None)["verdict"]
+    verdict = run(case, documents=record["supporting_documents"], documents_reply=None)["verdict"].details()
     assert "Reading the submitted documents" in verdict["not_run"]
     assert SEVERITY[verdict["verdict"]] >= SEVERITY["MANUAL_REVIEW"]
 
@@ -367,7 +368,7 @@ def test_unreadable_documents_mean_a_person_must_look(run):
 def test_pay_comes_from_his_tax_notices_not_the_ai_guess(run):
     record, reading = marcus()
     result = run_marcus(run, record, reading, pay_scale=0.5)
-    line = check(result["verdict"], "forecast", "PAY_FROM_DOCUMENTS")
+    line = check(result["verdict"].details(), "forecast", "PAY_FROM_DOCUMENTS")
     assert "S$186,000" in line["detail"]
     case = result["case"]
     forecast, adjusted = Forecast(POLICY, CONFIG).calibrate_pay(
@@ -397,7 +398,7 @@ def test_document_reading_is_saved_and_reused(run):
 
 def test_loan_financed_purchases_dont_push_cash_below_zero(run):
     record, reading = marcus()
-    verdict = run_marcus(run, record, reading)["verdict"]
+    verdict = run_marcus(run, record, reading)["verdict"].details()
     funding = check(verdict, "benchmark", "AUM_FUNDING")
     liquid = check(verdict, "forecast", "LIQUID_WEALTH")
     assert "-S$" not in liquid["detail"].split(" to ")[-1]          # the optimistic end is not negative
@@ -406,7 +407,7 @@ def test_loan_financed_purchases_dont_push_cash_below_zero(run):
 
 def test_banks_and_law_firms_are_not_unusual_counterparties(run):
     record, reading = marcus()                    # declared: Meridian Harbour Bank, Tan & Rao LLP
-    verdict = run_marcus(run, record, reading)["verdict"]
+    verdict = run_marcus(run, record, reading)["verdict"].details()
     counterparties = check(verdict, "benchmark", "COUNTERPARTIES")
     assert counterparties["status"] == "passed"
     assert "Meridian Harbour Bank" in counterparties["detail"] and "left out" in counterparties["detail"]
@@ -414,7 +415,7 @@ def test_banks_and_law_firms_are_not_unusual_counterparties(run):
 
 def test_benchmark_always_shows_its_9_original_checks(run):
     case = run.save_fake_forecast(client_record())
-    report = run(case)["report"]
+    report = run(case)["verdict"].report
     benchmark = next(s for s in report["sections"] if s["title"].startswith("Benchmark"))
     for item, rule in zip(benchmark["items"][:9], VerdictEngine.ORIGINAL_BENCHMARK):
         assert item["text"].startswith(Benchmark.BENCHMARK_LABELS[rule] + ":"), item["text"]
@@ -483,7 +484,7 @@ def test_one_asset_the_ai_cant_describe_doesnt_stop_the_forecast(run):
     run.cache().save_raw_replies(case["client_ref"], {k: {"raw": v} for k, v in replies.items()})
     result = run(case)
     assert result["forecast"] is not None                                          # the forecast finished
-    item = check(result["verdict"], "forecast", "ASSET_NOT_MODELLED")
+    item = check(result["verdict"].details(), "forecast", "ASSET_NOT_MODELLED")
     assert "purchase price" in item["detail"]
     assert all(c["asset_index"] != 0 for c in result["forecast_assessment"]["asset_checks"])
 
@@ -493,7 +494,7 @@ def test_the_report_says_why_the_forecast_stopped(run):
     replies = run.cache().load_raw_replies(case["client_ref"])
     replies["call3_types.list"] = json.dumps({"person_types": []})                # unusable, and no API key
     run.cache().save_raw_replies(case["client_ref"], {k: {"raw": v} for k, v in replies.items()})
-    verdict = run(case)["verdict"]
+    verdict = run(case)["verdict"].details()
     item = check(verdict, "forecast", "FORECAST")
     assert "the list of person types" in item["detail"] and "the AI request failed" in item["detail"]
     assert "The forecast" in verdict["not_run"]
@@ -501,7 +502,7 @@ def test_the_report_says_why_the_forecast_stopped(run):
 
 def test_benchmark_shows_its_9_checks_even_when_it_couldnt_run(run):
     case = run.save_fake_forecast(client_record())
-    report = run(case, benchmark_reply=None)["report"]
+    report = run(case, benchmark_reply=None)["verdict"].report
     benchmark = next(s for s in report["sections"] if s["title"].startswith("Benchmark"))
     first_nine = benchmark["items"][:9]
     assert all(item["mark"] == "skip" and "couldn't run" in item["text"] for item in first_nine)
@@ -509,7 +510,7 @@ def test_benchmark_shows_its_9_checks_even_when_it_couldnt_run(run):
 
 def test_growth_speed_is_shown_when_no_jump_was_recorded(run):
     case = run.save_fake_forecast(client_record(biggest_wealth_jump=None, wealth_jump_years=None))
-    report = run(case)["report"]
+    report = run(case)["verdict"].report
     benchmark = next(s for s in report["sections"] if s["title"].startswith("Benchmark"))
     speed = next(item for item in benchmark["items"] if item["text"].startswith("Wealth growth speed"))
     assert speed["mark"] == "skip" and "No biggest wealth jump" in speed["text"]

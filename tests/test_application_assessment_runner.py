@@ -1,6 +1,7 @@
 """AssessmentRunner: one assessment from made-up AI services, including the ways a step can fail."""
 
 from app.application.assessment_runner import AssessmentRunner
+from app.model.verdict import Verdict
 from tests import fake_services
 from tests.logic_fixtures import sample_case
 
@@ -15,10 +16,30 @@ def _run(tmp_path, save_forecast=True, on_failure=None, on_step=None, **services
 
 def test_a_full_run_gives_one_verdict_and_one_report(tmp_path):
     result, _ = _run(tmp_path)
-    assert result["verdict"]["verdict"] in ("PASSED", "MANUAL_REVIEW", "RISKY", "SERIOUS_RISK")
-    assert result["verdict"]["not_run"] == []
-    assert set(result["report"]) == {"header", "sections", "evidence", "evidence_titles", "legend"}
+    verdict = result["verdict"]
+    assert isinstance(verdict, Verdict)
+    assert verdict.outcome in Verdict.OUTCOMES
+    assert verdict.not_run == []
+    assert set(verdict.report) == {"header", "sections", "evidence", "evidence_titles", "legend"}
+    assert "report" not in result                          # the report travels on the Verdict
     assert result["forecast_assessment"] is not None and result["crime_result"] is not None
+
+
+def test_each_run_gives_its_verdict_a_new_id_and_the_time_it_was_made(tmp_path):
+    first, _ = _run(tmp_path)
+    second, _ = _run(tmp_path)
+    assert first["verdict"].assessment_id and first["verdict"].assessed_at
+    assert first["verdict"].assessment_id != second["verdict"].assessment_id
+    assert first["verdict"].assessed_at.endswith("+00:00")        # UTC, as saved assessments always had
+    assert first["verdict"].client_ref == sample_case()["client_ref"]
+
+
+def test_the_verdict_keeps_the_notes_of_the_run(tmp_path):
+    result, _ = _run(tmp_path, save_forecast=False)
+    notes = result["verdict"].notes
+    assert any(note.startswith("The forecast stopped at") for note in notes)
+    assert result["verdict"].details()["notes"] == notes
+    assert "Warnings from the run" in result["verdict"].report["evidence_titles"]
 
 
 def test_every_step_before_saving_is_announced_in_order(tmp_path):
@@ -44,13 +65,13 @@ def test_a_failed_ai_step_is_reported_and_the_run_carries_on_when_told_to(tmp_pa
     failures = []
     result, _ = _run(tmp_path, benchmark=None, on_failure=lambda step, reason: failures.append(step) or True)
     assert failures == ["The peer benchmark"]
-    assert result["verdict"]["not_run"] == ["The peer benchmark"]
+    assert result["verdict"].not_run == ["The peer benchmark"]
     assert result["benchmark"]["findings"] is None
 
 
 def test_with_no_on_failure_a_failed_step_is_noted_and_the_run_carries_on(tmp_path):
     result, _ = _run(tmp_path, typologies=None)
-    assert "The crime scan (sector typologies)" in result["verdict"]["not_run"]
+    assert "The crime scan (sector typologies)" in result["verdict"].not_run
 
 
 def test_the_run_stops_when_on_failure_says_stop(tmp_path):
@@ -73,10 +94,11 @@ def test_a_forecast_that_cannot_run_is_reported_with_where_it_stopped(tmp_path):
     assert failures[0][0] == "The forecast"
     assert "API key" in failures[0][1]
     assert result["forecast"] is None
-    assert result["verdict"]["verdict"] != "PASSED"       # an assessment with no forecast never passes
+    assert result["verdict"].outcome != "PASSED"          # an assessment with no forecast never passes
 
 
 def test_the_same_inputs_give_the_same_verdict(tmp_path):
     first, _ = _run(tmp_path)
     second, _ = _run(tmp_path)
-    assert first["verdict"] == second["verdict"]
+    assert first["verdict"].details() == second["verdict"].details()
+    assert first["verdict"].report == second["verdict"].report

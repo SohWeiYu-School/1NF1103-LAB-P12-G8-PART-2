@@ -3,8 +3,7 @@
 import json
 import logging
 import os
-import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Callable
 
 from dotenv import load_dotenv
@@ -31,7 +30,6 @@ from app.interface.report_view import ReportView
 from app.logic.case_reader import CaseReader
 from app.logic.case_timeline import CaseTimeline
 from app.logic.document_record_builder import DocumentRecordBuilder
-from app.model.check import Check
 from app.model.client_record import ClientRecord
 from app.model.config import Config
 from app.model.verdict import Verdict
@@ -267,8 +265,9 @@ class App:
             on_failure = self.__handle_failure if show_failures else self.__handle_failure_quietly
         return self.__runner.run(case, supporting_documents, on_step, on_failure)
 
-    def assess_client_record(self, record: ClientRecord) -> dict | None:
-        """The command line's assessment of a saved client: prepare, run, save, show."""
+    def assess_client_record(self, record: ClientRecord) -> Verdict | None:
+        """The command line's assessment of a saved client: prepare, run, save, show.
+        Returns the Verdict, or None if no assessment could be made."""
         case = self.prepare_case(record)
         if case is None:
             return None
@@ -279,13 +278,14 @@ class App:
             self.__ui.show_error("The assessment was stopped. Nothing was saved.")
             return None
         saved = self.save_assessment(result, record, on_step=self.__show_step)
-        self.__report_view.show_verdict_report(result["report"], crime_result=result.get("crime_result"),
+        verdict = result["verdict"]
+        self.__report_view.show_verdict_report(verdict.report, crime_result=result.get("crime_result"),
                                                typologies=result.get("typologies"))
         if saved:
             self.__ui.show_message("Assessment saved.")
         else:
             self.__ui.show_error("Could not save the assessment.")
-        return result
+        return verdict
 
     def save_assessment(self, result: dict, record: ClientRecord | None = None,
                         on_step: Callable[[int, str], None] | None = None) -> str | None:
@@ -294,10 +294,13 @@ class App:
         if on_step is not None:
             on_step(len(AssessmentRunner.STEPS), AssessmentRunner.STEPS[-1])
         case = result["case"]
-        verdict = self.__verdict_object(result)
+        verdict: Verdict = result["verdict"]
+        details = verdict.details()             # the layout saved under "verdict"
         if record is not None:
+            # The record keeps the case's date (assessed_on), not the time the verdict was made
+            # (assessed_at), so ClientRecord.record_assessment is not used here.
             record.review_status.update(verdict.outcome, verdict.next_step, verdict.next_review_date,
-                                        result["verdict"].get("assessed_on") or self.today(), case)
+                                        details["assessed_on"] or self.today(), case)
             if not self.save_client(record):
                 logger.error("App.save_assessment: could not save the client record for %s", verdict.client_ref)
         saved = self.__assessments.save({
@@ -306,7 +309,7 @@ class App:
             "kind": "onboarding",
             "assessed_at": verdict.assessed_at,
             "outcome": verdict.outcome,
-            "verdict": result["verdict"],
+            "verdict": details,
             "report": verdict.report,
             "crime_scan": {"research": result["research"], "typologies": result["typology_response"],
                            "declaration": result["crime_declaration"]},
@@ -336,7 +339,7 @@ class App:
             return False
         if not self.save_assessment(result, on_step=self.__show_step):
             self.__ui.show_error("Could not save the assessment.")
-        self.__report_view.show_verdict_report(result["report"], ask_for_evidence=False,
+        self.__report_view.show_verdict_report(result["verdict"].report, ask_for_evidence=False,
                                                crime_result=result.get("crime_result"),
                                                typologies=result.get("typologies"))
         return result["forecast"] is not None
@@ -597,18 +600,6 @@ class App:
 
     def __show_step(self, number: int, label: str) -> None:
         self.__ui.show_step(number, len(AssessmentRunner.STEPS), label)
-
-    def __verdict_object(self, result: dict) -> Verdict:
-        """The assessment's result as a Verdict: the outcome, the checks behind it and the report."""
-        data = result["verdict"]
-        verdict = Verdict(str(uuid.uuid4()), result["case"]["client_ref"], datetime.now(timezone.utc).isoformat(),
-                          data["verdict"], data.get("next_step", ""), data.get("next_review_date", ""),
-                          data.get("notes"), data.get("not_run"))
-        for key in ("benchmark", "forecast", "crime", "document_findings"):
-            for row in data.get(key) or []:
-                verdict.add_check(Check.from_dict(row))
-        verdict.report = result["report"]
-        return verdict
 
     def __configure_logging(self) -> None:
         """Send all logging to logs/app.log. Nothing goes to the console."""

@@ -593,7 +593,7 @@ class WebApp:
 
             job["result"] = {
                 "record":        record.to_dict(),       # the page template reads the saved layout
-                "report":        result["report"],
+                "report":        result["verdict"].report,
                 "assessment_id": assessment_id,
                 "assessed_at":   datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "ai_warnings":   ai_warnings,

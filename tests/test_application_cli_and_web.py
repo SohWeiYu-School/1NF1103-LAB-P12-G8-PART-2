@@ -63,22 +63,22 @@ def test_cli_and_web_app_give_the_same_report(tmp_path, monkeypatch, capsys):
     with patch("builtins.input", return_value="y") as answer:
         cli = application.assess_client_record(ClientRecord.from_dict(record))
     printed = capsys.readouterr().out
-    assert "COMBINED ASSESSMENT" in printed and cli["report"]["header"]["verdict_label"] in printed
+    assert "COMBINED ASSESSMENT" in printed and cli.report["header"]["verdict_label"] in printed
     assert "Show the full evidence?" in answer.call_args.args[0]       # asked before the evidence
     assert printed.index("FULL EVIDENCE  ") > printed.index("WHAT CAME BACK CLEAN")
 
     # the web app (Run Assessment button), on the same App
     web, page = _assess_on_the_web(application, record["client_ref"])
 
-    assert web["report"] == cli["report"]                     # the same verdict, reasons and evidence
+    assert web["report"] == cli.report                     # the same verdict, reasons and evidence
     saved = [a for a in application.assessments().load() if a.get("report")]
     assert len(saved) == 2 and saved[0]["report"] == saved[1]["report"]
-    for part in cli["report"]["sections"]:                     # and the page shows every line of it
+    for part in cli.report["sections"]:                     # and the page shows every line of it
         if "Crime" in part["title"]:
             continue                                           # the crime section renders as cards
         for item in part["items"]:
             assert item["text"] in page, item["text"]
-    assert cli["report"]["header"]["verdict_label"] in page
+    assert cli.report["header"]["verdict_label"] in page
 
 
 def test_the_web_page_shows_a_saved_assessment(tmp_path, monkeypatch):
@@ -90,7 +90,7 @@ def test_the_web_page_shows_a_saved_assessment(tmp_path, monkeypatch):
     result = application.assess(case, show_failures=False)
     assessment_id = application.save_assessment(result, ClientRecord.from_dict(record))
     page = WebApp(application).flask().test_client().get(f"/assessment/{assessment_id}").get_data(as_text=True)
-    assert result["report"]["header"]["summary"] in html.unescape(page)
+    assert result["verdict"].report["header"]["summary"] in html.unescape(page)
 
 
 @pytest.fixture
@@ -120,5 +120,5 @@ def test_cli_and_web_app_read_the_documents_the_same_way(tmp_path, monkeypatch, 
         cli = application.assess_client_record(ClientRecord.from_dict(record))
     application.rate_limiter().reset()
     web, page = _assess_on_the_web(application, record["client_ref"])
-    assert web["report"] == cli["report"]
+    assert web["report"] == cli.report
     assert "Documents - what his papers show" in page and "Arcadia Holdings Ltd" in page
