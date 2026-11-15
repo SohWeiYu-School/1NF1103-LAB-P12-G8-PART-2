@@ -228,3 +228,15 @@ def test_checks_flag_impossible_dates():
     record = _doc_builder().set_path(record, ["career_history", 0, "end_year"], 2001)
 
     assert any("ends (2001) before it starts (2004)" in w for w in _doc_builder().check(record))
+
+
+@pytest.mark.parametrize("today", ["banana", "2026-13-01", "20261014", 2026, None])
+def test_the_builder_rejects_a_date_that_is_not_yyyy_mm_dd(today):
+    with pytest.raises(ValueError, match="today must be empty or a real date"):
+        DocumentRecordBuilder(CONFIG, today)
+
+
+def test_the_builder_rejects_a_config_that_is_not_a_config():
+    with pytest.raises(ValueError, match="config must be a Config"):
+        DocumentRecordBuilder({"policy": {}}, "2026-10-14")
+    assert DocumentRecordBuilder(None, "") is not None

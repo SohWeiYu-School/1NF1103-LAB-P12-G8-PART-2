@@ -24,6 +24,13 @@ class DocumentRecordBuilder:
                         "claims": "Financial claims", "sow_declaration": "Source of wealth declaration"}
 
     def __init__(self, config: Config | None = None, today: str = "") -> None:
+        if config is not None and not isinstance(config, Config):
+            raise ValueError(f"the config must be a Config (or None), not {type(config).__name__}")
+        try:
+            if not isinstance(today, str) or (today and (len(today) != 10 or not datetime.date.fromisoformat(today))):
+                raise ValueError
+        except ValueError:
+            raise ValueError(f"today must be empty or a real date written YYYY-MM-DD, not {today!r}") from None
         self.__config: Config = config or Config({}, {})
         self.__policy: dict = self.__config.policy
         self.__today: str = today
