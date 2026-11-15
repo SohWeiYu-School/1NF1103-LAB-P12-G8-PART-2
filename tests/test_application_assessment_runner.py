@@ -163,3 +163,37 @@ def test_parallel_runs_never_interleave_a_crime_scan_check_and_its_warnings(tmp_
     spans.sort()
     for (_, earlier_end), (later_start, _) in zip(spans, spans[1:]):
         assert later_start >= earlier_end       # no check started while another was still running
+
+
+def test_parallel_runs_never_use_the_shared_forecast_at_the_same_time(tmp_path, monkeypatch):
+    """Forecast keeps the forecast it is working on while run() or honest_numbers() works, so two
+    parallel runs on one runner must take turns; otherwise one client's figures could end up in the
+    other client's verdict. The Forecast is slowed down here so that, without the lock, they overlap."""
+    import threading
+    import time
+    from app.logic.forecast import Forecast
+    runner, cache, _ = fake_services.runner(tmp_path)
+    fake_services.save_forecast_replies(cache, sample_case())
+    spans, guard = [], threading.Lock()
+
+    def slowed(original):
+        def work(self, *args):
+            start = time.monotonic()
+            found = original(self, *args)
+            time.sleep(0.2)
+            with guard:
+                spans.append((start, time.monotonic()))
+            return found
+        return work
+
+    for name in ("run", "honest_numbers"):
+        monkeypatch.setattr(Forecast, name, slowed(getattr(Forecast, name)))
+    threads = [threading.Thread(target=runner.run, args=(sample_case(),)) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert len(spans) >= 2
+    spans.sort()
+    for (_, earlier_end), (later_start, _) in zip(spans, spans[1:]):
+        assert later_start >= earlier_end       # the Forecast was never used by two runs at once

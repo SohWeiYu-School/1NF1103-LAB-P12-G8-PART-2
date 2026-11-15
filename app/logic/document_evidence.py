@@ -21,8 +21,9 @@ class DocumentEvidence(RiskAnalysis):
 
     def run(self, case: dict, ai_data: dict) -> dict:
         """The cleaned evidence. ai_data is {"extracted": the AI's reading or None, "files": [names]}."""
-        self._results = self._read(ai_data.get("extracted"), ai_data.get("files"))
-        return self._results
+        results = self._read(ai_data.get("extracted"), ai_data.get("files"))
+        self._results = results
+        return results          # the local value: another run may replace self._results meanwhile
 
     def checks(self, context: dict) -> list[Check]:
         """The documents' findings. context holds evidence (default: the last run) and types."""

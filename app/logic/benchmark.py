@@ -55,8 +55,9 @@ class Benchmark(RiskAnalysis):
     def run(self, case: dict, ai_data: dict) -> dict:
         """Run the benchmark rules. ai_data is {"benchmark_input", "benchmark_ai"}.
         Returns {} if the AI gave no benchmark."""
-        self._results = self._run_rules(ai_data.get("benchmark_input"), ai_data.get("benchmark_ai")) or {}
-        return self._results
+        results = self._run_rules(ai_data.get("benchmark_input"), ai_data.get("benchmark_ai")) or {}
+        self._results = results
+        return results          # the local value: another run may replace self._results meanwhile
 
     def checks(self, context: dict) -> list[Check]:
         """The benchmark's findings. context holds case, bench_input, ai_data, findings, honest,

@@ -36,8 +36,9 @@ class Forecast(RiskAnalysis):
     def run(self, case: dict, ai_data: dict) -> dict:
         """The forecast assessment for this case. ai_data is {"forecast": the finished forecast}."""
         self.__use(ai_data["forecast"])
-        self._results = self._assess(case)
-        return self._results
+        results = self._assess(case)
+        self._results = results
+        return results          # the local value: another run may replace self._results meanwhile
 
     def checks(self, context: dict) -> list[Check]:
         """The forecast's findings. context holds case, assessment, honest, types, failed_step, unmodelled."""

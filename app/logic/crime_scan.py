@@ -115,8 +115,9 @@ class CrimeScan(RiskAnalysis):
         typologies = ai_data.get("typologies")
         if typologies is None and ai_data.get("typology_response") is not None:
             typologies = self.read_typologies(ai_data["typology_response"].get("sector_typologies", []))
-        self._results = self._assess(typologies, ai_data.get("declaration"))
-        return self._results
+        results = self._assess(typologies, ai_data.get("declaration"))
+        self._results = results
+        return results          # the local value: another run may replace self._results meanwhile
 
     def checks(self, context: dict) -> list[Check]:
         """The crime scan's findings. context holds crime_result, reports (the trusted ResearchReports, or

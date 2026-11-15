@@ -75,6 +75,9 @@ class AssessmentRunner:
         # The web app runs assessments in parallel threads on this one runner. CrimeScan keeps the
         # warnings of its last check, so a check and the reading of its warnings must not interleave.
         self.__crime_scan_lock: threading.Lock = threading.Lock()
+        # Forecast keeps the forecast it is working on (its market model, paths and assessor) while
+        # run() or honest_numbers() works, so two runs must not use it at the same time.
+        self.__forecast_lock: threading.Lock = threading.Lock()
         self.__documents: DocumentEvidence = DocumentEvidence(policy)
         self.__benchmark: Benchmark = Benchmark(policy, self.__config)
         self.__forecast: Forecast = Forecast(policy, self.__config)
@@ -201,7 +204,10 @@ class AssessmentRunner:
 
         # 12. Test every story
         step(12)
-        forecast_assessment = self.__forecast.run(case, {"forecast": forecast}) if forecast else None
+        forecast_assessment = None
+        if forecast:
+            with self.__forecast_lock:
+                forecast_assessment = self.__forecast.run(case, {"forecast": forecast})
         declaration = partial.get("declaration")
         crime_declaration, warnings = self.__crime_scan.crime_declaration(declaration)
         notes += warnings
@@ -219,15 +225,16 @@ class AssessmentRunner:
         # 13. One verdict, and the report both front ends show
         step(13)
         try:
-            verdict = self.__engine.combine(case, {
-                "reports": reports,
-                "typologies": typologies, "crime_result": crime_result, "declaration": declaration,
-                "benchmark_input": bench_input, "benchmark_ai": bench_ai, "benchmark_findings": findings,
-                "forecast": forecast, "forecast_assessment": forecast_assessment,
-                "markets": partial.get("markets"), "evidence": evidence, "pay_adjustments": pay_adjustments,
-                "failed_step": stopped_at, "not_run": not_run, "notes": notes,
-                "assessment_id": str(uuid.uuid4()), "assessed_at": datetime.now(timezone.utc).isoformat(),
-            })
+            with self.__forecast_lock:        # combine() calls Forecast.honest_numbers
+                verdict = self.__engine.combine(case, {
+                    "reports": reports,
+                    "typologies": typologies, "crime_result": crime_result, "declaration": declaration,
+                    "benchmark_input": bench_input, "benchmark_ai": bench_ai, "benchmark_findings": findings,
+                    "forecast": forecast, "forecast_assessment": forecast_assessment,
+                    "markets": partial.get("markets"), "evidence": evidence, "pay_adjustments": pay_adjustments,
+                    "failed_step": stopped_at, "not_run": not_run, "notes": notes,
+                    "assessment_id": str(uuid.uuid4()), "assessed_at": datetime.now(timezone.utc).isoformat(),
+                })
         except (KeyError, TypeError, ValueError, ZeroDivisionError) as error:
             logger.exception("AssessmentRunner: the verdict could not be worked out")
             failed("Deciding the verdict", repr(error))
