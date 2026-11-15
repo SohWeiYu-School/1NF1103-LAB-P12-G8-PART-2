@@ -60,7 +60,13 @@ def test_problems_reports_a_file_that_cannot_be_read_instead_of_raising(tmp_path
     _write(tmp_path, "vocabulary", {})
     (tmp_path / "policy.json").write_text("{not json", encoding="utf-8")
     problems = ConfigReader(str(tmp_path)).problems()
-    assert len(problems) == 1 and "could not be read" in problems[0]
+    assert problems == ["config/policy.json could not be read (see the log)."]    # no path, no Errno, no JSON error
+
+
+def test_problems_names_a_missing_file_without_technical_details(tmp_path):
+    problems = ConfigReader(str(tmp_path)).problems()
+    assert problems == ["config/vocabulary.json could not be read (see the log)."]
+    assert str(tmp_path) not in problems[0] and "Errno" not in problems[0]
 
 
 def test_problems_names_every_missing_setting(tmp_path):

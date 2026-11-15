@@ -50,9 +50,12 @@ class ConfigReader:
         problems = []
         try:
             vocabulary = self.read("vocabulary")
+        except (OSError, ValueError):
+            return ["config/vocabulary.json could not be read (see the log)."]
+        try:
             policy = self.read("policy")
-        except (OSError, ValueError) as error:
-            return [f"The settings could not be read: {error}"]
+        except (OSError, ValueError):
+            return ["config/policy.json could not be read (see the log)."]
         for key in ConfigReader.REQUIRED["vocabulary"]:
             if not vocabulary.get(key):
                 problems.append(f"config/vocabulary.json is missing '{key}'")
