@@ -167,6 +167,18 @@ def test_a_pep_is_never_passed(run):
     assert any("PEP" in r["text"] for r in verdict["reasons"])
 
 
+def test_a_blank_pep_answer_is_never_passed_and_says_why(run):
+    answered = run(run.save_fake_forecast(client_record(pep_status="None")))["verdict"].details()
+    case = run.save_fake_forecast(client_record(pep_status="None"))
+    case["claims"]["pep_status"] = ""        # a case that reaches the engine with the question unanswered
+    blank = run(case)["verdict"].details()
+    assert check(answered, "benchmark", "PEP_STATUS")["status"] == "passed"
+    assert check(blank, "benchmark", "PEP_STATUS")["status"] == "skipped"
+    assert SEVERITY[blank["verdict"]] >= SEVERITY["MANUAL_REVIEW"]
+    assert any("PEP status is not answered" in r["text"] for r in blank["reasons"])
+    assert not any("PEP status is not answered" in r["text"] for r in answered["reasons"])
+
+
 def test_money_for_the_bank_he_cant_fund_is_risky(run):
     case = run.save_fake_forecast(client_record(expected_aum=30_000_000))
     verdict = run(case)["verdict"].details()

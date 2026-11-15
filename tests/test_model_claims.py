@@ -15,9 +15,27 @@ def _claims(**changes):
     return Claims(**details)
 
 
-@pytest.mark.parametrize("status", ["None", "no", " N/A ", "", None, "Not a PEP"])
+@pytest.mark.parametrize("status", ["None", "no", " N/A ", "Not a PEP"])
 def test_ways_of_writing_no_are_not_a_pep(status):
     assert not _claims(pep_status=status).is_pep()
+
+
+@pytest.mark.parametrize("status", ["", "   ", None])
+def test_a_blank_pep_answer_is_unknown_so_it_is_not_taken_as_no(status):
+    claims = _claims(pep_status=status)
+    assert claims.is_pep()                                  # unknown counts as a PEP: the cautious side
+    assert any("PEP question is not answered" in problem for problem in claims.problems())
+
+
+def test_a_blank_pep_answer_is_still_accepted_by_the_setter():
+    claims = _claims()
+    claims.pep_status = ""                                  # auto-fill leaves it blank; problems() lists it
+    assert claims.pep_status == ""
+
+
+def test_an_answered_pep_question_has_no_pep_problem():
+    for status in ("None", "no", "Domestic PEP"):
+        assert not any("PEP" in problem for problem in _claims(pep_status=status).problems())
 
 
 @pytest.mark.parametrize("status", ["Domestic PEP", "Foreign PEP", "Family member / close associate of a PEP"])

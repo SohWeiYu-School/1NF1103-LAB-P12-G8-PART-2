@@ -223,7 +223,8 @@ class Benchmark(RiskAnalysis):
     def __is_pep(self, case: dict) -> bool:
         policy = self._policy
         status = str(case.get("claims", {}).get("pep_status") or "").strip().lower()
-        return status not in policy["verdict"]["no_pep_values"]
+        # A blank answer is unknown, not "no": it counts as a PEP, the cautious side.
+        return not status or status not in policy["verdict"]["no_pep_values"]
 
     def _benchmark_checks(self, case: dict, bench_input: dict | None, ai_data: dict | None, findings: list[dict] | None,
                          honest: dict | None, assessment: dict | None, declaration: Declaration | None,
@@ -475,11 +476,18 @@ class Benchmark(RiskAnalysis):
         status_text = str(claims.get("pep_status") or "None")
         pep = self.__is_pep(case)
         pep_types = [t for t in types if t["fits"] and t["category"] in settings["pep_crime_categories"]]
-        checks.append(self._check(
-            "PEP_STATUS", Benchmark.BENCHMARK_LABELS["PEP_STATUS"], "pattern", "failed" if pep else "passed",
-            f"{status_text}" + (" - a politically exposed person needs enhanced due diligence" if pep else " - not a PEP"),
-            ("A public-office crime story also fits his money: "
-             + "; ".join(f"{t['type_id']} {t['name']}" for t in pep_types) + ".") if pep and pep_types else ""))
+        if not str(claims.get("pep_status") or "").strip():
+            # Unanswered: the check could not run. The verdict treats him as a PEP until a person asks.
+            checks.append(self._check(
+                "PEP_STATUS", Benchmark.BENCHMARK_LABELS["PEP_STATUS"], "pattern", "skipped",
+                "Not answered - treated as a politically exposed person until the client is asked",
+                "The PEP question was left blank, so it is unknown, not \"no\"."))
+        else:
+            checks.append(self._check(
+                "PEP_STATUS", Benchmark.BENCHMARK_LABELS["PEP_STATUS"], "pattern", "failed" if pep else "passed",
+                f"{status_text}" + (" - a politically exposed person needs enhanced due diligence" if pep else " - not a PEP"),
+                ("A public-office crime story also fits his money: "
+                 + "; ".join(f"{t['type_id']} {t['name']}" for t in pep_types) + ".") if pep and pep_types else ""))
         # Which failures are evidence of their own (from peers or his own figures), rather than the
         # forecast's honest story seen again: only these can be the "second feature" that agrees.
         for item in checks:

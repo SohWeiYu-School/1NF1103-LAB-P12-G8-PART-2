@@ -71,6 +71,13 @@ def test_pep_status_follows_the_policy():
     assert not _benchmark_checks(pep_status="None")["PEP_STATUS"].failed()
 
 
+def test_a_blank_pep_answer_is_a_check_that_could_not_run_not_a_pass():
+    for blank in ("", "  ", None):
+        check = _benchmark_checks(pep_status=blank)["PEP_STATUS"]
+        assert check.status == "skipped" and "Not answered" in check.detail
+        assert not check.failed() and check.status != "passed"
+
+
 def test_every_benchmark_check_says_whether_it_is_independent_evidence():
     checks = _benchmark_checks()
     assert checks["TOTAL_WEALTH"].extra("independent") is True        # from peers

@@ -69,9 +69,10 @@ class VerdictEngine:
         return Check(feature, check, label, theme, status, detail, explanation, group)
 
     def _is_pep(self, case: dict) -> bool:
-        """True if the client is a politically exposed person (anything but the policy's "no" values)."""
+        """True if the client is a politically exposed person (anything but the policy's "no" values).
+        A blank answer is unknown, not "no": it counts as a PEP, the cautious side."""
         status = str(case.get("claims", {}).get("pep_status") or "").strip().lower()
-        return status not in self.__policy["verdict"]["no_pep_values"]
+        return not status or status not in self.__policy["verdict"]["no_pep_values"]
 
     def __type_patterns(self, forecast: dict | None, assessment: dict | None, crime_result: dict | None,
                       typologies: list[Typology] | None) -> list[dict]:
@@ -352,12 +353,16 @@ class VerdictEngine:
         if any(c.check == "AUM_FUNDING" and c.failed() for c in bench):
             flag("RISKY", "He plans to bring more money to the bank than his cash and shares can fund.")
         if self._is_pep(case):
+            answered = bool(str(case["claims"].get("pep_status") or "").strip())
+            who = "He is a PEP" if answered else "His PEP status is not answered, so he is treated as a PEP"
             pep_types = [t for t in fitting if t["category"] in settings["pep_crime_categories"]]
             if pep_types:
-                flag("RISKY", "He is a PEP and a public-office crime story fits his money ("
+                flag("RISKY", f"{who} and a public-office crime story fits his money ("
                      + "; ".join(f"{t['type_id']} {t['name']}" for t in pep_types) + ").")
             else:
-                flag("MANUAL_REVIEW", f"He is a PEP ({case['claims']['pep_status']}): a KYC officer must review him.")
+                flag("MANUAL_REVIEW", f"He is a PEP ({case['claims']['pep_status']}): a KYC officer must review him."
+                     if answered else "His PEP status is not answered, so it is unknown: a KYC officer must ask "
+                     "him and review him before he can be passed.")
         counted = [c for c in unexplained if c.check != "AUM_FUNDING"]      # AUM has its own rule above
         if len(counted) >= settings["unexplained_benchmark_for_risky"]:
             flag("RISKY", f"{len(counted)} benchmark checks failed that the forecast can't explain: "
