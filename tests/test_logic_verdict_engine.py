@@ -36,25 +36,57 @@ def test_the_engine_keeps_the_features_it_was_handed():
     assert all(isinstance(feature, RiskAnalysis) for feature in engine.features())
 
 
-def test_decide_gives_one_outcome_with_checks_from_every_feature(parts):
+def test_combine_gives_one_verdict_object_with_checks_from_every_feature(parts):
     case, data = parts
-    verdict = VerdictEngine(_features(), CONFIG).decide(case, data)
-    assert verdict["verdict"] in Verdict.OUTCOMES
+    verdict = VerdictEngine(_features(), CONFIG).combine(case, data)
+    assert isinstance(verdict, Verdict)
+    assert verdict.outcome in Verdict.OUTCOMES
+    assert {check.feature for check in verdict.checks()} == set(FEATURE_KEYS.values())
+    details = verdict.details()
+    assert details["verdict"] == verdict.outcome
     for key, name in FEATURE_KEYS.items():
-        assert verdict[key] and all(check["feature"] == name for check in verdict[key])
+        assert details[key] and all(check["feature"] == name for check in details[key])
+
+
+def test_the_verdict_lists_every_check_once_in_feature_order(parts):
+    case, data = parts
+    verdict = VerdictEngine(_features(), CONFIG).combine(case, data)
+    details = verdict.details()
+    assert [check.to_dict() for check in verdict.checks()] == (
+        details["benchmark"] + details["forecast"] + details["crime"] + details["document_findings"])
+
+
+def test_combine_keeps_the_id_time_notes_and_what_did_not_run(parts):
+    case, data = parts
+    verdict = VerdictEngine(_features(), CONFIG).combine(case, {
+        **data, "assessment_id": "a-1", "assessed_at": "2026-09-24T01:02:03+00:00",
+        "notes": ["a warning from the run"], "not_run": ["The peer benchmark"]})
+    assert (verdict.assessment_id, verdict.client_ref, verdict.assessed_at) == (
+        "a-1", case["client_ref"], "2026-09-24T01:02:03+00:00")
+    assert verdict.notes == ["a warning from the run"]
+    assert verdict.not_run == ["The peer benchmark"]
+    assert verdict.next_step == POLICY["routing"][verdict.outcome]
+    assert verdict.next_review_date > case["current_date"]
+    assert verdict.explanation["assessed_on"] == case["current_date"]
+    assert verdict.explanation["verdict_label"] == VerdictEngine.VERDICT_LABELS[verdict.outcome]
+    assert verdict.explanation["policy_version"] == POLICY["policy_version"]
+    could_not_run = next(s for s in verdict.report["sections"] if s["title"] == "Could not run")
+    assert [item["text"] for item in could_not_run["items"]] == ["The peer benchmark"]
+    assert "Warnings from the run" in verdict.report["evidence_titles"]
 
 
 def test_the_same_inputs_always_give_the_same_verdict(parts):
     case, data = parts
-    first = VerdictEngine(_features(), CONFIG).decide(case, data)
-    second = VerdictEngine(_features(), CONFIG).decide(case, data)
-    assert first == second
+    first = VerdictEngine(_features(), CONFIG).combine(case, data)
+    second = VerdictEngine(_features(), CONFIG).combine(case, data)
+    assert first.details() == second.details()
+    assert first.report == second.report
 
 
 def test_a_feature_the_engine_was_not_given_adds_no_findings(parts):
     case, data = parts
     features = [feature for feature in _features() if feature.NAME != "crime"]
-    verdict = VerdictEngine(features, CONFIG).decide(case, data)
+    verdict = VerdictEngine(features, CONFIG).combine(case, data).details()
     assert verdict["crime"] == []
     assert verdict["forecast"]
 
@@ -74,13 +106,13 @@ class _AlwaysFails(RiskAnalysis):
 def test_the_engine_uses_whatever_feature_it_is_handed(parts):
     case, data = parts
     features = [_AlwaysFails(POLICY) if feature.NAME == "benchmark" else feature for feature in _features()]
-    verdict = VerdictEngine(features, CONFIG).decide(case, data)
+    verdict = VerdictEngine(features, CONFIG).combine(case, data).details()
     assert [(check["check"], check["detail"]) for check in verdict["benchmark"]] == [
         ("TOTAL_WEALTH", "Made-up failure.")]
 
 
 def test_with_nothing_run_each_feature_reports_skipped_and_nothing_crashes():
-    verdict = VerdictEngine(_features(), CONFIG).decide(sample_case(), {})
+    verdict = VerdictEngine(_features(), CONFIG).combine(sample_case(), {}).details()
     statuses = {check["check"]: check["status"] for key in FEATURE_KEYS for check in verdict[key]}
     assert statuses["FORECAST"] == "skipped"
     assert statuses["CRIME_SCAN"] == "skipped"
@@ -89,22 +121,32 @@ def test_with_nothing_run_each_feature_reports_skipped_and_nothing_crashes():
 
 def test_the_report_lists_the_verdict_for_the_screen(parts):
     case, data = parts
-    engine = VerdictEngine(_features(), CONFIG)
-    report = engine.report(engine.decide(case, data))
+    verdict = VerdictEngine(_features(), CONFIG).combine(case, data)
+    report = verdict.report
     assert set(report) == {"header", "sections", "evidence", "evidence_titles", "legend"}
     assert report["legend"] == VerdictEngine.REPORT_LEGEND
+    details = verdict.details()
+    assert report["header"] == {key: details[key] for key in (
+        "client_ref", "name", "assessed_on", "verdict", "verdict_label", "next_step", "next_review_date",
+        "summary", "policy_version")}
+    assert report["evidence"] == details["evidence"]
+    assert report["evidence_titles"] == [part["title"] for part in details["evidence"]]
+    why = report["sections"][0]
+    assert why["title"] == "Why" and len(why["items"]) >= len(details["reasons"])
+    clean = next(s for s in report["sections"] if s["title"] == "What came back clean")
+    assert [item["text"] for item in clean["items"]] == (details["clean"] or ["Nothing came back fully clean."])
 
 
 
 def test_a_verdict_where_nothing_ran_is_manual_review_not_passed():
-    verdict = VerdictEngine(_features(), CONFIG).decide(sample_case(), {})
+    verdict = VerdictEngine(_features(), CONFIG).combine(sample_case(), {}).details()
     assert verdict["verdict"] == "MANUAL_REVIEW"
     assert any("nothing was checked" in reason["text"] for reason in verdict["reasons"])
 
 
 def test_a_verdict_where_a_feature_ran_does_not_get_the_nothing_ran_reason():
     case = sample_case()
-    verdict = VerdictEngine(_features(), CONFIG).decide(case, {"forecast": sample_forecast(case)})
+    verdict = VerdictEngine(_features(), CONFIG).combine(case, {"forecast": sample_forecast(case)}).details()
     assert not any("nothing was checked" in reason["text"] for reason in verdict["reasons"])
 
 
@@ -141,7 +183,16 @@ def _made_up_checks() -> dict:
 
 def _made_up_verdict(checks: dict) -> dict:
     features = [_MadeUp(name, rows) for name, rows in checks.items()] + [Forecast(POLICY, CONFIG)]
-    return VerdictEngine(features, CONFIG).decide(sample_case(), {"benchmark_ai": {"expected_wealth": 1}})
+    return VerdictEngine(features, CONFIG).combine(sample_case(), {"benchmark_ai": {"expected_wealth": 1}}).details()
+
+
+def test_the_verdict_holds_the_very_check_objects_the_features_made():
+    checks = _made_up_checks()
+    features = [_MadeUp(name, rows) for name, rows in checks.items()] + [Forecast(POLICY, CONFIG)]
+    verdict = VerdictEngine(features, CONFIG).combine(sample_case(), {"benchmark_ai": {"expected_wealth": 1}})
+    held = verdict.checks()
+    for name in ("benchmark", "crime", "documents"):
+        assert [check for check in held if check.feature == name] == checks[name]   # the same objects
 
 
 def test_the_verdict_keeps_every_field_of_every_check():
@@ -188,7 +239,7 @@ def test_pay_taken_from_documents_is_added_as_a_forecast_check(parts):
     case, data = parts
     adjusted = {"ai_pay": 100_000, "documented_pay": 150_000, "year": 2025, "source_file": "tax.pdf",
                 "job": "COO", "ratio": 1.5}
-    verdict = VerdictEngine(_features(), CONFIG).decide(case, {**data, "pay_adjustments": [adjusted]})
+    verdict = VerdictEngine(_features(), CONFIG).combine(case, {**data, "pay_adjustments": [adjusted]}).details()
     pay = verdict["forecast"][1]
     assert (pay["feature"], pay["check"], pay["status"], pay["group"]) == (
         "forecast", "PAY_FROM_DOCUMENTS", "info", "Pay taken from his documents")

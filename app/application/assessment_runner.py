@@ -203,7 +203,7 @@ class AssessmentRunner:
         # 13. One verdict, and the report both front ends show
         step(13)
         try:
-            verdict = self.__engine.decide(case, {
+            verdict = self.__engine.combine(case, {
                 "research": clean_research if clean_research is not None else research,
                 "typologies": typologies, "crime_result": crime_result, "declaration": declaration,
                 "benchmark_input": bench_input, "benchmark_ai": bench_ai, "benchmark_findings": findings,
@@ -211,7 +211,7 @@ class AssessmentRunner:
                 "markets": partial.get("markets"), "evidence": evidence, "pay_adjustments": pay_adjustments,
                 "failed_step": stopped_at, "not_run": not_run, "notes": notes,
             })
-            report = self.__engine.report(verdict)
+            details = verdict.details()
         except (KeyError, TypeError, ValueError, ZeroDivisionError) as error:
             logger.exception("AssessmentRunner: the verdict could not be worked out")
             failed("Deciding the verdict", repr(error))
@@ -228,8 +228,8 @@ class AssessmentRunner:
             "forecast": forecast,
             "forecast_assessment": forecast_assessment,
             "evidence": evidence,
-            "verdict": verdict,
-            "report": report,
+            "verdict": details,
+            "report": verdict.report,
         }
 
     def __crime_categories(self) -> dict:

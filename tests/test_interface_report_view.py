@@ -21,9 +21,9 @@ def _report():
     feature = Forecast(POLICY, CONFIG)
     assessment = feature.run(case, {"forecast": forecast})
     engine = VerdictEngine([CrimeScan(POLICY), DocumentEvidence(POLICY), Benchmark(POLICY, CONFIG), feature], CONFIG)
-    verdict = engine.decide(case, {"forecast": forecast, "forecast_assessment": assessment,
-                                   "markets": forecast["markets"], "declaration": forecast["declaration"]})
-    return verdict, engine.report(verdict)
+    verdict = engine.combine(case, {"forecast": forecast, "forecast_assessment": assessment,
+                                    "markets": forecast["markets"], "declaration": forecast["declaration"]})
+    return verdict.details(), verdict.report
 
 
 def test_the_verdict_report_names_the_client_and_the_verdict():
