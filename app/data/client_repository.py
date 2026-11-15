@@ -1,8 +1,11 @@
 """ClientRepository: the client records, one per client."""
 
+import logging
 import os
 
 from app.data.json_repository import JsonRepository
+
+logger = logging.getLogger(__name__)
 
 
 class ClientRepository(JsonRepository):
@@ -16,11 +19,17 @@ class ClientRepository(JsonRepository):
         super().__init__(path, key_field)
 
     def save(self, record: dict) -> bool:
-        """Add the client, or replace the saved record with the same reference."""
+        """Add the client, or replace the saved record with the same reference. Returns False
+        (and leaves the file untouched) if the saved clients cannot be read, so records that
+        could not be read are never overwritten."""
         if not isinstance(record, dict) or self._key_field not in record:
             return False
         record = self.__standardise(record)
-        records = super().load()
+        try:
+            records = super().load()
+        except (OSError, ValueError) as error:
+            logger.error("ClientRepository.save: not saved, the existing records cannot be read: %r", error)
+            return False
         for position, existing in enumerate(records):
             if existing.get(self._key_field) == record[self._key_field]:
                 records[position] = record
@@ -30,7 +39,7 @@ class ClientRepository(JsonRepository):
         return self._write_all(records)
 
     def load(self) -> list[dict]:
-        """Every client, in the current layout."""
+        """Every client, in the current layout. Raises OSError or ValueError if the file cannot be read."""
         return [self.__standardise(record) for record in super().load()]
 
     def __standardise(self, record: dict) -> dict:
