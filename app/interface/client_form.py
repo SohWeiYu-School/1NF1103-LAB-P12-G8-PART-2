@@ -29,7 +29,7 @@ class ClientForm:
     The answers are collected in the saved layout and handed back as a ClientRecord.
     """
 
-    PAYMENT_METHODS = ["cash", "loan", "asset_sale"]
+    PAYMENT_METHODS: list[str] = ["cash", "loan", "asset_sale"]
 
     PEP_OPTIONS: list[str] = ["None", "Domestic PEP", "Foreign PEP", "International organisation PEP",
                               "Family member / close associate of a PEP"]
