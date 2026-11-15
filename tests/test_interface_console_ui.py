@@ -120,15 +120,16 @@ def test_read_number_and_read_year_give_none_for_what_cannot_be_read():
     assert ui.read_year("17") is None
 
 
-def test_keep_money_keeps_the_current_value_on_enter_and_reads_a_new_amount(monkeypatch):
-    """keep_money returns the current value unchanged on Enter (callers pass a number or ""),
-    and a float when a new amount is typed."""
-    typed = iter(["", "", "1,500,000"])
-    monkeypatch.setattr("builtins.input", lambda question="": next(typed))
-    ui = ConsoleUI()
+def test_keep_money_keeps_the_current_value_on_enter_and_reads_a_new_amount(capsys):
+    """keep_money returns the current value unchanged on Enter (a number, or None when there is no
+    amount yet: never ""), and a float when a new amount is typed."""
+    ask = _answers("", "", "abc", "-5", "1,500,000")
+    ui = ConsoleUI(read=ask)
     assert ui.keep_money("Price paid", 250000.0) == 250000.0
-    assert ui.keep_money("Price paid", "") == ""
-    assert ui.keep_money("Price paid", "") == 1500000.0
+    assert ui.keep_money("Price paid", None) is None
+    assert ui.keep_money("Price paid", None) == 1500000.0
+    assert ask.asked[0] == "Price paid [250000.0]: " and ask.asked[1] == "Price paid [None]: "
+    assert capsys.readouterr().out.count("[ERROR]") == 2
 
 
 def test_ask_count_takes_one_whole_number_and_refuses_ranges_and_text(capsys):

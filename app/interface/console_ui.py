@@ -290,7 +290,8 @@ class ConsoleUI:
                 return n
             self.show_error(f"Please enter a value between {minimum} and {maximum}.")
 
-    def keep_money(self, label: str, current: float | str) -> float | str:
+    def keep_money(self, label: str, current: float | None) -> float | None:
+        """Enter keeps the current amount; None means there is no amount yet (and stays None)."""
         while True:
             v = self.__read(f"{label} [{current}]: ").strip().replace(",", "")
             if not v:

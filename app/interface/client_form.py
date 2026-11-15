@@ -443,7 +443,7 @@ class ClientForm:
         asset["asset_type"]        = self.__ui.keep_words("Asset (e.g. Property - Condo)", asset.get("asset_type", ""), ConsoleUI.LABEL)
         asset["country"]           = self.__ui.keep_words("Country", asset.get("country", ""))
         asset["year_acquired"] = self.__ui.keep_int("Year acquired", asset.get("year_acquired", ""), 1940, this_year)
-        asset["price_paid"]    = self.__ui.keep_money("Price paid", asset.get("price_paid", ""))
+        asset["price_paid"]    = self.__ui.keep_money("Price paid", asset.get("price_paid"))
         while True:
             v = self.__ui.read_answer(f"Payment method {ClientForm.PAYMENT_METHODS} [{asset.get('payment_method', '')}]: ").strip().lower()
             if not v:
@@ -466,8 +466,8 @@ class ClientForm:
                 asset["sale_price"] = self.__ui.keep_money("Sale price", asset.get("sale_price") or 0)
                 break
             self.__ui.show_error(f"Enter a year between {bought} and {this_year}, 'none', or press Enter to keep.")
-        asset["current_declared_value"] = self.__ui.keep_money("Current value", asset.get("current_declared_value", ""))
-        asset["income_produced"]        = self.__ui.keep_money("Yearly income", asset.get("income_produced", ""))
+        asset["current_declared_value"] = self.__ui.keep_money("Current value", asset.get("current_declared_value"))
+        asset["income_produced"]        = self.__ui.keep_money("Yearly income", asset.get("income_produced"))
         while True:
             v = self.__ui.read_answer(f"Currency [{asset.get('currency', '')}]: ").strip().upper()
             if not v:
@@ -492,8 +492,8 @@ class ClientForm:
         claims = record.setdefault("claims", {})
         self.__ui.show("Press Enter to keep the existing value.")
 
-        claims["declared_net_worth"] = self.__ui.keep_money("Declared net worth (SGD)", claims.get("declared_net_worth", ""))
-        claims["expected_aum"]       = self.__ui.keep_money("Expected AUM (SGD)", claims.get("expected_aum", ""))
+        claims["declared_net_worth"] = self.__ui.keep_money("Declared net worth (SGD)", claims.get("declared_net_worth"))
+        claims["expected_aum"]       = self.__ui.keep_money("Expected AUM (SGD)", claims.get("expected_aum"))
 
         self.__ui.show(f"PEP status [{claims.get('pep_status', '')}]")
         if self.__ui.ask_yes_no("Change PEP status?"):

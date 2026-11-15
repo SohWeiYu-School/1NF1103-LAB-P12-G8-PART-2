@@ -51,6 +51,21 @@ def test_the_wealth_countries_are_changed_only_by_a_valid_list(monkeypatch, caps
     assert "Not changed. Countries must be letters only" in capsys.readouterr().out
 
 
+def test_enter_on_an_empty_amount_keeps_it_empty_and_a_typed_amount_is_kept(monkeypatch):
+    """An amount with no value yet stays None on Enter (never ""), so the edited record is valid."""
+    saved = sample_case()
+    saved["investments"][0]["price_paid"] = None
+    saved["claims"]["declared_net_worth"] = None
+    #       assets  edit  first  type  country  year  price  method  sold  value  income      currency
+    _type(monkeypatch, "3", "1", "1", "", "", "", "", "", "", "", "1,200,000", "", "y",
+          # declarations  net worth  AUM  PEP  countries  stop
+          "5", "", "", "n", "", "n")
+    edited = _form().edit_existing_client(ClientRecord.from_dict(saved))
+    assert edited.investments()[0].price_paid is None
+    assert edited.investments()[0].income_produced == 1_200_000
+    assert edited.claims.declared_net_worth is None
+
+
 def test_a_client_whose_saved_record_cannot_be_read_is_reported(monkeypatch, capsys):
     def find(client_ref):
         raise ValueError(f"Client {client_ref} could not be loaded because age must be between 18 and 120.")
