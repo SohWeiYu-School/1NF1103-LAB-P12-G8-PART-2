@@ -157,7 +157,7 @@ class CrimeScan(RiskAnalysis):
                 report = ResearchReport.from_dict(data, retrieved_at)
             except ValueError as error:
                 logger.warning("CrimeScan: research report %s cannot be read: %s", rid, error)
-                self.__warnings.append(f"Removed {rid}: the report could not be read ({error}).")
+                self.__warnings.append(f"Removed {rid}: the report could not be read.")
                 continue
 
             if report.url not in api_urls:
@@ -278,7 +278,7 @@ class CrimeScan(RiskAnalysis):
             return Typology.from_dict(data)
         except ValueError as error:
             logger.warning("CrimeScan: typology %s cannot be read: %s", typ_id, error)
-            self.__warnings.append(f"Typology '{typ_id}': dropped — it could not be read ({error}).")
+            self.__warnings.append(f"Typology '{typ_id}': dropped — it could not be read.")
             return None
 
     def __domain_is_trusted(self, url: str, trusted_domains: list[str]) -> bool:
@@ -346,120 +346,6 @@ class CrimeScan(RiskAnalysis):
             category = self.__categorise_match(core_fired, core, supporting_fired)
             matches.append(MatchResult(typology, core_fired, supporting_fired, category))
         return matches
-
-    def __to_iso(self, value: str | None, warnings: list[str]) -> str | None:
-        """Convert a country name or code to ISO 3166-1 alpha-2. Pure, no I/O.
-
-        - None/empty → None (no warning)
-        - Already 2 uppercase letters → return as-is
-        - Lookup in CrimeScan.__COUNTRY_TO_ISO (case-insensitive) → return code
-        - 2 letters, not uppercase → uppercase (e.g. "sg" → "SG")
-        - Unrecognized → keep as-is + warning
-        """
-        if value is None:
-            return None
-        stripped = str(value).strip()
-        if not stripped:
-            return None
-        if len(stripped) == 2 and stripped.isalpha() and stripped.isupper():
-            return stripped
-        lookup = CrimeScan.__COUNTRY_TO_ISO.get(stripped.lower())
-        if lookup:
-            return lookup
-        if len(stripped) == 2 and stripped.isalpha():
-            return stripped.upper()
-        warnings.append(f"Unknown country '{stripped}' — could not convert to ISO-2.")
-        return stripped
-
-    def _safe_int(self, value: int | float | str | None, default: int | None = None) -> int | None:
-        """Convert value to int if possible. Returns default on None or failure. Pure."""
-        if value is None:
-            return default
-        if isinstance(value, int):
-            return value
-        if isinstance(value, float):
-            return int(value)
-        if isinstance(value, str):
-            try:
-                return int(value.strip())
-            except ValueError:
-                return default
-        return default
-
-    def _prepare_case(self, record: dict) -> tuple[dict, list[str]]:
-        """Normalize a client record for typology matching. Pure function.
-
-        Returns (normalized_record, warnings).
-
-        1. Coerces age, career_start_year to int.
-        2. Converts country/country_of_residence to ISO-2.
-        3. Builds all_jurisdictions: sorted deduplicated list of ISO-2 codes from
-           country, country_of_residence, wealth_countries, career_timeline,
-           asset_timeline, and declarations.wealth_countries.
-        4. Extracts declared_net_worth_sgd from whichever location has it.
-        5. Extracts reference_year from record or date fields.
-        Does NOT mutate the original record or any sub-dicts.
-        """
-        warnings: list[str] = []
-        out = {**record}
-
-        out["age"] = self._safe_int(record.get("age"))
-        out["career_start_year"] = self._safe_int(record.get("career_start_year"))
-        out["country"] = self.__to_iso(record.get("country"), warnings)
-        out["country_of_residence"] = self.__to_iso(record.get("country_of_residence"), warnings)
-
-        # declared_net_worth_sgd — check multiple possible field locations
-        raw_nw = record.get("declared_net_worth_sgd")
-        if raw_nw is None:
-            raw_nw = (record.get("declarations") or {}).get("declared_net_worth")
-        if raw_nw is None:
-            raw_nw = (record.get("client_declarations") or {}).get("declared_net_worth")
-        out["declared_net_worth_sgd"] = self._safe_int(raw_nw)
-
-        # reference_year — explicit field, or extracted from date fields
-        ref = record.get("reference_year")
-        if ref is None:
-            date_str = (
-                record.get("date_profile_created")
-                or (record.get("client_profile") or {}).get("date_profile_created")
-                or (record.get("declarations") or {}).get("date_declared")
-                or (record.get("client_declarations") or {}).get("date_declared")
-            )
-            if date_str:
-                ref = self._safe_int(str(date_str)[:4])
-        out["reference_year"] = self._safe_int(ref)
-
-        all_iso: set[str] = set()
-
-        if out["country"]:
-            all_iso.add(out["country"])
-        if out["country_of_residence"]:
-            all_iso.add(out["country_of_residence"])
-
-        # Top-level wealth_countries (golden case format)
-        for c in record.get("wealth_countries", []):
-            code = self.__to_iso(c, warnings)
-            if code:
-                all_iso.add(code)
-
-        for entry in record.get("career_timeline", []):
-            code = self.__to_iso(entry.get("country"), warnings)
-            if code:
-                all_iso.add(code)
-
-        for entry in record.get("asset_timeline", []):
-            code = self.__to_iso(entry.get("country"), warnings)
-            if code:
-                all_iso.add(code)
-
-        decl = record.get("declarations", {})
-        for c in (decl or {}).get("wealth_countries", []):
-            code = self.__to_iso(c, warnings)
-            if code:
-                all_iso.add(code)
-
-        out["all_jurisdictions"] = sorted(all_iso)
-        return out, warnings
 
     def normalise_jurisdictions(self, declaration: Declaration) -> tuple[Declaration, list[str]]:
         """The crime scan's declaration with every jurisdiction as an ISO-2 code.

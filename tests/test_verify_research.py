@@ -184,6 +184,7 @@ def test_unreadable_report_removed_not_crashed():
     assert [r.report_id for r in reports] == ["R1"]
     assert any("R2" in w and "could not be read" in w for w in warnings)
     assert any("?" in w and "could not be read" in w for w in warnings)
+    assert "Removed R2: the report could not be read." in warnings     # plain words, no raw error text
 
 
 # ---------------------------------------------------------------------------

@@ -353,3 +353,4 @@ def test_unreadable_typology_dropped_not_crashed():
     assert [t.typology_id for t in cleaned] == ["T1"]
     assert any("'T2'" in w and "could not be read" in w for w in warnings)
     assert any("'unknown'" in w and "could not be read" in w for w in warnings)
+    assert "Typology 'T2': dropped — it could not be read." in warnings   # plain words, no raw error text
