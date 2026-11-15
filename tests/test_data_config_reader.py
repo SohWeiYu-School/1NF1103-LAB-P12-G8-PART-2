@@ -13,6 +13,11 @@ def test_the_real_config_folder_has_no_problems():
     assert ConfigReader().problems() == []
 
 
+def test_file_names_lists_the_policy_then_the_vocabulary_and_each_has_required_keys():
+    assert ConfigReader.FILE_NAMES == ("policy", "vocabulary")
+    assert all(name in ConfigReader.REQUIRED for name in ConfigReader.FILE_NAMES)
+
+
 def test_read_returns_the_file_contents(tmp_path):
     _write(tmp_path, "policy", {"policy_version": "1"})
     assert ConfigReader(str(tmp_path)).read("policy") == {"policy_version": "1"}

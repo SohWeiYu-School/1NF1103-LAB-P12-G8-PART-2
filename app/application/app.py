@@ -72,7 +72,8 @@ class App:
 
         # Settings (read by the Data Manager, held by a Domain Model object)
         self.__config_reader: ConfigReader = ConfigReader(os.path.join(root, "config"))
-        self.__config: Config = Config(self.__config_reader.read("policy"), self.__config_reader.read("vocabulary"))
+        policy_file, vocabulary_file = (self.__config_reader.read(name) for name in ConfigReader.FILE_NAMES)
+        self.__config: Config = Config(policy_file, vocabulary_file)
         policy = self.__config.policy
 
         # Data Manager

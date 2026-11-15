@@ -12,6 +12,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 class ConfigReader:
     """Reads config/<name>.json. Each file is read once and kept."""
 
+    FILE_NAMES: tuple[str, ...] = ("policy", "vocabulary")     # the files App needs, in this order
     REQUIRED: dict[str, tuple[str, ...]] = {
         "vocabulary": ("signal_codes", "document_codes", "source_types", "crime_categories"),
         "policy": ("policy_version", "tolerance", "fit", "review_interval_months", "routing", "forecasting"),
