@@ -507,3 +507,56 @@ def test_a_failed_local_read_is_a_failed_sync_through_the_app(app, tmp_path):
     _damage(tmp_path, "sow_cases.json")
     stats = app.sync_to_cloud()
     assert stats["cases_synced"] == 0 and stats["errors"]
+
+
+def _app_with_damaged_policy(tmp_path, monkeypatch):
+    import shutil
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    root = tmp_path / "root"
+    shutil.copytree("config", root / "config")
+    (root / "config" / "policy.json").write_text("{broken")
+    return root
+
+
+def test_a_damaged_policy_is_logged_to_the_log_file_not_shown_on_the_terminal(tmp_path, monkeypatch, capsys):
+    import logging
+    root = _app_with_damaged_policy(tmp_path, monkeypatch)
+    root_logger = logging.getLogger()
+    saved_handlers, saved_level = root_logger.handlers[:], root_logger.level
+    root_logger.handlers = []                                  # a fresh process: nothing configured yet
+    try:
+        application = App(ai_caller=None, root=str(root), data_folder=str(tmp_path / "data"))
+        assert application.start([]) == 1
+        for handler in root_logger.handlers:
+            handler.flush()
+        log = (root / "logs" / "app.log").read_text(encoding="utf-8")
+        assert len(root_logger.handlers) == 1                  # start() did not add a second handler
+    finally:
+        for handler in root_logger.handlers:
+            handler.close()
+        root_logger.handlers, root_logger.level = saved_handlers, saved_level
+    shown = capsys.readouterr()
+    assert App.SETTINGS_UNAVAILABLE in shown.out
+    for text in (shown.out, shown.err):
+        assert "policy.json" not in text and "JSONDecodeError" not in text and "Errno" not in text
+    assert "policy.json" in log and "JSONDecodeError" in log          # the real error is in the log
+    assert log.count("Config file") == 1                              # and written once
+
+
+def test_an_app_with_broken_settings_says_so_and_refuses_to_assess(tmp_path, monkeypatch):
+    root = _app_with_damaged_policy(tmp_path, monkeypatch)
+    application = App(ai_caller=fake_ai.caller, root=str(root), data_folder=str(tmp_path / "data"))
+    assert application.settings_ok() is False
+    case_path = tmp_path / "case.json"
+    case_path.write_text(json.dumps(sample_case()))
+    with pytest.raises(RuntimeError, match="settings could not be loaded"):
+        application.assess(sample_case())
+    with pytest.raises(RuntimeError, match="settings could not be loaded"):
+        application.run_case_file(str(case_path))
+    with pytest.raises(RuntimeError, match="settings could not be loaded"):
+        application.assess_client_record(ClientRecord.from_dict(sample_case()))
+
+
+def test_an_app_with_good_settings_reports_settings_ok(app):
+    assert app.settings_ok() is True

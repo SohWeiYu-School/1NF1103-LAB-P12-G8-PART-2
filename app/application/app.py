@@ -62,6 +62,7 @@ class App:
                                       "google_genai", "hpack", "pymongo")
     # What the user is told when the settings files cannot be loaded (the real error goes to the log).
     SETTINGS_UNAVAILABLE: str = "The app's settings could not be loaded. Please contact your administrator."
+    LOG_HANDLER_NAME: str = "app_log_file"
     CLIENT_COLLECTION: str = "client_cases"
     ASSESSMENT_COLLECTION: str = "ai_assessments"
     # What the user is told when saved records cannot be read (the real error goes to the log).
@@ -70,8 +71,11 @@ class App:
 
     def __init__(self, ai_caller: Callable[[str, dict, dict], str | None] | None = None,
                  root: str = ROOT_DIR, data_folder: str = "data") -> None:
-        load_dotenv(os.path.join(root, ".env"))
         self.__root: str = root
+        # Settings errors are logged while App is built, so the log file must exist before that.
+        if not logging.getLogger().handlers:
+            self.__configure_logging()
+        load_dotenv(os.path.join(root, ".env"))
         data_dir = data_folder if os.path.isabs(data_folder) else os.path.join(root, data_folder)
         database_dir = os.path.join(data_dir, "local database")
 
@@ -133,6 +137,15 @@ class App:
     @property
     def config(self) -> Config:
         return self.__config
+
+    def settings_ok(self) -> bool:
+        """False when the settings files could not be loaded: no assessment can then be trusted."""
+        return self.__settings_ok
+
+    def __require_settings(self) -> None:
+        """Raises RuntimeError(SETTINGS_UNAVAILABLE) instead of running on empty rules."""
+        if not self.__settings_ok:
+            raise RuntimeError(App.SETTINGS_UNAVAILABLE)
 
     def steps(self) -> list[str]:
         """The steps of an assessment, in the order they are announced."""
@@ -301,6 +314,7 @@ class App:
         """Run one assessment. Returns the result, or None if a critical step failed.
         on_failure defaults to App's own rule (CRITICAL_STEPS). show_failures=False keeps
         failed steps off the terminal (the web app shows them in the report instead)."""
+        self.__require_settings()
         if on_failure is None:
             on_failure = self.__handle_failure if show_failures else self.__handle_failure_quietly
         return self.__runner.run(case, supporting_documents, on_step, on_failure)
@@ -308,6 +322,7 @@ class App:
     def assess_client_record(self, record: ClientRecord) -> Verdict | None:
         """The command line's assessment of a saved client: prepare, run, save, show.
         Returns the Verdict, or None if no assessment could be made."""
+        self.__require_settings()
         case = self.__prepare_case(record)
         if case is None:
             return None
@@ -381,6 +396,7 @@ class App:
 
     def run_case_file(self, path: str) -> bool:
         """Assess a case file (the same assessment as the menu). False if it could not be assessed."""
+        self.__require_settings()
         case = self.__case_files.load(path)
         if case is not None and not self.__case_files.is_forecasting_case(case):
             self.__ui.show(f"\n{os.path.basename(path)}: not in the forecasting format "
@@ -707,12 +723,16 @@ class App:
         return verdict
 
     def __configure_logging(self) -> None:
-        """Send all logging to logs/app.log. Nothing goes to the console."""
+        """Send all logging to logs/app.log. Nothing goes to the console. Done once: a second
+        call keeps the handler it made (no duplicate lines)."""
+        root_logger = logging.getLogger()
+        if any(getattr(handler, "name", None) == App.LOG_HANDLER_NAME for handler in root_logger.handlers):
+            return
         log_dir = os.path.join(self.__root, "logs")
         os.makedirs(log_dir, exist_ok=True)
         handler = logging.FileHandler(os.path.join(log_dir, "app.log"), encoding="utf-8")
+        handler.set_name(App.LOG_HANDLER_NAME)
         handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
-        root_logger = logging.getLogger()
         root_logger.setLevel(logging.DEBUG)
         root_logger.handlers.clear()
         root_logger.addHandler(handler)
