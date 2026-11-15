@@ -14,10 +14,10 @@ class ConsoleUI:
     was wrong. Each keep_ method offers the current value and keeps it on a blank answer.
     """
 
-    LINE = "-" * 72
-    LETTERS = " '.-"                    # allowed besides letters: names, nationality, countries
-    LABEL   = " '.-&/,()%#0123456789"     # job titles, industries, employers, asset descriptions
-    MAX_EMPLOYEES = 10_000_000
+    LINE: str = "-" * 72
+    LETTERS: str = " '.-"                    # allowed besides letters: names, nationality, countries
+    LABEL: str   = " '.-&/,()%#0123456789"     # job titles, industries, employers, asset descriptions
+    MAX_EMPLOYEES: int = 10_000_000
 
     def __init__(self, read: Callable[[str], str] | None = None,
                  write: Callable[[str], None] | None = None) -> None:
@@ -229,7 +229,7 @@ class ConsoleUI:
                 return v
             self.show_error(f"Enter at least {min_length} characters, or press Enter to keep.")
 
-    def keep_int(self, label: str, current, minimum: int, maximum: int):
+    def keep_int(self, label: str, current: int | str | None, minimum: int, maximum: int) -> int | str | None:
         while True:
             v = self.__read(f"{label} [{current}]: ").strip()
             if not v:
@@ -275,7 +275,7 @@ class ConsoleUI:
                 return answer
             self.show_error(self.__words_error(allowed))
 
-    def keep_words(self, label: str, current, allowed: str = LETTERS, min_length: int = 2) -> str:
+    def keep_words(self, label: str, current: str, allowed: str = LETTERS, min_length: int = 2) -> str:
         while True:
             v = self.__read(f"{label} [{current}]: ").strip()
             if not v:
@@ -319,7 +319,7 @@ class ConsoleUI:
             self.show_error("Please enter the number of employees as a single whole number, e.g. 2500 "
                        "(no ranges or text).")
 
-    def keep_count(self, label: str, current):
+    def keep_count(self, label: str, current: int | str | None) -> int | str | None:
         while True:
             v = self.__read(f"{label} [{current}]: ").strip()
             if not v:
