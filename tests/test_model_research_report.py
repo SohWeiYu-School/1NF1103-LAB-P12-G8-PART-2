@@ -70,3 +70,10 @@ def test_impossible_values_are_rejected_with_a_clear_message(bad):
 def test_a_report_that_is_not_an_object_is_rejected():
     with pytest.raises(ValueError, match="JSON object"):
         ResearchReport.from_dict(["R1"])
+
+
+def test_an_empty_or_blank_quote_is_never_found():
+    report = ResearchReport("R1", "https://mas.gov.sg/x", ["Shell companies are often used."])
+    assert not report.contains_quote("")
+    assert not report.contains_quote("   ")
+    assert not report.contains_quote(None)

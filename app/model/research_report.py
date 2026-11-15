@@ -79,8 +79,11 @@ class ResearchReport:
         return urlparse(self.__url).netloc.lower()
 
     def contains_quote(self, quote: str) -> bool:
-        """True if the quote appears in an excerpt, ignoring case, spacing and curly quote marks."""
+        """True if the quote appears in an excerpt, ignoring case, spacing and curly quote marks.
+        An empty or blank quote proves nothing, so it is never found."""
         wanted = self.__normalise(quote)
+        if not wanted:
+            return False
         return any(wanted in self.__normalise(excerpt) for excerpt in self.__excerpts)
 
     def to_dict(self) -> dict:

@@ -69,6 +69,16 @@ def test_a_typology_whose_quote_is_not_in_its_report_is_dropped():
     assert any("dropped" in warning for warning in scan.warnings())
 
 
+def test_an_empty_or_blank_quote_is_not_verified():
+    scan = CrimeScan(POLICY)
+    clean = scan.verify_research(fake_ai.research())
+    typologies = fake_ai.typologies()["sector_typologies"]
+    for blank in ("", "   "):
+        empty = [{**typologies[0], "source_quotes": [{"report_id": "R1", "quote": blank}]}]
+        assert scan.verify_typology_sources(empty, clean) == []
+    assert any("dropped" in warning for warning in scan.warnings())
+
+
 def test_without_research_the_typologies_are_read_unchecked():
     scan = CrimeScan(POLICY)
     reply = fake_ai.typologies()["sector_typologies"]
