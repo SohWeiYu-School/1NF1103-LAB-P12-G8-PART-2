@@ -292,3 +292,26 @@ def test_the_new_client_form_has_no_date_box_because_assessments_are_dated_today
     _, _, client = web
     page = client.get("/client/new").get_data(as_text=True)
     assert 'name="client.current_date"' not in page
+
+
+def test_an_assessment_page_shows_the_client_name_saved_with_it(web):
+    application, _, client = web
+    record = sample_case()
+    application.clients().save(record)
+    application.assessments().save({"client_ref": record["client_ref"], "assessment_id": "A-1",
+                                    "assessed_at": "2026-11-14T10:00:00+00:00", "outcome": "RISKY",
+                                    "case": {"name": "Name At The Time"}})
+    application.clients().save({**record, "name": "Renamed Client"})
+    page = client.get("/assessment/A-1").get_data(as_text=True)
+    assert "Name At The Time" in page
+    assert "Renamed Client" not in page
+
+
+def test_an_older_assessment_without_a_snapshot_shows_the_current_client_name(web):
+    application, _, client = web
+    record = sample_case()
+    application.clients().save(record)
+    application.assessments().save({"client_ref": record["client_ref"], "assessment_id": "A-1",
+                                    "assessed_at": "2026-11-14T10:00:00+00:00", "outcome": "RISKY"})
+    page = client.get("/assessment/A-1").get_data(as_text=True)
+    assert record["name"] in page

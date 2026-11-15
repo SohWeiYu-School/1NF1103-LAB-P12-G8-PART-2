@@ -675,7 +675,11 @@ class WebApp:
         saved = self.__app.assessments().find(assessment_id)
         if saved is None:
             abort(404)
-        record = self.get_record(saved["client_ref"]) or {"client_ref": saved["client_ref"], "name": saved["client_ref"]}
+        live = self.get_record(saved["client_ref"]) or {"client_ref": saved["client_ref"], "name": saved["client_ref"]}
+        snapshot = saved.get("case") if isinstance(saved.get("case"), dict) else {}
+        
+        # show the client as they were when this assessment ran; older assessments have no snapshot
+        record = {**live, "name": snapshot.get("name") or live.get("name", "")}
         typologies = (saved.get("crime_scan") or {}).get("typologies", {})
         typology_list = typologies.get("sector_typologies") if isinstance(typologies, dict) else None
         archive_log = saved.get("archive_log") or []
