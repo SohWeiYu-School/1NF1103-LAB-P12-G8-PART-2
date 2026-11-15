@@ -22,6 +22,7 @@ from app.data.cloud_sync import CloudSync
 from app.data.config_reader import ConfigReader
 from app.data.document_store import DocumentStore
 from app.data.mongo_repository import MongoRepository
+from app.data.repository import Repository
 from app.interface.case_builder import CaseBuilder
 from app.interface.client_form import ClientForm
 from app.interface.console_ui import ConsoleUI
@@ -75,7 +76,7 @@ class App:
         policy = self.__config.policy
 
         # Data Manager
-        self.__clients: ClientRepository = ClientRepository(os.path.join(database_dir, "sow_cases.json"))
+        self.__clients: Repository = ClientRepository(os.path.join(database_dir, "sow_cases.json"))
         self.__assessments: AssessmentRepository = AssessmentRepository(
             os.path.join(database_dir, "ai_assessments.json"))
         # Document ids are paths from the folder that holds the data folder ("data/documents/...").
@@ -118,7 +119,8 @@ class App:
         """The steps of an assessment, in the order they are announced."""
         return list(AssessmentRunner.STEPS)
 
-    def today(self) -> str:
+    @staticmethod
+    def today() -> str:
         """Every assessment is dated today (the command line and the web app both use this)."""
         return datetime.now().date().isoformat()
 
@@ -203,7 +205,7 @@ class App:
                 if record is not None:
                     self.__assess_if_allowed(record)
             elif choice == "2":
-                record = self.new_client_from_documents()
+                record = self.__new_client_from_documents()
                 if record is not None:
                     self.__assess_if_allowed(record)
             elif choice == "3":
@@ -237,7 +239,7 @@ class App:
 
     # ----- assessing ---------------------------------------------------------------------------
 
-    def prepare_case(self, record: ClientRecord) -> dict | None:
+    def __prepare_case(self, record: ClientRecord) -> dict | None:
         """The case to assess, built from a saved client record. The officer is only asked for
         what cannot be read from the record. None if no usable case could be made."""
         case, missing = self.read_case(record)
@@ -271,7 +273,7 @@ class App:
     def assess_client_record(self, record: ClientRecord) -> Verdict | None:
         """The command line's assessment of a saved client: prepare, run, save, show.
         Returns the Verdict, or None if no assessment could be made."""
-        case = self.prepare_case(record)
+        case = self.__prepare_case(record)
         if case is None:
             return None
         self.__ui.show_message(f"\nAssessing {case['client_ref']}: documents, crime scan, forecast "
@@ -399,7 +401,7 @@ class App:
             logger.error("App.save_client: could not save the client record %s", record.client_ref)
         return saved
 
-    def new_client_from_documents(self) -> ClientRecord | None:
+    def __new_client_from_documents(self) -> ClientRecord | None:
         """Read a folder of documents, pre-fill the client, ask for what is missing, show a
         summary to check, then save. Returns the saved record (to assess) or None."""
         # 1. Which folder
@@ -431,7 +433,7 @@ class App:
         try:
             document_record, _ = builder.build(extracted, client_ref)
         except ValueError as error:
-            logger.error("App.new_client_from_documents: the AI's reading is not a possible record: %r", error)
+            logger.error("App.__new_client_from_documents: the AI's reading is not a possible record: %r", error)
             self.__ui.show_error(f"The details read from the documents cannot be used because {error}.")
             if not self.__ui.ask_yes_no("Type the details in yourself?"):
                 return None
@@ -533,7 +535,7 @@ class App:
 
     # ----- the objects the web app reaches through App ---------------------------------------
 
-    def clients(self) -> ClientRepository:
+    def clients(self) -> Repository:
         return self.__clients
 
     def assessments(self) -> AssessmentRepository:
@@ -582,22 +584,22 @@ class App:
                        self.__config.vocabulary),
             self.__documents, cache)
 
-    def __handle_failure(self, step: str, reason: str) -> bool:
+    def __handle_failure(self, step: str, error: str) -> bool:
         """Decide what happens when a step of an assessment fails. Returns True to carry on
         without the step, False to stop the assessment."""
         if step in App.CRITICAL_STEPS:
-            logger.error("App: critical step failed, stopping the assessment: %s (%s)", step, reason)
-            self.__ui.show_error(f"{step} failed, so no verdict can be given: {reason}")
+            logger.error("App: critical step failed, stopping the assessment: %s (%s)", step, error)
+            self.__ui.show_error(f"{step} failed, so no verdict can be given: {error}")
             return False
-        logger.warning("App: step failed, carrying on without it: %s (%s)", step, reason)
-        self.__ui.show_message(f"   ! {step} could not be completed and is left out: {reason}")
+        logger.warning("App: step failed, carrying on without it: %s (%s)", step, error)
+        self.__ui.show_message(f"   ! {step} could not be completed and is left out: {error}")
         return True
 
-    def __handle_failure_quietly(self, step: str, reason: str) -> bool:
+    def __handle_failure_quietly(self, step: str, error: str) -> bool:
         """The same decision as __handle_failure, written to the log only."""
         critical = step in App.CRITICAL_STEPS
         logger.log(logging.ERROR if critical else logging.WARNING,
-                   "App: step failed (%s): %s (%s)", "stopping" if critical else "carrying on", step, reason)
+                   "App: step failed (%s): %s (%s)", "stopping" if critical else "carrying on", step, error)
         return not critical
 
     def __assess_if_allowed(self, record: ClientRecord) -> None:

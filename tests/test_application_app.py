@@ -33,6 +33,12 @@ def test_app_creates_every_manager_and_shares_one_config(app):
     assert isinstance(app.runner(), AssessmentRunner)
 
 
+def test_every_assessment_is_dated_today_without_an_app():
+    """today() reads no App state, so it is a static method: the same date for every App."""
+    import datetime
+    assert App.today() == datetime.date.today().isoformat()
+
+
 def test_the_document_reader_is_ready_as_soon_as_the_app_is_built(app):
     """App creates its DocumentAI in __init__, so documents can be read before any assessment."""
     assert app.read_documents([]) == (None, [])
