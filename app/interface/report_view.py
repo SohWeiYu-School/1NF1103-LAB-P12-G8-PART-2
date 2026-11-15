@@ -2,6 +2,7 @@
 
 import os
 import textwrap
+from typing import Any
 
 from app.interface.console_ui import ConsoleUI
 from app.model.client_record import ClientRecord
@@ -15,16 +16,16 @@ class ReportView:
     past assessments. It only arranges text; the ConsoleUI it is handed does the printing.
     """
 
-    REPORT_WIDTH = 96
-    _CRIME_SECTION_TITLE = "Crime - known patterns for his industry"
-    _CRIME_INDICATOR_LABEL = {
+    REPORT_WIDTH: int = 96
+    _CRIME_SECTION_TITLE: str = "Crime - known patterns for his industry"
+    _CRIME_INDICATOR_LABEL: dict[str, str] = {
         "counterparty_unnamed":          "Money from unnamed counterparty",
         "gift_or_inheritance_unnamed":   "Gift or inheritance from unnamed person",
         "source_contradicts_occupation": "Source of wealth contradicts occupation",
         "unvalued_source_present":       "Source with no declared amount",
         "related_party_transaction":     "Related party transaction",
     }
-    _CRIME_CATEGORY_LABEL = {
+    _CRIME_CATEGORY_LABEL: dict[str, str] = {
         "critical":    "CRITICAL MATCH",
         "high":        "HIGH MATCH",
         "medium":      "MEDIUM MATCH",
@@ -32,10 +33,10 @@ class ReportView:
         "weak_signal": "WEAK SIGNAL",
         "no_match":    "NO MATCH",
     }
-    FIELD_NAMES = {"expected_aum": "Expected AUM", "pep_status": "PEP Status",
+    FIELD_NAMES: dict[str, str] = {"expected_aum": "Expected AUM", "pep_status": "PEP Status",
                    "current_declared_value": "Current Value (SGD)", "income_produced": "Yearly Income (SGD)"}
     SOURCE_TAGS: dict[str, str] = {"documents": "[DOC]   ", "edited": "[EDITED]", "entered": "[YOU]   ", "blank": "[ -- ]  "}
-    OUTCOME_LABELS = {
+    OUTCOME_LABELS: dict[str, str] = {
         "PASSED": "PASSED",
         "MANUAL_REVIEW": "MANUAL REVIEW",
         "RISKY": "RISKY",
@@ -157,7 +158,7 @@ class ReportView:
     def _field_name(self, key: str) -> str:
         return ReportView.FIELD_NAMES.get(key, key.replace("_", " ").title())
 
-    def _field_value(self, key: str, value) -> str:
+    def _field_value(self, key: str, value: Any) -> str:
         """A saved value as a person would write it: 6,000,000 not 6000000.0, Singapore not ['Singapore']."""
         if key == "end_year" and value in (None, ""):
             return "present (current job)"
