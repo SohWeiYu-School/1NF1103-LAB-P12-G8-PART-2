@@ -5,6 +5,7 @@ import logging
 import certifi
 from gridfs import GridFS
 from pymongo import MongoClient
+from pymongo.collection import Collection
 from pymongo.errors import PyMongoError
 
 from app.data.database_repository import DatabaseRepository
@@ -64,5 +65,5 @@ class MongoRepository(DatabaseRepository):
             logger.error("MongoRepository: could not store file %s: %s", name, repr(error))
             return ""
 
-    def __collection(self):
+    def __collection(self) -> Collection:
         return self.__client[MongoRepository.DB_NAME][self._collection_name]
