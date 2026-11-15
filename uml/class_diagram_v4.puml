@@ -40,7 +40,7 @@ package "Data Manager (app/data)" {
     {static} -__fingerprint(record : dict) : str
   }
   class ConfigReader {
-    -__folder : str = "config"
+    -__folder : str = ".../config"
     +FILE_NAMES : tuple[str, ...] = ("policy", "vocabulary") «const»
     --
     +__init__(folder : str = os.path.join(ROOT_DIR, "config"))
@@ -49,10 +49,10 @@ package "Data Manager (app/data)" {
   }
   abstract class DatabaseRepository {
     #_collection_name : str = ""
-    #_key_field : str = "client_ref"
+    #_key_field : str = ""
     #_uri : str = ""
     --
-    +__init__(collection_name : str, key_field : str, uri : str)
+    +__init__(collection_name : str = "", key_field : str = "", uri : str = "")
     +save(record : dict) : bool
     +load() : list[dict]
     +find(ref : str) : dict | None
@@ -79,8 +79,8 @@ package "Data Manager (app/data)" {
     +supported_types() : list[str]
   }
   class DocumentStore {
-    -__folder : str = "data/documents"
-    -__reader_factory : DocumentReaderFactory = None
+    -__folder : str = ".../data/documents"
+    -__reader_factory : DocumentReaderFactory = DocumentReaderFactory()
     --
     +__init__(folder : str = "data/documents", root : str = ROOT_DIR)
     +upload(file_path : str) : str | None
@@ -103,10 +103,10 @@ package "Data Manager (app/data)" {
   }
   abstract class JsonRepository {
     #_path : str = ""
-    #_key_field : str = "client_ref"
+    #_key_field : str = ""
     +DATA_DIR : str = ".../data/local database" «const»
     --
-    +__init__(path : str, key_field : str)
+    +__init__(path : str = "", key_field : str = "")
     {abstract} +save(record : dict) : bool
     +load() : list[dict]
     +find(ref : str) : dict | None
@@ -116,7 +116,7 @@ package "Data Manager (app/data)" {
     -__client : MongoClient | None = None
     +DB_NAME : str = "sow_risk_db" «const»
     --
-    +__init__(collection_name : str, key_field : str, uri : str)
+    +__init__(collection_name : str = "", key_field : str = "", uri : str = "")
     #_connect() : bool
     #_upsert(key : str, record : dict) : bool
     #_fetch(query : dict) : list[dict]
@@ -150,7 +150,7 @@ package "Data Manager (app/data)" {
 
 package "IO Manager (app/interface)" {
   class CaseBuilder {
-    -__ui : ConsoleUI = None
+    -__ui : ConsoleUI = ConsoleUI()
     --
     +__init__(ui : ConsoleUI | None = None, case_schema : dict | None = None)
     +build(record : ClientRecord) : dict | None
@@ -161,7 +161,7 @@ package "IO Manager (app/interface)" {
     -__year_or_ask(value : object, question : str, minimum : int | None = None, maximum : int | None = None) : int
   }
   class ClientForm {
-    -__ui : ConsoleUI = None
+    -__ui : ConsoleUI = ConsoleUI()
     +PAYMENT_METHODS : list[str] = [...] «const»
     +PEP_OPTIONS : list[str] = [...] «const»
     --
@@ -179,19 +179,19 @@ package "IO Manager (app/interface)" {
     -__edit_sow_declaration(record : dict) : None
   }
   class ConsoleUI {
-    -__read : Callable[[str], str] = input
-    -__write : Callable[[str], None] = print
+    -__read : Callable[[str], str] = lambda question: input(...)
+    -__write : Callable[[str], None] = lambda text: print(...)
     +LINE : str = "-" * 72 «const»
     +LETTERS : str = " '.-" «const»
     +MAX_EMPLOYEES : int = 10_000_000 «const»
     --
     +__init__(read : Callable[[str], str] | None = None, write : Callable[[str], None] | None = None)
-    +show(text : str) : None
+    +show(text : str = "") : None
     +show_message(text : str) : None
     +show_error(text : str) : None
     +show_app_menu() : str
     +show_step(number : int, total : int, label : str) : None
-    +show_ai_unavailable(feature : str) : None
+    +show_ai_unavailable(feature : str = "Assessment") : None
     +show_rate_limit_error(seconds_left : int) : None
     +show_sync_result(stats : dict) : None
     +read_answer(question : str) : str
@@ -219,7 +219,7 @@ package "IO Manager (app/interface)" {
     +record(user_key : str) : None
   }
   class ReportView {
-    -__ui : ConsoleUI = None
+    -__ui : ConsoleUI = ConsoleUI()
     -__width : int = 96
     +FIELD_NAMES : dict = {...} «const»
     +OUTCOME_LABELS : dict = {...} «const»
@@ -240,7 +240,7 @@ package "IO Manager (app/interface)" {
   class WebApp {
     -__app : App | None = None
     -__limiter : RateLimiter | None = None
-    -__flask : Flask = Flask(__name__)
+    -__flask : Flask = Flask(...)
     -__jobs : dict[str, dict] = {}
     --
     +__init__(app : App | None = None, limiter : RateLimiter | None = None)
@@ -333,7 +333,7 @@ package "AI Manager (app/ai)" {
     -__add_report_ids(data : dict) : dict
   }
   class ResponseCache {
-    -__folder : str = "data/cache"
+    -__folder : str = ".../data/cache"
     --
     +__init__(folder : str = "data/cache")
     +get(kind : str, payload : dict, model : str, prompt_version : str = "") : dict | None
@@ -357,20 +357,20 @@ package "AI Manager (app/ai)" {
 package "Application (app/application)" {
   class App {
     -__ai_caller : Callable | None = None
-    -__config : Config = None
-    -__ui : ConsoleUI = None
-    -__report_view : ReportView = None
-    -__client_form : ClientForm = None
-    -__case_builder : CaseBuilder = None
-    -__case_files : CaseFiles = None
-    -__limiter : RateLimiter = None
-    -__clients : Repository = None
-    -__assessments : AssessmentRepository = None
-    -__runner : AssessmentRunner = None
-    -__documents : DocumentStore = None
-    -__document_ai : DocumentAI = None
-    -__response_cache : ResponseCache = None
-    -__syncs : list[CloudSync] = []
+    -__config : Config = Config(...)
+    -__ui : ConsoleUI = ConsoleUI()
+    -__report_view : ReportView = ReportView(...)
+    -__client_form : ClientForm = ClientForm(...)
+    -__case_builder : CaseBuilder = CaseBuilder(...)
+    -__case_files : CaseFiles = CaseFiles(...)
+    -__limiter : RateLimiter = RateLimiter(...)
+    -__clients : Repository = ClientRepository(...)
+    -__assessments : AssessmentRepository = AssessmentRepository(...)
+    -__runner : AssessmentRunner = AssessmentRunner(...)
+    -__documents : DocumentStore = DocumentStore(...)
+    -__document_ai : DocumentAI = DocumentAI(...)
+    -__response_cache : ResponseCache = ResponseCache(...)
+    -__syncs : list[CloudSync] = [CloudSync(...), CloudSync(...)]
     +CRITICAL_STEPS : tuple[str, ...] = ("Deciding the verdict",) «const»
     --
     +__init__(ai_caller : Callable[[str, dict, dict], str | None] | None = None, root : str = ROOT_DIR, data_folder : str = "data")
@@ -394,8 +394,8 @@ package "Application (app/application)" {
     -__handle_failure(step : str, error : str) : bool
   }
   class AssessmentRunner {
-    -__verdict_engine : VerdictEngine = None
-    -__config : Config = None
+    -__verdict_engine : VerdictEngine = VerdictEngine(...)
+    -__config : Config = Config()
     +STEPS : tuple[str, ...] = (...) «const»
     --
     +__init__(config : Config | None = None, research_ai : ResearchAI | None = None, typology_ai : TypologyAI | None = None, benchmark_ai : BenchmarkAI | None = None, document_ai : DocumentAI | None = None, forecast_ai : ForecastAI | None = None, document_store : DocumentStore | None = None, response_cache : ResponseCache | None = None)
@@ -405,7 +405,7 @@ package "Application (app/application)" {
 
 package "Logic Manager (app/logic)" {
   class AssetPath {
-    -__market_model : MarketModel = None
+    -__market_model : MarketModel = MarketModel()
     -__paths : list[dict] = []
     --
     +__init__(market_model : MarketModel | None = None, asset_models : list[dict] | None = None)
@@ -413,7 +413,7 @@ package "Logic Manager (app/logic)" {
     +income_up_to(path : dict, year : int) : dict
   }
   class Benchmark {
-    -__config : Config = None
+    -__config : Config = Config(...)
     +BENCHMARK_LABELS : dict = {...} «const»
     +COMPOSITION_RULES : dict = {...} «const»
     --
@@ -464,7 +464,7 @@ package "Logic Manager (app/logic)" {
     +fires(declaration : Declaration) : bool
   }
   class CrimeScan {
-    -__indicators : list[Indicator] = []
+    -__indicators : list[Indicator] = [GiftOrInheritanceUnnamed(...), ...]
     -__COUNTRY_TO_ISO : dict = {...} «const»
     +MATCH_LABELS : dict[str, str] = {...} «const»
     --
@@ -497,11 +497,11 @@ package "Logic Manager (app/logic)" {
   }
   class Forecast {
     -__forecast : dict = {}
-    -__market_model : MarketModel = None
-    -__future_paths : FuturePaths = None
-    -__assessor : OnboardingAssessor = None
-    -__pay_calibrator : PayCalibrator = None
-    -__config : Config = None
+    -__market_model : MarketModel = MarketModel()
+    -__future_paths : FuturePaths = FuturePaths(...)
+    -__assessor : OnboardingAssessor = OnboardingAssessor(...)
+    -__pay_calibrator : PayCalibrator = PayCalibrator(...)
+    -__config : Config = Config(...)
     --
     +__init__(policy : dict | None = None, config : Config | None = None)
     +run(case : dict, ai_data : dict) : dict
@@ -519,8 +519,8 @@ package "Logic Manager (app/logic)" {
     {static} +add_months(date_text : str, months : int) : str
   }
   class FuturePaths {
-    -__career_savings : CareerSavings = None
-    -__asset_path : AssetPath = None
+    -__career_savings : CareerSavings = CareerSavings(...)
+    -__asset_path : AssetPath = AssetPath(...)
     -__paths : dict = {}
     --
     +__init__(market_model : MarketModel | None = None, forecast : dict | None = None, policy : dict | None = None)
@@ -556,9 +556,9 @@ package "Logic Manager (app/logic)" {
     +change(market_id : str, year : int, scenario : str, level : str = "typical", shocks : dict | None = None) : float
   }
   class OnboardingAssessor {
-    -__future_paths : FuturePaths = None
+    -__future_paths : FuturePaths = FuturePaths()
     -__policy : dict = {}
-    -__config : Config = None
+    -__config : Config = Config()
     --
     +__init__(future_paths : FuturePaths | None = None, policy : dict | None = None, config : Config | None = None)
     +evaluate(record : dict, forecast : dict, savings_rows : list[dict], paths : list[dict], scale : float = 1.0) : dict
@@ -569,7 +569,7 @@ package "Logic Manager (app/logic)" {
     -__decide_onboarding(fits : dict, t1_affordability_breach : bool, other_failures : list[str]) : str
   }
   class PayCalibrator {
-    -__career_savings : CareerSavings = None
+    -__career_savings : CareerSavings = CareerSavings()
     -__policy : dict = {}
     --
     +__init__(career_savings : CareerSavings | None = None, policy : dict | None = None)
@@ -607,7 +607,7 @@ package "Logic Manager (app/logic)" {
   }
   class VerdictEngine {
     -__features : list[RiskAnalysis] = []
-    -__config : Config = None
+    -__config : Config = Config()
     +VERDICT_LABELS : dict = {...} «const»
     +THEMES : dict = {...} «const»
     +MARKS : dict = {...} «const»
@@ -675,7 +675,7 @@ package "Domain Model (app/model)" {
   class Claims {
     -__declared_net_worth : float | None = None {get, set}
     -__expected_aum : float | None = None {get, set}
-    -__pep_status : str = "no" {get, set}
+    -__pep_status : str = "" {get, set}
     -__asset_composition : dict = {} {get, set}
     -__wealth_countries : list[str] = [] {get, set}
     -__declared_counterparties : list[str] = [] {get}
@@ -696,13 +696,13 @@ package "Domain Model (app/model)" {
     -__country_of_residence : str = "" {get, set}
     -__age : int | None = None {get, set}
     --
-    +__init__(name : str, nationality : str, country_of_residence : str = "", age : int | None = None)
+    +__init__(name : str = "", nationality : str = "", country_of_residence : str = "", age : int | None = None)
     +to_dict() : dict
     -__check_age(age : int | None) : None
   }
   class ClientRecord {
     -__client_ref : str = "" {get}
-    -__profile : ClientProfile = None {get}
+    -__profile : ClientProfile = ClientProfile(...) {get}
     -__current_date : str = "" {get}
     -__sow_declaration : str = "" {get, set}
     -__career_history : list[Job] = []
@@ -712,7 +712,7 @@ package "Domain Model (app/model)" {
     -__supporting_documents : list[dict] = []
     -__review_status : ReviewStatus = ReviewStatus() {get}
     --
-    +__init__(client_ref : str, name : str, nationality : str, current_date : str, country_of_residence : str = "", age : int | None = None)
+    +__init__(client_ref : str = "", name : str = "", nationality : str = "", current_date : str = "", country_of_residence : str = "", age : int | None = None)
     +jobs() : list[Job]
     +add_job(details : dict) : Job
     +add_investment(details : dict) : Investment
@@ -784,7 +784,7 @@ package "Domain Model (app/model)" {
     -__check_years(start_year : int | None, end_year : int | None) : None
   }
   class MatchResult {
-    -__typology : Typology = None {get}
+    -__typology : Typology = Typology() {get}
     -__core_fired : list[str] = [] {get}
     --
     +__init__(typology : Typology | None = None, core_fired : list[str] | None = None, supporting_fired : list[str] | None = None, category : str = "no_match")
@@ -823,7 +823,7 @@ package "Domain Model (app/model)" {
     -__assessment_id : str = "" {get}
     -__client_ref : str = "" {get}
     -__assessed_at : str = "" {get}
-    -__outcome : str = "" {get}
+    -__outcome : str = "MANUAL_REVIEW" {get}
     -__next_step : str = "" {get}
     -__next_review_date : str = "" {get}
     -__checks : list[Check] = []

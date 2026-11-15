@@ -72,7 +72,7 @@
           <mxGeometry height="1239" width="1840" y="2" as="geometry" />
         </mxCell>
         <mxCell id="c27" parent="1" style="shape=folder;tabWidth=348;tabHeight=38;tabPosition=left;html=1;whiteSpace=wrap;fillColor=#E8F1FD;strokeColor=#5B8FD6;strokeWidth=2;fontColor=#5B8FD6;fontSize=20;align=left;verticalAlign=top;spacingLeft=18;spacingTop=4;" value="&lt;b&gt;IO Manager&lt;/b&gt;&amp;nbsp; · &amp;nbsp;app/interface" vertex="1">
-          <mxGeometry height="1489" width="1160" x="1960" y="2" as="geometry" />
+          <mxGeometry height="1500" width="1160" x="1960" y="2" as="geometry" />
         </mxCell>
         <mxCell id="c28" parent="1" style="shape=folder;tabWidth=271;tabHeight=38;tabPosition=left;html=1;whiteSpace=wrap;fillColor=#F1EBFE;strokeColor=#8E6BD8;strokeWidth=2;fontColor=#8E6BD8;fontSize=20;align=left;verticalAlign=top;spacingLeft=18;spacingTop=4;" value="&lt;b&gt;AI Manager&lt;/b&gt;&amp;nbsp; · &amp;nbsp;app/ai" vertex="1">
           <mxGeometry height="1557" width="1720" x="4110" y="2" as="geometry" />
@@ -92,7 +92,7 @@
         <mxCell id="c33" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="App" vertex="1">
           <mxGeometry height="586" width="540" x="2050" y="1600" as="geometry" />
         </mxCell>
-        <mxCell id="c34" parent="c33" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __ai_caller : Callable | None = None&lt;br&gt;− __config : Config = None&lt;br&gt;− __ui : ConsoleUI = None&lt;br&gt;− __report_view : ReportView = None&lt;br&gt;− __client_form : ClientForm = None&lt;br&gt;− __case_builder : CaseBuilder = None&lt;br&gt;− __case_files : CaseFiles = None&lt;br&gt;− __limiter : RateLimiter = None&lt;br&gt;− __clients : Repository = None&lt;br&gt;− __assessments : AssessmentRepository = None&lt;br&gt;− __runner : AssessmentRunner = None&lt;br&gt;− __documents : DocumentStore = None&lt;br&gt;− __document_ai : DocumentAI = None&lt;br&gt;− __response_cache : ResponseCache = None&lt;br&gt;− __syncs : list[CloudSync] = []&lt;br&gt;+ CRITICAL_STEPS : tuple[str, ...] = (&amp;quot;Deciding the verdict&amp;quot;,) «const»&lt;/div&gt;" vertex="1">
+        <mxCell id="c34" parent="c33" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __ai_caller : Callable | None = None&lt;br&gt;− __config : Config = Config(...)&lt;br&gt;− __ui : ConsoleUI = ConsoleUI()&lt;br&gt;− __report_view : ReportView = ReportView(...)&lt;br&gt;− __client_form : ClientForm = ClientForm(...)&lt;br&gt;− __case_builder : CaseBuilder = CaseBuilder(...)&lt;br&gt;− __case_files : CaseFiles = CaseFiles(...)&lt;br&gt;− __limiter : RateLimiter = RateLimiter(...)&lt;br&gt;− __clients : Repository = ClientRepository(...)&lt;br&gt;− __assessments : AssessmentRepository = AssessmentRepository(...)&lt;br&gt;− __runner : AssessmentRunner = AssessmentRunner(...)&lt;br&gt;− __documents : DocumentStore = DocumentStore(...)&lt;br&gt;− __document_ai : DocumentAI = DocumentAI(...)&lt;br&gt;− __response_cache : ResponseCache = ResponseCache(...)&lt;br&gt;− __syncs : list[CloudSync] = [CloudSync(...), CloudSync(...)]&lt;br&gt;+ CRITICAL_STEPS : tuple[str, ...] = (&amp;quot;Deciding the verdict&amp;quot;,) «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="250" width="540" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c35" parent="c33" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -104,7 +104,7 @@
         <mxCell id="c37" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="WebApp" vertex="1">
           <mxGeometry height="436" width="460" x="2000" y="90" as="geometry" />
         </mxCell>
-        <mxCell id="c38" parent="c37" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __app : App | None = None&lt;br&gt;− __limiter : RateLimiter | None = None&lt;br&gt;− __flask : Flask = Flask(__name__)&lt;br&gt;− __jobs : dict[str, dict] = {}&lt;/div&gt;" vertex="1">
+        <mxCell id="c38" parent="c37" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __app : App | None = None&lt;br&gt;− __limiter : RateLimiter | None = None&lt;br&gt;− __flask : Flask = Flask(...)&lt;br&gt;− __jobs : dict[str, dict] = {}&lt;/div&gt;" vertex="1">
           <mxGeometry height="70" width="460" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c39" parent="c37" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -128,19 +128,19 @@
         <mxCell id="c45" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="ConsoleUI" vertex="1">
           <mxGeometry height="586" width="440" x="2620" y="90" as="geometry" />
         </mxCell>
-        <mxCell id="c46" parent="c45" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __read : Callable[[str], str] = input&lt;br&gt;− __write : Callable[[str], None] = print&lt;br&gt;+ LINE : str = &amp;quot;-&amp;quot; * 72 «const»&lt;br&gt;+ LETTERS : str = &amp;quot; &amp;#x27;.-&amp;quot; «const»&lt;br&gt;+ MAX_EMPLOYEES : int = 10_000_000 «const»&lt;/div&gt;" vertex="1">
+        <mxCell id="c46" parent="c45" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __read : Callable[[str], str] = lambda question: input(...)&lt;br&gt;− __write : Callable[[str], None] = lambda text: print(...)&lt;br&gt;+ LINE : str = &amp;quot;-&amp;quot; * 72 «const»&lt;br&gt;+ LETTERS : str = &amp;quot; &amp;#x27;.-&amp;quot; «const»&lt;br&gt;+ MAX_EMPLOYEES : int = 10_000_000 «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="85" width="440" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c47" parent="c45" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
           <mxGeometry height="1" width="440" y="110.5" as="geometry" />
         </mxCell>
-        <mxCell id="c48" parent="c45" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(read : Callable[[str], str] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;write : Callable[[str], None] | None = None)&lt;br&gt;+ show(text : str) : None&lt;br&gt;+ show_message(text : str) : None&lt;br&gt;+ show_error(text : str) : None&lt;br&gt;+ show_app_menu() : str&lt;br&gt;+ show_step(number : int, total : int, label : str) : None&lt;br&gt;+ show_ai_unavailable(feature : str) : None&lt;br&gt;+ show_rate_limit_error(seconds_left : int) : None&lt;br&gt;+ show_sync_result(stats : dict) : None&lt;br&gt;+ read_answer(question : str) : str&lt;br&gt;+ ask_text(question : str, min_length : int = 1) : str&lt;br&gt;+ ask_int(question : str, minimum : int | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;maximum : int | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;allow_blank : bool = False) : int | None&lt;br&gt;+ ask_money(question : str, allow_zero : bool = False) : float&lt;br&gt;+ ask_year(question : str, minimum : int = 1940,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;maximum : int | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;allow_blank : bool = False) : int | None&lt;br&gt;+ ask_choice(question : str, options : list[str],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;allow_back : bool = False) : int | None&lt;br&gt;+ ask_yes_no(question : str) : bool&lt;br&gt;+ ask_client_ref() : str | None&lt;br&gt;+ keep_text(label : str, current : str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;min_length : int = 2) : str&lt;br&gt;+ keep_money(label : str, current : float | None) : float | None&lt;br&gt;+ money(value : float | None) : str&lt;br&gt;+ money_range(values : dict) : str&lt;br&gt;− __only(text : str, allowed : str) : bool&lt;br&gt;− __parse_count(text : str) : int | None&lt;br&gt;+ keep_countries(label : str, current : list[str]) : list[str]&lt;/div&gt;" vertex="1">
+        <mxCell id="c48" parent="c45" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(read : Callable[[str], str] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;write : Callable[[str], None] | None = None)&lt;br&gt;+ show(text : str = &amp;quot;&amp;quot;) : None&lt;br&gt;+ show_message(text : str) : None&lt;br&gt;+ show_error(text : str) : None&lt;br&gt;+ show_app_menu() : str&lt;br&gt;+ show_step(number : int, total : int, label : str) : None&lt;br&gt;+ show_ai_unavailable(feature : str = &amp;quot;Assessment&amp;quot;) : None&lt;br&gt;+ show_rate_limit_error(seconds_left : int) : None&lt;br&gt;+ show_sync_result(stats : dict) : None&lt;br&gt;+ read_answer(question : str) : str&lt;br&gt;+ ask_text(question : str, min_length : int = 1) : str&lt;br&gt;+ ask_int(question : str, minimum : int | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;maximum : int | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;allow_blank : bool = False) : int | None&lt;br&gt;+ ask_money(question : str, allow_zero : bool = False) : float&lt;br&gt;+ ask_year(question : str, minimum : int = 1940,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;maximum : int | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;allow_blank : bool = False) : int | None&lt;br&gt;+ ask_choice(question : str, options : list[str],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;allow_back : bool = False) : int | None&lt;br&gt;+ ask_yes_no(question : str) : bool&lt;br&gt;+ ask_client_ref() : str | None&lt;br&gt;+ keep_text(label : str, current : str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;min_length : int = 2) : str&lt;br&gt;+ keep_money(label : str, current : float | None) : float | None&lt;br&gt;+ money(value : float | None) : str&lt;br&gt;+ money_range(values : dict) : str&lt;br&gt;− __only(text : str, allowed : str) : bool&lt;br&gt;− __parse_count(text : str) : int | None&lt;br&gt;+ keep_countries(label : str, current : list[str]) : list[str]&lt;/div&gt;" vertex="1">
           <mxGeometry height="475" width="440" y="111" as="geometry" />
         </mxCell>
         <mxCell id="c49" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="ReportView" vertex="1">
           <mxGeometry height="361" width="380" x="2620" y="740" as="geometry" />
         </mxCell>
-        <mxCell id="c50" parent="c49" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __ui : ConsoleUI = None&lt;br&gt;− __width : int = 96&lt;br&gt;+ FIELD_NAMES : dict = {...} «const»&lt;br&gt;+ OUTCOME_LABELS : dict = {...} «const»&lt;br&gt;+ MIN_WIDTH : int = 20 «const»&lt;br&gt;+ SOURCE_TAGS : dict[str, str] = {...} «const»&lt;/div&gt;" vertex="1">
+        <mxCell id="c50" parent="c49" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __ui : ConsoleUI = ConsoleUI()&lt;br&gt;− __width : int = 96&lt;br&gt;+ FIELD_NAMES : dict = {...} «const»&lt;br&gt;+ OUTCOME_LABELS : dict = {...} «const»&lt;br&gt;+ MIN_WIDTH : int = 20 «const»&lt;br&gt;+ SOURCE_TAGS : dict[str, str] = {...} «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="100" width="380" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c51" parent="c49" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -152,7 +152,7 @@
         <mxCell id="c53" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="ClientForm" vertex="1">
           <mxGeometry height="361" width="430" x="2620" y="1120" as="geometry" />
         </mxCell>
-        <mxCell id="c54" parent="c53" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __ui : ConsoleUI = None&lt;br&gt;+ PAYMENT_METHODS : list[str] = [...] «const»&lt;br&gt;+ PEP_OPTIONS : list[str] = [...] «const»&lt;/div&gt;" vertex="1">
+        <mxCell id="c54" parent="c53" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __ui : ConsoleUI = ConsoleUI()&lt;br&gt;+ PAYMENT_METHODS : list[str] = [...] «const»&lt;br&gt;+ PEP_OPTIONS : list[str] = [...] «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="55" width="430" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c55" parent="c53" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -164,7 +164,7 @@
         <mxCell id="c57" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="CaseBuilder" vertex="1">
           <mxGeometry height="256" width="460" x="2000" y="756" as="geometry" />
         </mxCell>
-        <mxCell id="c58" parent="c57" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __ui : ConsoleUI = None&lt;/div&gt;" vertex="1">
+        <mxCell id="c58" parent="c57" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __ui : ConsoleUI = ConsoleUI()&lt;/div&gt;" vertex="1">
           <mxGeometry height="25" width="460" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c59" parent="c57" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -248,7 +248,7 @@
         <mxCell id="c85" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="ResponseCache" vertex="1">
           <mxGeometry height="181" width="430" x="4150" y="100" as="geometry" />
         </mxCell>
-        <mxCell id="c86" parent="c85" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __folder : str = &amp;quot;data/cache&amp;quot;&lt;/div&gt;" vertex="1">
+        <mxCell id="c86" parent="c85" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __folder : str = &amp;quot;.../data/cache&amp;quot;&lt;/div&gt;" vertex="1">
           <mxGeometry height="25" width="430" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c87" parent="c85" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -260,7 +260,7 @@
         <mxCell id="c89" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="AssessmentRunner" vertex="1">
           <mxGeometry height="271" width="460" x="2700" y="1860" as="geometry" />
         </mxCell>
-        <mxCell id="c90" parent="c89" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __verdict_engine : VerdictEngine = None&lt;br&gt;− __config : Config = None&lt;br&gt;+ STEPS : tuple[str, ...] = (...) «const»&lt;/div&gt;" vertex="1">
+        <mxCell id="c90" parent="c89" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __verdict_engine : VerdictEngine = VerdictEngine(...)&lt;br&gt;− __config : Config = Config()&lt;br&gt;+ STEPS : tuple[str, ...] = (...) «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="55" width="460" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c91" parent="c89" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -272,7 +272,7 @@
         <mxCell id="c93" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="VerdictEngine" vertex="1">
           <mxGeometry height="346" width="420" x="900" y="2420" as="geometry" />
         </mxCell>
-        <mxCell id="c94" parent="c93" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __features : list[RiskAnalysis] = []&lt;br&gt;− __config : Config = None&lt;br&gt;+ VERDICT_LABELS : dict = {...} «const»&lt;br&gt;+ THEMES : dict = {...} «const»&lt;br&gt;+ MARKS : dict = {...} «const»&lt;br&gt;+ REPORT_LEGEND : list = [...] «const»&lt;/div&gt;" vertex="1">
+        <mxCell id="c94" parent="c93" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __features : list[RiskAnalysis] = []&lt;br&gt;− __config : Config = Config()&lt;br&gt;+ VERDICT_LABELS : dict = {...} «const»&lt;br&gt;+ THEMES : dict = {...} «const»&lt;br&gt;+ MARKS : dict = {...} «const»&lt;br&gt;+ REPORT_LEGEND : list = [...] «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="100" width="420" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c95" parent="c93" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -294,16 +294,16 @@
           <mxGeometry height="130" width="530" y="95" as="geometry" />
         </mxCell>
         <mxCell id="c101" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="CrimeScan" vertex="1">
-          <mxGeometry height="316" width="440" x="640" y="3190" as="geometry" />
+          <mxGeometry height="316" width="460" x="640" y="3190" as="geometry" />
         </mxCell>
-        <mxCell id="c102" parent="c101" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __indicators : list[Indicator] = []&lt;br&gt;− __COUNTRY_TO_ISO : dict = {...} «const»&lt;br&gt;+ MATCH_LABELS : dict[str, str] = {...} «const»&lt;/div&gt;" vertex="1">
-          <mxGeometry height="55" width="440" y="26" as="geometry" />
+        <mxCell id="c102" parent="c101" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __indicators : list[Indicator] = [GiftOrInheritanceUnnamed(...),&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;...]&lt;br&gt;− __COUNTRY_TO_ISO : dict = {...} «const»&lt;br&gt;+ MATCH_LABELS : dict[str, str] = {...} «const»&lt;/div&gt;" vertex="1">
+          <mxGeometry height="70" width="460" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c103" parent="c101" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
-          <mxGeometry height="1" width="440" y="80.5" as="geometry" />
+          <mxGeometry height="1" width="460" y="95.5" as="geometry" />
         </mxCell>
-        <mxCell id="c104" parent="c101" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(policy : dict | None = None)&lt;br&gt;+ run(case : dict, ai_data : dict) : dict&lt;br&gt;+ checks(context : dict) : list[Check]&lt;br&gt;+ flags(declaration : Declaration) : list[str]&lt;br&gt;+ verify_research(research : dict) : list[ResearchReport]&lt;br&gt;+ verify_typology_sources(typologies : list[dict],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;reports : list[ResearchReport]) : list[Typology]&lt;br&gt;+ match_typologies(declaration : Declaration,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;typologies : list[Typology]) : list[MatchResult]&lt;br&gt;− __categorise_match(core_fired : list[str], core : list[str],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;supporting_fired : list[str]) : str&lt;br&gt;− __domain_is_trusted(url : str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;trusted_domains : list[str]) : bool&lt;br&gt;− __to_iso(value : str | None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;warnings : list[str]) : str | None&lt;/div&gt;" vertex="1">
-          <mxGeometry height="235" width="440" y="81" as="geometry" />
+        <mxCell id="c104" parent="c101" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(policy : dict | None = None)&lt;br&gt;+ run(case : dict, ai_data : dict) : dict&lt;br&gt;+ checks(context : dict) : list[Check]&lt;br&gt;+ flags(declaration : Declaration) : list[str]&lt;br&gt;+ verify_research(research : dict) : list[ResearchReport]&lt;br&gt;+ verify_typology_sources(typologies : list[dict],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;reports : list[ResearchReport]) : list[Typology]&lt;br&gt;+ match_typologies(declaration : Declaration,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;typologies : list[Typology]) : list[MatchResult]&lt;br&gt;− __categorise_match(core_fired : list[str], core : list[str],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;supporting_fired : list[str]) : str&lt;br&gt;− __domain_is_trusted(url : str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;trusted_domains : list[str]) : bool&lt;br&gt;− __to_iso(value : str | None, warnings : list[str]) : str | None&lt;/div&gt;" vertex="1">
+          <mxGeometry height="220" width="460" y="96" as="geometry" />
         </mxCell>
         <mxCell id="c105" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=40;horizontal=1;collapsible=0;fillColor=#E3DAFF;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="&lt;span style=&quot;font-weight:normal;font-size:10px;color:#64748B&quot;&gt;«abstract»&lt;/span&gt;&lt;br&gt;&lt;i&gt;Indicator&lt;/i&gt;" vertex="1">
           <mxGeometry height="120" width="370" x="660" y="3550" as="geometry" />
@@ -380,7 +380,7 @@
         <mxCell id="c129" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="Benchmark" vertex="1">
           <mxGeometry height="316" width="420" x="1560" y="3190" as="geometry" />
         </mxCell>
-        <mxCell id="c130" parent="c129" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __config : Config = None&lt;br&gt;+ BENCHMARK_LABELS : dict = {...} «const»&lt;br&gt;+ COMPOSITION_RULES : dict = {...} «const»&lt;/div&gt;" vertex="1">
+        <mxCell id="c130" parent="c129" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __config : Config = Config(...)&lt;br&gt;+ BENCHMARK_LABELS : dict = {...} «const»&lt;br&gt;+ COMPOSITION_RULES : dict = {...} «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="55" width="420" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c131" parent="c129" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -390,21 +390,21 @@
           <mxGeometry height="235" width="420" y="81" as="geometry" />
         </mxCell>
         <mxCell id="c133" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="Forecast" vertex="1">
-          <mxGeometry height="301" width="390" x="2070" y="3190" as="geometry" />
+          <mxGeometry height="286" width="410" x="2070" y="3190" as="geometry" />
         </mxCell>
-        <mxCell id="c134" parent="c133" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __forecast : dict = {}&lt;br&gt;− __market_model : MarketModel = None&lt;br&gt;− __future_paths : FuturePaths = None&lt;br&gt;− __assessor : OnboardingAssessor = None&lt;br&gt;− __pay_calibrator : PayCalibrator = None&lt;br&gt;− __config : Config = None&lt;/div&gt;" vertex="1">
-          <mxGeometry height="100" width="390" y="26" as="geometry" />
+        <mxCell id="c134" parent="c133" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __forecast : dict = {}&lt;br&gt;− __market_model : MarketModel = MarketModel()&lt;br&gt;− __future_paths : FuturePaths = FuturePaths(...)&lt;br&gt;− __assessor : OnboardingAssessor = OnboardingAssessor(...)&lt;br&gt;− __pay_calibrator : PayCalibrator = PayCalibrator(...)&lt;br&gt;− __config : Config = Config(...)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="410" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c135" parent="c133" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
-          <mxGeometry height="1" width="390" y="125.5" as="geometry" />
+          <mxGeometry height="1" width="410" y="125.5" as="geometry" />
         </mxCell>
-        <mxCell id="c136" parent="c133" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(policy : dict | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;config : Config | None = None)&lt;br&gt;+ run(case : dict, ai_data : dict) : dict&lt;br&gt;+ checks(context : dict) : list[Check]&lt;br&gt;+ economy_brief(markets : dict | None) : dict | None&lt;br&gt;+ document_request(failures : list[dict],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;candidates : list[str]) : list[dict]&lt;br&gt;− __honest_numbers(case : dict,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;assessment : dict) : dict&lt;br&gt;− __rank_documents(candidates : list[str]) : list[dict]&lt;br&gt;− __data_quality() : dict&lt;/div&gt;" vertex="1">
-          <mxGeometry height="175" width="390" y="126" as="geometry" />
+        <mxCell id="c136" parent="c133" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(policy : dict | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;config : Config | None = None)&lt;br&gt;+ run(case : dict, ai_data : dict) : dict&lt;br&gt;+ checks(context : dict) : list[Check]&lt;br&gt;+ economy_brief(markets : dict | None) : dict | None&lt;br&gt;+ document_request(failures : list[dict],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;candidates : list[str]) : list[dict]&lt;br&gt;− __honest_numbers(case : dict, assessment : dict) : dict&lt;br&gt;− __rank_documents(candidates : list[str]) : list[dict]&lt;br&gt;− __data_quality() : dict&lt;/div&gt;" vertex="1">
+          <mxGeometry height="160" width="410" y="126" as="geometry" />
         </mxCell>
         <mxCell id="c137" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="OnboardingAssessor" vertex="1">
           <mxGeometry height="301" width="490" x="2150" y="3570" as="geometry" />
         </mxCell>
-        <mxCell id="c138" parent="c137" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __future_paths : FuturePaths = None&lt;br&gt;− __policy : dict = {}&lt;br&gt;− __config : Config = None&lt;/div&gt;" vertex="1">
+        <mxCell id="c138" parent="c137" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __future_paths : FuturePaths = FuturePaths()&lt;br&gt;− __policy : dict = {}&lt;br&gt;− __config : Config = Config()&lt;/div&gt;" vertex="1">
           <mxGeometry height="55" width="490" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c139" parent="c137" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -414,21 +414,21 @@
           <mxGeometry height="220" width="490" y="81" as="geometry" />
         </mxCell>
         <mxCell id="c141" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="FuturePaths" vertex="1">
-          <mxGeometry height="286" width="370" x="2700" y="3570" as="geometry" />
+          <mxGeometry height="286" width="380" x="2700" y="3570" as="geometry" />
         </mxCell>
-        <mxCell id="c142" parent="c141" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __career_savings : CareerSavings = None&lt;br&gt;− __asset_path : AssetPath = None&lt;br&gt;− __paths : dict = {}&lt;/div&gt;" vertex="1">
-          <mxGeometry height="55" width="370" y="26" as="geometry" />
+        <mxCell id="c142" parent="c141" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __career_savings : CareerSavings = CareerSavings(...)&lt;br&gt;− __asset_path : AssetPath = AssetPath(...)&lt;br&gt;− __paths : dict = {}&lt;/div&gt;" vertex="1">
+          <mxGeometry height="55" width="380" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c143" parent="c141" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
-          <mxGeometry height="1" width="370" y="80.5" as="geometry" />
+          <mxGeometry height="1" width="380" y="80.5" as="geometry" />
         </mxCell>
         <mxCell id="c144" parent="c141" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(market_model : MarketModel | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;forecast : dict | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;policy : dict | None = None)&lt;br&gt;+ career_savings() : CareerSavings&lt;br&gt;+ expected_paths(record : dict,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;savings_rows : list[dict]) : dict&lt;br&gt;+ event_impacts(record : dict,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;savings_rows : list[dict]) : list[dict]&lt;br&gt;+ divergence_years(paths : dict) : list[dict]&lt;br&gt;+ honest_wealth(record : dict,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;savings_rows : list[dict], paths : list[dict],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;year : int) : dict&lt;br&gt;+ monitoring_ranges(year : int) : dict&lt;/div&gt;" vertex="1">
-          <mxGeometry height="205" width="370" y="81" as="geometry" />
+          <mxGeometry height="205" width="380" y="81" as="geometry" />
         </mxCell>
         <mxCell id="c145" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="PayCalibrator" vertex="1">
           <mxGeometry height="136" width="410" x="3120" y="3570" as="geometry" />
         </mxCell>
-        <mxCell id="c146" parent="c145" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __career_savings : CareerSavings = None&lt;br&gt;− __policy : dict = {}&lt;/div&gt;" vertex="1">
+        <mxCell id="c146" parent="c145" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __career_savings : CareerSavings = CareerSavings()&lt;br&gt;− __policy : dict = {}&lt;/div&gt;" vertex="1">
           <mxGeometry height="40" width="410" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c147" parent="c145" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -452,7 +452,7 @@
         <mxCell id="c153" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="AssetPath" vertex="1">
           <mxGeometry height="166" width="370" x="2445" y="3930" as="geometry" />
         </mxCell>
-        <mxCell id="c154" parent="c153" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __market_model : MarketModel = None&lt;br&gt;− __paths : list[dict] = []&lt;/div&gt;" vertex="1">
+        <mxCell id="c154" parent="c153" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __market_model : MarketModel = MarketModel()&lt;br&gt;− __paths : list[dict] = []&lt;/div&gt;" vertex="1">
           <mxGeometry height="40" width="370" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c155" parent="c153" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -548,13 +548,13 @@
         <mxCell id="c185" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=40;horizontal=1;collapsible=0;fillColor=#E3DAFF;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="&lt;span style=&quot;font-weight:normal;font-size:10px;color:#64748B&quot;&gt;«abstract»&lt;/span&gt;&lt;br&gt;&lt;i&gt;JsonRepository&lt;/i&gt;" vertex="1">
           <mxGeometry height="180" width="360" x="685" y="290" as="geometry" />
         </mxCell>
-        <mxCell id="c186" parent="c185" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;# _path : str = &amp;quot;&amp;quot;&lt;br&gt;# _key_field : str = &amp;quot;client_ref&amp;quot;&lt;br&gt;+ DATA_DIR : str = &amp;quot;.../data/local database&amp;quot; «const»&lt;/div&gt;" vertex="1">
+        <mxCell id="c186" parent="c185" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;# _path : str = &amp;quot;&amp;quot;&lt;br&gt;# _key_field : str = &amp;quot;&amp;quot;&lt;br&gt;+ DATA_DIR : str = &amp;quot;.../data/local database&amp;quot; «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="55" width="360" y="40" as="geometry" />
         </mxCell>
         <mxCell id="c187" parent="c185" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
           <mxGeometry height="1" width="360" y="94.5" as="geometry" />
         </mxCell>
-        <mxCell id="c188" parent="c185" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(path : str, key_field : str)&lt;br&gt;+ save(record : dict) : bool {abstract}&lt;br&gt;+ load() : list[dict]&lt;br&gt;+ find(ref : str) : dict | None&lt;br&gt;# _write_all(records : list[dict]) : bool&lt;/div&gt;" vertex="1">
+        <mxCell id="c188" parent="c185" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(path : str = &amp;quot;&amp;quot;, key_field : str = &amp;quot;&amp;quot;)&lt;br&gt;+ save(record : dict) : bool {abstract}&lt;br&gt;+ load() : list[dict]&lt;br&gt;+ find(ref : str) : dict | None&lt;br&gt;# _write_all(records : list[dict]) : bool&lt;/div&gt;" vertex="1">
           <mxGeometry height="85" width="360" y="95" as="geometry" />
         </mxCell>
         <mxCell id="c189" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="ClientRepository" vertex="1">
@@ -582,19 +582,19 @@
           <mxGeometry height="85" width="360" y="38" as="geometry" />
         </mxCell>
         <mxCell id="c197" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=40;horizontal=1;collapsible=0;fillColor=#E3DAFF;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="&lt;span style=&quot;font-weight:normal;font-size:10px;color:#64748B&quot;&gt;«abstract»&lt;/span&gt;&lt;br&gt;&lt;i&gt;DatabaseRepository&lt;/i&gt;" vertex="1">
-          <mxGeometry height="255" width="430" x="1280" y="290" as="geometry" />
+          <mxGeometry height="270" width="430" x="1280" y="290" as="geometry" />
         </mxCell>
-        <mxCell id="c198" parent="c197" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;# _collection_name : str = &amp;quot;&amp;quot;&lt;br&gt;# _key_field : str = &amp;quot;client_ref&amp;quot;&lt;br&gt;# _uri : str = &amp;quot;&amp;quot;&lt;/div&gt;" vertex="1">
+        <mxCell id="c198" parent="c197" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;# _collection_name : str = &amp;quot;&amp;quot;&lt;br&gt;# _key_field : str = &amp;quot;&amp;quot;&lt;br&gt;# _uri : str = &amp;quot;&amp;quot;&lt;/div&gt;" vertex="1">
           <mxGeometry height="55" width="430" y="40" as="geometry" />
         </mxCell>
         <mxCell id="c199" parent="c197" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
           <mxGeometry height="1" width="430" y="94.5" as="geometry" />
         </mxCell>
-        <mxCell id="c200" parent="c197" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(collection_name : str, key_field : str, uri : str)&lt;br&gt;+ save(record : dict) : bool&lt;br&gt;+ load() : list[dict]&lt;br&gt;+ find(ref : str) : dict | None&lt;br&gt;+ is_online() : bool&lt;br&gt;+ upload_local_documents(record : dict) : int&lt;br&gt;&lt;i&gt;# _connect() : bool {abstract}&lt;/i&gt;&lt;br&gt;&lt;i&gt;# _upsert(key : str, record : dict) : bool {abstract}&lt;/i&gt;&lt;br&gt;&lt;i&gt;# _fetch(query : dict) : list[dict] {abstract}&lt;/i&gt;&lt;br&gt;&lt;i&gt;# _store_file(path : str, name : str) : str {abstract}&lt;/i&gt;&lt;/div&gt;" vertex="1">
-          <mxGeometry height="160" width="430" y="95" as="geometry" />
+        <mxCell id="c200" parent="c197" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(collection_name : str = &amp;quot;&amp;quot;, key_field : str = &amp;quot;&amp;quot;,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;uri : str = &amp;quot;&amp;quot;)&lt;br&gt;+ save(record : dict) : bool&lt;br&gt;+ load() : list[dict]&lt;br&gt;+ find(ref : str) : dict | None&lt;br&gt;+ is_online() : bool&lt;br&gt;+ upload_local_documents(record : dict) : int&lt;br&gt;&lt;i&gt;# _connect() : bool {abstract}&lt;/i&gt;&lt;br&gt;&lt;i&gt;# _upsert(key : str, record : dict) : bool {abstract}&lt;/i&gt;&lt;br&gt;&lt;i&gt;# _fetch(query : dict) : list[dict] {abstract}&lt;/i&gt;&lt;br&gt;&lt;i&gt;# _store_file(path : str, name : str) : str {abstract}&lt;/i&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="175" width="430" y="95" as="geometry" />
         </mxCell>
         <mxCell id="c201" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="MongoRepository" vertex="1">
-          <mxGeometry height="151" width="430" x="1280" y="590" as="geometry" />
+          <mxGeometry height="166" width="430" x="1280" y="590" as="geometry" />
         </mxCell>
         <mxCell id="c202" parent="c201" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __client : MongoClient | None = None&lt;br&gt;+ DB_NAME : str = &amp;quot;sow_risk_db&amp;quot; «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="40" width="430" y="26" as="geometry" />
@@ -602,8 +602,8 @@
         <mxCell id="c203" parent="c201" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
           <mxGeometry height="1" width="430" y="65.5" as="geometry" />
         </mxCell>
-        <mxCell id="c204" parent="c201" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(collection_name : str, key_field : str, uri : str)&lt;br&gt;# _connect() : bool&lt;br&gt;# _upsert(key : str, record : dict) : bool&lt;br&gt;# _fetch(query : dict) : list[dict]&lt;br&gt;# _store_file(path : str, name : str) : str&lt;/div&gt;" vertex="1">
-          <mxGeometry height="85" width="430" y="66" as="geometry" />
+        <mxCell id="c204" parent="c201" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(collection_name : str = &amp;quot;&amp;quot;, key_field : str = &amp;quot;&amp;quot;,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;uri : str = &amp;quot;&amp;quot;)&lt;br&gt;# _connect() : bool&lt;br&gt;# _upsert(key : str, record : dict) : bool&lt;br&gt;# _fetch(query : dict) : list[dict]&lt;br&gt;# _store_file(path : str, name : str) : str&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="430" y="66" as="geometry" />
         </mxCell>
         <mxCell id="c205" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="CloudSync" vertex="1">
           <mxGeometry height="226" width="420" x="1290" y="820" as="geometry" />
@@ -618,16 +618,16 @@
           <mxGeometry height="145" width="420" y="81" as="geometry" />
         </mxCell>
         <mxCell id="c209" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="DocumentStore" vertex="1">
-          <mxGeometry height="196" width="370" x="40" y="90" as="geometry" />
+          <mxGeometry height="181" width="470" x="40" y="90" as="geometry" />
         </mxCell>
-        <mxCell id="c210" parent="c209" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __folder : str = &amp;quot;data/documents&amp;quot;&lt;br&gt;− __reader_factory : DocumentReaderFactory = None&lt;/div&gt;" vertex="1">
-          <mxGeometry height="40" width="370" y="26" as="geometry" />
+        <mxCell id="c210" parent="c209" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __folder : str = &amp;quot;.../data/documents&amp;quot;&lt;br&gt;− __reader_factory : DocumentReaderFactory = DocumentReaderFactory()&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="470" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c211" parent="c209" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
-          <mxGeometry height="1" width="370" y="65.5" as="geometry" />
+          <mxGeometry height="1" width="470" y="65.5" as="geometry" />
         </mxCell>
-        <mxCell id="c212" parent="c209" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(folder : str = &amp;quot;data/documents&amp;quot;,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;root : str = ROOT_DIR)&lt;br&gt;+ upload(file_path : str) : str | None&lt;br&gt;+ download(file_id : str, output_path : str) : bool&lt;br&gt;+ read_all(entries : list[dict]) : list[dict]&lt;br&gt;+ read_for_extraction(file_path : str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;file_name : str | None = None) : dict&lt;br&gt;+ list_folder(folder : str) : list[str] | None&lt;/div&gt;" vertex="1">
-          <mxGeometry height="130" width="370" y="66" as="geometry" />
+        <mxCell id="c212" parent="c209" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(folder : str = &amp;quot;data/documents&amp;quot;, root : str = ROOT_DIR)&lt;br&gt;+ upload(file_path : str) : str | None&lt;br&gt;+ download(file_id : str, output_path : str) : bool&lt;br&gt;+ read_all(entries : list[dict]) : list[dict]&lt;br&gt;+ read_for_extraction(file_path : str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;file_name : str | None = None) : dict&lt;br&gt;+ list_folder(folder : str) : list[str] | None&lt;/div&gt;" vertex="1">
+          <mxGeometry height="115" width="470" y="66" as="geometry" />
         </mxCell>
         <mxCell id="c213" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=40;horizontal=1;collapsible=0;fillColor=#E3DAFF;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="&lt;span style=&quot;font-weight:normal;font-size:10px;color:#64748B&quot;&gt;«abstract»&lt;/span&gt;&lt;br&gt;&lt;i&gt;DocumentReader&lt;/i&gt;" vertex="1">
           <mxGeometry height="120" width="410" x="40" y="340" as="geometry" />
@@ -714,16 +714,16 @@
           <mxGeometry height="70" width="320" y="66" as="geometry" />
         </mxCell>
         <mxCell id="c241" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="ClientRecord" vertex="1">
-          <mxGeometry height="541" width="550" x="2480" y="4880" as="geometry" />
+          <mxGeometry height="556" width="550" x="2480" y="4880" as="geometry" />
         </mxCell>
-        <mxCell id="c242" parent="c241" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __client_ref : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __profile : ClientProfile = None {get}&lt;br&gt;− __current_date : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __sow_declaration : str = &amp;quot;&amp;quot; {get, set}&lt;br&gt;− __career_history : list[Job] = []&lt;br&gt;− __investments : list[Investment] = []&lt;br&gt;− __claims : Claims | None = None&lt;br&gt;− __declaration : Declaration = Declaration()&lt;br&gt;− __supporting_documents : list[dict] = []&lt;br&gt;− __review_status : ReviewStatus = ReviewStatus() {get}&lt;/div&gt;" vertex="1">
+        <mxCell id="c242" parent="c241" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __client_ref : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __profile : ClientProfile = ClientProfile(...) {get}&lt;br&gt;− __current_date : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __sow_declaration : str = &amp;quot;&amp;quot; {get, set}&lt;br&gt;− __career_history : list[Job] = []&lt;br&gt;− __investments : list[Investment] = []&lt;br&gt;− __claims : Claims | None = None&lt;br&gt;− __declaration : Declaration = Declaration()&lt;br&gt;− __supporting_documents : list[dict] = []&lt;br&gt;− __review_status : ReviewStatus = ReviewStatus() {get}&lt;/div&gt;" vertex="1">
           <mxGeometry height="160" width="550" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c243" parent="c241" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
           <mxGeometry height="1" width="550" y="185.5" as="geometry" />
         </mxCell>
-        <mxCell id="c244" parent="c241" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(client_ref : str, name : str, nationality : str, current_date : str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;country_of_residence : str = &amp;quot;&amp;quot;, age : int | None = None)&lt;br&gt;+ jobs() : list[Job]&lt;br&gt;+ add_job(details : dict) : Job&lt;br&gt;+ add_investment(details : dict) : Investment&lt;br&gt;+ set_claims(details : dict) : Claims&lt;br&gt;+ current_job() : Job | None&lt;br&gt;+ documents() : list[dict]&lt;br&gt;+ add_document(entry : dict) : None&lt;br&gt;+ record_assessment(verdict : Verdict, case : dict) : None&lt;br&gt;+ problems() : list[str]&lt;br&gt;+ warnings(policy : dict) : list[str]&lt;br&gt;+ crime_scan_input() : dict&lt;br&gt;+ benchmark_input() : dict&lt;br&gt;+ to_dict() : dict&lt;br&gt;+ from_dict(data : dict) : ClientRecord «static»&lt;br&gt;− __check_job_order() : list[str]&lt;br&gt;− __check_one_current_job() : list[str]&lt;br&gt;− __check_asset_years() : list[str]&lt;br&gt;− __check_schema() : list[str]&lt;br&gt;− __check_start_age() : list[str]&lt;br&gt;− __check_assets_vs_worth() : list[str]&lt;br&gt;− __check_split_against_assets(policy : dict) : list[str]&lt;/div&gt;" vertex="1">
-          <mxGeometry height="355" width="550" y="186" as="geometry" />
+        <mxCell id="c244" parent="c241" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(client_ref : str = &amp;quot;&amp;quot;, name : str = &amp;quot;&amp;quot;, nationality : str = &amp;quot;&amp;quot;,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;current_date : str = &amp;quot;&amp;quot;, country_of_residence : str = &amp;quot;&amp;quot;,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;age : int | None = None)&lt;br&gt;+ jobs() : list[Job]&lt;br&gt;+ add_job(details : dict) : Job&lt;br&gt;+ add_investment(details : dict) : Investment&lt;br&gt;+ set_claims(details : dict) : Claims&lt;br&gt;+ current_job() : Job | None&lt;br&gt;+ documents() : list[dict]&lt;br&gt;+ add_document(entry : dict) : None&lt;br&gt;+ record_assessment(verdict : Verdict, case : dict) : None&lt;br&gt;+ problems() : list[str]&lt;br&gt;+ warnings(policy : dict) : list[str]&lt;br&gt;+ crime_scan_input() : dict&lt;br&gt;+ benchmark_input() : dict&lt;br&gt;+ to_dict() : dict&lt;br&gt;+ from_dict(data : dict) : ClientRecord «static»&lt;br&gt;− __check_job_order() : list[str]&lt;br&gt;− __check_one_current_job() : list[str]&lt;br&gt;− __check_asset_years() : list[str]&lt;br&gt;− __check_schema() : list[str]&lt;br&gt;− __check_start_age() : list[str]&lt;br&gt;− __check_assets_vs_worth() : list[str]&lt;br&gt;− __check_split_against_assets(policy : dict) : list[str]&lt;/div&gt;" vertex="1">
+          <mxGeometry height="370" width="550" y="186" as="geometry" />
         </mxCell>
         <mxCell id="c245" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="Job" vertex="1">
           <mxGeometry height="316" width="490" x="2130" y="5650" as="geometry" />
@@ -752,7 +752,7 @@
         <mxCell id="c253" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="Claims" vertex="1">
           <mxGeometry height="361" width="590" x="3170" y="5650" as="geometry" />
         </mxCell>
-        <mxCell id="c254" parent="c253" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __declared_net_worth : float | None = None {get, set}&lt;br&gt;− __expected_aum : float | None = None {get, set}&lt;br&gt;− __pep_status : str = &amp;quot;no&amp;quot; {get, set}&lt;br&gt;− __asset_composition : dict = {} {get, set}&lt;br&gt;− __wealth_countries : list[str] = [] {get, set}&lt;br&gt;− __declared_counterparties : list[str] = [] {get}&lt;br&gt;− __biggest_wealth_jump : float | None = None {get, set}&lt;br&gt;− __wealth_jump_years : int | None = None {get, set}&lt;/div&gt;" vertex="1">
+        <mxCell id="c254" parent="c253" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __declared_net_worth : float | None = None {get, set}&lt;br&gt;− __expected_aum : float | None = None {get, set}&lt;br&gt;− __pep_status : str = &amp;quot;&amp;quot; {get, set}&lt;br&gt;− __asset_composition : dict = {} {get, set}&lt;br&gt;− __wealth_countries : list[str] = [] {get, set}&lt;br&gt;− __declared_counterparties : list[str] = [] {get}&lt;br&gt;− __biggest_wealth_jump : float | None = None {get, set}&lt;br&gt;− __wealth_jump_years : int | None = None {get, set}&lt;/div&gt;" vertex="1">
           <mxGeometry height="130" width="590" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c255" parent="c253" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -788,7 +788,7 @@
         <mxCell id="c265" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="Verdict" vertex="1">
           <mxGeometry height="346" width="500" x="120" y="4880" as="geometry" />
         </mxCell>
-        <mxCell id="c266" parent="c265" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __assessment_id : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __client_ref : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __assessed_at : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __outcome : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __next_step : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __next_review_date : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __checks : list[Check] = []&lt;br&gt;− __notes : list[str] = []&lt;br&gt;− __not_run : list[str] = []&lt;br&gt;− __report : dict = {} {get, set}&lt;br&gt;+ OUTCOMES : tuple[str, ...] = (&amp;quot;PASSED&amp;quot;, &amp;quot;MANUAL_REVIEW&amp;quot;,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;quot;RISKY&amp;quot;, &amp;quot;SERIOUS_RISK&amp;quot;) «const»&lt;/div&gt;" vertex="1">
+        <mxCell id="c266" parent="c265" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __assessment_id : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __client_ref : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __assessed_at : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __outcome : str = &amp;quot;MANUAL_REVIEW&amp;quot; {get}&lt;br&gt;− __next_step : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __next_review_date : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __checks : list[Check] = []&lt;br&gt;− __notes : list[str] = []&lt;br&gt;− __not_run : list[str] = []&lt;br&gt;− __report : dict = {} {get, set}&lt;br&gt;+ OUTCOMES : tuple[str, ...] = (&amp;quot;PASSED&amp;quot;, &amp;quot;MANUAL_REVIEW&amp;quot;,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;quot;RISKY&amp;quot;, &amp;quot;SERIOUS_RISK&amp;quot;) «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="190" width="500" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c267" parent="c265" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -824,7 +824,7 @@
         <mxCell id="c277" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="MatchResult" vertex="1">
           <mxGeometry height="151" width="390" x="760" y="4880" as="geometry" />
         </mxCell>
-        <mxCell id="c278" parent="c277" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __typology : Typology = None {get}&lt;br&gt;− __core_fired : list[str] = [] {get}&lt;/div&gt;" vertex="1">
+        <mxCell id="c278" parent="c277" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __typology : Typology = Typology() {get}&lt;br&gt;− __core_fired : list[str] = [] {get}&lt;/div&gt;" vertex="1">
           <mxGeometry height="40" width="390" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c279" parent="c277" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -854,7 +854,7 @@
         <mxCell id="c287" parent="c285" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
           <mxGeometry height="1" width="450" y="95.5" as="geometry" />
         </mxCell>
-        <mxCell id="c288" parent="c285" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(name : str, nationality : str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;country_of_residence : str = &amp;quot;&amp;quot;, age : int | None = None)&lt;br&gt;+ to_dict() : dict&lt;br&gt;− __check_age(age : int | None) : None&lt;/div&gt;" vertex="1">
+        <mxCell id="c288" parent="c285" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(name : str = &amp;quot;&amp;quot;, nationality : str = &amp;quot;&amp;quot;,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;country_of_residence : str = &amp;quot;&amp;quot;, age : int | None = None)&lt;br&gt;+ to_dict() : dict&lt;br&gt;− __check_age(age : int | None) : None&lt;/div&gt;" vertex="1">
           <mxGeometry height="70" width="450" y="96" as="geometry" />
         </mxCell>
         <mxCell id="c289" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="ReviewStatus" vertex="1">
@@ -884,7 +884,7 @@
         <mxCell id="c297" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="ConfigReader" vertex="1">
           <mxGeometry height="121" width="460" x="1340" y="1080" as="geometry" />
         </mxCell>
-        <mxCell id="c298" parent="c297" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __folder : str = &amp;quot;config&amp;quot;&lt;br&gt;+ FILE_NAMES : tuple[str, ...] = (&amp;quot;policy&amp;quot;, &amp;quot;vocabulary&amp;quot;) «const»&lt;/div&gt;" vertex="1">
+        <mxCell id="c298" parent="c297" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __folder : str = &amp;quot;.../config&amp;quot;&lt;br&gt;+ FILE_NAMES : tuple[str, ...] = (&amp;quot;policy&amp;quot;, &amp;quot;vocabulary&amp;quot;) «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="40" width="460" y="26" as="geometry" />
         </mxCell>
         <mxCell id="c299" parent="c297" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
@@ -978,7 +978,7 @@
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="1760" y="894.9" />
-              <mxPoint x="1760" y="420" />
+              <mxPoint x="1760" y="427.6" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -1068,7 +1068,7 @@
         <mxCell id="c327" edge="1" parent="1" source="c101" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=block;endFill=0;endSize=14;exitX=0.5000;exitY=0.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5000;entryY=1.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c97" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="860" y="3105" />
+              <mxPoint x="870" y="3105" />
               <mxPoint x="1685" y="3105" />
             </Array>
           </mxGeometry>
@@ -1092,7 +1092,7 @@
         <mxCell id="c330" edge="1" parent="1" source="c133" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=block;endFill=0;endSize=14;exitX=0.5000;exitY=0.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5000;entryY=1.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c97" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2265" y="3105" />
+              <mxPoint x="2275" y="3105" />
               <mxPoint x="1685" y="3105" />
             </Array>
           </mxGeometry>
@@ -1144,7 +1144,7 @@
         <mxCell id="c339" edge="1" parent="1" source="c133" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.1026;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.5000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c157" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2110" y="3668" />
+              <mxPoint x="2112.1" y="3668" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -1154,7 +1154,7 @@
         <mxCell id="c341" edge="1" parent="1" source="c133" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.5897;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5000;entryY=0.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c137" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2300" y="3515" />
+              <mxPoint x="2311.8" y="3515" />
               <mxPoint x="2395" y="3515" />
             </Array>
           </mxGeometry>
@@ -1165,8 +1165,8 @@
         <mxCell id="c343" edge="1" parent="1" source="c133" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.5897;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5000;entryY=0.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c141" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2300" y="3515" />
-              <mxPoint x="2885" y="3515" />
+              <mxPoint x="2311.8" y="3515" />
+              <mxPoint x="2890" y="3515" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -1176,7 +1176,7 @@
         <mxCell id="c345" edge="1" parent="1" source="c133" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.5897;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5000;entryY=0.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c145" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2300" y="3515" />
+              <mxPoint x="2311.8" y="3515" />
               <mxPoint x="3325" y="3515" />
             </Array>
           </mxGeometry>
@@ -1190,7 +1190,7 @@
         <mxCell id="c348" edge="1" parent="1" source="c141" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.5000;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5000;entryY=0.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c153" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2885" y="3875" />
+              <mxPoint x="2890" y="3875" />
               <mxPoint x="2630" y="3875" />
             </Array>
           </mxGeometry>
@@ -1201,7 +1201,7 @@
         <mxCell id="c350" edge="1" parent="1" source="c141" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.5000;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5000;entryY=0.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c149" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2885" y="3875" />
+              <mxPoint x="2890" y="3875" />
               <mxPoint x="3090" y="3875" />
             </Array>
           </mxGeometry>
@@ -1430,15 +1430,15 @@
         <mxCell id="c394" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.0000;exitY=0.2730;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.9036;entryDx=0;entryDy=0;entryPerimeter=0;" target="c209" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="1240" y="1760" />
-              <mxPoint x="1240" y="490" />
-              <mxPoint x="470" y="490" />
-              <mxPoint x="470" y="267.1" />
+              <mxPoint x="1240.0" y="1760.0" />
+              <mxPoint x="1240.0" y="490.0" />
+              <mxPoint x="530" y="490.0" />
+              <mxPoint x="530" y="253.6" />
             </Array>
           </mxGeometry>
         </mxCell>
         <mxCell id="c395" parent="1" style="text;html=1;fontSize=11;fontStyle=1;fontColor=#0F172A;align=center;verticalAlign=middle;" value="1" vertex="1">
-          <mxGeometry height="16" width="40" x="412" y="243" as="geometry" />
+          <mxGeometry height="16" width="40" x="412" y="273" as="geometry" />
         </mxCell>
         <mxCell id="c396" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.0000;exitY=0.3584;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.1190;entryY=1.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c205" value="">
           <mxGeometry relative="1" as="geometry">
@@ -1515,7 +1515,7 @@
         <mxCell id="c407" edge="1" parent="1" source="c209" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.0000;exitY=0.9036;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.0000;entryY=0.9091;entryDx=0;entryDy=0;entryPerimeter=0;" target="c293" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="-40" y="267.1" />
+              <mxPoint x="-40" y="253.6" />
               <mxPoint x="-40" y="1130" />
               <mxPoint x="570" y="1130" />
               <mxPoint x="570" y="983.6" />
@@ -1587,7 +1587,7 @@
         <mxCell id="c418" edge="1" parent="1" source="c133" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=none;exitX=0.0000;exitY=0.8984;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.7188;entryY=0.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c237" value="reads names">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2040" y="3460.4" />
+              <mxPoint x="2040" y="3446.9" />
               <mxPoint x="2040" y="4710" />
               <mxPoint x="1790" y="4710" />
             </Array>
@@ -1642,7 +1642,7 @@
         <mxCell id="c424" edge="1" parent="1" source="c101" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=0.1136;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.1250;entryY=0.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c257" value="reads">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="690" y="3528" />
+              <mxPoint x="692.3" y="3528" />
               <mxPoint x="640" y="3528" />
               <mxPoint x="640" y="4750" />
               <mxPoint x="1440" y="4750" />
@@ -1654,7 +1654,7 @@
         <mxCell id="c425" edge="1" parent="1" source="c141" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=0.1143;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.9036;entryDx=0;entryDy=0;entryPerimeter=0;" target="c157" value="uses">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2742.3" y="3895" />
+              <mxPoint x="2743.4" y="3895" />
               <mxPoint x="2080" y="3895" />
               <mxPoint x="2080" y="3747.1" />
             </Array>
@@ -1715,7 +1715,7 @@
         <mxCell id="c432" edge="1" parent="1" source="c133" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=1.0000;exitY=0.8984;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.8793;entryY=0.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c173" value="uses">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="3700" y="3460.4" />
+              <mxPoint x="3700" y="3446.9" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -1737,7 +1737,7 @@
             <Array as="points">
               <mxPoint x="2530" y="2280" />
               <mxPoint x="3840" y="2280" />
-              <mxPoint x="3840" y="5150" />
+              <mxPoint x="3840" y="5157.5" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -1746,7 +1746,7 @@
             <Array as="points">
               <mxPoint x="2400" y="40" />
               <mxPoint x="4080" y="40" />
-              <mxPoint x="4080" y="5190" />
+              <mxPoint x="4080" y="5198.6" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -1756,7 +1756,7 @@
               <mxPoint x="3340" y="1444.3" />
               <mxPoint x="3340" y="1940" />
               <mxPoint x="3880" y="1940" />
-              <mxPoint x="3880" y="5230" />
+              <mxPoint x="3880" y="5239.7" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -1766,7 +1766,7 @@
               <mxPoint x="2600" y="982.3" />
               <mxPoint x="2600" y="1500" />
               <mxPoint x="4100" y="1500" />
-              <mxPoint x="4100" y="5270" />
+              <mxPoint x="4100" y="5280.8" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -1786,7 +1786,7 @@
               <mxPoint x="4020" y="1064.3" />
               <mxPoint x="4020" y="1370" />
               <mxPoint x="4140" y="1370" />
-              <mxPoint x="4140" y="5310" />
+              <mxPoint x="4140" y="5321.9" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -1795,7 +1795,7 @@
             <Array as="points">
               <mxPoint x="510" y="4710" />
               <mxPoint x="1360" y="4710" />
-              <mxPoint x="1360" y="5030" />
+              <mxPoint x="1360" y="5034.2" />
             </Array>
           </mxGeometry>
         </mxCell>

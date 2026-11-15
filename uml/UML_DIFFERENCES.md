@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `6ae3b75` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `2a7dc78` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -14,7 +14,7 @@ Checked code at commit `6ae3b75` against `uml/class_diagram_v4.puml`, which is c
 
 **What was compared:** class presence, kind, package and parent; attribute name, visibility, type and starting value; `{get}` / `{get, set}` properties; «const» name, type and value; method name, visibility, parameters (names, order, types, defaults), return type, «static», abstract; every relationship's kind, direction, verb and multiplicity; class-to-class links in the code that have no UML line; module-level functions (only `app/ai/ai_caller.py`: ✅); the main.py note.
 
-**Not checked (can't be, statically):** method behaviour; 25 values the UML shortens with `...` (listed at the end).
+**Not checked (can't be, statically):** method behaviour; 54 values the UML shortens with `...` (listed at the end).
 
 **Area** is the feature area of the class, to help split the work. It is a best guess, so confirm it with the team. Don't change a teammate's files without asking them.
 
@@ -27,9 +27,9 @@ Checked code at commit `6ae3b75` against `uml/class_diagram_v4.puml`, which is c
 | 3 | Same member, different details | 0 | Decide per item |
 | 4 | In UML, missing in code | 0 | Decide per item |
 | 5 | In code, missing from UML | 465 | UML |
-| 6 | Minor: default and starting values | 75 | UML |
+| 6 | Minor: default and starting values | 0 | UML |
 | 7 | Relationships (arrows, verbs, multiplicities) and the main.py note | 43 | Mostly UML |
-| | **Total** | **583** | |
+| | **Total** | **508** | |
 
 Pairs where only the underscores differ (`__x` in UML, `_x` in code) are merged into one item in stage 3, so the total is lower than the raw count of differences.
 
@@ -695,194 +695,13 @@ How to fix: **UML:** add them to the draw.io boxes. If a class gets too big (pro
 - [ ] `values_from_form()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:186` (app/interface/web_app.py:186)
 - [ ] `values_from_record()` exists in code but not in UML. UML: `—` · code: `app/interface/web_app.py:161` (app/interface/web_app.py:161)
 
-## Stage 6: Minor: default and starting values (75)
+## Stage 6: Minor: default and starting values (0)
 
 A parameter default the UML leaves out, or an attribute whose starting value differs.
 
 How to fix: **UML:** add or correct the `= value`. Where the code is computed, decide by hand. For the `= None` pattern, the team can agree once on whether parts created in `__init__` are shown as `= None` or without a value. Do it last.
 
-### Benchmark (1)
-
-**`Benchmark`**
-
-- [ ] `__config` starts with a different value. UML: `None` · code: `Config(self._policy, {})` (app/logic/benchmark.py:53) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-
-### Crime Scan (9)
-
-**`CrimeScan`**
-
-- [ ] `__indicators` starts with a different value. UML: `[]` · code: `[GiftOrInheritanceUnnamed(self._policy), CounterpartyUnnamed(self._policy), SourceContradictsOccupation(self._policy), UnvaluedSource(self._policy), RelatedPart…` (app/logic/crime_scan.py:104) *(computed in code: check by hand)*
-
-**`MatchResult`**
-
-- [ ] `__typology` starts with a different value. UML: `None` · code: `Typology()` (app/model/match_result.py:20) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__core_fired` starts with a different value. UML: `[]` · code: `MatchResult.__signs('core', core_fired, self.__typology.core_indicators())` (app/model/match_result.py:21) *(computed in code: check by hand)*
-
-**`ResearchReport`**
-
-- [ ] `__report_id` starts with a different value. UML: `""` · code: `ResearchReport.__text('report_id', report_id)` (app/model/research_report.py:17) *(computed in code: check by hand)*
-- [ ] `__url` starts with a different value. UML: `""` · code: `ResearchReport.__text('url', url or '')` (app/model/research_report.py:18) *(computed in code: check by hand)*
-- [ ] `__excerpts` starts with a different value. UML: `[]` · code: `[str(excerpt) for excerpt in ResearchReport.__list('excerpts', excerpts)]` (app/model/research_report.py:19) *(computed in code: check by hand)*
-
-**`Typology`**
-
-- [ ] `__typology_id` starts with a different value. UML: `""` · code: `Typology.__text('typology_id', typology_id)` (app/model/typology.py:17) *(computed in code: check by hand)*
-- [ ] `__name` starts with a different value. UML: `""` · code: `Typology.__text('name', name)` (app/model/typology.py:18) *(computed in code: check by hand)*
-- [ ] `__indicators` starts with a different value. UML: `[]` · code: `[Typology.__indicator(indicator) for indicator in Typology.__list('indicators', indicators)]` (app/model/typology.py:19) *(computed in code: check by hand)*
-
-### Data (11)
-
-**`ConfigReader`**
-
-- [ ] `__folder` starts with a different value. UML: `"config"` · code: `os.path.join(ROOT_DIR, 'config')` (app/data/config_reader.py:22) *(computed in code: check by hand)*
-
-**`DatabaseRepository`**
-
-- [ ] `_key_field` starts with a different value. UML: `"client_ref"` · code: `""` (app/data/database_repository.py:20)
-- [ ] `__init__` parameter `collection_name` has a default in code that UML does not show. UML: `—` · code: `''` (app/data/database_repository.py:17)
-- [ ] `__init__` parameter `key_field` has a default in code that UML does not show. UML: `—` · code: `''` (app/data/database_repository.py:17)
-- [ ] `__init__` parameter `uri` has a default in code that UML does not show. UML: `—` · code: `''` (app/data/database_repository.py:17)
-
-**`JsonRepository`**
-
-- [ ] `_key_field` starts with a different value. UML: `"client_ref"` · code: `""` (app/data/json_repository.py:24)
-- [ ] `__init__` parameter `path` has a default in code that UML does not show. UML: `—` · code: `''` (app/data/json_repository.py:21)
-- [ ] `__init__` parameter `key_field` has a default in code that UML does not show. UML: `—` · code: `''` (app/data/json_repository.py:21)
-
-**`MongoRepository`**
-
-- [ ] `__init__` parameter `collection_name` has a default in code that UML does not show. UML: `—` · code: `''` (app/data/mongo_repository.py:21)
-- [ ] `__init__` parameter `key_field` has a default in code that UML does not show. UML: `—` · code: `''` (app/data/mongo_repository.py:21)
-- [ ] `__init__` parameter `uri` has a default in code that UML does not show. UML: `—` · code: `''` (app/data/mongo_repository.py:21)
-
-### Document Evidence (3)
-
-**`DocumentRecordBuilder`**
-
-- [ ] `__policy` starts with a different value. UML: `{}` · code: `self.__config.policy` (app/logic/document_record_builder.py:27)
-
-**`DocumentStore`**
-
-- [ ] `__folder` starts with a different value. UML: `"data/documents"` · code: `folder if os.path.isabs(folder) else os.path.join(root, folder)` (app/data/document_store.py:24) *(computed in code: check by hand)*
-- [ ] `__reader_factory` starts with a different value. UML: `None` · code: `DocumentReaderFactory()` (app/data/document_store.py:25) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-
-### Forecast (13)
-
-**`AssetPath`**
-
-- [ ] `__market_model` starts with a different value. UML: `None` · code: `MarketModel()` (app/logic/asset_path.py:17) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-
-**`Forecast`**
-
-- [ ] `__market_model` starts with a different value. UML: `None` · code: `MarketModel()` (app/logic/forecast.py:31) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__future_paths` starts with a different value. UML: `None` · code: `FuturePaths(self.__market_model, {}, self._policy)` (app/logic/forecast.py:32) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__assessor` starts with a different value. UML: `None` · code: `OnboardingAssessor(self.__future_paths, self._policy, self.__config)` (app/logic/forecast.py:33) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__pay_calibrator` starts with a different value. UML: `None` · code: `PayCalibrator(self.__future_paths.career_savings(), self._policy)` (app/logic/forecast.py:34) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__config` starts with a different value. UML: `None` · code: `Config(self._policy, {})` (app/logic/forecast.py:29) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-
-**`FuturePaths`**
-
-- [ ] `__career_savings` starts with a different value. UML: `None` · code: `CareerSavings(earnings)` (app/logic/future_paths.py:26) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__asset_path` starts with a different value. UML: `None` · code: `AssetPath(self.__market_model, earnings.get('assets'))` (app/logic/future_paths.py:27) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-
-**`MarketModel`**
-
-- [ ] `__history` starts with a different value. UML: `{}` · code: `{market_id: {row['year']: row['change_pct'] for row in one['history']} for market_id, one in series.items()}` (app/logic/market_model.py:19) *(computed in code: check by hand)*
-- [ ] `__outlook` starts with a different value. UML: `{}` · code: `{market_id: {row['year']: {s: row[s] for s in MarketModel.SCENARIOS} for row in one['outlook']} for market_id, one in series.items()}` (app/logic/market_model.py:22) *(computed in code: check by hand)*
-
-**`OnboardingAssessor`**
-
-- [ ] `__future_paths` starts with a different value. UML: `None` · code: `FuturePaths()` (app/logic/onboarding_assessor.py:22) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__config` starts with a different value. UML: `None` · code: `Config()` (app/logic/onboarding_assessor.py:24) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-
-**`PayCalibrator`**
-
-- [ ] `__career_savings` starts with a different value. UML: `None` · code: `CareerSavings()` (app/logic/pay_calibrator.py:18) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-
-### Shared core (38)
-
-**`App`**
-
-- [ ] `__config` starts with a different value. UML: `None` · code: `Config(policy_file, vocabulary_file)` (app/application/app.py:76) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__ui` starts with a different value. UML: `None` · code: `ConsoleUI()` (app/application/app.py:104) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__report_view` starts with a different value. UML: `None` · code: `ReportView(self.__ui)` (app/application/app.py:105) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__client_form` starts with a different value. UML: `None` · code: `ClientForm(self.__ui, self.__report_view)` (app/application/app.py:106) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__case_builder` starts with a different value. UML: `None` · code: `CaseBuilder(self.__ui, schema)` (app/application/app.py:108) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__case_files` starts with a different value. UML: `None` · code: `CaseFiles(os.path.join(root, 'data', 'sample'))` (app/application/app.py:86) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__limiter` starts with a different value. UML: `None` · code: `RateLimiter(limits.get('cooldown_seconds', RateLimiter.DEFAULT_COOLDOWN_SECONDS), limits.get('enabled', True))` (app/application/app.py:111) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__clients` starts with a different value. UML: `None` · code: `ClientRepository(os.path.join(database_dir, 'sow_cases.json'))` (app/application/app.py:80) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__assessments` starts with a different value. UML: `None` · code: `AssessmentRepository(os.path.join(database_dir, 'ai_assessments.json'))` (app/application/app.py:81) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__runner` starts with a different value. UML: `None` · code: `self.__create_runner(policy)` (app/application/app.py:101)
-- [ ] `__documents` starts with a different value. UML: `None` · code: `DocumentStore(os.path.join(data_dir, 'documents'), root=os.path.dirname(data_dir))` (app/application/app.py:84) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__document_ai` starts with a different value. UML: `None` · code: `self.__create_document_ai()` (app/application/app.py:100)
-- [ ] `__response_cache` starts with a different value. UML: `None` · code: `ResponseCache(cache_folder if os.path.isabs(cache_folder) else os.path.join(root, cache_folder))` (app/application/app.py:97) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__syncs` starts with a different value. UML: `[]` · code: `[CloudSync(self.__clients, MongoRepository(App.CLIENT_COLLECTION, 'client_ref', uri), state_path), CloudSync(self.__assessments, MongoRepository(App.ASSESSMENT_…` (app/application/app.py:89) *(computed in code: check by hand)*
-
-**`AssessmentRunner`**
-
-- [ ] `__verdict_engine` starts with a different value. UML: `None` · code: `VerdictEngine([self.__crime_scan, self.__documents, self.__benchmark, self.__forecast], self.__config)` (app/application/assessment_runner.py:84) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__config` starts with a different value. UML: `None` · code: `Config()` (app/application/assessment_runner.py:64) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-
-**`CaseBuilder`**
-
-- [ ] `__ui` starts with a different value. UML: `None` · code: `ConsoleUI()` (app/interface/case_builder.py:19) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-
-**`CaseTimeline`**
-
-- [ ] `__forecast_years` starts with a different value. UML: `4` · code: `FORECAST_YEARS` (app/logic/case_timeline.py:13)
-
-**`Claims`**
-
-- [ ] `__pep_status` starts with a different value. UML: `"no"` · code: `""` (app/model/claims.py:22)
-
-**`ClientForm`**
-
-- [ ] `__ui` starts with a different value. UML: `None` · code: `ConsoleUI()` (app/interface/client_form.py:38) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-
-**`ClientProfile`**
-
-- [ ] `__init__` parameter `name` has a default in code that UML does not show. UML: `—` · code: `''` (app/model/client_profile.py:10)
-- [ ] `__init__` parameter `nationality` has a default in code that UML does not show. UML: `—` · code: `''` (app/model/client_profile.py:10)
-
-**`ClientRecord`**
-
-- [ ] `__profile` starts with a different value. UML: `None` · code: `ClientProfile(name, nationality, country_of_residence, age)` (app/model/client_record.py:31) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__init__` parameter `client_ref` has a default in code that UML does not show. UML: `—` · code: `''` (app/model/client_record.py:28)
-- [ ] `__init__` parameter `name` has a default in code that UML does not show. UML: `—` · code: `''` (app/model/client_record.py:28)
-- [ ] `__init__` parameter `nationality` has a default in code that UML does not show. UML: `—` · code: `''` (app/model/client_record.py:28)
-- [ ] `__init__` parameter `current_date` has a default in code that UML does not show. UML: `—` · code: `''` (app/model/client_record.py:28)
-
-**`ConsoleUI`**
-
-- [ ] `__read` starts with a different value. UML: `input` · code: `read if read is not None else lambda question: input(question)` (app/interface/console_ui.py:31) *(computed in code: check by hand)*
-- [ ] `__write` starts with a different value. UML: `print` · code: `write if write is not None else lambda text: print(text)` (app/interface/console_ui.py:32) *(computed in code: check by hand)*
-- [ ] `show` parameter `text` has a default in code that UML does not show. UML: `—` · code: `''` (app/interface/console_ui.py:111)
-- [ ] `show_ai_unavailable` parameter `feature` has a default in code that UML does not show. UML: `—` · code: `'Assessment'` (app/interface/console_ui.py:62)
-
-**`RateLimiter`**
-
-- [ ] `__cooldown_seconds` starts with a different value. UML: `60` · code: `DEFAULT_COOLDOWN_SECONDS` (app/interface/rate_limiter.py:23)
-
-**`ReportView`**
-
-- [ ] `__ui` starts with a different value. UML: `None` · code: `ConsoleUI()` (app/interface/report_view.py:52) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-- [ ] `__width` starts with a different value. UML: `96` · code: `REPORT_WIDTH` (app/interface/report_view.py:53)
-
-**`ResponseCache`**
-
-- [ ] `__folder` starts with a different value. UML: `"data/cache"` · code: `folder if os.path.isabs(folder) else os.path.join(ROOT_DIR, folder)` (app/ai/response_cache.py:27) *(computed in code: check by hand)*
-
-**`Verdict`**
-
-- [ ] `__outcome` starts with a different value. UML: `""` · code: `"MANUAL_REVIEW"` (app/model/verdict.py:35)
-
-**`VerdictEngine`**
-
-- [ ] `__config` starts with a different value. UML: `None` · code: `Config()` (app/logic/verdict_engine.py:51) *(pattern: UML writes `= None` for a part that `__init__` creates)*
-
-**`WebApp`**
-
-- [ ] `__flask` starts with a different value. UML: `Flask(__name__)` · code: `flask` (app/interface/web_app.py:124)
+**Done.** Nothing left in this stage.
 
 ## Stage 7: Relationships (43)
 
@@ -955,7 +774,7 @@ Real class-to-class links in the code with no UML line between the two classes. 
 
 - [ ] The note on `App` says `caller = with_fallback(openai_caller(OpenAI()), gemini_caller(genai.Client()))` then `App(caller)`, but `main.py:22` is `App(with_fallback(openai_caller(), gemini_caller()))`: no `caller` variable, and the callers take no arguments. Fix in UML.
 
-## Appendix: values shortened with `...` (not checked, 25)
+## Appendix: values shortened with `...` (not checked, 54)
 
-`AssessmentRunner.STEPS`, `Band.MONEY_IN`, `Band.MONEY_OUT`, `Benchmark.BENCHMARK_LABELS`, `Benchmark.COMPOSITION_RULES`, `BenchmarkAI.ALLOWED_FIELDS`, `CaseFiles.__folder`, `CaseReader.__PRESENT_WORDS`, `ClientForm.PAYMENT_METHODS`, `ClientForm.PEP_OPTIONS`, `ClientRepository.OLD_ASSET_KEYS`, `CloudSync.__state_path`, `CrimeScan.MATCH_LABELS`, `CrimeScan.__COUNTRY_TO_ISO`, `DocumentReaderFactory.READER_TYPES`, `ImageReader.IMAGE_TYPES`, `JsonRepository.DATA_DIR`, `RelatedPartyTransaction.__KEYWORDS`, `ReportView.FIELD_NAMES`, `ReportView.OUTCOME_LABELS`, `ReportView.SOURCE_TAGS`, `VerdictEngine.MARKS`, `VerdictEngine.REPORT_LEGEND`, `VerdictEngine.THEMES`, `VerdictEngine.VERDICT_LABELS`
+`App.__assessments`, `App.__case_builder`, `App.__case_files`, `App.__client_form`, `App.__clients`, `App.__config`, `App.__document_ai`, `App.__documents`, `App.__limiter`, `App.__report_view`, `App.__response_cache`, `App.__runner`, `App.__syncs`, `AssessmentRunner.STEPS`, `AssessmentRunner.__verdict_engine`, `Band.MONEY_IN`, `Band.MONEY_OUT`, `Benchmark.BENCHMARK_LABELS`, `Benchmark.COMPOSITION_RULES`, `Benchmark.__config`, `BenchmarkAI.ALLOWED_FIELDS`, `CaseFiles.__folder`, `CaseReader.__PRESENT_WORDS`, `ClientForm.PAYMENT_METHODS`, `ClientForm.PEP_OPTIONS`, `ClientRecord.__profile`, `ClientRepository.OLD_ASSET_KEYS`, `CloudSync.__state_path`, `ConfigReader.__folder`, `ConsoleUI.__read`, `ConsoleUI.__write`, `CrimeScan.MATCH_LABELS`, `CrimeScan.__COUNTRY_TO_ISO`, `CrimeScan.__indicators`, `DocumentReaderFactory.READER_TYPES`, `DocumentStore.__folder`, `Forecast.__assessor`, `Forecast.__config`, `Forecast.__future_paths`, `Forecast.__pay_calibrator`, `FuturePaths.__asset_path`, `FuturePaths.__career_savings`, `ImageReader.IMAGE_TYPES`, `JsonRepository.DATA_DIR`, `RelatedPartyTransaction.__KEYWORDS`, `ReportView.FIELD_NAMES`, `ReportView.OUTCOME_LABELS`, `ReportView.SOURCE_TAGS`, `ResponseCache.__folder`, `VerdictEngine.MARKS`, `VerdictEngine.REPORT_LEGEND`, `VerdictEngine.THEMES`, `VerdictEngine.VERDICT_LABELS`, `WebApp.__flask`
 
