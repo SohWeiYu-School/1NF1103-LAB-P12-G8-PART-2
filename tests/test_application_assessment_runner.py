@@ -119,3 +119,37 @@ def test_without_research_the_typologies_are_taken_unchecked(tmp_path):
     typologies = result["typologies"]
     assert all(isinstance(typology, Typology) and not typology.verified for typology in typologies)
     assert [typology.to_dict() for typology in typologies] == fake_ai.typologies()["sector_typologies"]
+
+
+def test_parallel_runs_never_interleave_a_crime_scan_check_and_its_warnings(tmp_path, monkeypatch):
+    """The web app runs assessments in parallel on one runner. CrimeScan keeps the warnings of its
+    last check, so one run must not start a check while another is still reading its warnings.
+    The check is slowed down here so that, without the runner's lock, the two would overlap."""
+    import threading
+    import time
+    from app.logic.crime_scan import CrimeScan
+    runner, cache, _ = fake_services.runner(tmp_path)
+    fake_services.save_forecast_replies(cache, sample_case())
+    spans, guard = [], threading.Lock()
+
+    def slowed(original):
+        def check(self, *args):
+            start = time.monotonic()
+            found = original(self, *args)
+            time.sleep(0.2)
+            with guard:
+                spans.append((start, time.monotonic()))
+            return found
+        return check
+
+    for name in ("verify_research", "verify_typology_sources", "read_typologies"):
+        monkeypatch.setattr(CrimeScan, name, slowed(getattr(CrimeScan, name)))
+    threads = [threading.Thread(target=runner.run, args=(sample_case(),)) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert len(spans) >= 2
+    spans.sort()
+    for (_, earlier_end), (later_start, _) in zip(spans, spans[1:]):
+        assert later_start >= earlier_end       # no check started while another was still running

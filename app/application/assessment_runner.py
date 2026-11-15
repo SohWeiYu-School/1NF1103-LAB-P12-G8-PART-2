@@ -1,6 +1,7 @@
 """AssessmentRunner: runs one assessment, step by step."""
 
 import logging
+import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Callable
@@ -71,6 +72,9 @@ class AssessmentRunner:
         policy = self.__config.policy
         self.__case_reader: CaseReader = CaseReader()
         self.__crime_scan: CrimeScan = CrimeScan(policy)
+        # The web app runs assessments in parallel threads on this one runner. CrimeScan keeps the
+        # warnings of its last check, so a check and the reading of its warnings must not interleave.
+        self.__crime_scan_lock: threading.Lock = threading.Lock()
         self.__documents: DocumentEvidence = DocumentEvidence(policy)
         self.__benchmark: Benchmark = Benchmark(policy, self.__config)
         self.__forecast: Forecast = Forecast(policy, self.__config)
@@ -132,8 +136,9 @@ class AssessmentRunner:
         step(3)
         reports = None
         if research is not None:
-            reports = self.__crime_scan.verify_research(research)
-            notes += self.__crime_scan.warnings()
+            with self.__crime_scan_lock:
+                reports = self.__crime_scan.verify_research(research)
+                notes += self.__crime_scan.warnings()
         step(4)
         typology_response = self.__typology_ai.run({"case": crime_input, "research": research,
                                                     "categories": self.__crime_categories()})
@@ -145,11 +150,12 @@ class AssessmentRunner:
                 return None
         else:
             found = typology_response.get("sector_typologies", [])
-            if reports is not None:
-                typologies = self.__crime_scan.verify_typology_sources(found, reports)
-            else:                                   # no research to check them against: taken as they are
-                typologies = self.__crime_scan.read_typologies(found)
-            notes += self.__crime_scan.warnings()
+            with self.__crime_scan_lock:
+                if reports is not None:
+                    typologies = self.__crime_scan.verify_typology_sources(found, reports)
+                else:                               # no research to check them against: taken as they are
+                    typologies = self.__crime_scan.read_typologies(found)
+                notes += self.__crime_scan.warnings()
 
         # 6-10. Forecast: the declaration is read once here, and the crime types are built from the typologies
         run = self.__forecast_ai.run({
