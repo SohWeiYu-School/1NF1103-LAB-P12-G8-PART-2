@@ -1514,3 +1514,30 @@ def test_an_old_archive_line_without_by_says_it_was_not_recorded(web):
     page = browser.get(f"/client/{ref}?archived=1").get_data(as_text=True)
     assert "Not recorded (before sign-in existed)" in page
     assert "Archived by: Not recorded (before sign-in existed)." in browser.get("/assessment/A1").get_data(as_text=True)
+
+
+# ----- web errors keep their own status ----------------------------------------------------------
+
+def test_a_wrong_method_is_a_405_not_a_500(web):
+    _, _, browser = web
+    for method, url in (("get", "/signout"), ("put", "/"), ("get", "/sync"), ("delete", "/audit/verify")):
+        reply = getattr(browser, method)(url)
+        assert reply.status_code == 405, (method, url)
+        assert "Back to home" in reply.get_data(as_text=True)
+
+
+def test_an_upload_that_is_too_large_is_a_413_with_the_error_page(web):
+    _, site, browser = web
+    site.flask().config["MAX_CONTENT_LENGTH"] = 100
+    reply = browser.post("/client/new/autofill", content_type="multipart/form-data",
+                         data={"autofill_files": (io.BytesIO(b"x" * 5000), "big.txt")})
+    assert reply.status_code == 413
+    assert "Back to home" in reply.get_data(as_text=True)
+
+
+def test_an_unknown_page_is_still_a_404_and_a_real_error_is_still_a_500(web, monkeypatch):
+    application, _, browser = web
+    assert browser.get("/no/such/page").status_code == 404
+    monkeypatch.setattr(application, "all_clients", lambda: 1 / 0)
+    reply = browser.get("/")
+    assert reply.status_code == 500 and "Something went wrong" in reply.get_data(as_text=True)

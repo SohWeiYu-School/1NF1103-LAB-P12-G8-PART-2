@@ -1226,6 +1226,10 @@ class WebApp:
         return render_template("error.html", error_detail=None), 404
 
     def handle_exception(self, e: Exception) -> tuple[str, int]:
+        """The error page. A web error such as 405 (wrong method) or 413 (upload too large) keeps its own
+        status code; anything else is an unexpected error: logged in full, shown as a plain 500 page."""
+        if isinstance(e, HTTPException):
+            return render_template("error.html", error_detail=None), e.code or 500
         import logging
         import traceback
         logging.error("Unhandled exception: %s", traceback.format_exc())
