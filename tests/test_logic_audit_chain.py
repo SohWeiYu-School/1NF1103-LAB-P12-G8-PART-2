@@ -31,8 +31,8 @@ def test_an_empty_list_is_intact_and_says_no_entries_yet():
 def test_an_intact_chain_checks_out():
     chain = AuditChain(_chain(5))
     assert chain.intact() and chain.breaks() == [] and len(chain.events()) == 5
-    assert chain.summary() == "All 5 entries check out."
-    assert AuditChain(_chain(1)).summary() == "The 1 entry checks out."
+    assert chain.summary() == "No changes found in the 5 entries."
+    assert AuditChain(_chain(1)).summary() == "No changes found in the 1 entry."
 
 
 def test_events_come_back_in_file_order():
@@ -53,15 +53,15 @@ def test_an_edited_detail_is_caught_too():
     assert AuditChain(rows).breaks() == [1]
 
 
-def test_a_deleted_middle_row_breaks_at_the_row_after_it():
+def test_a_deleted_middle_row_breaks_at_the_position_of_the_row_after_it():
     rows = _chain(5)
     del rows[2]
     chain = AuditChain(rows)
-    assert chain.breaks() == [4] and not chain.intact()
+    assert chain.breaks() == [3] and not chain.intact()          # position 3 now holds the row with sequence 4
 
 
 def test_a_deleted_first_row_is_caught():
-    assert AuditChain(_chain(3)[1:]).breaks() == [2]
+    assert AuditChain(_chain(3)[1:]).breaks() == [1]
 
 
 def test_a_deleted_last_row_cannot_be_seen_by_the_chain_itself():
@@ -71,7 +71,7 @@ def test_a_deleted_last_row_cannot_be_seen_by_the_chain_itself():
 def test_swapped_rows_are_caught():
     rows = _chain(4)
     rows[1], rows[2] = rows[2], rows[1]
-    assert AuditChain(rows).breaks() == [3, 2, 4]
+    assert AuditChain(rows).breaks() == [2, 3, 4]
 
 
 def test_a_row_whose_hash_was_recomputed_after_editing_still_breaks_the_link_after_it():
@@ -85,12 +85,12 @@ def test_a_row_whose_hash_was_recomputed_after_editing_still_breaks_the_link_aft
 def test_a_row_with_the_wrong_sequence_breaks():
     rows = _chain(3)
     rows[1]["sequence"] = 5
-    assert 5 in AuditChain(rows).breaks()
+    assert AuditChain(rows).breaks()[0] == 2              # named by position, not by the 5 stored in the row
 
 
 def test_a_row_that_was_never_sealed_breaks():
     rows = _chain(2) + [AuditEvent(action="signed_in").to_dict()]
-    assert AuditChain(rows).breaks() == [0]
+    assert AuditChain(rows).breaks() == [3]
 
 
 def test_an_unreadable_row_is_counted_kept_out_of_events_and_is_a_break():
@@ -143,3 +143,25 @@ def test_the_rows_given_are_not_changed():
 def test_rows_that_are_not_a_list_are_refused():
     with pytest.raises(ValueError, match="list"):
         AuditChain({"a": 1})
+
+
+@pytest.mark.parametrize("key", ["event_id", "sequence", "at", "action", "previous_hash", "hash"])
+def test_a_row_missing_any_required_field_is_unreadable_and_never_filled_in(key):
+    rows = _chain(3)
+    del rows[1][key]
+    chain = AuditChain(rows)
+    assert chain.unreadable_count() == 1 and len(chain.events()) == 2 and chain.breaks()[0] == 2
+
+
+@pytest.mark.parametrize("key", ["event_id", "at"])
+def test_a_row_with_an_empty_id_or_time_is_unreadable_not_given_a_new_one(key):
+    rows = _chain(3)
+    rows[1][key] = ""
+    assert AuditChain(rows).unreadable_count() == 1
+
+
+def test_breaks_are_positions_even_when_the_stored_sequences_are_forged():
+    rows = _chain(4)
+    for row in rows:
+        row["sequence"] = 1000
+    assert AuditChain(rows).breaks()[0] == 1

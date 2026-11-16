@@ -1260,7 +1260,7 @@ def test_verifying_an_untouched_log_passes_and_is_recorded(app):
     app.sync_to_cloud()
     app.sync_to_cloud()
     chain = app.verify_audit_log("Orbit Admin")
-    assert chain.intact() and chain.summary() == "All 2 entries check out."
+    assert chain.intact() and chain.summary() == "No changes found in the 2 entries."
     event = _events(app)[-1]
     assert (event.action, event.actor, event.result) == ("audit_verified", "Orbit Admin", "ok")
     assert event.details == {"entries": 2, "intact": True, "breaks": 0}

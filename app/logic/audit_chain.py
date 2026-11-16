@@ -12,8 +12,14 @@ class AuditChain:
     hash of the row before it (the all-zero start hash for the first), or its sequence is not the
     one before plus 1. A row that cannot be read as an event is itself a break. The work is done
     once, when the object is made.
+
+    Breaks are named by the row's 1-based position in the file, not by the sequence stored in it,
+    because a changed row's own sequence cannot be trusted. The hash covers the fields as AuditEvent
+    normalises them, and the check proves only that the log agrees with itself: it cannot detect rows
+    removed from the end, or a file that was emptied or rewritten from the start with a new valid chain.
     """
 
+    REQUIRED_KEYS: tuple[str, ...] = ("event_id", "sequence", "at", "action", "previous_hash", "hash")
     MAX_NAMED: int = 5            # how many entry numbers the summary names before "and N more"
     __HASH_PATTERN: str = r"^[0-9a-f]{64}$"
 
@@ -25,7 +31,7 @@ class AuditChain:
         self.__rows: list[dict] = list(rows)
         self.__events: list[AuditEvent] = []
         self.__unreadable: list[int] = []         # 1-based row numbers
-        self.__breaks: list[int] = []             # sequences (the row number for an unreadable row)
+        self.__breaks: list[int] = []             # 1-based row positions
         self.__mismatches: list[int] = []         # the breaks that are readable rows
         self.__check()
 
@@ -35,6 +41,10 @@ class AuditChain:
         expected_sequence = 1
         for position, row in enumerate(self.__rows, start=1):
             try:
+                if not isinstance(row, dict) or any(key not in row for key in AuditChain.REQUIRED_KEYS):
+                    raise ValueError("a saved row must hold every field")     # never filled in with now or a new id
+                if not row["event_id"] or not row["at"]:
+                    raise ValueError("a saved row must have an id and a time")
                 event = AuditEvent.from_dict(row)
             except ValueError:
                 self.__unreadable.append(position)
@@ -51,8 +61,8 @@ class AuditChain:
                       or (expected_hash is not None and event.previous_hash != expected_hash)
                       or event.sequence != expected_sequence)
             if broken:
-                self.__breaks.append(event.sequence)
-                self.__mismatches.append(event.sequence)
+                self.__breaks.append(position)
+                self.__mismatches.append(position)
             expected_hash = event.hash if re.match(AuditChain.__HASH_PATTERN, event.hash) else None
             expected_sequence = event.sequence + 1
 
@@ -65,7 +75,7 @@ class AuditChain:
         return len(self.__unreadable)
 
     def breaks(self) -> list[int]:
-        """The sequence of every row where the chain breaks (the row number for an unreadable row)."""
+        """The 1-based file position of every row where the chain breaks (unreadable rows included)."""
         return list(self.__breaks)
 
     def intact(self) -> bool:
@@ -78,7 +88,7 @@ class AuditChain:
         if total == 0:
             return "No entries yet."
         if self.intact():
-            return "The 1 entry checks out." if total == 1 else f"All {total} entries check out."
+            return "No changes found in the 1 entry." if total == 1 else f"No changes found in the {total} entries."
         parts = []
         if self.__mismatches:
             named = ", ".join(str(number) for number in self.__mismatches[:AuditChain.MAX_NAMED])
