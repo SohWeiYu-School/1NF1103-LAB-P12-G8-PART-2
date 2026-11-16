@@ -55,8 +55,13 @@ class AuditRepository(JsonRepository):
                                    len(rows))
                 if isinstance(last_sequence, int) and not isinstance(last_sequence, bool) and last_sequence >= 1:
                     sequence = last_sequence + 1
-            event.seal(sequence, previous_hash)
-            return self._write_all(rows + [event.to_dict()])
+            try:
+                event.seal(sequence, previous_hash)
+                sealed = event.to_dict()
+            except ValueError as error:
+                logger.error("AuditRepository.save: not saved, the event could not be sealed: %r", error)
+                return False
+            return self._write_all(rows + [sealed])
 
     def for_client(self, client_ref: str) -> list[dict]:
         """Every event about one client, oldest first (the reference is matched ignoring case). An

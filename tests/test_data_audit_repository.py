@@ -148,3 +148,24 @@ def test_two_threads_saving_twenty_events_each_keep_the_chain_valid(tmp_path):
     for before, row in zip(rows, rows[1:]):
         assert row["previous_hash"] == before["hash"]
     assert all(AuditEvent.from_dict(r).hash_matches() for r in rows)
+
+
+def test_a_surrogate_in_the_record_is_refused_not_crashed(tmp_path, caplog):
+    repo = _repo(tmp_path)
+    assert repo.save(_record(details={"x": "\ud800"})) is False
+    assert repo.save(_record(actor="a\ud800")) is False
+    assert not (tmp_path / "audit_log.json").exists()
+
+
+def test_a_seal_that_fails_returns_false_logs_the_details_and_writes_nothing(tmp_path, monkeypatch, caplog):
+    repo = _repo(tmp_path)
+    repo.save(_record())
+    before = (tmp_path / "audit_log.json").read_text(encoding="utf-8")
+
+    def broken(self, sequence, previous_hash):
+        raise ValueError("seal went wrong")
+
+    monkeypatch.setattr(AuditEvent, "seal", broken)
+    assert repo.save(_record("signed_in")) is False
+    assert (tmp_path / "audit_log.json").read_text(encoding="utf-8") == before
+    assert "ValueError('seal went wrong')" in caplog.text
