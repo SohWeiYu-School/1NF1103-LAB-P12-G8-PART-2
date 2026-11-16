@@ -1,0 +1,56 @@
+"""AuditPage: one page of the audit log, with the counts the log page needs."""
+
+from app.model.audit_event import AuditEvent
+
+
+class AuditPage:
+    """The events of one page (in the order they are shown), how many events match the filter in all, how
+    many rows of the log cannot be read, how many readable events the whole log holds (so a page can tell
+    an empty log from a filter that matches nothing), and, over every match (not only this page), how many
+    different people did them and how many failed."""
+
+    def __init__(self, events: list[AuditEvent] | None = None, total: int = 0, unreadable: int = 0,
+                 everything: int = 0, officers: int = 0, failed: int = 0) -> None:
+        """Raises ValueError for events that are not AuditEvents or a count that is not a whole number, 0 or more."""
+        events = [] if events is None else events
+        if not isinstance(events, list) or not all(isinstance(event, AuditEvent) for event in events):
+            raise ValueError("The page's events must be a list of AuditEvent objects.")
+        counts = {"total": total, "unreadable": unreadable, "everything": everything,
+                  "officers": officers, "failed": failed}
+        for name, value in counts.items():
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"The {name} count must be a whole number, 0 or more (got {value!r}).")
+        if total < len(events) or everything < total or failed > total or officers > total:
+            raise ValueError("The counts do not fit together: the page cannot hold more events than match, "
+                             "the match cannot be bigger than the log, and the officers and failures "
+                             "cannot be more than the matches.")
+        self.__events: list[AuditEvent] = list(events)
+        self.__total: int = total
+        self.__unreadable: int = unreadable
+        self.__everything: int = everything
+        self.__officers: int = officers
+        self.__failed: int = failed
+
+    @property
+    def events(self) -> list[AuditEvent]:
+        return list(self.__events)
+
+    @property
+    def total(self) -> int:
+        return self.__total
+
+    @property
+    def unreadable(self) -> int:
+        return self.__unreadable
+
+    @property
+    def everything(self) -> int:
+        return self.__everything
+
+    @property
+    def officers(self) -> int:
+        return self.__officers
+
+    @property
+    def failed(self) -> int:
+        return self.__failed

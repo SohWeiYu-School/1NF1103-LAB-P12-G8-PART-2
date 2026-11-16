@@ -7,6 +7,7 @@ import json
 import re
 import shutil
 import time
+from datetime import datetime, timezone
 
 import flask
 import pytest
@@ -1016,7 +1017,12 @@ def _anonymous(tmp_path, monkeypatch, ai=_no_answer):
 
 def _events(application):
     from app.model.audit_filter import AuditFilter
-    return list(reversed(application.audit_log(AuditFilter(days=0))[0]))
+    first = application.audit_log(AuditFilter("custom", sort="asc"))          # a custom range with no dates: all dates
+    events, page = first.events, 1
+    while len(events) < first.total:
+        page += 1
+        events += application.audit_log(AuditFilter("custom", sort="asc", page=page)).events
+    return events
 
 
 def test_nobody_signed_in_is_sent_to_the_sign_in_page_of_the_portal_from_every_route(tmp_path, monkeypatch):
@@ -1389,7 +1395,25 @@ def test_an_officer_opening_the_audit_log_gets_a_403_page_and_the_refusal_is_rec
 def test_an_empty_log_says_no_activity_recorded_yet(web):
     _, _, browser = _admin_web(web)
     page = browser.get("/admin/log").get_data(as_text=True)
-    assert "No activity recorded yet." in page and "<table" not in page
+    assert '<div class="empty">No activity recorded yet.</div>' in page
+    assert "0 events</strong> by 0 officers; <strong>0 failed</strong>" in page
+
+
+def test_the_page_head_filter_bar_and_headline_follow_the_mockup(web):
+    application, _, browser = _admin_web(web)
+    application.sync_to_cloud("Shareen")
+    page = browser.get("/admin/log").get_data(as_text=True)
+    for text in ("Activity log", "Newest first", "Oldest first", "Verify log", "Date range", ">Today<", ">7 days<",
+                 ">30 days<", ">90 days<", ">Custom<", "Everyone", "All actions", ">All<", ">OK<", ">Failed<",
+                 'placeholder="C-0007"', "Name, file, field, officer…", ">Apply<", "Time (SGT)", "<th>Officer</th>",
+                 "<th>Action</th>", "<th>Client</th>", "<th>What happened</th>"):
+        assert text in page, text
+    assert 'aria-pressed="true">7 days<' in page and 'aria-pressed="true">Newest first<' in page
+    assert "In the last 7 days: <strong>1 event</strong> by 1 officer; <strong>1 failed</strong>." in page
+    assert "Showing 1&ndash;1 of 1" in page and "Page 1 of 1" in page and "Clear all" not in page
+    for group, colour in WebApp.GROUP_COLOURS.items():
+        assert f'<span class="dot" style="background:var({colour})"></span>{group}' in page
+    assert 'method="get" action="/admin/log"' in page and 'form="verify-form"' in page
 
 
 def test_the_log_shows_time_in_singapore_actor_label_client_summary_and_result(web):
@@ -1398,8 +1422,10 @@ def test_the_log_shows_time_in_singapore_actor_label_client_summary_and_result(w
     ref = sample_case()["client_ref"]
     page = browser.get("/admin/log").get_data(as_text=True)
     event = _events(application)[0]
-    assert site.singapore_time(event.at) in page
-    for shown in ("Shareen", "Client created", f"Created client {ref}", f'href="/admin/clients/{ref}"', "badge-pass"):
+    assert f'title="{event.at.replace("T", " ").replace("Z", " UTC")}"' in page          # UTC in the tooltip
+    assert f'{site.singapore_day(event.at)} <span class="muted">{site.singapore_clock(event.at)}</span>' in page
+    for shown in ("Shareen", "Client created", "New client record", f'class="mono" href="/admin/clients/{ref}"',
+                  '<span class="avatar"'):
         assert shown in page, shown
 
 
@@ -1408,17 +1434,67 @@ def test_singapore_time_is_eight_hours_ahead_and_odd_text_is_left_alone(web):
     assert site.singapore_time("2026-11-16T06:02:11Z") == "16 Nov 2026 14:02"
     assert site.singapore_time("2026-12-31T20:30:00Z") == "1 Jan 2027 04:30"
     assert site.singapore_time("not a time") == "not a time" and site.singapore_time(None) == "None"
+    assert site.singapore_day("2026-12-31T20:30:00Z") == "1 Jan" and site.singapore_day("x") == "x"
+    assert site.singapore_clock("2026-11-16T06:02:11Z") == "14:02" and site.singapore_clock(None) == "None"
+    assert site.singapore_long("2026-11-15T06:02:11Z") == "15 November 2026, 14:02 SGT" and site.singapore_long("x") == "x"
 
 
-def test_an_edit_row_lists_before_and_after_in_a_details_block_and_escapes_them(web):
+def test_the_small_text_helpers():
+    assert WebApp.initials("Wei Yu") == "WY" and WebApp.initials("Shareen") == "S" and WebApp.initials("") == ""
+    assert WebApp.field_label("claims.declared_net_worth") == "Claims › Declared net worth"
+    assert WebApp.field_label("investments[0].country") == "Investments 1 › Country"
+
+
+def test_the_short_line_names_the_changed_fields(web):
+    _, site, _ = web
+    change = lambda *names: [{"field": name, "before": 1, "after": 2} for name in names]
+    assert site.short_fields(change("claims.declared_net_worth")) == "Declared net worth"
+    assert site.short_fields(change("a.x", "a.y")) == "X and Y"
+    assert site.short_fields(change("a.x", "a.y", "a.z")) == "X, Y and Z"
+    assert site.short_fields(change("a.w", "a.x", "a.y", "a.z")) == "W, X and 2 more"
+    assert site.short_fields([]) == "" and site.short_fields("junk") == "" and site.short_fields([5, {"field": 3}]) == ""
+
+
+def test_an_edit_row_has_the_before_and_after_in_its_info_and_escapes_them(web):
     application, _, browser = _admin_web(web)
     record = ClientRecord.from_dict(sample_case())
     application.save_client(record, "Shareen")
     application.save_client(ClientRecord.from_dict({**record.to_dict(), "name": "<script>alert(1)</script>"}), "Adrian")
     page = browser.get("/admin/log").get_data(as_text=True)
-    assert "<details>" in page and "<code>name</code>" in page and "&rarr;" in page
-    assert sample_case()["name"] in page
-    assert "<script>alert(1)</script>" not in page and "&lt;script&gt;alert(1)&lt;/script&gt;" in page
+    assert "Name changed" in page and "What changed" in page
+    assert '<span class="b">' + sample_case()["name"] + '</span>&rarr;<span class="a">&lt;script&gt;' in page
+    assert "<script>alert(1)</script>" not in page
+    assert "Edited by" in page and "Log entry" in page and "fingerprint " in page and "links to #" in page
+
+
+def test_an_assessment_row_shows_the_verdict_a_link_and_the_steps(web):
+    application, _, browser = _admin_web(web)
+    ref = _two_assessments(application)
+    application._App__record("assessment_run", "Shareen", ref, "ok", {"assessment_id": "A1", "outcome": "RISKY",
+                                                                        "not_run": ["Benchmark"]})
+    page = browser.get("/admin/log").get_data(as_text=True)
+    assert '<span class="badge b-RISKY">Risky</span>' in page and "Not run: Benchmark" in page
+    assert '<a href="/admin/assessment/A1">Open assessment A1 &rarr;</a>' in page and "Assessed by" in page
+
+
+def test_each_kind_of_entry_has_a_short_line_and_an_info(web):
+    application, _, browser = _admin_web(web)
+    ref = sample_case()["client_ref"]
+    record = application._App__record
+    record("document_uploaded", "Shareen", ref, "ok", {"file_id": "data/documents/Bank.pdf"})
+    record("autofill_used", "Shareen", ref, "ok", {"documents": 2, "fields": 5})
+    record("assessment_failed", "Shareen", ref, "failed", {"step": "Saving the assessment"})
+    record("assessment_archived", "Shareen", ref, "ok", {"assessment_id": "A1", "reason": "duplicate"})
+    record("cloud_sync", "Shareen", "", "failed", {"synced": 0, "errors": 2})
+    record("sign_in_failed", "unknown", "", "failed", {"portal": "officer"})
+    record("access_refused", "Adrian", "", "ok", {"what": "opening the audit log"})
+    page = browser.get("/admin/log").get_data(as_text=True)
+    for text in ('<span class="mono">data/documents/Bank.pdf</span>', "Read</dt><dd>2 documents, 5 fields filled in",
+                 "Stopped at</dt><dd>Saving the assessment", "No. Nothing from this run was saved.",
+                 "Reason</dt><dd>duplicate", "2 could not be synced", "Portal</dt><dd>officer", "Failed sign-in",
+                 "Tried to</dt><dd>opening the audit log", "Uploaded by", "Started by"):
+        assert text in page, text
+    assert page.count('class="res-fail">Failed</span>') == 3
 
 
 def test_the_filters_narrow_the_log_and_show_a_chip_that_removes_each_one(web):
@@ -1426,14 +1502,79 @@ def test_the_filters_narrow_the_log_and_show_a_chip_that_removes_each_one(web):
     application.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
     application.sign_in("Adrian", "officer123", App.OFFICER_PORTAL)
     application.sync_to_cloud("Shareen")
-    page = browser.get("/admin/log?actor=Adrian&group=Sign-in&result=ok&days=30&client_ref=").get_data(as_text=True)
-    assert "Signed in</td>" in page and "Cloud sync</td>" not in page and "Client created</td>" not in page
-    for label in ("Period: Last 30 days", "Officer: Adrian", "Group: Sign-in", "Result: OK"):
+    page = browser.get("/admin/log?actor=Adrian&group=Sign-in&result=ok&preset=30&client_ref=").get_data(as_text=True)
+    assert "Signed in</span>" in page and "Cloud sync</span>" not in page and "Client created</span>" not in page
+    for label in ("Officer: Adrian", "Actions: Sign-in", "OK only"):
         assert label in page, label
-    assert 'href="/admin/log?actor=Adrian&amp;group=Sign-in&amp;result=ok"' in page          # the Period chip's remove link
-    assert 'aria-label="Remove the Officer filter"' in page
-    assert re.search(r'<option value="30" selected>', page) and re.search(r"<option selected>Adrian</option>", page)
-    assert "1 event &middot; page 1 of 1" in page
+    assert 'aria-pressed="true">30 days<' in page and 'aria-pressed="true">OK<' in page
+    assert 'href="/admin/log?preset=30&amp;group=Sign-in&amp;result=ok"' in page           # the Officer chip's remove link
+    assert 'href="/admin/log?preset=30"' in page                                              # Clear all keeps the dates
+    assert "Clear all" in page and "Remove this filter: Officer: Adrian" in page
+    assert re.search(r"<option selected>Adrian</option>", page) and '<option>Shareen</option>' in page
+    assert 'value="Sign-in" checked' in page and 'value="Client">' in page and "1 of 5 groups" in page
+    assert "Showing 1&ndash;1 of 1" in page
+
+
+def test_the_search_box_matches_actor_client_label_file_and_changed_fields_ignoring_case(web):
+    application, _, browser = _admin_web(web)
+    record = ClientRecord.from_dict(sample_case())
+    application.save_client(record, "Shareen")
+    application.save_client(ClientRecord.from_dict({**record.to_dict(), "name": "Changed Name"}), "Adrian")
+    application.sync_to_cloud("Dominic")
+    ref = sample_case()["client_ref"]
+    for text, expected in (("DOMINIC", "Cloud sync"), (ref.lower(), "Client created"), ("client edited", "Client edited"),
+                           ("NAME", "Client edited")):
+        page = browser.get("/admin/log", query_string={"q": text}).get_data(as_text=True)
+        assert expected + "</span>" in page, text
+    page = browser.get("/admin/log?q=shareen").get_data(as_text=True)
+    assert "Client created</span>" in page and "Client edited</span>" not in page and "Search: “shareen”" in page
+    assert 'value="shareen"' in page
+
+
+def test_the_result_actions_and_officer_filters(web):
+    application, _, browser = _admin_web(web)
+    application.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    application.sync_to_cloud("Adrian")                                       # fails: there is no cloud
+    failed = browser.get("/admin/log?result=failed").get_data(as_text=True)
+    assert "Cloud sync</span>" in failed and "Client created</span>" not in failed and "Failed only" in failed
+    docs = browser.get("/admin/log?group=Client&group=System").get_data(as_text=True)
+    assert "Client created</span>" in docs and "Cloud sync</span>" in docs and "2 of 5 groups" in docs
+    only = browser.get("/admin/log?group=System").get_data(as_text=True)
+    assert "Client created</span>" not in only and "Actions: System" in only
+
+
+def test_the_log_can_be_oldest_first_and_the_sort_buttons_say_which_is_chosen(web):
+    application, _, browser = _admin_web(web)
+    application.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    application.sync_to_cloud("Shareen")
+    newest = browser.get("/admin/log").get_data(as_text=True)
+    oldest = browser.get("/admin/log?sort=asc").get_data(as_text=True)
+    assert newest.index("Cloud sync</span>") < newest.index("Client created</span>")
+    assert oldest.index("Client created</span>") < oldest.index("Cloud sync</span>")
+    assert 'aria-pressed="true">Oldest first<' in oldest
+
+
+def test_custom_dates_show_the_date_boxes_and_filter_by_singapore_day(web):
+    application, _, browser = _admin_web(web)
+    application.sync_to_cloud("Shareen")
+    today = datetime.now(timezone.utc).astimezone(WebApp.SINGAPORE).date()
+    page = browser.get(f"/admin/log?preset=custom&from={today}&to={today}").get_data(as_text=True)
+    assert 'name="from"' in page and f'value="{today}"' in page and 'name="to"' in page and f'max="{today}"' in page
+    assert "Cloud sync</span>" in page and "On all dates" not in page
+    other = browser.get("/admin/log?preset=custom&from=2020-01-01&to=2020-01-02").get_data(as_text=True)
+    assert "Cloud sync</span>" not in other and "No events match these filters. Try a longer date range or" in other
+    assert 'name="from"' not in browser.get("/admin/log").get_data(as_text=True)
+
+
+def test_a_bad_custom_range_shows_the_mockups_problem_line_and_all_dates(web):
+    application, _, browser = _admin_web(web)
+    application.sync_to_cloud("Shareen")
+    for url, problem in (("/admin/log?preset=custom", "Pick both a start and an end date. Showing all dates for now."),
+                         ("/admin/log?preset=custom&from=2026-11-12&to=2026-11-10",
+                          "The start date must be on or before the end date. Showing all dates for now.")):
+        page = browser.get(url).get_data(as_text=True)
+        assert f'<div class="problem" role="alert">{problem}</div>' in page and "Cloud sync</span>" in page
+    assert "All dates" in browser.get("/admin/log?preset=custom").get_data(as_text=True)
 
 
 def test_a_client_filter_matches_one_clients_events_whatever_the_case(web):
@@ -1442,40 +1583,52 @@ def test_a_client_filter_matches_one_clients_events_whatever_the_case(web):
     application.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
     application.sync_to_cloud("Shareen")
     page = browser.get(f"/admin/log?client_ref={ref.lower()}").get_data(as_text=True)
-    assert "Client created</td>" in page and "Cloud sync</td>" not in page
+    assert "Client created</span>" in page and "Cloud sync</span>" not in page and f"Client: {ref.upper()}" in page
 
 
-def test_filters_that_match_nothing_say_so_instead_of_no_activity_yet(web):
+def test_filters_that_match_nothing_say_so_without_reading_the_log_twice(web, monkeypatch):
     application, _, browser = _admin_web(web)
     application.sync_to_cloud("Shareen")
+    reads = []
+    original = application.audit_log
+    monkeypatch.setattr(application, "audit_log", lambda *args, **kw: reads.append(1) or original(*args, **kw))
     page = browser.get("/admin/log?actor=Nobody").get_data(as_text=True)
-    assert "No activity matches these filters." in page and "No activity recorded yet." not in page
+    assert "No events match these filters. Try a longer date range or" in page and "No activity recorded yet." not in page
+    assert 'href="/admin/log">clear the filters</a>' in page and len(reads) == 1
 
 
 def test_bad_filter_values_fall_back_and_are_explained_on_the_page(web):
     application, _, browser = _admin_web(web)
     application.sync_to_cloud("Shareen")
-    page = browser.get("/admin/log?days=999&group=Nonsense&result=maybe&page=zero")
+    page = browser.get("/admin/log?preset=999&group=Nonsense&result=maybe&page=zero&sort=up&q=" + "x" * 90)
     assert page.status_code == 200
     text = html.unescape(page.get_data(as_text=True))
-    for problem in ("'days' must be one of 1, 7, 30, 90 or all", "'group' must be one of Sign-in",
-                    "'result' must be ok or failed", "'page' must be a whole number"):
+    for problem in ("'preset' must be one of 1, 7, 30, 90, custom", "'group' must be one of Sign-in",
+                    "'result' must be all, ok or failed", "'page' must be a whole number", "'sort' must be desc",
+                    "'q' must be printable text of at most 80 characters"):
         assert problem in text, problem
-    assert "Cloud sync</td>" in text                          # the defaults still show the log
+    assert text.count('class="problem"') == 6 and "Cloud sync</span>" in text      # the defaults still show the log
 
 
-def test_the_log_is_paged_fifty_to_a_page_newest_first(web):
+def test_the_log_is_paged_twenty_five_to_a_page_newest_first(web):
     application, _, browser = _admin_web(web)
-    _put_events(application, 52)
+    _put_events(application, 27)
     application.sync_to_cloud("Adrian")                       # the newest
     first = browser.get("/admin/log").get_data(as_text=True)
-    assert first.count("Access refused</td>") == 49 and first.index("Cloud sync</td>") < first.index("Access refused</td>")
-    assert "53 events &middot; page 1 of 2" in first and "Older &rarr;" in first and "Newer" not in first
+    assert first.count("Access refused</span>") == 24 and first.index("Cloud sync</span>") < first.index("Access refused</span>")
+    assert "Showing 1&ndash;25 of 28" in first and "Page 1 of 2" in first
+    assert 'href="/admin/log?page=2">Older &rarr;</a>' in first and 'aria-disabled="true">&larr; Newer' in first
     second = browser.get("/admin/log?page=2").get_data(as_text=True)
-    assert second.count("Access refused</td>") == 3 and "page 2 of 2" in second
-    assert "Newer" in second and "Older" not in second
-    assert "page 2 of 2" in browser.get("/admin/log?page=99").get_data(as_text=True)      # past the end shows the last page
-    assert 'href="/admin/log?page=2"' in first
+    assert second.count("Access refused</span>") == 3 and "Page 2 of 2" in second and "Showing 26&ndash;28 of 28" in second
+    assert 'href="/admin/log">&larr; Newer</a>' in second and 'aria-disabled="true">Older &rarr;' in second
+    assert "Page 2 of 2" in browser.get("/admin/log?page=99").get_data(as_text=True)      # past the end shows the last page
+
+
+def test_the_pager_links_keep_the_filters(web):
+    application, _, browser = _admin_web(web)
+    _put_events(application, 30)
+    page = browser.get("/admin/log?actor=Shareen&sort=asc").get_data(as_text=True)
+    assert 'href="/admin/log?actor=Shareen&amp;sort=asc&amp;page=2">Older &rarr;</a>' in page
 
 
 def test_verify_log_reports_an_untouched_log_as_a_success_and_records_it(web):
@@ -1501,7 +1654,7 @@ def test_verify_log_after_the_file_was_changed_shows_a_warning(web, tmp_path):
     page = browser.post("/admin/log/verify").get_data(as_text=True)
     assert 'class="msg msg-warning"' in page and "changed outside the app" in page
     assert _events(application)[-1].result == "failed"
-    rows_html = page.split("<tbody>")[1].split("</tbody>")[0].split("<tr>")[1:]
+    rows_html = page.split("<tbody>")[1].split("</tbody>")[0].split('<tr class="ev">')[1:]
     marked = [row for row in rows_html if "Changed outside the app" in row]
     assert len(marked) == 1 and "Somebody Else" in marked[0]               # only the tampered row is marked
     assert "Changed outside the app" not in browser.get("/admin/log").get_data(as_text=True)
@@ -1521,7 +1674,7 @@ def test_verify_keeps_the_filters_of_the_page_it_was_pressed_on_and_marks_a_row_
     shown = browser.post("/admin/log/verify?actor=Adrian").get_data(as_text=True)
     assert "Officer: Adrian" in shown
     assert shown.count("Changed outside the app") == 1
-    assert "Shareen</td>" not in shown
+    assert "Shareen</span>" not in shown.split("<tbody>")[1]
 
 
 def test_an_unreadable_audit_log_says_so_and_shows_no_table(web, tmp_path):
@@ -1538,16 +1691,14 @@ def test_an_unreadable_audit_log_says_so_and_shows_no_table(web, tmp_path):
     assert App.AUDIT_UNAVAILABLE in _flashes(browser)
 
 
-def test_the_filter_form_offers_every_account_the_terminal_and_every_group(web):
+def test_the_filter_form_offers_every_account_the_terminal_the_unknown_actor_and_every_group(web):
     application, _, browser = _admin_web(web)
     page = browser.get("/admin/log").get_data(as_text=True)
     for account in application.accounts():
         assert f"<option>{account.name}</option>" in page
-    assert "<option>terminal</option>" in page
+    assert "<option>terminal</option>" in page and "<option>unknown</option>" in page
     for group in ("Sign-in", "Client", "Documents", "Assessment", "System"):
-        assert f"<option>{group}</option>" in page
-    for choice in ("all", "1", "7", "30", "90"):
-        assert f'<option value="{choice}"' in page
+        assert f'<input type="checkbox" name="group" value="{group}" checked>' in page
 
 
 def _add_unreadable_rows(tmp_path, count):
@@ -1576,7 +1727,7 @@ def test_a_log_where_every_entry_is_unreadable_does_not_say_no_activity_recorded
     _add_unreadable_rows(tmp_path, 2)
     page = html.unescape(browser.get("/admin/log").get_data(as_text=True))
     assert "2 entries in the audit log can't be read." in page
-    assert "No activity recorded yet." not in page and "<table" not in page
+    assert "No activity recorded yet." not in page and '<div class="empty">No activity can be shown.</div>' in page
 
 
 def test_the_client_history_warns_both_roles_when_entries_cannot_be_read(web, tmp_path):
@@ -1600,21 +1751,86 @@ def test_the_client_history_warns_both_roles_when_entries_cannot_be_read(web, tm
 
 # ----- the client's History ---------------------------------------------------------------------
 
-def test_the_client_page_shows_its_history_newest_first_to_both_roles(web):
+def test_the_client_page_shows_its_history_as_a_timeline_newest_first_in_both_portals(web):
     application, _, browser = web
     ref = sample_case()["client_ref"]
     record = ClientRecord.from_dict(sample_case())
     application.save_client(record, "Shareen")
     application.save_client(ClientRecord.from_dict({**record.to_dict(), "name": "Daniel K. Tan"}), "Adrian")
     application.sync_to_cloud("Shareen")                               # not about this client
-    for role in ("officer", "admin"):
-        sign_in(browser, application, role)
-        page = browser.get(f"/client/{ref}").get_data(as_text=True)
+    sign_in(browser, application, "admin")
+    for url in (f"/client/{ref}", f"/admin/clients/{ref}"):
+        page = browser.get(url).get_data(as_text=True)
         history = page[page.index('id="history"'):]
         assert "Client edited" in history and "Client created" in history and "Cloud sync" not in history
         assert history.index("Client edited") < history.index("Client created")
-        assert "Adrian" in history and "Shareen" in history and "<th>Client</th>" not in history
-        assert "<code>name</code>" in history and "Daniel K. Tan" in history
+        assert 'class="by muted">Adrian' in history and 'class="by muted">Shareen' in history
+        assert '<li class="day-label">' in history and '<span class="node" style="color:var(--g-client)">' in history
+        assert "Name changed" in history and "Daniel K. Tan" in history and "<summary>Info</summary>" in history
+        assert "2 entries" in history and "Log entry" not in history
+    day = datetime.now(timezone.utc).astimezone(WebApp.SINGAPORE)
+    assert f'<li class="day-label">{day.day} {day:%B %Y}</li>' in history
+
+
+def test_the_timeline_links_an_assessed_line_to_its_assessment_in_each_portal(web):
+    application, _, browser = web
+    ref = _two_assessments(application)
+    application._App__record("assessment_run", "Shareen", ref, "ok", {"assessment_id": "A1", "outcome": "PASSED"})
+    sign_in(browser, application, "admin")
+    officer = browser.get(f"/client/{ref}").get_data(as_text=True)
+    admin = browser.get(f"/admin/clients/{ref}").get_data(as_text=True)
+    assert '<a href="/assessment/A1">Assessed</a>' in officer and '<a href="/admin/assessment/A1">Assessed</a>' in admin
+    assert '<span class="badge b-PASSED">Passed</span>' in officer
+
+
+def _timeline_client(web):
+    application, _, browser = web
+    ref = sample_case()["client_ref"]
+    record = ClientRecord.from_dict(sample_case())
+    application.save_client(record, "Shareen")
+    application.save_client(ClientRecord.from_dict({**record.to_dict(), "name": "Daniel K. Tan"}), "Adrian")
+    application._App__record("document_uploaded", "Dominic", ref, "ok", {"file_id": "data/documents/a.pdf"})
+    application._App__record("assessment_run", "Shareen", ref, "ok", {"assessment_id": "A1", "outcome": "RISKY"})
+    return browser, ref
+
+
+def test_the_show_filter_of_the_timeline_picks_edits_assessments_or_documents(web):
+    browser, ref = _timeline_client(web)
+    def shown(query):
+        page = browser.get(f"/client/{ref}?{query}").get_data(as_text=True)
+        return page[page.index('id="history"'):page.index("Supporting documents")]
+    assert "4 entries" in shown("")
+    edits = shown("show=edits")
+    assert "Client created" in edits and "Client edited" in edits and "Uploaded" not in edits and "2 entries" in edits
+    assert "Assessed" in shown("show=assessments") and "Client edited" not in shown("show=assessments")
+    assert "Document uploaded" in shown("show=documents") and "1 entry" in shown("show=documents")
+    assert 'aria-pressed="true">Documents<' in shown("show=documents") and 'aria-pressed="true">All<' in shown("")
+
+
+def test_the_when_filter_of_the_timeline_and_its_problem_lines(web):
+    browser, ref = _timeline_client(web)
+    def shown(query):
+        page = browser.get(f"/client/{ref}?{query}").get_data(as_text=True)
+        return page[page.index('id="history"'):page.index("Supporting documents")]
+    assert "4 entries" in shown("when=7") and '<option value="7" selected>' in shown("when=7")
+    old = shown("when=custom&from=2020-01-01&to=2020-01-02")
+    assert "Nothing matches these filters. Try &ldquo;All&rdquo; or &ldquo;All time&rdquo;." in old and "0 entries" in old
+    assert 'name="from"' in old and 'name="to"' in old and "No history recorded yet." not in old
+    for query, problem in (("when=custom", "Pick both a start and an end date. Showing all dates for now."),
+                           ("when=custom&from=2026-11-12&to=2026-11-10",
+                            "The start date must be on or before the end date. Showing all dates for now.")):
+        text = shown(query)
+        assert f'<div class="problem" role="alert">{problem}</div>' in text and "4 entries" in text
+    bad = html.unescape(shown("show=nope&when=soon"))
+    assert "'show' must be one of all, edits, assessments, documents" in bad and "'when' must be one of" in bad
+    assert "4 entries" in bad
+
+
+def test_the_timeline_filter_form_keeps_the_archived_choice(web):
+    application, _, browser = web
+    ref = _two_assessments(application)
+    page = browser.get(f"/client/{ref}?archived=1").get_data(as_text=True)
+    assert '<input type="hidden" name="archived" value="1">' in page
 
 
 def test_a_client_with_no_events_says_no_history_recorded_yet(web):
@@ -1624,14 +1840,14 @@ def test_a_client_with_no_events_says_no_history_recorded_yet(web):
     assert "No history recorded yet." in page
 
 
-def test_only_the_newest_fifty_events_of_a_client_are_shown(web):
+def test_a_long_history_is_shown_whole_with_its_count(web):
     application, _, browser = web
     ref = sample_case()["client_ref"]
     application.clients().save(sample_case())
     for number in range(55):
         application.upload_document("/no/such/file", "Shareen", ref)
     page = browser.get(f"/client/{ref}").get_data(as_text=True)
-    assert page.count("<tr>") >= 50 and "Showing the latest 50 of 55 events." in page
+    assert page.count('<li class="tl">') == 55 and "55 entries" in page
 
 
 def test_an_unreadable_audit_log_shows_the_message_in_history_and_the_rest_of_the_page_still_renders(web, tmp_path):
@@ -1643,7 +1859,7 @@ def test_an_unreadable_audit_log_shows_the_message_in_history_and_the_rest_of_th
     text = html.unescape(page.get_data(as_text=True))
     assert page.status_code == 200
     history = text[text.index('id="history"'):]
-    assert App.AUDIT_UNAVAILABLE in history[:400] and "No history recorded yet." not in text
+    assert App.AUDIT_UNAVAILABLE in history and "No history recorded yet." not in text and "<ul class=\"timeline\">" not in text
     assert sample_case()["name"] in text and "Supporting documents" in text
 
 
@@ -1720,7 +1936,7 @@ def test_auto_filling_an_existing_client_shows_in_that_clients_history(tmp_path,
         "autofill_files": (io.BytesIO(b"Daniel Tan, Portfolio Manager"), "cv.txt")})
     assert {event.action for event in application.audit_trail(ref)[0]} == {"document_uploaded", "autofill_used"}
     page = client.get(f"/client/{ref}").get_data(as_text=True)
-    assert "Used document auto-fill" in page
+    assert "Used document auto-fill" in page and "Details filled in from documents" in page
 
 
 def test_the_result_page_says_when_the_outcome_could_not_be_written_to_the_client(tmp_path, monkeypatch):
@@ -1820,9 +2036,11 @@ def test_an_edit_in_the_log_and_the_history_shows_numbers_with_separators(web):
     application.save_client(ClientRecord.from_dict(data), "Shareen")
     old = f"{sample_case()['claims']['declared_net_worth']:,.0f}"
     history = browser.get(f"/client/{ref}").get_data(as_text=True)
-    assert f"{old} &rarr; 9,500,000</li>" in history and "9500000.0" not in history
+    shown = f'<span class="b">{old}</span>&rarr;<span class="a">9,500,000</span>'
+    assert shown in history and "9500000.0" not in history
     sign_in(browser, application, "admin")
-    assert f"{old} &rarr; 9,500,000</li>" in browser.get("/admin/log").get_data(as_text=True)
+    assert shown in browser.get("/admin/log").get_data(as_text=True)
+    assert shown in browser.get(f"/admin/clients/{ref}").get_data(as_text=True)
 
 
 # ----- the client list: latest verdict and last activity -----------------------------------------

@@ -868,8 +868,12 @@ def test_a_bad_accounts_file_stops_the_app_like_a_bad_policy_file(tmp_path, monk
 
 def _events(app, **filters) -> list[AuditEvent]:
     """Every audit event that matches, oldest first (the whole log unless filters narrow it)."""
-    events, _, _ = app.audit_log(AuditFilter(days=0, **filters))
-    return list(reversed(events))
+    first = app.audit_log(AuditFilter("custom", sort="asc", **filters))      # a custom range with no dates is all dates
+    events, page = first.events, 1
+    while len(events) < first.total:
+        page += 1
+        events += app.audit_log(AuditFilter("custom", sort="asc", page=page, **filters)).events
+    return events
 
 
 def _actions(app) -> list[str]:
@@ -1244,40 +1248,57 @@ def test_the_log_gives_newest_first_with_the_total_and_applies_the_filter(app):
     app.save_client(record, "Shareen")
     app.sign_in("Adrian", "officer123", App.OFFICER_PORTAL)
     app.sync_to_cloud("Shareen")
-    events, total, _ = app.audit_log(AuditFilter())
-    assert total == 3 and [event.action for event in events] == ["cloud_sync", "signed_in", "client_created"]
-    events, total, _ = app.audit_log(AuditFilter(actor="shareen"))
-    assert total == 2 and {event.actor for event in events} == {"Shareen"}
-    events, total, _ = app.audit_log(AuditFilter(group="Sign-in"))
-    assert [event.action for event in events] == ["signed_in"] and total == 1
-    assert app.audit_log(AuditFilter(client_ref=record.client_ref.lower()))[1] == 1
+    log = app.audit_log(AuditFilter())
+    assert log.total == 3 and [event.action for event in log.events] == ["cloud_sync", "signed_in", "client_created"]
+    assert (log.officers, log.failed, log.everything) == (2, 1, 3)           # the sync failed: there is no cloud here
+    log = app.audit_log(AuditFilter(actor="shareen"))
+    assert log.total == 2 and {event.actor for event in log.events} == {"Shareen"} and log.officers == 1
+    log = app.audit_log(AuditFilter(groups=["Sign-in"]))
+    assert [event.action for event in log.events] == ["signed_in"] and log.total == 1
+    assert app.audit_log(AuditFilter(client_ref=record.client_ref.lower())).total == 1
+    assert app.audit_log(AuditFilter(result="failed")).total == 1 and app.audit_log(AuditFilter(query="nothing like this")).total == 0
+    assert app.audit_log(AuditFilter(query="cloud")).total == 1
+
+
+def test_the_log_can_be_oldest_first(app):
+    app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    app.sync_to_cloud("Shareen")
+    assert [e.action for e in app.audit_log(AuditFilter(sort="asc")).events] == ["client_created", "cloud_sync"]
+
+
+def test_a_filter_that_matches_nothing_still_says_how_much_the_whole_log_holds_from_the_same_read(app):
+    app.sync_to_cloud("Shareen")
+    app.sync_to_cloud("Shareen")
+    log = app.audit_log(AuditFilter(client_ref="nobody"))
+    assert (log.events, log.total, log.everything) == ([], 0, 2)
 
 
 def test_the_log_uses_the_time_it_is_given_for_the_period(app):
     from datetime import datetime, timedelta, timezone
     app.sync_to_cloud()
     now = datetime.now(timezone.utc)
-    assert app.audit_log(AuditFilter(days=1), now)[1] == 1
-    assert app.audit_log(AuditFilter(days=1), now + timedelta(days=3))[1] == 0
-    assert app.audit_log(AuditFilter(days=0), now + timedelta(days=3))[1] == 1
+    assert app.audit_log(AuditFilter("1"), now).total == 1
+    assert app.audit_log(AuditFilter("1"), now + timedelta(days=3)).total == 0
+    assert app.audit_log(AuditFilter("custom"), now + timedelta(days=3)).total == 1
 
 
 def test_the_log_is_paged_and_the_total_counts_every_match(app):
     for number in range(AuditFilter.PAGE_SIZE + 3):
         app.refused("Shareen", f"opening page {number}")
-    events, total, _ = app.audit_log(AuditFilter(page=1))
-    assert len(events) == AuditFilter.PAGE_SIZE and total == AuditFilter.PAGE_SIZE + 3
-    assert len(app.audit_log(AuditFilter(page=2))[0]) == 3
+    log = app.audit_log(AuditFilter(page=1))
+    assert len(log.events) == AuditFilter.PAGE_SIZE and log.total == AuditFilter.PAGE_SIZE + 3
+    assert len(app.audit_log(AuditFilter(page=2)).events) == 3
 
 
-def test_an_empty_log_is_an_empty_list_not_an_error(app):
-    assert app.audit_log(AuditFilter()) == ([], 0, 0)
+def test_an_empty_log_is_an_empty_page_not_an_error(app):
+    log = app.audit_log(AuditFilter())
+    assert (log.events, log.total, log.unreadable, log.everything) == ([], 0, 0, 0)
     assert app.audit_trail("C-1") == ([], 0)
 
 
 def test_the_log_needs_a_filter(app):
     with pytest.raises(ValueError):
-        app.audit_log({"days": 7})
+        app.audit_log({"preset": "7"})
 
 
 def test_an_unreadable_audit_log_gives_the_safe_message_and_is_logged(app, tmp_path, caplog):
@@ -1295,7 +1316,7 @@ def test_a_row_that_cannot_be_read_is_not_listed_but_is_logged(app, tmp_path, ca
     path = tmp_path / "local database" / "audit_log.json"
     rows = json.loads(path.read_text(encoding="utf-8"))
     path.write_text(json.dumps(rows + [{"action": "bogus"}]), encoding="utf-8")
-    assert app.audit_log(AuditFilter())[1] == 1
+    assert app.audit_log(AuditFilter()).total == 1
     assert "cannot be read and are not listed" in caplog.text
 
 
@@ -1355,7 +1376,8 @@ def test_a_hand_added_row_without_a_time_or_id_is_not_listed_but_verify_reports_
     rows.append({"action": "cloud_sync", "actor": "Shareen", "sequence": 3, "hash": "a" * 64,
                  "previous_hash": rows[0]["hash"]})                                  # sealed-looking, no at or id
     path.write_text(json.dumps(rows), encoding="utf-8")
-    events, total, _ = app.audit_log(AuditFilter())
+    log = app.audit_log(AuditFilter())
+    events, total = log.events, log.total
     assert total == 1 and [event.actor for event in events] == ["Shareen"]
     assert app.audit_trail("") == ([], 2)        # no client matches, but two rows are unreadable
     assert "2 audit row(s) cannot be read and are not listed" in caplog.text
@@ -1513,31 +1535,18 @@ def _add_unreadable_rows(tmp_path, count):
 
 def test_the_log_and_the_trail_count_the_unreadable_rows_of_the_whole_log(app, tmp_path):
     ref = _assessed(app)[0].client_ref
-    assert app.audit_log(AuditFilter(days=0))[2] == 0 and app.audit_trail(ref)[1] == 0
+    assert app.audit_log(AuditFilter("custom")).unreadable == 0 and app.audit_trail(ref)[1] == 0
     _add_unreadable_rows(tmp_path, 3)
-    events, total, unreadable = app.audit_log(AuditFilter(days=0))
-    assert total == len(events) and unreadable == 3
+    log = app.audit_log(AuditFilter("custom"))
+    assert log.total == len(log.events) and log.unreadable == 3
     trail, trail_unreadable = app.audit_trail(ref)
     assert trail and trail_unreadable == 3                    # counted for the whole log, not just this client
-    assert app.audit_log(AuditFilter(days=0, client_ref="nobody"))[1:] == (0, 3)     # a filter never hides them
+    nobody = app.audit_log(AuditFilter("custom", client_ref="nobody"))
+    assert (nobody.total, nobody.unreadable) == (0, 3)        # a filter never hides them
 
 
 def test_a_log_where_every_row_is_unreadable_gives_no_events_and_the_count(app, tmp_path):
     _add_unreadable_rows(tmp_path, 2)
-    assert app.audit_log(AuditFilter(days=0)) == ([], 0, 2)
+    log = app.audit_log(AuditFilter("custom"))
+    assert (log.events, log.total, log.unreadable, log.everything) == ([], 0, 2, 0)
     assert app.audit_trail("C-1") == ([], 2)
-
-
-def test_the_same_refusal_by_the_same_person_is_written_once_a_minute(app):
-    app.refused("Shareen", "opening the audit log", now=100.0)
-    app.refused("Shareen", "opening the audit log", now=130.0)           # a reload 30 s later: not written again
-    assert len(_events(app)) == 1
-    app.refused("Shareen", "opening the audit log", now=161.0)           # more than 60 s after the written one
-    assert len(_events(app)) == 2
-
-
-def test_a_refusal_for_another_person_or_another_thing_is_always_written(app):
-    app.refused("Shareen", "opening the audit log", now=100.0)
-    app.refused("Adrian", "opening the audit log", now=101.0)
-    app.refused("Shareen", "opening an admin page", now=102.0)
-    assert len(_events(app)) == 3

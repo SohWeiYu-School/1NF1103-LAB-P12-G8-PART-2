@@ -40,6 +40,7 @@ from app.logic.record_diff import RecordDiff
 from app.model.account import Account
 from app.model.audit_event import AuditEvent
 from app.model.audit_filter import AuditFilter
+from app.model.audit_page import AuditPage
 from app.model.client_record import ClientRecord
 from app.model.config import Config
 from app.model.declaration import Declaration
@@ -1021,19 +1022,22 @@ class App:
                                           if 0 <= now - t < App.REFUSAL_REPEAT_SECONDS}
                 self.__recent_refusals[key] = now
 
-    def audit_log(self, audit_filter: AuditFilter,
-                  now: datetime | None = None) -> tuple[list[AuditEvent], int, int]:
-        """(one page of events, newest first; how many events match the filter in all; how many rows of the
-        whole log cannot be read and so are not listed). An empty log gives ([], 0, 0). Raises
-        ValueError(AUDIT_UNAVAILABLE) if the log cannot be read, and ValueError if audit_filter is not an
-        AuditFilter."""
+    def audit_log(self, audit_filter: AuditFilter, now: datetime | None = None) -> AuditPage:
+        """One page of the log in the filter's order, with the counts the page needs, all from one read:
+        how many events match, how many rows cannot be read, how many readable events the whole log holds
+        (so a page can tell an empty log from a filter that matches nothing), and how many different people and
+        failures there are among the matches. An empty log gives an empty page. Raises ValueError(AUDIT_UNAVAILABLE)
+        if the log cannot be read, and ValueError if audit_filter is not an AuditFilter."""
         if not isinstance(audit_filter, AuditFilter):
             raise ValueError("The audit log needs an AuditFilter.")
         now = now or datetime.now(timezone.utc)
         readable, unreadable = App.__audit_events(self.__audit_rows("audit_log"), "audit_log")
         events = [event for event in readable if audit_filter.matches(event, now)]
-        events.reverse()
-        return audit_filter.page_of(events), len(events), unreadable
+        if audit_filter.sort == "desc":
+            events.reverse()                       # the file is oldest first
+        return AuditPage(audit_filter.page_of(events), len(events), unreadable, len(readable),
+                         len({event.actor.casefold() for event in events}),
+                         sum(1 for event in events if event.result == "failed"))
 
     def audit_trail(self, client_ref: str) -> tuple[list[AuditEvent], int]:
         """(every audit event about one client, newest first; how many rows of the whole log cannot be read

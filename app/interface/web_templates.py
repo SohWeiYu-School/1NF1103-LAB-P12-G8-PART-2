@@ -101,7 +101,7 @@ table{width:100%;border-collapse:collapse}
 th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top;font-size:.88rem}
 th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;background:var(--surface-2);white-space:nowrap;width:auto}
 tbody tr.ev:hover{background:var(--surface-2)}
-tr.ev.open{background:var(--accent-soft)}
+tr.ev:has(details[open]){background:var(--accent-soft)}
 tr.detail td{background:var(--surface-2);padding:12px 16px 14px}
 .pill{display:inline-flex;gap:6px;align-items:center;font-size:.8rem;white-space:nowrap}
 .res-fail{color:var(--bad);font-weight:600;font-size:.8rem;background:var(--bad-soft);padding:1px 7px;border-radius:4px}
@@ -438,7 +438,7 @@ FORM = """{% extends "base.html" %}
 """
  
 VIEW = """{% extends "base.html" %}
-{% from "audit_rows.html" import event_table %}
+{% from "audit_rows.html" import info, short %}
 {% block content %}
 <div class="stack" style="margin-bottom:16px">
   <a href="{{ link('home') }}" class="muted" style="text-decoration:none">&larr; All clients</a>
@@ -516,20 +516,64 @@ VIEW = """{% extends "base.html" %}
 </div>
 {% endif %}
  
-<div class="panel" id="history" style="margin-bottom:20px">
-  <h2>History</h2>
+{% set client_url = link('view_client', client_ref=record.get('client_ref', '')) %}
+<div class="stack" style="margin-bottom:20px"><section class="panel" id="history">
+  <form method="get" action="{{ client_url }}" id="trail-form">
+    <div class="spread panel-pad" style="padding-bottom:8px">
+      <div><h2>History</h2><p class="muted" style="margin:2px 0 0; font-size:.86rem">Every change to this client, newest first. Open <b>Info</b> for the details, or click <b>Assessed</b> to open that assessment.</p></div>
+      <div class="row" style="gap:10px; align-items:flex-end">
+        <button type="submit" tabindex="-1" aria-hidden="true" style="position:absolute; left:-9999px">Apply</button>
+        <div class="field"><span>Show</span><div class="seg" role="group" aria-label="Show">
+          {% for value, label in trail_shows %}<button type="submit" name="show" value="{{ value }}" aria-pressed="{{ 'true' if trail_filter.show == value else 'false' }}">{{ label }}</button>{% endfor %}
+        </div></div>
+        <label class="field" for="trail-when"><span>When</span><select id="trail-when" name="when">
+          {% for value, label in trail_whens %}<option value="{{ value }}"{{ ' selected' if trail_filter.when == value else '' }}>{{ label }}</option>{% endfor %}
+        </select></label>
+        {% if trail_filter.when == 'custom' %}
+        <label class="field" for="trail-from"><span>From</span><input type="date" id="trail-from" name="from" value="{{ trail_filter.date_from }}" max="{{ today }}"></label>
+        <label class="field" for="trail-to"><span>To</span><input type="date" id="trail-to" name="to" value="{{ trail_filter.date_to }}" max="{{ today }}"></label>
+        {% endif %}
+        <button class="btn sm" type="submit" style="margin-bottom:2px">Apply</button>
+      </div>
+    </div>
+    {% if show_archived %}<input type="hidden" name="archived" value="1">{% endif %}
+    <input type="hidden" name="show" value="{{ trail_filter.show }}">
+  </form>
+  {% for problem in trail_filter.problems() %}<div class="panel-pad" style="padding-top:0"><div class="problem" role="alert">{{ problem }}</div></div>{% endfor %}
   {% if history_error %}
-  <p class="muted">{{ history_error }}</p>
+  <p class="muted" style="padding:0 20px 18px; margin:0">{{ history_error }}</p>
   {% else %}
-  {% if history_unreadable %}<div class="notes" style="margin:0 0 10px">{{ history_unreadable }} {{ 'entry' if history_unreadable == 1 else 'entries' }} in the audit log can't be read, so this history may be incomplete.</div>{% endif %}
-  {% if not history %}
-  <p class="muted">No history recorded yet.</p>
+  {% if history_unreadable %}<div class="panel-pad" style="padding-top:0"><div class="problem" role="alert">{{ history_unreadable }} {{ 'entry' if history_unreadable == 1 else 'entries' }} in the audit log can't be read, so this history may be incomplete.</div></div>{% endif %}
+  {% if history %}
+  <ul class="timeline">
+    {% for day, events in history %}
+    <li class="day-label">{{ day }}</li>
+    {% for e in events %}
+    <li class="tl"><span class="rail"></span><time title="{{ e.at.replace('T', ' ').replace('Z', ' UTC') }}">{{ e.at|sgt_hm }}</time><span class="node" style="color:var({{ GROUP_COLOURS[e.group] }})"></span>
+      <div class="body">
+        <div class="line"><strong>{% if e.action == 'assessment_run' and e.details.get('assessment_id') %}<a href="{{ link('view_assessment', assessment_id=e.details.get('assessment_id')) }}">{{ e.label }}</a>{% else %}{{ e.label }}{% endif %}</strong>
+          <span class="short">{{ short(e) }}</span>{% if e.result == 'failed' %}<span class="res-fail">Failed</span>{% endif %}<span class="by muted">{{ e.actor }}</span></div>
+        <details class="info"><summary>Info</summary>{{ info(e) }}</details>
+      </div></li>
+    {% endfor %}
+    {% endfor %}
+  </ul>
+  {% elif history_total %}
+  <div class="empty">Nothing matches these filters. Try &ldquo;All&rdquo; or &ldquo;All time&rdquo;.</div>
   {% else %}
-  {{ event_table(history, false) }}
-  {% if history_total > history_limit %}<p class="muted" style="margin:10px 0 0">Showing the latest {{ history_limit }} of {{ history_total }} events.</p>{% endif %}
+  <div class="empty">No history recorded yet.</div>
   {% endif %}
+  <div class="pager" style="border-top:1px solid var(--line)"><span class="muted">{{ history_count }} entr{{ 'y' if history_count == 1 else 'ies' }}</span></div>
   {% endif %}
-</div>
+</section></div>
+<script>
+(function () {
+  var form = document.getElementById('trail-form');
+  form.addEventListener('change', function (event) {
+    if (event.target.matches('select, input[type=date]')) { form.submit(); }
+  });
+})();
+</script>
 
 {% for prefix, title, fields, kind in SECTIONS %}
 <div class="panel">
@@ -895,106 +939,160 @@ ERROR = """{% extends "base.html" %}
 {% endblock %}
 """
 
-AUDIT_ROWS = """{% macro event_table(events, show_client=true, broken_ids=[]) %}
-<table class="audit">
-  <thead><tr><th>Time (SGT)</th><th>Who</th><th>What</th>{% if show_client %}<th>Client</th>{% endif %}<th>Details</th><th>Result</th></tr></thead>
-  <tbody>
-  {% for e in events %}
-  <tr>
-    <td style="white-space:nowrap">{{ e.at|sgt }}</td>
-    <td>{{ e.actor }}</td>
-    <td>{{ e.label }}</td>
-    {% if show_client %}<td>{% if e.client_ref %}<a href="{{ link('view_client', client_ref=e.client_ref) }}">{{ e.client_ref }}</a>{% endif %}</td>{% endif %}
-    <td>{{ e.summary() }}
-      {% set changes = e.details.get('changes') if e.action == 'client_edited' else none %}
-      {% if changes %}
-      <details><summary>Show the changes</summary>
-        <ul style="margin:6px 0 0; padding-left:18px">
-          {% for c in changes %}<li><code>{{ c.get('field') }}</code>: {{ c.get('before')|shown }} &rarr; {{ c.get('after')|shown }}</li>{% endfor %}
-        </ul>
-      </details>
-      {% endif %}
-    </td>
-    <td>{% if e.result == 'ok' %}<span class="badge badge-pass">OK</span>{% else %}<span class="badge badge-bad">Failed</span>{% endif %}
-      {% if e.event_id in broken_ids %}<br><span class="badge badge-warn" style="margin-top:4px">Changed outside the app</span>{% endif %}</td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
+AUDIT_ROWS = """{% macro short(e) -%}
+{%- set d = e.details -%}
+{%- if e.action == 'client_created' -%}New client record
+{%- elif e.action == 'client_edited' -%}{%- if e.result == 'failed' -%}Change was not saved{%- else -%}{{ (d.get('changes')|short_fields) or 'Fields' }} changed{%- endif -%}
+{%- elif e.action == 'assessment_run' -%}{%- set outcome = d.get('outcome') -%}{%- if outcome -%}<span class="badge b-{{ outcome }}">{{ outcome.replace('_', ' ').capitalize() }}</span>{%- else -%}Assessment saved{%- endif -%}
+{%- elif e.action == 'assessment_failed' -%}Stopped before finishing
+{%- elif e.action in ('document_uploaded', 'document_downloaded') -%}<span class="mono">{{ d.get('file_id') or 'a document' }}</span>
+{%- elif e.action == 'autofill_used' -%}Details filled in from documents
+{%- else -%}{{ e.summary() }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro info(e, seal=false) %}
+{% set d = e.details %}
+<dl class="kv">
+  {% if e.action == 'client_edited' %}
+    {% if e.result == 'failed' %}<dt>Problem</dt><dd>The change could not be saved, so the record stayed as it was.</dd>
+    {% else %}<dt>What changed</dt><dd>{% for c in d.get('changes', []) %}<div>{{ c.get('field')|field_label }}: <span class="diff"><span class="b">{{ c.get('before')|shown }}</span>&rarr;<span class="a">{{ c.get('after')|shown }}</span></span></div>{% else %}Nothing was listed.{% endfor %}</dd>{% endif %}
+  {% elif e.action == 'assessment_run' %}
+    <dt>Result</dt><dd>{% if d.get('outcome') %}<span class="badge b-{{ d.get('outcome') }}">{{ d.get('outcome').replace('_', ' ').capitalize() }}</span>{% else %}Not recorded{% endif %}</dd>
+    <dt>Steps</dt><dd>{% if d.get('not_run') %}Not run: {{ d.get('not_run')|join(', ') }}{% else %}All steps ran{% endif %}</dd>
+    {% if d.get('assessment_id') %}<dt>Record</dt><dd><a href="{{ link('view_assessment', assessment_id=d.get('assessment_id')) }}">Open assessment {{ d.get('assessment_id') }} &rarr;</a></dd>{% endif %}
+  {% elif e.action == 'assessment_failed' %}
+    <dt>Stopped at</dt><dd>{{ d.get('step') or 'Not recorded' }}</dd><dt>Saved?</dt><dd>No. Nothing from this run was saved.</dd>
+  {% elif e.action in ('document_uploaded', 'document_downloaded') %}
+    <dt>File</dt><dd class="mono">{{ d.get('file_id') or 'Not recorded' }}</dd>
+  {% elif e.action == 'autofill_used' %}
+    <dt>Read</dt><dd>{{ d.get('documents', 0) }} document{{ '' if d.get('documents') == 1 else 's' }}, {{ d.get('fields', 0) }} field{{ '' if d.get('fields') == 1 else 's' }} filled in</dd>
+  {% elif e.action in ('assessment_archived', 'assessment_restored') %}
+    <dt>Assessment</dt><dd class="mono">{{ d.get('assessment_id') or 'Not recorded' }}</dd>
+    {% if d.get('reason') %}<dt>Reason</dt><dd>{{ d.get('reason') }}</dd>{% endif %}
+  {% elif e.action == 'cloud_sync' %}
+    <dt>Synced</dt><dd>{{ d.get('synced', 0) }} record{{ '' if d.get('synced') == 1 else 's' }}{% if d.get('errors') %}, {{ d.get('errors') }} could not be synced{% endif %}</dd>
+  {% elif e.action == 'audit_verified' %}
+    <dt>Checked</dt><dd>{{ d.get('entries', 0) }} entries: {{ 'changes found' if e.result == 'failed' else 'no changes found' }}</dd>
+  {% elif e.action == 'access_refused' %}
+    <dt>Tried to</dt><dd>{{ d.get('what') or 'Not recorded' }}</dd>
+  {% elif e.action == 'sign_in_failed' %}
+    <dt>Portal</dt><dd>{{ d.get('portal') or 'Not recorded' }}</dd>
+  {% endif %}
+  <dt>{{ DONE_BY.get(e.action, 'Done by') }}</dt><dd>{{ e.actor }} &middot; {{ e.at|sgt_long }}</dd>
+  {% if seal %}<dt>Log entry</dt><dd class="mono small">#{{ e.sequence }} &middot; fingerprint {{ e.hash[:12] }}&hellip; &middot; {% if e.sequence > 1 %}links to #{{ e.sequence - 1 }}{% else %}first entry{% endif %}</dd>{% endif %}
+</dl>
 {% endmacro %}
 """
 
 AUDIT = """{% extends "base.html" %}
-{% from "audit_rows.html" import event_table %}
-{% block title %}Audit log — Orbit{% endblock %}
+{% from "audit_rows.html" import short, info with context %}
+{% block title %}Activity log — Orbit{% endblock %}
 {% block content %}
-<div style="display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px">
-  <h1 style="margin:0">Audit log</h1>
-  <form method="post" action="{{ url_for('audit_verify', **query) }}" style="margin:0">
-    <button type="submit" class="secondary">Verify log</button>
-  </form>
-</div>
-
-{% for problem in audit_filter.problems() %}<div class="notes" style="margin:0 0 10px">{{ problem }}</div>{% endfor %}
-
-<form method="get" action="{{ url_for('audit_log_view') }}" class="panel" style="padding:12px 16px">
-  <div class="grid" style="grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:0 12px">
-    <label>Period
-      <select name="days">
-        {% for d in day_choices %}{% set value = 'all' if d == 0 else d %}
-        <option value="{{ value }}"{{ ' selected' if d == audit_filter.days else '' }}>{{ 'All time' if d == 0 else ('Last 24 hours' if d == 1 else 'Last ' ~ d ~ ' days') }}</option>
-        {% endfor %}
-      </select></label>
-    <label>Officer
-      <select name="actor">
-        <option value="">Everyone</option>
-        {% for name in officers %}<option{{ ' selected' if name == audit_filter.actor else '' }}>{{ name }}</option>{% endfor %}
-      </select></label>
-    <label>Group
-      <select name="group">
-        <option value="">Every group</option>
-        {% for name in groups %}<option{{ ' selected' if name == audit_filter.group else '' }}>{{ name }}</option>{% endfor %}
-      </select></label>
-    <label>Client reference
-      <input name="client_ref" maxlength="40" value="{{ audit_filter.client_ref }}"></label>
-    <label>Result
-      <select name="result">
-        <option value="">Both</option>
-        <option value="ok" {{ 'selected' if audit_filter.result == 'ok' else '' }}>OK</option>
-        <option value="failed" {{ 'selected' if audit_filter.result == 'failed' else '' }}>Failed</option>
-      </select></label>
+<form method="post" action="{{ url_for('audit_verify', **query) }}" id="verify-form"></form>
+<form method="get" action="{{ url_for('audit_log_view') }}" id="filters" class="stack">
+  <button type="submit" tabindex="-1" aria-hidden="true" style="position:absolute; left:-9999px">Apply</button>
+  <div class="page-head">
+    <div><div class="eyebrow">Audit</div><h1>Activity log</h1>
+      <p class="muted" style="margin:4px 0 0">Every action anyone took in the app. Use it to answer &ldquo;who did what, and when?&rdquo;</p></div>
+    <div class="row">
+      <div class="seg" role="group" aria-label="Sort">
+        <button type="submit" name="sort" value="desc" aria-pressed="{{ 'true' if audit_filter.sort == 'desc' else 'false' }}">Newest first</button>
+        <button type="submit" name="sort" value="asc" aria-pressed="{{ 'true' if audit_filter.sort == 'asc' else 'false' }}">Oldest first</button>
+      </div>
+      <button class="btn secondary" type="submit" form="verify-form">Verify log</button>
+    </div>
   </div>
-  <div class="actions"><button type="submit">Apply filters</button>
-    <a class="button secondary" href="{{ url_for('audit_log_view') }}">Reset</a></div>
+
+  <section class="filters" aria-label="Filters">
+    <div class="f-row">
+      <div class="field"><span>Date range</span><div class="seg" role="group" aria-label="Date range">
+        {% for value, label in (('1', 'Today'), ('7', '7 days'), ('30', '30 days'), ('90', '90 days'), ('custom', 'Custom')) %}<button type="submit" name="preset" value="{{ value }}" aria-pressed="{{ 'true' if audit_filter.preset == value else 'false' }}">{{ label }}</button>{% endfor %}
+      </div></div>
+      {% if audit_filter.preset == 'custom' %}
+      <label class="field" for="f-from"><span>From</span><input type="date" id="f-from" name="from" value="{{ audit_filter.date_from }}" max="{{ today }}"></label>
+      <label class="field" for="f-to"><span>To</span><input type="date" id="f-to" name="to" value="{{ audit_filter.date_to }}" max="{{ today }}"></label>
+      {% endif %}
+      <label class="field" for="f-officer"><span>Officer</span><select id="f-officer" name="actor">
+        <option value="">Everyone</option>
+        {% for name in officers %}<option{{ ' selected' if name.casefold() == audit_filter.actor.casefold() and audit_filter.actor else '' }}>{{ name }}</option>{% endfor %}
+      </select></label>
+      <div class="field"><span>Actions</span><details class="multi" id="f-groups"><summary>{{ 'All actions' if audit_filter.all_groups() else (audit_filter.groups|length ~ ' of ' ~ groups|length ~ ' groups') }}</summary>
+        <div class="multi-pop">{% for name in groups %}<label><input type="checkbox" name="group" value="{{ name }}"{{ ' checked' if name in audit_filter.groups else '' }}><span class="dot" style="background:var({{ GROUP_COLOURS[name] }})"></span>{{ name }}</label>{% endfor %}</div></details></div>
+      <div class="field"><span>Result</span><div class="seg" role="group" aria-label="Result">
+        {% for value, label in (('all', 'All'), ('ok', 'OK'), ('failed', 'Failed')) %}<button type="submit" name="result" value="{{ value }}" aria-pressed="{{ 'true' if audit_filter.result == value else 'false' }}">{{ label }}</button>{% endfor %}
+      </div></div>
+    </div>
+    <div class="f-row">
+      <label class="field" for="f-client" style="width:130px"><span>Client</span><input id="f-client" name="client_ref" maxlength="40" placeholder="C-0007" value="{{ audit_filter.client_ref }}"></label>
+      <label class="field" for="f-q" style="flex:1; min-width:180px"><span>Search</span><input id="f-q" name="q" type="search" maxlength="80" placeholder="Name, file, field, officer…" value="{{ audit_filter.query }}"></label>
+      <button class="btn sm" type="submit" style="margin-bottom:2px">Apply</button>
+    </div>
+    {% for problem in audit_filter.problems() %}<div class="problem" role="alert">{{ problem }}</div>{% endfor %}
+    <div class="spread"><div class="chips"><span class="muted" style="font-size:.82rem">{{ range_text }}</span>
+      {% for text, remove in chips %}<span class="chip">{{ text }}<a href="{{ remove }}" aria-label="Remove this filter: {{ text }}">&times;</a></span>{% endfor %}</div>
+      {% if chips %}<a class="btn ghost sm" href="{{ clear_url }}">Clear all</a>{% endif %}</div>
+  </section>
+  <input type="hidden" name="preset" value="{{ audit_filter.preset }}">
+  <input type="hidden" name="result" value="{{ audit_filter.result }}">
+  <input type="hidden" name="sort" value="{{ audit_filter.sort }}">
 </form>
 
-{% if chips %}
-<div class="actions" style="margin-bottom:12px">
-  {% for label, text, remove in chips %}
-  <span class="badge badge-warn">{{ label }}: {{ text }} <a href="{{ remove }}" aria-label="Remove the {{ label }} filter" style="color:inherit; text-decoration:none">&times;</a></span>
-  {% endfor %}
-</div>
-{% endif %}
-
-{% if unreadable and not error %}<div class="notes" style="margin:0 0 10px">{{ unreadable }} {{ 'entry' if unreadable == 1 else 'entries' }} in the audit log can't be read. Use Verify log to see which.</div>{% endif %}
-
-<div class="panel" style="padding:0; overflow:hidden">
+<div class="stack" style="margin-top:16px">
+{% if log and log.unreadable and not error %}<div class="problem" role="alert">{{ log.unreadable }} {{ 'entry' if log.unreadable == 1 else 'entries' }} in the audit log can't be read. Use Verify log to see which.</div>{% endif %}
+{% if log %}<p class="summary">{{ period }}: <strong>{{ log.total }} event{{ '' if log.total == 1 else 's' }}</strong> by {{ log.officers }} officer{{ '' if log.officers == 1 else 's' }}; <strong>{{ log.failed }} failed</strong>.</p>{% endif %}
+<section class="panel">
   {% if error %}
     <p class="muted" style="padding:20px 22px; margin:0">{{ error }}</p>
-  {% elif not events %}
-    <p class="muted" style="padding:20px 22px; margin:0">{{ 'No activity matches these filters.' if anything else ('No activity can be shown.' if unreadable else 'No activity recorded yet.') }}</p>
   {% else %}
-    {{ event_table(events, true, broken_ids) }}
-    <div style="padding:10px 22px; color:var(--muted); font-size:.82rem; border-top:1px solid var(--line); display:flex; justify-content:space-between">
-      <span>{{ total }} event{{ 's' if total != 1 else '' }} &middot; page {{ page }} of {{ pages }}</span>
-      <span>
-        {% if page > 1 %}<a href="{{ url_for('audit_log_view', **dict(query, page=page - 1)) }}">&larr; Newer</a>{% endif %}
-        {% if page > 1 and page < pages %} &middot; {% endif %}
-        {% if page < pages %}<a href="{{ url_for('audit_log_view', **dict(query, page=page + 1)) }}">Older &rarr;</a>{% endif %}
-      </span>
-    </div>
+  <div class="scroll-x"><table>
+    <thead><tr><th>Time (SGT)</th><th>Officer</th><th>Action</th><th>Client</th><th>What happened</th></tr></thead>
+    <tbody>
+    {% for e in log.events %}
+    <tr class="ev">
+      <td class="num" title="{{ e.at.replace('T', ' ').replace('Z', ' UTC') }}" style="white-space:nowrap">{{ e.at|sgt_day }} <span class="muted">{{ e.at|sgt_hm }}</span></td>
+      <td style="white-space:nowrap"><span class="pill"><span class="avatar" style="width:22px;height:22px;font-size:.62rem" aria-hidden="true">{{ e.actor|initials }}</span>{{ e.actor }}</span></td>
+      <td style="white-space:nowrap"><span class="pill"><span class="dot" style="background:var({{ GROUP_COLOURS[e.group] }})"></span>{{ e.label }}</span></td>
+      <td>{% if e.client_ref %}<a class="mono" href="{{ link('view_client', client_ref=e.client_ref) }}">{{ e.client_ref }}</a>{% else %}<span class="muted">&mdash;</span>{% endif %}</td>
+      <td style="min-width:260px">
+        <span class="row" style="gap:8px">{{ short(e) }}{% if e.result == 'failed' %}<span class="res-fail">Failed</span>{% endif %}{% if e.event_id in broken_ids %}<span class="badge badge-warn">Changed outside the app</span>{% endif %}</span>
+        <details class="info"><summary>Info</summary>{{ info(e, true) }}</details>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5"><div class="empty">{% if log.everything == 0 and not log.unreadable %}No activity recorded yet.{% elif log.everything == 0 %}No activity can be shown.{% else %}No events match these filters. Try a longer date range or <a href="{{ clear_url }}">clear the filters</a>.{% endif %}</div></td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <div class="pager"><span class="muted">Showing {{ (page - 1) * page_size + 1 if log.total else 0 }}&ndash;{{ [page * page_size, log.total]|min }} of {{ log.total }} &middot; open <b>Info</b> on a row for details</span>
+    <span class="row">
+      {% if page > 1 %}<a class="btn secondary sm" href="{{ url_for('audit_log_view', **(dict(base_query, page=page - 1) if page > 2 else base_query)) }}">&larr; Newer</a>{% else %}<span class="btn secondary sm" aria-disabled="true">&larr; Newer</span>{% endif %}
+      <span class="num">Page {{ page }} of {{ pages }}</span>
+      {% if page < pages %}<a class="btn secondary sm" href="{{ url_for('audit_log_view', **dict(base_query, page=page + 1)) }}">Older &rarr;</a>{% else %}<span class="btn secondary sm" aria-disabled="true">Older &rarr;</span>{% endif %}
+    </span></div>
   {% endif %}
+</section>
 </div>
+<script>
+(function () {
+  var form = document.getElementById('filters');
+  form.addEventListener('change', function (event) {
+    if (event.target.matches('select, input[type=date]')) { form.submit(); }
+  });
+  var groups = document.getElementById('f-groups'), before = groups.querySelectorAll('input:checked').length;
+  groups.addEventListener('toggle', function () {
+    if (!groups.open && groups.querySelectorAll('input:checked').length !== before) { form.submit(); }
+  });
+  document.querySelectorAll('tr.ev').forEach(function (row) {
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', function (event) {
+      if (event.target.closest('a, summary, details dl')) { return; }
+      var info = row.querySelector('details.info');
+      if (info) { info.open = !info.open; }
+    });
+  });
+})();
+</script>
 {% endblock %}
 """
 

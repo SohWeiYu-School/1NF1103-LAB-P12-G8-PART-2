@@ -26,7 +26,9 @@ from app.interface.web_templates import TEMPLATES
 from app.model.account import Account
 from app.model.audit_event import AuditEvent
 from app.model.audit_filter import AuditFilter
+from app.model.audit_page import AuditPage
 from app.model.client_record import ClientRecord
+from app.model.trail_filter import TrailFilter
 from app.model.typology import Typology
 
 logger = logging.getLogger(__name__)
@@ -107,11 +109,17 @@ class WebApp:
                                    "download_document": "admin_download_document"}
     # The demo accounts shown beside the sign-in form (the passwords config/accounts.json is shipped with).
     DEMO_PASSWORDS: dict[str, str] = {"officer": "officer123", "admin": "admin123"}
-    # The chips above the log: label -> the web address value that removes it.
-    CHIP_KEYS: dict[str, str] = {"Period": "days", "Officer": "actor", "Group": "group",
-                                 "Client": "client_ref", "Result": "result"}
+    # The colour variable (in the page's CSS) of each audit group, for the dots in the log and the timeline.
+    GROUP_COLOURS: dict[str, str] = {"Sign-in": "--g-signin", "Client": "--g-client", "Documents": "--g-documents",
+                                     "Assessment": "--g-assessment", "System": "--g-system"}
+    # "Done by" in an entry's Info, by action ("Done by" if an action is not here).
+    DONE_BY: dict[str, str] = {"client_created": "Created by", "client_edited": "Edited by",
+                               "assessment_run": "Assessed by", "assessment_failed": "Started by",
+                               "document_uploaded": "Uploaded by", "document_downloaded": "Downloaded by",
+                               "autofill_used": "Filled in by", "assessment_archived": "Archived by",
+                               "assessment_restored": "Restored by", "cloud_sync": "Started by",
+                               "audit_verified": "Checked by"}
     SINGAPORE: timezone = timezone(timedelta(hours=8))      # Singapore has no daylight saving: a fixed offset is exact
-    HISTORY_LIMIT: int = 50          # events shown in a client's History (the newest)
     NOT_ADMIN: str = "Only the admin can open the audit log."
     MAX_UPLOAD_BYTES: int = 40 * 1024 * 1024     # uploads for auto-fill: 40 MB per request
     ASSESSMENT_STOPPED: str = ("The assessment was stopped because a step it cannot do without failed. "
@@ -140,6 +148,11 @@ class WebApp:
         flask.jinja_env.filters["shown"] = self.shown_value
         flask.jinja_env.filters["sgt_day"] = self.singapore_day
         flask.jinja_env.filters["initials"] = self.initials
+        flask.jinja_env.filters["sgt_hm"] = self.singapore_clock
+        flask.jinja_env.filters["sgt_long"] = self.singapore_long
+        flask.jinja_env.filters["field_label"] = self.field_label
+        flask.jinja_env.filters["short_fields"] = self.short_fields
+        flask.jinja_env.globals.update(GROUP_COLOURS=WebApp.GROUP_COLOURS, DONE_BY=WebApp.DONE_BY)
         flask.jinja_env.globals["link"] = self.portal_link
         flask.jinja_env.globals.update(PEP_OPTIONS=ClientForm.PEP_OPTIONS, PAYMENT_OPTIONS=ClientForm.PAYMENT_METHODS)
         flask.before_request(self.gate)
@@ -318,6 +331,47 @@ class WebApp:
         local = moment.astimezone(WebApp.SINGAPORE)
         return f"{local.day} {local:%b}"
 
+    def singapore_clock(self, text: str) -> str:
+        """An audit time (UTC) as the Singapore clock time: "14:02". Anything else is shown as it is."""
+        try:
+            moment = datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            return str(text)
+        return f"{moment.astimezone(WebApp.SINGAPORE):%H:%M}"
+
+    def singapore_long(self, text: str) -> str:
+        """An audit time (UTC) as "15 November 2026, 14:02 SGT". Anything else is shown as it is."""
+        try:
+            moment = datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            return str(text)
+        local = moment.astimezone(WebApp.SINGAPORE)
+        return f"{local.day} {local:%B %Y}, {local:%H:%M} SGT"
+
+    @staticmethod
+    def field_label(path: Any) -> str:
+        """A changed field's path in words: "claims.declared_net_worth" -> "Claims › Declared net worth",
+        "investments[0].country" -> "Investments 1 › Country"."""
+        parts = []
+        for part in str(path).split("."):
+            name, _, index = part.partition("[")
+            words = name.replace("_", " ").strip().capitalize()
+            parts.append(f"{words} {int(index.rstrip(']')) + 1}" if index.rstrip("]").isdigit() else words)
+        return " › ".join(parts)
+
+    def short_fields(self, changes: Any) -> str:
+        """The changed fields as one phrase for a log line: "Declared net worth and Annual income", or
+        "A, B and 3 more" for many. The last part of each path is used. "" if there are none."""
+        names: list[str] = []
+        for change in changes if isinstance(changes, list) else []:
+            field = change.get("field") if isinstance(change, dict) else None
+            label = self.field_label(field).split(" › ")[-1] if isinstance(field, str) and field else ""
+            if label and label not in names:
+                names.append(label)
+        if len(names) > 3:
+            return f"{names[0]}, {names[1]} and {len(names) - 2} more"
+        return names[0] if len(names) == 1 else (", ".join(names[:-1]) + " and " + names[-1] if names else "")
+
     def singapore_time(self, text: str) -> str:
         """An audit time (UTC, 2026-11-16T06:02:11Z) as Singapore time: "16 Nov 2026 14:02". Anything
         that is not such a time is shown as it is."""
@@ -335,27 +389,30 @@ class WebApp:
     def __show_audit_log(self, broken_ids: list[str] | None = None) -> str:
         """The audit log page. If the log cannot be read the page says so and shows no table (it never shows
         an empty log for an error). broken_ids are the events a Verify log found changed: their rows are marked."""
-        audit_filter = AuditFilter.from_query(request.args)
-        events: list | None = None
-        total, unreadable, error, anything = 0, 0, "", True
+        now = datetime.now(timezone.utc)
+        audit_filter = AuditFilter.from_query(request.args, now)
+        log: AuditPage | None = None
+        error = ""
         try:
-            events, total, unreadable = self.__app.audit_log(audit_filter)
-            if total == 0:
-                anything = self.__app.audit_log(AuditFilter(days=0))[1] > 0     # is the whole log empty?
+            log = self.__app.audit_log(audit_filter, now)
         except ValueError:
             error = App.AUDIT_UNAVAILABLE
         query = audit_filter.to_query()
-        chips = [(label, text, url_for("audit_log_view", **{key: value for key, value in query.items()
-                                                            if key not in (WebApp.CHIP_KEYS[label], "page")}))
-                 for label, text in audit_filter.chips()]
-        officers = [account.name for account in self.__app.accounts()] + [App.TERMINAL]
-        if audit_filter.actor and audit_filter.actor not in officers:
+        chips = [(text, url_for("audit_log_view", **{k: v for k, v in query.items() if k not in (key, "page")}))
+                 for key, text in audit_filter.chips()]
+        keep = {k: v for k, v in query.items() if k in ("preset", "from", "to", "sort")}
+        officers = [account.name for account in self.__app.accounts()] + [App.TERMINAL, App.UNKNOWN]
+        if audit_filter.actor and audit_filter.actor.casefold() not in [name.casefold() for name in officers]:
             officers.append(audit_filter.actor)
-        return render_template("audit.html", events=events, total=total, error=error, anything=anything,
-                               unreadable=unreadable,
-                               audit_filter=audit_filter, query=query, chips=chips, officers=officers,
-                               groups=list(AuditEvent.GROUPS), day_choices=AuditFilter.DAY_CHOICES,
+        total = log.total if log is not None else 0
+        newer = {k: v for k, v in query.items() if k != "page"}
+        return render_template("audit.html", log=log, error=error, audit_filter=audit_filter, query=query,
+                               chips=chips, clear_url=url_for("audit_log_view", **keep), officers=officers,
+                               groups=list(AuditEvent.GROUPS), presets=AuditFilter.PRESETS,
+                               range_text=audit_filter.range_text(now), period=audit_filter.period_text(now),
+                               today=AuditFilter.singapore_day(now).isoformat(),
                                page=audit_filter.page_for(total), pages=audit_filter.page_count(total),
+                               page_size=AuditFilter.PAGE_SIZE, base_query=newer,
                                broken_ids=broken_ids or [])
 
     def audit_verify(self) -> str | Response:
@@ -996,21 +1053,40 @@ class WebApp:
             logger.error("WebApp.view_client: the saved assessments cannot be read: %r", error)
             flash(App.ASSESSMENTS_UNAVAILABLE)
             assessments = None
+        now = datetime.now(timezone.utc)
+        trail_filter = TrailFilter.from_query(request.args, now)
         history: list | None = None
-        history_error, history_unreadable = "", 0
+        history_error, history_unreadable, history_total, history_count = "", 0, 0, 0
         try:
-            history, history_unreadable = self.__app.audit_trail(client_ref)
+            everything, history_unreadable = self.__app.audit_trail(client_ref)
+            history_total = len(everything)
+            shown = [event for event in everything if trail_filter.matches(event, now)]
+            history_count = len(shown)
+            history = self.__by_day(shown)
         except ValueError:
             history_error = App.AUDIT_UNAVAILABLE         # the rest of the page still shows
-        shown = None if history is None else history[:WebApp.HISTORY_LIMIT]
-        return render_template("client_view.html", record=saved, history=shown,
+        return render_template("client_view.html", record=saved, history=history,
                                history_error=history_error, history_unreadable=history_unreadable,
-                               history_total=len(history or []),
-                               history_limit=WebApp.HISTORY_LIMIT,
+                               history_total=history_total, history_count=history_count,
+                               trail_filter=trail_filter, trail_shows=list(TrailFilter.SHOW_LABELS.items()),
+                               trail_whens=list(TrailFilter.WHEN_LABELS.items()),
+                               today=AuditFilter.singapore_day(now).isoformat(),
                                values=self.values_from_record(saved), SECTIONS=WebApp.SECTIONS,
                                assessments=assessments, problems=record.problems(),
                                show_archived=show_archived, archived_count=archived_count,
                                archive_states=archive_states, max_reason=App.MAX_ARCHIVE_REASON)
+
+    @staticmethod
+    def __by_day(events: list[AuditEvent]) -> list[tuple[str, list[AuditEvent]]]:
+        """Events (newest first) grouped by Singapore day, each day labelled "15 November 2026"."""
+        days: list[tuple[str, list[AuditEvent]]] = []
+        for event in events:
+            day = AuditFilter.event_day(event)
+            label = f"{day.day} {day:%B %Y}"
+            if not days or days[-1][0] != label:
+                days.append((label, []))
+            days[-1][1].append(event)
+        return days
 
     def archive_assessment(self, assessment_id: str) -> Response:
         """Hide one assessment from the lists (nothing is deleted), then go back to its client."""
