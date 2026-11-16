@@ -587,6 +587,13 @@ def test_a_client_page_for_a_damaged_client_file_says_the_database_cannot_be_rea
     assert App.CLIENTS_UNAVAILABLE in _flashes(client)
 
 
+def test_the_database_message_is_shown_once_after_going_home(web, tmp_path):
+    _, _, client = web
+    _damage(tmp_path, "sow_cases.json")
+    page = client.get("/client/CL-1", follow_redirects=True).get_data(as_text=True)
+    assert page.count("We can&#39;t load the client database right now.") == 1
+
+
 def test_saving_a_new_client_into_a_damaged_file_says_it_was_not_saved_and_keeps_the_file(web, tmp_path):
     _, site, client = web
     path = _damage(tmp_path, "sow_cases.json")

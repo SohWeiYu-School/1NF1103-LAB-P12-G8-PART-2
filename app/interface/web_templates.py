@@ -64,7 +64,7 @@ BASE = """<!doctype html>
   </nav>
 </header>
 <main>
-  {% for message in get_flashed_messages() %}<div class="msg">{{ message }}</div>{% endfor %}
+  {% for message in get_flashed_messages()|unique %}<div class="msg">{{ message }}</div>{% endfor %}
   {% block content %}{% endblock %}
 </main>
 </body>
