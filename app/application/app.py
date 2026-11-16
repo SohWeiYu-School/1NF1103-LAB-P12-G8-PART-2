@@ -76,6 +76,14 @@ class App:
     LOG_HANDLER_NAME: str = "app_log_file"
     # Who did an action when nobody signed in: the command line.
     TERMINAL: str = AuditEvent.TERMINAL
+    UNKNOWN: str = AuditEvent.UNKNOWN
+    OFFICER_PORTAL: str = "officer"
+    ADMIN_PORTAL: str = "admin"
+    SIGN_IN_EMPTY: str = "Please enter your name and password."
+    SIGN_IN_WRONG: str = "Name or password is wrong."
+    SIGN_IN_OFFICER_AT_ADMIN: str = "This is an officer account. Officers sign in at / (the officer portal)."
+    SIGN_IN_ADMIN_AT_OFFICER: str = "This is an admin account. Admins sign in at /admin."
+    MAX_SIGN_IN_TEXT: int = 200               # longer names and passwords are refused as wrong, not checked
     CLIENT_COLLECTION: str = "client_cases"
     ASSESSMENT_COLLECTION: str = "ai_assessments"
     # What the user is told when saved records cannot be read (the real error goes to the log).
@@ -953,15 +961,36 @@ class App:
         """The account with this email (upper and lower case are the same), or None."""
         return self.__config.account(email)
 
-    def sign_in(self, email: str) -> Account | None:
-        """Sign in as a configured account: the audit log gets a "signed in" line. None (and nothing
-        written) if no account has this email."""
-        account = self.__config.account(email)
-        if account is None:
-            return None
-        self.__start(account.name)
-        self.__record("signed_in", account.name)
-        return account
+    def sign_in(self, name: str, password: str, portal: str) -> tuple[Account | None, str]:
+        """Sign in by name and password at a portal (OFFICER_PORTAL or ADMIN_PORTAL). Returns (the account, "")
+        and writes a "signed in" line, or (None, the plain message to show) and, if something was typed,
+        a "failed sign-in" line (details: the portal only, never the password; the actor is the account
+        name if the name matched an account, else UNKNOWN). The name is matched ignoring case and extra
+        spaces. An admin account at the officer portal, or an officer at the admin one, is refused with a message
+        that says where to sign in, but only after the password was right. Raises ValueError for an unknown portal."""
+        if portal not in (App.OFFICER_PORTAL, App.ADMIN_PORTAL):
+            raise ValueError(f"The portal must be {App.OFFICER_PORTAL} or {App.ADMIN_PORTAL}.")
+        name = " ".join(name.split()) if isinstance(name, str) else ""
+        password = password if isinstance(password, str) else ""
+        if not name or not password:
+            return None, App.SIGN_IN_EMPTY
+        match = None
+        if len(name) <= App.MAX_SIGN_IN_TEXT and len(password) <= App.MAX_SIGN_IN_TEXT:
+            match = next((a for a in self.__config.accounts
+                          if " ".join(a.name.split()).casefold() == name.casefold()), None)
+        actor = match.name if match is not None else App.UNKNOWN
+        self.__start(actor)
+        if match is None or not match.check_password(password):
+            self.__record("sign_in_failed", actor, "", "failed", {"portal": portal})
+            return None, App.SIGN_IN_WRONG
+        if portal == App.ADMIN_PORTAL and not match.is_admin():
+            self.__record("sign_in_failed", actor, "", "failed", {"portal": portal})
+            return None, App.SIGN_IN_OFFICER_AT_ADMIN
+        if portal == App.OFFICER_PORTAL and match.is_admin():
+            self.__record("sign_in_failed", actor, "", "failed", {"portal": portal})
+            return None, App.SIGN_IN_ADMIN_AT_OFFICER
+        self.__record("signed_in", match.name)
+        return match, ""
 
     def sign_out(self, account: Account) -> None:
         """Sign out: the audit log gets a "signed out" line. Raises ValueError if this is not a configured account."""
@@ -1016,6 +1045,17 @@ class App:
         events = [event for event in readable if wanted and event.client_ref.casefold() == wanted]
         events.reverse()
         return events, unreadable
+
+    def last_activity(self) -> dict[str, AuditEvent]:
+        """The newest audit event about each client, by client reference in lower case (one read of the
+        log). Events with no client are not counted. {} if no client has any. Raises ValueError(AUDIT_UNAVAILABLE)
+        if the log cannot be read."""
+        readable, _ = App.__audit_events(self.__audit_rows("last_activity"), "last_activity")
+        latest: dict[str, AuditEvent] = {}
+        for event in readable:                      # file order is oldest first, so a later one replaces an earlier one
+            if event.client_ref:
+                latest[event.client_ref.casefold()] = event
+        return latest
 
     def verify_audit_log(self, actor: str) -> AuditChain:
         """Check the hash chain of the whole log and write an "audit verified" line. The line's result is
@@ -1072,13 +1112,13 @@ class App:
 
     def __start(self, actor: str) -> None:
         """Begin an action: forget the last audit failure of this thread and check who is acting.
-        Raises ValueError (a programming error) if actor is neither TERMINAL nor a configured account name."""
+        Raises ValueError (a programming error) if actor is neither TERMINAL, UNKNOWN nor a configured account name."""
         self.__audit_note.failed = False
         self.__audit_note.outcome_failed = False
-        known = isinstance(actor, str) and (actor == App.TERMINAL
+        known = isinstance(actor, str) and (actor in (App.TERMINAL, App.UNKNOWN)
                                             or any(account.name == actor for account in self.__config.accounts))
         if not known:
-            raise ValueError("The actor must be 'terminal' or the name of a configured account.")
+            raise ValueError("The actor must be 'terminal', 'unknown' or the name of a configured account.")
 
     def __record(self, action: str, actor: str, client_ref: str = "", result: str = "ok",
                  details: dict | None = None, kept: bool = False) -> bool:

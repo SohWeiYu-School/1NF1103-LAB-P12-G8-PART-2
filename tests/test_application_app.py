@@ -1076,17 +1076,69 @@ def test_a_cloud_sync_is_recorded_with_counts_and_never_the_error_text(app):
 
 
 def test_signing_in_and_out_are_recorded_under_the_account_name(app):
-    account = app.sign_in("  SHAREEN@orbit.local ")
-    assert account is not None and account.name == "Shareen"
+    account, problem = app.sign_in("  shareen ", "officer123", App.OFFICER_PORTAL)
+    assert account is not None and account.name == "Shareen" and problem == ""
     app.sign_out(account)
     assert [(event.action, event.actor) for event in _events(app)] == [
         ("signed_in", "Shareen"), ("signed_out", "Shareen")]
 
 
-def test_signing_in_as_nobody_returns_none_and_writes_nothing(app):
-    assert app.sign_in("nobody@example.com") is None
-    assert app.sign_in("") is None
+def test_the_name_is_matched_ignoring_case_and_extra_spaces(app):
+    assert app.sign_in("WEI   yu", "officer123", App.OFFICER_PORTAL)[0].name == "Wei Yu"
+    assert app.sign_in(" orbit  admin", "admin123", App.ADMIN_PORTAL)[0].name == "Orbit Admin"
+
+
+def test_nothing_typed_is_refused_and_writes_nothing(app):
+    for name, password in (("", "officer123"), ("Shareen", ""), ("  ", " "), (None, None)):
+        assert app.sign_in(name, password, App.OFFICER_PORTAL) == (None, App.SIGN_IN_EMPTY)
     assert _actions(app) == []
+
+
+def test_a_wrong_password_is_recorded_under_the_account_without_the_password(app):
+    assert app.sign_in("Shareen", "wrong-password-XYZ", App.OFFICER_PORTAL) == (None, App.SIGN_IN_WRONG)
+    [event] = _events(app)
+    assert (event.action, event.actor, event.result, event.details) == (
+        "sign_in_failed", "Shareen", "failed", {"portal": "officer"})
+    assert "wrong-password-XYZ" not in json.dumps(event.to_dict())
+
+
+def test_an_unknown_name_is_recorded_as_the_unknown_actor_and_gets_the_same_message(app):
+    assert app.sign_in("Nobody Here", "officer123", App.ADMIN_PORTAL) == (None, App.SIGN_IN_WRONG)
+    [event] = _events(app)
+    assert (event.actor, event.result, event.details) == ("unknown", "failed", {"portal": "admin"})
+    assert app.sign_in("x" * 500, "y" * 500, App.OFFICER_PORTAL) == (None, App.SIGN_IN_WRONG)
+
+
+def test_the_right_password_at_the_wrong_portal_says_where_to_sign_in_and_is_recorded(app):
+    assert app.sign_in("Shareen", "officer123", App.ADMIN_PORTAL) == (None, App.SIGN_IN_OFFICER_AT_ADMIN)
+    assert app.sign_in("Orbit Admin", "admin123", App.OFFICER_PORTAL) == (None, App.SIGN_IN_ADMIN_AT_OFFICER)
+    assert [(event.actor, event.result, event.details["portal"]) for event in _events(app)] == [
+        ("Shareen", "failed", "admin"), ("Orbit Admin", "failed", "officer")]
+    # a wrong password never reveals which portal the account belongs to
+    assert app.sign_in("Shareen", "nope", App.ADMIN_PORTAL)[1] == App.SIGN_IN_WRONG
+
+
+def test_an_unknown_portal_is_refused(app):
+    with pytest.raises(ValueError, match="portal"):
+        app.sign_in("Shareen", "officer123", "staff")
+
+
+def test_the_last_activity_of_each_client_comes_from_one_read_of_the_log(app):
+    assert app.last_activity() == {}
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record, "Shareen")
+    app.sign_in("Adrian", "officer123", App.OFFICER_PORTAL)         # no client: not counted
+    changed = ClientRecord.from_dict({**sample_case(), "name": "Somebody Else"})
+    app.save_client(changed, "Adrian")
+    latest = app.last_activity()
+    assert list(latest) == [record.client_ref.casefold()]
+    assert (latest[record.client_ref.casefold()].actor, latest[record.client_ref.casefold()].action) == ("Adrian", "client_edited")
+
+
+def test_the_last_activity_says_when_the_log_cannot_be_read(app, tmp_path):
+    break_audit(tmp_path)
+    with pytest.raises(ValueError, match="audit log"):
+        app.last_activity()
 
 
 def test_sign_out_needs_an_account(app):
@@ -1190,7 +1242,7 @@ def test_accounts_come_from_the_config(app):
 def test_the_log_gives_newest_first_with_the_total_and_applies_the_filter(app):
     record = ClientRecord.from_dict(sample_case())
     app.save_client(record, "Shareen")
-    app.sign_in("adrian@orbit.local")
+    app.sign_in("Adrian", "officer123", App.OFFICER_PORTAL)
     app.sync_to_cloud("Shareen")
     events, total, _ = app.audit_log(AuditFilter())
     assert total == 3 and [event.action for event in events] == ["cloud_sync", "signed_in", "client_created"]
