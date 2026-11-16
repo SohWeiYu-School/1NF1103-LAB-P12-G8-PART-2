@@ -1443,3 +1443,74 @@ def test_the_filter_form_offers_every_account_the_terminal_and_every_group(web):
         assert f"<option>{group}</option>" in page
     for choice in ("all", "1", "7", "30", "90"):
         assert f'<option value="{choice}"' in page
+
+
+# ----- the client's History ---------------------------------------------------------------------
+
+def test_the_client_page_shows_its_history_newest_first_to_both_roles(web):
+    application, _, browser = web
+    ref = sample_case()["client_ref"]
+    record = ClientRecord.from_dict(sample_case())
+    application.save_client(record, "Shareen")
+    application.save_client(ClientRecord.from_dict({**record.to_dict(), "name": "Daniel K. Tan"}), "Adrian")
+    application.sync_to_cloud("Shareen")                               # not about this client
+    for role in ("officer", "admin"):
+        sign_in(browser, application, role)
+        page = browser.get(f"/client/{ref}").get_data(as_text=True)
+        history = page[page.index('id="history"'):]
+        assert "Client edited" in history and "Client created" in history and "Cloud sync" not in history
+        assert history.index("Client edited") < history.index("Client created")
+        assert "Adrian" in history and "Shareen" in history and "<th>Client</th>" not in history
+        assert "<code>name</code>" in history and "Daniel K. Tan" in history
+
+
+def test_a_client_with_no_events_says_no_history_recorded_yet(web):
+    application, _, browser = web
+    application.clients().save(sample_case())                           # saved behind App's back: no event
+    page = browser.get(f"/client/{sample_case()['client_ref']}").get_data(as_text=True)
+    assert "No history recorded yet." in page
+
+
+def test_only_the_newest_fifty_events_of_a_client_are_shown(web):
+    application, _, browser = web
+    ref = sample_case()["client_ref"]
+    application.clients().save(sample_case())
+    for number in range(55):
+        application.upload_document("/no/such/file", "Shareen", ref)
+    page = browser.get(f"/client/{ref}").get_data(as_text=True)
+    assert page.count("<tr>") >= 50 and "Showing the latest 50 of 55 events." in page
+
+
+def test_an_unreadable_audit_log_shows_the_message_in_history_and_the_rest_of_the_page_still_renders(web, tmp_path):
+    application, _, browser = web
+    application.clients().save(sample_case())
+    path = tmp_path / "local database" / "audit_log.json"
+    path.mkdir(parents=True)
+    page = browser.get(f"/client/{sample_case()['client_ref']}")
+    text = html.unescape(page.get_data(as_text=True))
+    assert page.status_code == 200
+    history = text[text.index('id="history"'):]
+    assert App.AUDIT_UNAVAILABLE in history[:400] and "No history recorded yet." not in text
+    assert sample_case()["name"] in text and "Supporting documents" in text
+
+
+def test_an_archived_assessment_shows_who_archived_it(web):
+    application, _, browser = web
+    ref = _two_assessments(application)
+    officer = account_with_role(application)
+    browser.post("/assessment/A1/archive", data={"reason": "duplicate"})
+    page = browser.get(f"/client/{ref}?archived=1").get_data(as_text=True)
+    assert f"(archived) &middot; by {officer.name}" in page
+    banner = browser.get("/assessment/A1").get_data(as_text=True)
+    assert f"Archived by: {officer.name}." in banner
+
+
+def test_an_old_archive_line_without_by_says_it_was_not_recorded(web):
+    application, _, browser = web
+    ref = _two_assessments(application)
+    rows = application.assessments().load()
+    rows[0]["archive_log"] = [{"action": "archived", "at": "2026-01-06T00:00:00+00:00", "reason": "old"}]
+    assert application.assessments()._write_all(rows)
+    page = browser.get(f"/client/{ref}?archived=1").get_data(as_text=True)
+    assert "Not recorded (before sign-in existed)" in page
+    assert "Archived by: Not recorded (before sign-in existed)." in browser.get("/assessment/A1").get_data(as_text=True)

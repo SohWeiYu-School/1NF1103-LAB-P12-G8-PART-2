@@ -319,6 +319,7 @@ FORM = """{% extends "base.html" %}
 """
  
 VIEW = """{% extends "base.html" %}
+{% from "audit_rows.html" import event_table %}
 {% block content %}
 <h1>{{ record.get('name', 'Client') }}
   <span class="muted" style="font-size:1rem">{{ record.get('client_ref', '') }}</span></h1>
@@ -356,7 +357,7 @@ VIEW = """{% extends "base.html" %}
     <tr{% if state != 'active' %} style="opacity:.55"{% endif %}>
       <td>{{ a.get('assessed_at', '')[:10] }}</td>
       <td>{{ a.get('assessed_at', '')[11:16] }} UTC</td>
-      <td>{{ (a.get('outcome') or (a.get('assessment') or {}).get('outcome') or '—').replace('_', ' ') }}{% if state == 'archived' %} (archived){% elif state == 'unreadable' %} (archive state unreadable){% endif %}</td>
+      <td>{{ (a.get('outcome') or (a.get('assessment') or {}).get('outcome') or '—').replace('_', ' ') }}{% if state == 'archived' %}{% set last = (a.get('archive_log') or [])[-1] %} (archived) &middot; {{ ('by ' ~ last.get('by')) if last.get('by') else 'Not recorded (before sign-in existed)' }}{% elif state == 'unreadable' %} (archive state unreadable){% endif %}</td>
       <td>
         {% if a.get('assessment_id') %}
         <a href="{{ url_for('view_assessment', assessment_id=a.get('assessment_id')) }}">View</a>
@@ -385,6 +386,18 @@ VIEW = """{% extends "base.html" %}
 </div>
 {% endif %}
  
+<div class="panel" id="history" style="margin-bottom:20px">
+  <h2>History</h2>
+  {% if history_error %}
+  <p class="muted">{{ history_error }}</p>
+  {% elif not history %}
+  <p class="muted">No history recorded yet.</p>
+  {% else %}
+  {{ event_table(history, false) }}
+  {% if history_total > history_limit %}<p class="muted" style="margin:10px 0 0">Showing the latest {{ history_limit }} of {{ history_total }} events.</p>{% endif %}
+  {% endif %}
+</div>
+
 {% for prefix, title, fields, kind in SECTIONS %}
 <div class="panel">
   <h2>{{ title }}</h2>
@@ -464,7 +477,7 @@ ASSESS_RESULT = """{% extends "base.html" %}
 <div class="msg">This assessment's archive record is damaged, so it cannot be archived or restored.</div>
 {% elif archive %}
 <div class="msg" style="display:flex; justify-content:space-between; align-items:center; gap:12px">
-  <span>This assessment is archived{% if archive.get('at') %} (since {{ archive['at'][:10] }}){% endif %}{% if archive.get('reason') %}: {{ archive['reason'] }}{% endif %}. It is hidden from the lists but kept as a record. The client's current outcome is not changed.</span>
+  <span>This assessment is archived{% if archive.get('at') %} (since {{ archive['at'][:10] }}){% endif %}{% if archive.get('reason') %}: {{ archive['reason'] }}{% endif %}. It is hidden from the lists but kept as a record. The client's current outcome is not changed. Archived by: {{ archive.get('by') or 'Not recorded (before sign-in existed)' }}.</span>
   {% if not account.is_admin() %}
   <form method="post" action="{{ url_for('restore_assessment', assessment_id=assessment_id) }}" style="margin:0">
     <button type="submit" class="secondary">Restore</button>

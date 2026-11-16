@@ -109,6 +109,7 @@ class WebApp:
     CHIP_KEYS: dict[str, str] = {"Period": "days", "Officer": "actor", "Group": "group",
                                  "Client": "client_ref", "Result": "result"}
     SINGAPORE: timezone = timezone(timedelta(hours=8))      # Singapore has no daylight saving: a fixed offset is exact
+    HISTORY_LIMIT: int = 50          # events shown in a client's History (the newest)
     NOT_ADMIN: str = "Only the admin can open the audit log."
     CHOOSE_ACCOUNT: str = "Please choose one of the listed accounts."
     MAX_UPLOAD_BYTES: int = 40 * 1024 * 1024     # uploads for auto-fill: 40 MB per request
@@ -904,7 +905,16 @@ class WebApp:
             logger.error("WebApp.view_client: the saved assessments cannot be read: %r", error)
             flash(App.ASSESSMENTS_UNAVAILABLE)
             assessments = None
-        return render_template("client_view.html", record=saved,
+        history: list | None = None
+        history_error = ""
+        try:
+            history = self.__app.audit_trail(client_ref)
+        except ValueError:
+            history_error = App.AUDIT_UNAVAILABLE         # the rest of the page still shows
+        shown = None if history is None else history[:WebApp.HISTORY_LIMIT]
+        return render_template("client_view.html", record=saved, history=shown,
+                               history_error=history_error, history_total=len(history or []),
+                               history_limit=WebApp.HISTORY_LIMIT,
                                values=self.values_from_record(saved), SECTIONS=WebApp.SECTIONS,
                                assessments=assessments, problems=record.problems(),
                                show_archived=show_archived, archived_count=archived_count,
