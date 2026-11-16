@@ -24,10 +24,11 @@ class AuditEvent:
     """
 
     TERMINAL: str = "terminal"
+    UNKNOWN: str = "unknown"                 # the actor of a failed sign-in whose name matched no account
     GENESIS: str = "0" * 64                  # the "previous hash" of the first entry
     RESULTS: tuple[str, ...] = ("ok", "failed")
     GROUPS: dict[str, tuple[str, ...]] = {
-        "Sign-in": ("signed_in", "signed_out"),
+        "Sign-in": ("signed_in", "signed_out", "sign_in_failed"),
         "Client": ("client_created", "client_edited"),
         "Documents": ("autofill_used", "document_uploaded", "document_downloaded"),
         "Assessment": ("assessment_run", "assessment_failed", "assessment_archived", "assessment_restored"),
@@ -35,7 +36,7 @@ class AuditEvent:
     }
     ACTIONS: tuple[str, ...] = tuple(action for actions in GROUPS.values() for action in actions)
     LABELS: dict[str, str] = {
-        "signed_in": "Signed in", "signed_out": "Signed out",
+        "signed_in": "Signed in", "signed_out": "Signed out", "sign_in_failed": "Failed sign-in",
         "client_created": "Client created", "client_edited": "Client edited",
         "autofill_used": "Used document auto-fill", "document_uploaded": "Document uploaded",
         "document_downloaded": "Document downloaded",
@@ -220,6 +221,9 @@ class AuditEvent:
             text = "Signed in"
         elif action == "signed_out":
             text = "Signed out"
+        elif action == "sign_in_failed":
+            portal = details.get("portal")
+            text = "Sign-in attempt" + (f" at the {portal} portal" if portal in ("officer", "admin") else "")
         elif action == "client_created":
             text = f"Created {who}"
         elif action == "client_edited":

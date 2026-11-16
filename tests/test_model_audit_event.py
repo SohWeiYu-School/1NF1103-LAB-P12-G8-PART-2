@@ -152,6 +152,8 @@ def test_hash_matches_turns_false_when_the_stored_hash_is_wrong():
 @pytest.mark.parametrize("action, details, ref, expected", [
     ("signed_in", {}, "", "Signed in"),
     ("signed_out", {}, "", "Signed out"),
+    ("sign_in_failed", {"portal": "admin"}, "", "Sign-in attempt at the admin portal"),
+    ("sign_in_failed", {}, "", "Sign-in attempt"),
     ("client_created", {}, "C-0007", "Created client C-0007"),
     ("client_edited", {"changes": [{}, {}]}, "C-0007", "Edited client C-0007 (2 fields changed)"),
     ("client_edited", {"changes": [{}]}, "C-0007", "Edited client C-0007 (1 field changed)"),
@@ -264,3 +266,10 @@ def test_an_empty_key_is_refused_and_a_refused_seal_changes_nothing():
         _sealed().compute_hash("")
     with pytest.raises(ValueError, match="key"):
         _sealed().hash_matches("")
+
+
+def test_a_failed_sign_in_by_an_unknown_name_is_a_valid_event_and_belongs_to_the_sign_in_group():
+    event = AuditEvent(actor=AuditEvent.UNKNOWN, action="sign_in_failed", result="failed", details={"portal": "officer"})
+    assert AuditEvent.UNKNOWN == "unknown"
+    assert (event.group, event.label) == ("Sign-in", "Failed sign-in")
+    assert event.summary() == "Sign-in attempt at the officer portal — failed"
