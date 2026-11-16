@@ -1,6 +1,10 @@
 """AssessmentRunner: one assessment from made-up AI services, including the ways a step can fail."""
 
+import copy
+
 from app.application.assessment_runner import AssessmentRunner
+from app.data.document_store import DocumentStore
+from app.model.config import Config
 from app.model.declaration import Declaration
 from app.model.typology import Typology
 from app.model.verdict import Verdict
@@ -275,3 +279,20 @@ def test_a_missing_ai_service_is_shown_as_plain_words(tmp_path):
     assert ".)" not in sentence and ")." in sentence and ". ." not in sentence      # reads cleanly, no double stops
     assert "OPENAI_API_KEY" not in reason + " ".join(notes) + str(verdict.report)
     assert verdict.outcome != "PASSED"
+
+
+
+def test_a_verdict_that_cannot_be_worked_out_is_reported_in_plain_words(tmp_path):
+    policy = copy.deepcopy(fake_services.CONFIG.policy)
+    del policy["verdict"]["max_documents"]                  # a setting only the verdict needs
+    _, cache, _ = fake_services.runner(tmp_path)
+    runner = AssessmentRunner(Config(policy, fake_services.CONFIG.vocabulary),
+                              fake_services.FixedAI(fake_ai.research()), fake_services.FixedAI(fake_ai.typologies()),
+                              fake_services.FixedAI(fake_ai.benchmark()), fake_services.FixedAI(None),
+                              fake_services.forecast_ai(cache), DocumentStore("data/documents", root=str(tmp_path)),
+                              cache)
+    case = sample_case()
+    fake_services.save_forecast_replies(cache, case)
+    failures = []
+    assert runner.run(case, on_failure=lambda step, reason: failures.append((step, reason)) or True) is None
+    assert failures[-1] == ("Deciding the verdict", "the verdict could not be worked out")

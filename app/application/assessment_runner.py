@@ -244,7 +244,7 @@ class AssessmentRunner:
                 })
         except (KeyError, TypeError, ValueError, ZeroDivisionError) as error:
             logger.exception("AssessmentRunner: the verdict could not be worked out")
-            failed("Deciding the verdict", repr(error))
+            failed("Deciding the verdict", "the verdict could not be worked out")      # details are in the log
             return None
         return {
             "case": case,
