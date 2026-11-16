@@ -1,6 +1,5 @@
 """WebApp: the browser front end. It only calls App."""
 
-import datetime
 import io
 import logging
 import os
@@ -563,9 +562,10 @@ class WebApp:
         """Save a record built from the form. Returns the problems ([] = saved)."""
         try:
             client = ClientRecord.from_dict(record)
-        except ValueError as error:
+        except (ValueError, TypeError, AttributeError) as error:
             logger.error("WebApp: the form for %s did not make a valid record: %r", record.get("client_ref"), error)
-            return [f"The client could not be saved because {error}."]
+            reason = str(error) if isinstance(error, ValueError) else "some of the details are not in the expected layout"
+            return [f"The client could not be saved because {reason}."]
         if not self.__app.save_client(client):
             return ["The client was not saved because the client database cannot be read or written right now. "
                     "Please try again later."]
@@ -617,7 +617,7 @@ class WebApp:
                 "report":        result["verdict"].report,
                 "assessment_id": assessment_id,
                 "saved":         assessment_id is not None,
-                "assessed_at":   datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "assessed_at":   result["verdict"].assessed_at,   # the same time App saved
                 "ai_warnings":   ai_warnings,
                 "crime_result":  WebApp.__crime_result_layout(result.get("crime_result")),
                 "typologies":    WebApp.__typology_layout(result.get("typologies")),

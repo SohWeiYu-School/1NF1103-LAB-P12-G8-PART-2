@@ -640,3 +640,42 @@ def test_the_edit_form_shows_the_items_in_the_notes_box_not_the_errors_box(web):
     assert "The PEP question is not answered" in page
     assert "To complete or check" in page
     assert "issue found" not in page and "issues found" not in page and "fix the fields highlighted" not in page
+
+
+def test_a_form_record_that_cannot_be_read_gives_a_plain_message_and_nothing_is_saved(web):
+    application, site, _ = web
+    bad = {**sample_case(), "claims": 5}                           # makes ClientRecord.from_dict raise AttributeError
+    problems = site.save_form_record(bad)
+    assert len(problems) == 1
+    assert "could not be saved because some of the details are not in the expected layout" in problems[0]
+    assert "AttributeError" not in problems[0]
+    assert application.clients().load() == []
+
+
+class _CapturingWebApp(WebApp):
+    """A WebApp that keeps what the result page was given."""
+
+    def __init__(self, application: App) -> None:
+        super().__init__(application)
+        self.shown_times: list[str] = []
+
+    def show_report(self, record, report, assessed_at="", *args, **kwargs):
+        self.shown_times.append(assessed_at)
+        return super().show_report(record, report, assessed_at, *args, **kwargs)
+
+
+def test_the_result_page_gets_the_time_the_assessment_was_saved_with(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    application = App(fake_ai.caller(), data_folder=str(tmp_path))
+    site = _CapturingWebApp(application)
+    client = site.flask().test_client()
+    record = sample_case()
+    application.clients().save(record)
+    case, _ = application.read_case(ClientRecord.from_dict(record))
+    fake_services.save_forecast_replies(application.response_cache(), case)
+    job_id = client.post(f"/client/{record['client_ref']}/assess").headers["Location"].rsplit("/", 1)[-1]
+    assert _wait_for(client, job_id)["status"] == "done"
+    assert client.get(f"/assess/result/{job_id}").status_code == 200
+    saved = application.assessments().for_client(record["client_ref"])
+    assert site.shown_times == [saved[0]["assessed_at"]] and saved[0]["assessed_at"]
