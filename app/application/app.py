@@ -980,8 +980,9 @@ class App:
         return events
 
     def verify_audit_log(self, actor: str) -> AuditChain:
-        """Check the hash chain of the whole log and write an "audit verified" line (failed if the
-        chain is broken). Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read."""
+        """Check the hash chain of the whole log and write an "audit verified" line. The line's result is
+        "failed" only when the chain is broken (the check itself ran; if it could not run, nothing is written
+        and ValueError is raised). Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read."""
         self.__start(actor)
         rows = self.__audit_rows("verify_audit_log")
         chain = AuditChain(rows)

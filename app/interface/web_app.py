@@ -96,6 +96,7 @@ class WebApp:
     ]
 
     # What a signed-in admin is refused: every route that changes something, with what the audit log says was tried.
+    # Downloading a document is a read, so the admin may do it (it is still recorded as a download).
     ADMIN_REFUSED: dict[str, str] = {
         "new_client": "creating a client", "new_client_autofill": "reading documents for a new client",
         "edit_client": "editing a client", "edit_client_autofill": "reading documents for a client",
