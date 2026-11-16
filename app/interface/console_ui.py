@@ -246,7 +246,8 @@ class ConsoleUI:
 
     def keep_int(self, label: str, current: int | str | None, minimum: int, maximum: int) -> int | str | None:
         while True:
-            v = self.__read(f"{label} [{current}]: ").strip()
+            shown = "" if current is None else current      # a missing value shows as [], like keep_money
+            v = self.__read(f"{label} [{shown}]: ").strip()
             if not v:
                 return current
             try:
@@ -344,7 +345,8 @@ class ConsoleUI:
 
     def keep_count(self, label: str, current: int | str | None) -> int | str | None:
         while True:
-            v = self.__read(f"{label} [{current}]: ").strip()
+            shown = "" if current is None else current      # a missing value shows as [], like keep_money
+            v = self.__read(f"{label} [{shown}]: ").strip()
             if not v:
                 return current
             number = self.__parse_count(v)

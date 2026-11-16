@@ -180,3 +180,19 @@ def test_ask_money_and_ask_countries_can_allow_enter_for_no_answer():
     assert ConsoleUI(read=_answers("")).ask_money("Jump", allow_zero=True, allow_blank=True) is None
     assert ConsoleUI(read=_answers("")).ask_countries("Countries", allow_blank=True) == []
     assert ConsoleUI(read=_answers("", "5")).ask_money("Net worth") == 5.0       # not allowed by default: asked again
+
+
+def test_a_missing_age_or_employer_size_shows_empty_brackets_not_none():
+    ask = _answers("", "")
+    ui = ConsoleUI(read=ask)
+    assert ui.keep_int("Age", None, 18, 120) is None
+    assert ui.keep_count("Employer size", None) is None
+    assert ask.asked == ["Age []: ", "Employer size []: "]
+
+
+def test_a_known_age_or_employer_size_is_shown_and_kept_on_enter():
+    ask = _answers("", "")
+    ui = ConsoleUI(read=ask)
+    assert ui.keep_int("Age", 51, 18, 120) == 51
+    assert ui.keep_count("Employer size", "2500") == "2500"
+    assert ask.asked == ["Age [51]: ", "Employer size [2500]: "]
