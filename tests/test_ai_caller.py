@@ -177,3 +177,35 @@ def test_gemini_schema_can_drop_required_at_every_level():
     cleaned = gemini_schema(schema, {"required"})
     assert "required" not in cleaned
     assert "required" not in cleaned["properties"]["reports"]["items"]
+
+
+def test_a_web_search_uses_the_research_model_and_other_questions_the_normal_one(monkeypatch):
+    monkeypatch.setenv("OPENAI_MODEL", "normal-model")
+    monkeypatch.setenv("OPENAI_RESEARCH_MODEL", "research-model")
+    client = _FakeOpenAI()
+    ask = openai_caller(client)
+    searched = {"web_search": True, "domains": ["fatf-gafi.org"], "model": "normal-model"}
+    ask("Find reports", SCHEMA, searched)
+    ask("Describe the job", SCHEMA, {"model": "normal-model"})
+    assert [request["model"] for request in client.requests] == ["research-model", "normal-model"]
+    assert searched["answered_by"] == "research-model"
+    assert ask.model_name() == "normal-model" and ask.search_model_name() == "research-model"
+
+
+def test_with_no_research_model_a_web_search_uses_the_normal_model(monkeypatch):
+    monkeypatch.setenv("OPENAI_MODEL", "normal-model")
+    monkeypatch.delenv("OPENAI_RESEARCH_MODEL", raising=False)
+    client = _FakeOpenAI()
+    ask = openai_caller(client)
+    ask("Find reports", SCHEMA, {"web_search": True})
+    assert client.requests[0]["model"] == "normal-model"
+    assert ask.search_model_name() == "normal-model"
+    assert openai_caller(client, search_model="given").search_model_name() == "given"
+
+
+def test_a_fallback_chain_reports_its_first_callers_research_model(monkeypatch):
+    monkeypatch.setenv("OPENAI_RESEARCH_MODEL", "research-model")
+    monkeypatch.setenv("GEMINI_SEARCH_MODEL", "gemini-search")
+    assert with_fallback(openai_caller(_FakeOpenAI()), gemini_caller()).search_model_name() == "research-model"
+    assert gemini_caller().search_model_name() == "gemini-search"
+    assert with_fallback().search_model_name() == ""
