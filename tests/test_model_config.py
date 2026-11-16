@@ -1,5 +1,7 @@
 """Config: policy and vocabulary held as one object."""
 
+import pytest
+
 from app.model.account import Account
 from app.model.config import Config
 
@@ -48,3 +50,27 @@ def test_config_holds_the_accounts_and_finds_one_by_email_ignoring_case():
     assert config.account(" SHAREEN@orbit.local ") is shareen
     assert config.account("nobody@orbit.local") is None
     assert config.account(None) is None
+
+
+def test_accounts_must_be_a_list_of_accounts():
+    for bad in ("shareen", [{"email": "a@b.com"}], [Account("a@b.com", "Wei Yu"), None], {"a": 1}):
+        with pytest.raises(ValueError, match="list of Account"):
+            Config(POLICY, VOCABULARY, bad)
+
+
+def test_the_accounts_property_gives_a_copy():
+    config = Config(POLICY, VOCABULARY, [Account("a@b.com", "Wei Yu")])
+    config.accounts.clear()
+    assert len(config.accounts) == 1
+
+
+def test_the_list_given_in_is_copied_too():
+    given = [Account("a@b.com", "Wei Yu")]
+    config = Config(POLICY, VOCABULARY, given)
+    given.clear()
+    assert len(config.accounts) == 1
+
+
+def test_account_with_an_empty_or_missing_email_finds_nothing_even_next_to_an_unset_account():
+    config = Config(POLICY, VOCABULARY, [Account(), Account("a@b.com", "Wei Yu")])
+    assert config.account("") is None and config.account(None) is None and config.account("   ") is None

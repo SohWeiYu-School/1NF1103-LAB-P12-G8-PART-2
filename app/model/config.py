@@ -15,7 +15,10 @@ class Config:
                  accounts: list[Account] | None = None) -> None:
         self.__policy: dict = policy or {}
         self.__vocabulary: dict = vocabulary or {}
-        self.__accounts: list[Account] = list(accounts or [])
+        accounts = [] if accounts is None else accounts
+        if not isinstance(accounts, list) or not all(isinstance(account, Account) for account in accounts):
+            raise ValueError("The accounts must be a list of Account objects.")
+        self.__accounts: list[Account] = list(accounts)
 
     @property
     def policy(self) -> dict:
@@ -27,11 +30,14 @@ class Config:
 
     @property
     def accounts(self) -> list[Account]:
-        return self.__accounts
+        """The accounts, as a copy (changing the copy does not change the settings)."""
+        return list(self.__accounts)
 
     def account(self, email: str) -> Account | None:
         """The account with this email (upper and lower case are treated the same), or None."""
         wanted = str(email or "").strip().lower()
+        if not wanted:
+            return None
         for account in self.__accounts:
             if account.email == wanted:
                 return account
