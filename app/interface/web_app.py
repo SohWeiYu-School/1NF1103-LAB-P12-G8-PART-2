@@ -564,8 +564,7 @@ class WebApp:
             client = ClientRecord.from_dict(record)
         except (ValueError, TypeError, AttributeError) as error:
             logger.error("WebApp: the form for %s did not make a valid record: %r", record.get("client_ref"), error)
-            reason = str(error) if isinstance(error, ValueError) else "some of the details are not in the expected layout"
-            return [f"The client could not be saved because {reason}."]
+            return [f"The client could not be saved because {ClientRecord.why_unreadable(error)}."]
         if not self.__app.save_client(client):
             return ["The client was not saved because the client database cannot be read or written right now. "
                     "Please try again later."]
