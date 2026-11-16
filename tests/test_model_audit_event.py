@@ -52,6 +52,7 @@ def test_an_empty_action_is_refused_when_anything_else_is_set():
     ({"details": {"x": float("nan")}}, "plain JSON"),
     ({"at": "2026-11-15 06:02:11"}, "time must look like"),
     ({"at": "2026-13-45T06:02:11Z"}, "time must look like"),
+    ({"at": "9999-12-31T20:00:00Z"}, "time must look like"),     # no Singapore time for it: the pages would crash
     ({"sequence": -1}, "sequence"),
     ({"sequence": True}, "sequence"),
     ({"sequence": "3"}, "sequence"),

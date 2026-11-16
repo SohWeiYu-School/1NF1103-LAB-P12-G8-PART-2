@@ -5,7 +5,7 @@ import hmac
 import json
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 
 class AuditEvent:
@@ -116,8 +116,9 @@ class AuditEvent:
         if not re.match(AuditEvent.__TIME_PATTERN, text):
             return False
         try:
-            datetime.strptime(text, AuditEvent.TIME_FORMAT)
-        except ValueError:
+            moment = datetime.strptime(text, AuditEvent.TIME_FORMAT).replace(tzinfo=timezone.utc)
+            moment.astimezone(timezone(timedelta(hours=8)))    # the pages show Singapore time: it must exist
+        except (ValueError, OverflowError):
             return False
         return True
 
