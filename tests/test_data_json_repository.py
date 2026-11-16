@@ -1,6 +1,8 @@
 """Repository and JsonRepository: the shared loading and finding, with missing and damaged files."""
 
 import json
+import os
+import stat
 
 import pytest
 
@@ -131,3 +133,43 @@ def test_writing_to_a_place_that_cannot_be_written_returns_false(tmp_path):
     blocker = tmp_path / "file.txt"
     blocker.write_text("x", encoding="utf-8")
     assert _Notes(str(blocker / "notes.json"), "note_id").save({"note_id": "N1"}) is False
+
+
+def _leftover_temporary_files(folder):
+    return [name for name in os.listdir(folder) if name.endswith(".tmp")]
+
+
+def test_a_successful_write_leaves_no_temporary_file(tmp_path):
+    repository = _repository(tmp_path)
+    assert repository.save({"note_id": "N1", "text": "café"})
+    assert repository.save({"note_id": "N2"})
+    assert repository.load() == [{"note_id": "N1", "text": "café"}, {"note_id": "N2"}]
+    assert "café" in (tmp_path / "db" / "notes.json").read_text(encoding="utf-8")   # ensure_ascii=False
+    assert _leftover_temporary_files(tmp_path / "db") == []
+
+
+@pytest.mark.skipif(not hasattr(os, "geteuid") or os.geteuid() == 0,
+                    reason="needs a user that a read-only folder can stop")
+def test_a_failed_write_returns_false_and_keeps_the_old_file_whole(tmp_path, caplog):
+    repository = _repository(tmp_path)
+    assert repository.save({"note_id": "N1"})
+    path = tmp_path / "db" / "notes.json"
+    before = path.read_text(encoding="utf-8")
+    os.chmod(tmp_path / "db", stat.S_IRUSR | stat.S_IXUSR)       # read-only folder: no new file can be made
+    try:
+        assert repository.save({"note_id": "N2"}) is False
+        assert path.read_text(encoding="utf-8") == before
+        assert _leftover_temporary_files(tmp_path / "db") == []
+    finally:
+        os.chmod(tmp_path / "db", stat.S_IRWXU)
+    assert "notes.json" in caplog.text and "PermissionError" in caplog.text
+
+
+def test_a_record_json_cannot_hold_returns_false_and_keeps_the_old_file_whole(tmp_path):
+    repository = _repository(tmp_path)
+    assert repository.save({"note_id": "N1"})
+    path = tmp_path / "db" / "notes.json"
+    before = path.read_text(encoding="utf-8")
+    assert repository.save({"note_id": "N2", "tags": {"a", "b"}}) is False     # a set is not JSON
+    assert path.read_text(encoding="utf-8") == before
+    assert _leftover_temporary_files(tmp_path / "db") == []

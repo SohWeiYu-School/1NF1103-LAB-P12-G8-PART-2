@@ -68,12 +68,24 @@ class JsonRepository(Repository):
         return None
 
     def _write_all(self, records: list[dict]) -> bool:
-        """Replace the file's contents with these records."""
+        """Replace the file's contents with these records. Written to a temporary file in the
+        same folder first, then swapped in, so a reader never sees a half-written file and a
+        crash half way leaves the old file whole. Returns False (the real error logged, the
+        temporary file removed) if the file could not be written or a record cannot be held in JSON."""
+        temporary = self._path + ".tmp"
         try:
             os.makedirs(os.path.dirname(os.path.abspath(self._path)), exist_ok=True)
-            with open(self._path, "w", encoding="utf-8") as handle:
+            with open(temporary, "w", encoding="utf-8") as handle:
                 json.dump(records, handle, indent=4, ensure_ascii=False)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self._path)
             return True
-        except OSError as error:
+        except (OSError, TypeError, ValueError) as error:   # TypeError/ValueError: a record JSON cannot hold
             logger.error("JsonRepository: could not write %s: %s", self._path, repr(error))
+            try:
+                if os.path.exists(temporary):
+                    os.remove(temporary)
+            except OSError as cleanup_error:
+                logger.error("JsonRepository: could not remove %s: %s", temporary, repr(cleanup_error))
             return False
