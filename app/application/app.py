@@ -687,7 +687,8 @@ class App:
     def record_from_reading(self, extracted: dict, today: str = "") -> tuple[ClientRecord, list[dict]]:
         """The client record made from the AI's reading of documents, and one entry for each field
         left out because no client record can have that value: {"path", "message", "optional_field"}.
-        Raises ValueError, saying what is wrong, only if the reading as a whole cannot be a record."""
+        Raises ValueError, saying what is wrong, if today is not a YYYY-MM-DD date or if the
+        reading as a whole cannot be a record."""
         record, _, dropped = self.record_builder(today).build(extracted, "")
         return record, dropped
 
@@ -695,7 +696,7 @@ class App:
         """Things worth a second look in a record filled from documents. [] = nothing spotted."""
         return self.record_builder(today).check(record)
 
-    # ----- the objects the web app reaches through App ---------------------------------------
+    # ----- the objects set-up code and tests reach through App ------------------------------
 
     def clients(self) -> Repository:
         return self.__clients

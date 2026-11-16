@@ -678,6 +678,12 @@ def test_all_assessments_is_empty_when_there_are_none(app):
     assert app.all_assessments() == []
 
 
+def test_all_assessments_lists_the_saved_ones(app):
+    saved = {"assessment_id": "A1", "client_ref": "C-1", "assessed_at": "2025-01-01T00:00:00+00:00"}
+    assert app.assessments().save(saved)
+    assert app.all_assessments() == [saved]
+
+
 def test_all_assessments_raises_the_safe_message_when_they_cannot_be_read(app, tmp_path, caplog):
     _damage(tmp_path, "ai_assessments.json")
     with pytest.raises(ValueError) as error:
