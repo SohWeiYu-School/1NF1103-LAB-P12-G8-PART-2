@@ -479,5 +479,9 @@ one line to an assessment's `archive_log`, and the last line decides whether it 
   id would mark the wrong rows; Opus review).
 - `AssessmentRepository` (**B**): added `-__good_entry()` (Opus review: an archive line whose time or reason is not text
   now counts as damaged, instead of breaking the assessment page).
+- Optional archive reason (Marcus, PR #19 review point 5): `AssessmentRepository.+reason_problem()` (**T**, the plain
+  reason a reason is refused); `App.archive_assessment()` gained `reason`, and App gained `ARCHIVE_BAD_REASON`,
+  `MAX_ARCHIVE_REASON` and `archive_reason_problem()` (**T**), so a bad reason is reported as such, never as
+  "can't load the saved assessments". The web page has an optional reason box next to Archive. layout_check 0.
 - Layout: WebApp and AssessmentRepository grew, so RateLimiter, CaseBuilder, ClientForm, DocumentReaderFactory and
   CaseFiles moved down; every line was re-routed. layout_check 0.
