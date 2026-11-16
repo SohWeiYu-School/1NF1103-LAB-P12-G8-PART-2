@@ -68,3 +68,26 @@ def test_from_dict_refuses_something_that_is_not_an_object(data):
 def test_from_dict_refuses_a_bad_field():
     with pytest.raises(ValueError):
         Account.from_dict({"email": "bad", "name": "Wei Yu", "role": "officer"})
+
+
+@pytest.mark.parametrize("data", [{}, {"email": "", "name": "Wei Yu"}, {"email": "a@b.com", "name": ""},
+                                  {"email": "  ", "name": "  "}, {"email": None, "name": "Wei Yu"},
+                                  {"email": "a@b.com", "name": 5}])
+def test_from_dict_refuses_an_entry_with_no_email_or_no_name(data):
+    with pytest.raises(ValueError, match="needs an email and a name"):
+        Account.from_dict(data)
+
+
+def test_the_unset_account_stays_legal_but_is_never_an_admin():
+    assert Account().is_admin() is False
+    assert Account(role="admin").is_admin() is False          # an admin role with no email is still unset
+
+
+@pytest.mark.parametrize("name", ["terminal", "Terminal", " TERMINAL ", "tErMiNaL"])
+def test_the_name_terminal_is_reserved_in_any_case(name):
+    with pytest.raises(ValueError, match="reserved"):
+        Account("a@b.com", name, "officer")
+
+
+def test_a_name_that_only_contains_terminal_is_fine():
+    assert Account("a@b.com", "Terminal Tan", "officer").name == "Terminal Tan"

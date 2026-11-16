@@ -15,12 +15,13 @@ class Account:
     ROLES: tuple[str, ...] = (ADMIN, OFFICER)
     __EMAIL_PATTERN: str = r"^[a-z0-9._-]+@[a-z0-9.-]+\.[a-z]+$"
     __NAME_PATTERN: str = r"^[A-Za-z][A-Za-z .'-]*$"
+    RESERVED_NAME: str = "terminal"        # the actor name the terminal uses; no account may take it
     MIN_NAME: int = 2
     MAX_NAME: int = 40
 
     def __init__(self, email: str = "", name: str = "", role: str = "officer") -> None:
         """Raises ValueError, saying what is wrong and what is allowed, for a bad value. Empty email and
-        name are allowed only together (an unset account)."""
+        name are allowed only together (an unset account). The name "terminal" (any case) is reserved."""
         if not isinstance(email, str) or not isinstance(name, str):
             raise ValueError("An account's email and name must be text.")
         email = email.strip().lower()
@@ -34,6 +35,9 @@ class Account:
             if not (Account.MIN_NAME <= len(name) <= Account.MAX_NAME) or not re.match(Account.__NAME_PATTERN, name):
                 raise ValueError(f"The name must be {Account.MIN_NAME} to {Account.MAX_NAME} characters of "
                                  f"letters, spaces and . ' - (got {name!r}).")
+        if name.casefold() == Account.RESERVED_NAME:
+            raise ValueError(f"The name {name!r} is reserved for actions made from the terminal; "
+                             "please choose another name.")
         self.__email: str = email
         self.__name: str = name
         self.__role: str = role
@@ -51,8 +55,8 @@ class Account:
         return self.__role
 
     def is_admin(self) -> bool:
-        """True for the admin account."""
-        return self.__role == Account.ADMIN
+        """True for the admin account. An unset account (no email) is never an admin."""
+        return self.__role == Account.ADMIN and bool(self.__email)
 
     def to_dict(self) -> dict:
         """The layout kept in config/accounts.json."""
@@ -60,7 +64,11 @@ class Account:
 
     @staticmethod
     def from_dict(data: dict) -> "Account":
-        """Build an account from its saved layout. Raises ValueError if data is not an object or a value is bad."""
+        """Build an account from its saved layout. Raises ValueError if data is not an object, has no
+        email or name (only the all-defaults Account() may be unset), or a value is bad."""
         if not isinstance(data, dict):
             raise ValueError("An account must be an object with an email, a name and a role.")
-        return Account(data.get("email", ""), data.get("name", ""), data.get("role", Account.OFFICER))
+        email, name = data.get("email", ""), data.get("name", "")
+        if not isinstance(email, str) or not isinstance(name, str) or not email.strip() or not name.strip():
+            raise ValueError("An account needs an email and a name.")
+        return Account(email, name, data.get("role", Account.OFFICER))
