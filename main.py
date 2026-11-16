@@ -1,5 +1,5 @@
 """
-main.py - starts the Source of Wealth screening system.
+main.py - starts Orbit, the Source of Wealth screening system.
 
 It does two things: it chooses the AI brand (OpenAI, with Gemini as the fallback) and
 starts App. App creates every other object and coordinates them.

@@ -1,4 +1,4 @@
-# Source of Wealth Screening System
+# Orbit: Source of Wealth Screening
 
 A Python tool (command line and web app) that helps bank compliance officers screen client Source of Wealth declarations faster and more consistently, using AI-generated career benchmarks to flag red flags without replacing human judgement.
 
