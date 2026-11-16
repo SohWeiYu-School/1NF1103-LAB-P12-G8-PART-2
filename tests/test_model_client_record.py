@@ -224,3 +224,15 @@ def test_why_unreadable_shows_a_value_errors_reason_but_hides_other_errors():
     assert ClientRecord.why_unreadable(ValueError("age must be between 18 and 120")) == "age must be between 18 and 120"
     hidden = ClientRecord.why_unreadable(AttributeError("'int' object has no attribute 'get'"))
     assert hidden == "some of the details are not in the expected layout"
+
+
+def test_a_retired_clients_ended_last_job_copied_into_career_stays_ended():
+    # the web form copies the last listed job into "career" even when it has ended
+    saved = {"client_ref": "CL-1", "name": "Daniel Tan", "nationality": "Malaysian", "current_date": "2026-09-24",
+             "career": {"occupation": "Planner", "employer_name": "Pacific Crest", "country_of_residence": "Singapore"},
+             "career_history": [{"start_year": 1998, "end_year": 2016, "occupation": "Planner",
+                                "employer_name": "Pacific Crest", "country": "Singapore"}]}
+    record = ClientRecord.from_dict(saved)
+    job = record.current_job()
+    assert job is record.jobs()[-1]
+    assert not job.is_current()

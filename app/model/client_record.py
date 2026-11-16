@@ -125,18 +125,24 @@ class ClientRecord:
         """The latest job with no end year.
 
         The command line's New Client form keeps the current job only in "career", so when no listed
-        job is open and "career" names an occupation, that job is returned (its own start year is not
-        known). With neither, the last job listed is the best available answer."""
+        job is open and "career" names another job, that job is returned (its own start year is not
+        known). When "career" only repeats the last listed job (the web form copies it there, even
+        once it has ended), or names none, the last job listed is the best available answer."""
         for job in reversed(self.__career_history):
             if job.is_current():
                 return job
-        if str(self.__career_extra.get("occupation") or "").strip():
+        last = self.__career_history[-1] if self.__career_history else None
+        occupation = str(self.__career_extra.get("occupation") or "").strip()
+        if last is not None and (occupation, str(self.__career_extra.get("employer_name") or "").strip()) == \
+                (str(last.occupation or "").strip(), str(last.employer_name or "").strip()):
+            return last                     # the web form copies the last listed job (even an ended one) into career
+        if occupation:
             details = {key: self.__career_extra.get(key) for key in ClientRecord.CAREER_JOB_KEYS}
             return Job(occupation=str(details["occupation"] or ""), seniority=str(details["seniority"] or ""),
                        industry=str(details["industry"] or ""), employer_name=str(details["employer_name"] or ""),
                        employer_size=str(details["employer_size"] or ""),
                        country=str(self.__career_extra.get("country") or ""))
-        return self.__career_history[-1] if self.__career_history else None
+        return last
 
     def career_start_year(self) -> int | None:
         starts = [job.start_year for job in self.__career_history if job.start_year is not None]
