@@ -160,6 +160,13 @@ def test_a_bad_reason_is_refused_and_nothing_is_written(tmp_path):
     assert repository.archive("A-1", "x" * R.MAX_REASON_LENGTH) == R.CHANGED
 
 
+def test_reason_problem_explains_each_bad_reason_and_accepts_good_ones():
+    assert R.reason_problem("") == "" and R.reason_problem("  typed the wrong net worth  ") == ""
+    assert R.reason_problem(5) == "The reason must be text."
+    assert "at most 200 characters" in R.reason_problem("x" * 201)
+    assert "printable" in R.reason_problem("two\nlines")
+
+
 def test_lists_hide_archived_unless_asked(tmp_path):
     repository = _with_two(tmp_path)
     repository.archive("A-1")

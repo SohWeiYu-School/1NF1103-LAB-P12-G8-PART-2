@@ -70,15 +70,23 @@ class AssessmentRepository(JsonRepository):
         NO_CHANGE (already archived), UNREADABLE (its archive log is damaged) or NOT_SAVED (the file
         could not be written). Raises ValueError if the reason is longer than MAX_REASON_LENGTH or not
         printable text, and OSError or ValueError if the file cannot be read."""
+        problem = AssessmentRepository.reason_problem(reason)
+        if problem:
+            raise ValueError(problem)
+        return self.__record_action(assessment_id, "archived", reason.strip())
+
+    @staticmethod
+    def reason_problem(reason: object) -> str:
+        """What is wrong with an archive reason, in plain words; "" if it is fine (an empty reason is fine)."""
         if not isinstance(reason, str):
-            raise ValueError("The reason must be text.")
+            return "The reason must be text."
         reason = reason.strip()
         if len(reason) > AssessmentRepository.MAX_REASON_LENGTH:
-            raise ValueError(f"The reason is too long: at most {AssessmentRepository.MAX_REASON_LENGTH} "
-                             f"characters are allowed, not {len(reason)}.")
+            return (f"The reason is too long: at most {AssessmentRepository.MAX_REASON_LENGTH} "
+                    f"characters are allowed, not {len(reason)}.")
         if not reason.isprintable():
-            raise ValueError("The reason can only hold printable characters (no line breaks or control characters).")
-        return self.__record_action(assessment_id, "archived", reason)
+            return "The reason can only hold printable characters (no line breaks or control characters)."
+        return ""
 
     def restore(self, assessment_id: str) -> str:
         """Bring an archived assessment back into the lists. Returns CHANGED, NOT_FOUND, NO_CHANGE
