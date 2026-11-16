@@ -303,3 +303,30 @@ def test_the_verdict_engine_rejects_wrong_typed_features_and_config():
         VerdictEngine([CrimeScan(POLICY), "forecast"])
     with pytest.raises(ValueError, match="config must be a Config"):
         VerdictEngine([], {"policy": {}})
+
+
+def _pep_text(parts, pep_status) -> str:
+    """The verdict's explanation for a client with this PEP answer, as one string."""
+    import copy
+    import json
+    case, data = parts
+    case = copy.deepcopy(case)
+    case["claims"]["pep_status"] = pep_status
+    return json.dumps(VerdictEngine(_features(), CONFIG).combine(case, data).explanation)
+
+
+def test_every_no_pep_answer_is_not_a_pep_for_the_verdict(parts):
+    from app.model.claims import Claims
+    for answer in Claims.NO_PEP_VALUES:
+        for written in (answer, answer.upper(), f"  {answer} "):
+            text = _pep_text(parts, written)
+            assert "He is a PEP" not in text and "PEP status is not answered" not in text
+
+
+def test_a_real_pep_status_is_a_pep_for_the_verdict(parts):
+    assert "He is a PEP (Domestic PEP)" in _pep_text(parts, "Domestic PEP")
+
+
+def test_a_blank_pep_status_is_unknown_and_treated_as_a_pep_for_the_verdict(parts):
+    for blank in ("", "   ", None):
+        assert "PEP status is not answered" in _pep_text(parts, blank)

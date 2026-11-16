@@ -7,6 +7,7 @@ from app.logic.risk_analysis import RiskAnalysis
 from app.logic.formatter import Formatter
 from app.logic.market_model import MarketModel
 from app.model.check import Check
+from app.model.claims import Claims
 from app.model.config import Config
 from app.model.declaration import Declaration
 
@@ -223,10 +224,9 @@ class Benchmark(RiskAnalysis):
         return best
 
     def __is_pep(self, case: dict) -> bool:
-        policy = self._policy
         status = str(case.get("claims", {}).get("pep_status") or "").strip().lower()
-        # A blank answer is unknown, not "no": it counts as a PEP, the cautious side.
-        return not status or status not in policy["verdict"]["no_pep_values"]
+        # A blank answer is unknown, not "no": it is not in Claims.NO_PEP_VALUES, so it counts as a PEP.
+        return status not in Claims.NO_PEP_VALUES
 
     def _benchmark_checks(self, case: dict, bench_input: dict | None, ai_data: dict | None, findings: list[dict] | None,
                          honest: dict | None, assessment: dict | None, declaration: Declaration | None,

@@ -7,6 +7,7 @@ from app.logic.risk_analysis import RiskAnalysis
 from app.logic.formatter import Formatter
 from app.logic.future_paths import FuturePaths
 from app.model.check import Check
+from app.model.claims import Claims
 from app.model.config import Config
 from app.model.typology import Typology
 from app.model.verdict import Verdict
@@ -75,10 +76,10 @@ class VerdictEngine:
         return Check(feature, check, label, theme, status, detail, explanation, group)
 
     def _is_pep(self, case: dict) -> bool:
-        """True if the client is a politically exposed person (anything but the policy's "no" values).
+        """True if the client is a politically exposed person (anything but Claims.NO_PEP_VALUES).
         A blank answer is unknown, not "no": it counts as a PEP, the cautious side."""
         status = str(case.get("claims", {}).get("pep_status") or "").strip().lower()
-        return not status or status not in self.__policy["verdict"]["no_pep_values"]
+        return status not in Claims.NO_PEP_VALUES     # a blank is not in the list, so it counts as a PEP
 
     def __type_patterns(self, forecast: dict | None, assessment: dict | None, crime_result: dict | None,
                       typologies: list[Typology] | None) -> list[dict]:

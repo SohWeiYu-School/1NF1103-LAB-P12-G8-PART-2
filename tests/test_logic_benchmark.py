@@ -149,3 +149,16 @@ def test_the_benchmark_rejects_a_config_that_is_not_a_config_and_a_policy_that_i
         Benchmark(POLICY, {"policy": POLICY})
     with pytest.raises(ValueError, match="policy must be a dict"):
         Benchmark("policy")
+
+
+def test_every_no_pep_answer_is_not_a_pep_in_any_case_or_spacing():
+    from app.model.claims import Claims
+    for answer in Claims.NO_PEP_VALUES:
+        for written in (answer, answer.upper(), f"  {answer} "):
+            check = _benchmark_checks(pep_status=written)["PEP_STATUS"]
+            assert check.status == "passed" and "not a PEP" in check.detail
+
+
+def test_a_real_pep_status_fails_and_a_blank_one_is_never_a_pass():
+    assert _benchmark_checks(pep_status="Domestic PEP")["PEP_STATUS"].status == "failed"
+    assert _benchmark_checks(pep_status="")["PEP_STATUS"].status == "skipped"
