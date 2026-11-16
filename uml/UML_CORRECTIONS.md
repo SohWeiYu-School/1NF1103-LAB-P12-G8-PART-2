@@ -452,3 +452,11 @@ was dropped in Part 1 (6dc338b, "one AI model for every call"); it is read again
 Marcus: the app runs in normal mode only (no cache yet means the live AI is asked; its answers are then cached).
 `--demo` never worked: the recorded replies it loaded (`tests/golden/*/ai_responses.json`) were never committed, so it
 quietly used the live AI. Removed `App.+use_recorded_replies() : int`. `run.sh` (never committed) deleted. layout_check 0.
+
+## PR #20 review fixes (2026-11-16): code changed, the diagram follows it
+
+- Added `WebApp.ASSESSMENT_FAILED` and `WebApp.ASSESSMENT_STOPPED` (**T**): the plain messages a failed web assessment shows;
+  the real error goes to the log only (CLAUDE.md §9).
+- Not a diagram change: `AssessmentRunner` reports a failed verdict as "the verdict could not be worked out"; the Flask
+  secret key comes from `SECRET_KEY` in `.env`, or is random at each start (no hard-coded key).
+- Layout: WebApp grew two lines, so RateLimiter, CaseBuilder and ClientForm moved down; every line was re-routed. layout_check 0.

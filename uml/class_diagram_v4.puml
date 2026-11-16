@@ -319,6 +319,8 @@ package "IO Manager (app/interface)" {
     +MAX_UPLOAD_BYTES : int = 40 * 1024 * 1024 «const»
     +SECTIONS : list[tuple[str, str, list[tuple[str, str, str]], str]] = [...] «const»
     +SOW_FIELDS : list[tuple[str, str, str]] = [...] «const»
+    +ASSESSMENT_FAILED : str = "The assessment could not be complete... «const»
+    +ASSESSMENT_STOPPED : str = "The assessment was stopped because a... «const»
     --
     +__init__(app : App | None = None, limiter : RateLimiter | None = None)
     +start(host : str = "127.0.0.1", port : int = 5000, debug : bool = False) : None
