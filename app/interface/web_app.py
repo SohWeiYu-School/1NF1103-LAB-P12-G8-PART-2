@@ -91,6 +91,9 @@ class WebApp:
     ]
 
     MAX_UPLOAD_BYTES: int = 40 * 1024 * 1024     # uploads for auto-fill: 40 MB per request
+    ASSESSMENT_STOPPED: str = ("The assessment was stopped because a step it cannot do without failed. "
+                               "Please try again later.")
+    ASSESSMENT_FAILED: str = "The assessment could not be completed. Please try again later."
     ASSESSMENT_NOT_SAVED: str = ("This assessment was NOT saved, so it is not in the client's history and the "
                                  "client's outcome was not changed. Please try again later.")
 
@@ -599,7 +602,10 @@ class WebApp:
         try:
             result = self.__app.assess(case, record.documents(), on_step=step, show_failures=False)
             if result is None:
-                raise RuntimeError("The assessment was stopped because a critical step failed.")
+                logger.error("WebApp: the assessment of %s stopped at a critical step", record.client_ref)
+                job["status"] = "error"
+                job["error"] = WebApp.ASSESSMENT_STOPPED
+                return
             assessment_id = self.__app.save_assessment(result, record, on_step=step)
 
             # Per-feature failure flags — feature names passed to flash_ai_unavailable in assess_result
@@ -623,11 +629,11 @@ class WebApp:
                 "benchmark":     result.get("benchmark"),
             }
             job["status"] = "done"
-        except Exception as exc:
-            logging.getLogger(__name__).error("__run_in_background %s failed: %s", job_id, repr(exc))
-            logging.exception("Assessment of %s failed", record.client_ref)
+        except Exception:
+            # The real error goes to the log; the browser is told only that it failed (CLAUDE.md §9).
+            logger.exception("WebApp: the assessment of %s (job %s) failed", record.client_ref, job_id)
             job["status"] = "error"
-            job["error"] = str(exc)
+            job["error"] = WebApp.ASSESSMENT_FAILED
 
     @staticmethod
     def __crime_result_layout(crime_result: dict | None) -> dict | None:

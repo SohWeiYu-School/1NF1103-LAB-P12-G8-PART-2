@@ -686,3 +686,33 @@ def test_the_result_page_gets_the_time_the_assessment_was_saved_with(tmp_path, m
     assert client.get(f"/assess/result/{job_id}").status_code == 200
     saved = application.assessments().for_client(record["client_ref"])
     assert site.shown_times == [saved[0]["assessed_at"]] and saved[0]["assessed_at"]
+
+
+class _BrokenAssessApp(App):
+    """An App whose assessment breaks with a technical error, or stops at a critical step."""
+
+    def __init__(self, *args, stop: bool = False, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.stop = stop
+
+    def assess(self, case, documents=None, on_step=None, show_failures=True):
+        if self.stop:
+            return None
+        raise KeyError("benchmark")
+
+
+@pytest.mark.parametrize("stop, expected", [(False, WebApp.ASSESSMENT_FAILED), (True, WebApp.ASSESSMENT_STOPPED)])
+def test_a_failed_web_assessment_shows_a_plain_message_and_logs_the_real_error(tmp_path, monkeypatch, caplog,
+                                                                              stop, expected):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    application = _BrokenAssessApp(fake_ai.caller(), data_folder=str(tmp_path), stop=stop)
+    client = WebApp(application).flask().test_client()
+    record = sample_case()
+    application.clients().save(record)
+    job_id = client.post(f"/client/{record['client_ref']}/assess").headers["Location"].rsplit("/", 1)[-1]
+    state = _wait_for(client, job_id)
+    assert state == {**state, "status": "error", "error": expected}
+    assert "KeyError" not in state["error"] and "benchmark" not in state["error"]
+    if not stop:
+        assert "KeyError" in caplog.text                       # the real error is in the log
