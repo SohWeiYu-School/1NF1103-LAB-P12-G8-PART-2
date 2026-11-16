@@ -66,3 +66,4 @@ Fixed straight away (not listed above): the #45/#46 review's bug, a damaged conf
 "Changes saved successfully" in `find_existing_client`, and (b) an open "previous" job replacing the current
 job in the CLI New Client form.
 | 57 | Research-model review | **Fixed** (AIService.run uses a fallback model's answer but does not save it under the main model's name; tested): a research reply from the Gemini fallback is cached under the first caller's (OpenAI) research model key, so later runs reuse Gemini's answer even once OpenAI works (older than the research-model change) | `app/ai/ai_service.py:178-183` | Nit |
+| 58 | #57 review | Open: ForecastAI saves its raw replies per case (`save_raw_replies`) whoever answered, so a forecast answered by the Gemini fallback is reused on a rerun of that case even after OpenAI works again (unlike the other AI services since #57) | `app/application/assessment_runner.py:172` | Nit |
