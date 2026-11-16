@@ -50,21 +50,32 @@ BASE = """<!doctype html>
   .badge-warn { background:#fef3c7; color:#92400e; }
   .badge-risk { background:#ffedd5; color:#9a3412; }
   .badge-bad  { background:#fee2e2; color:#991b1b; }
+  .who { color:rgba(255,255,255,.85); font-size:.85rem; padding:0 4px; }
+  .msg-warning { background:#fff8db; border-color:#e9d68f; }
+  .msg-success { background:#e6f6ec; border-color:#a7d9b8; }
 </style>
 </head>
 <body>
 <header>
   <a class="brand" href="{{ url_for('home') }}">Orbit</a>
   <nav>
+    {% if account %}
     <a class="nav-link" href="{{ url_for('list_assessments_view') }}">Assessments</a>
+    {% if not account.is_admin() %}
     <form method="post" action="{{ url_for('sync_to_cloud') }}" style="margin:0">
       <button class="nav-link" type="submit" style="cursor:pointer">Sync to Cloud</button>
     </form>
     <a class="nav-cta" href="{{ url_for('new_client') }}">+ New client</a>
+    {% endif %}
+    <span class="who">Signed in as {{ account.name }} ({{ account.role }}) &middot;</span>
+    <form method="post" action="{{ url_for('signout') }}" style="margin:0">
+      <button class="nav-link" type="submit" style="cursor:pointer">Sign out</button>
+    </form>
+    {% endif %}
   </nav>
 </header>
 <main>
-  {% for message in get_flashed_messages()|unique(case_sensitive=True) %}<div class="msg">{{ message }}</div>{% endfor %}
+  {% for category, message in get_flashed_messages(with_categories=true)|unique(case_sensitive=True) %}<div class="msg{% if category in ('success', 'warning') %} msg-{{ category }}{% endif %}">{{ message }}</div>{% endfor %}
   {% block content %}{% endblock %}
 </main>
 </body>
@@ -86,7 +97,7 @@ HOME = """{% extends "base.html" %}
   {% if clients is none %}
     <p class="muted" style="padding:20px 22px; margin:0">The list of clients cannot be shown because the client database could not be read.</p>
   {% elif not clients %}
-    <p class="muted" style="padding:20px 22px; margin:0">No clients yet — click <strong>+ New client</strong> in the top right to add the first one.</p>
+    <p class="muted" style="padding:20px 22px; margin:0">No clients yet{% if not account.is_admin() %} — click <strong>+ New client</strong> in the top right to add the first one{% endif %}.</p>
   {% else %}
   <table>
     <thead>
@@ -311,10 +322,12 @@ VIEW = """{% extends "base.html" %}
   <span class="muted" style="font-size:1rem">{{ record.get('client_ref', '') }}</span></h1>
  
 <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--line)">
+  {% if not account.is_admin() %}
   <a class="button secondary" href="{{ url_for('edit_client', client_ref=record.get('client_ref', '')) }}">Edit</a>
   <form method="post" action="{{ url_for('assess_client', client_ref=record.get('client_ref', '')) }}" style="margin:0">
     <button type="submit">Run Assessment</button>
   </form>
+  {% endif %}
   <span style="flex:1"></span>
   <a class="button secondary" href="{{ url_for('home') }}" style="color:var(--muted); border-color:var(--line)">← Back</a>
 </div>
@@ -350,7 +363,7 @@ VIEW = """{% extends "base.html" %}
         {% endif %}
       </td>
       <td>
-        {% if a.get('assessment_id') and state != 'unreadable' %}
+        {% if a.get('assessment_id') and state != 'unreadable' and not account.is_admin() %}
         <form method="post" action="{{ url_for('restore_assessment' if state == 'archived' else 'archive_assessment', assessment_id=a.get('assessment_id')) }}" style="margin:0; display:flex; gap:8px; align-items:center">
           {% if state != 'archived' %}
           <input type="text" name="reason" maxlength="{{ max_reason }}" placeholder="Reason (optional)" aria-label="Reason for archiving (optional)" style="flex:1; min-width:0; margin:0">
@@ -407,6 +420,7 @@ VIEW = """{% extends "base.html" %}
     <p class="muted">No documents uploaded yet.</p>
   {% endfor %}
  
+  {% if not account.is_admin() %}
   <form method="post" action="{{ url_for('upload_documents', client_ref=record.get('client_ref', '')) }}"
         enctype="multipart/form-data" style="margin-top:14px">
     <label>Add documents
@@ -414,6 +428,7 @@ VIEW = """{% extends "base.html" %}
     </label>
     <button type="submit">Upload</button>
   </form>
+  {% endif %}
 </div>
 {% endblock %}
 """
@@ -448,9 +463,11 @@ ASSESS_RESULT = """{% extends "base.html" %}
 {% elif archive %}
 <div class="msg" style="display:flex; justify-content:space-between; align-items:center; gap:12px">
   <span>This assessment is archived{% if archive.get('at') %} (since {{ archive['at'][:10] }}){% endif %}{% if archive.get('reason') %}: {{ archive['reason'] }}{% endif %}. It is hidden from the lists but kept as a record. The client's current outcome is not changed.</span>
+  {% if not account.is_admin() %}
   <form method="post" action="{{ url_for('restore_assessment', assessment_id=assessment_id) }}" style="margin:0">
     <button type="submit" class="secondary">Restore</button>
   </form>
+  {% endif %}
 </div>
 {% endif %}
 
@@ -730,7 +747,40 @@ ERROR = """{% extends "base.html" %}
 {% endblock %}
 """
 
+SIGNIN = """{% extends "base.html" %}
+{% block title %}Sign in — Orbit{% endblock %}
+{% block content %}
+<h1>Sign in</h1>
+<div class="panel" style="max-width:460px">
+  <p class="muted" style="margin-top:0">Choose who you are. Everything you change is recorded under your name.</p>
+  {% if problem %}<div class="errors" style="padding:10px 14px">{{ problem }}</div>{% endif %}
+  <form method="post" action="{{ url_for('signin') }}">
+    {% for a in accounts %}
+    <label style="display:flex; gap:10px; align-items:center; color:var(--ink); font-size:1rem; margin-bottom:8px">
+      <input type="radio" name="email" value="{{ a.email }}" style="width:auto; margin:0" required>
+      <span>{{ a.name }} <span class="muted">({{ a.role }})</span></span>
+    </label>
+    {% endfor %}
+    <button type="submit" style="margin-top:8px">Sign in</button>
+  </form>
+</div>
+{% endblock %}
+"""
+
+FORBIDDEN = """{% extends "base.html" %}
+{% block title %}Not allowed — Orbit{% endblock %}
+{% block content %}
+<div class="panel" style="text-align:center; padding:40px 22px">
+  <h1 style="color:var(--bad); margin-bottom:10px">Not allowed</h1>
+  <p style="color:var(--muted); margin:0 auto 24px">{{ message }}</p>
+  <a class="button secondary" href="{{ url_for('home') }}">← Back to home</a>
+</div>
+{% endblock %}
+"""
+
 TEMPLATES: dict[str, str] = {
+    "signin.html": SIGNIN,
+    "forbidden.html": FORBIDDEN,
     "base.html": BASE,
     "home.html": HOME,
     "client_form.html": FORM,

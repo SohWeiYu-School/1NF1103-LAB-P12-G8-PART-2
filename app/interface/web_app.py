@@ -10,8 +10,8 @@ import threading
 import uuid
 from typing import Any
 
-from flask import (Flask, abort, flash, redirect, render_template,
-                   request, send_file, url_for)
+from flask import (Flask, abort, flash, g, redirect, render_template,
+                   request, send_file, session, url_for)
 from jinja2 import DictLoader
 from werkzeug.datastructures import FileStorage, MultiDict
 from werkzeug.exceptions import HTTPException
@@ -22,6 +22,7 @@ from app.application.app import App
 from app.interface.client_form import ClientForm
 from app.interface.rate_limiter import RateLimiter
 from app.interface.web_templates import TEMPLATES
+from app.model.account import Account
 from app.model.client_record import ClientRecord
 from app.model.typology import Typology
 
@@ -91,6 +92,18 @@ class WebApp:
         ("sow", "Source of wealth declaration", SOW_FIELDS, "dict"),
     ]
 
+    # What a signed-in admin is refused: every route that changes something, with what the audit log says was tried.
+    ADMIN_REFUSED: dict[str, str] = {
+        "new_client": "creating a client", "new_client_autofill": "reading documents for a new client",
+        "edit_client": "editing a client", "edit_client_autofill": "reading documents for a client",
+        "upload_documents": "uploading documents", "assess_client": "running an assessment",
+        "archive_assessment": "archiving an assessment", "restore_assessment": "restoring an assessment",
+        "sync_to_cloud": "syncing to the cloud",
+    }
+    ADMIN_ONLY_REVIEWS: str = "The admin account can only review the audit log."
+    AUDIT_ENDPOINTS: tuple[str, ...] = ("audit_log_view", "audit_verify")
+    NOT_ADMIN: str = "Only the admin can open the audit log."
+    CHOOSE_ACCOUNT: str = "Please choose one of the listed accounts."
     MAX_UPLOAD_BYTES: int = 40 * 1024 * 1024     # uploads for auto-fill: 40 MB per request
     ASSESSMENT_STOPPED: str = ("The assessment was stopped because a step it cannot do without failed. "
                                "Please try again later.")
@@ -112,8 +125,13 @@ class WebApp:
         # at each start (never a fixed one written in the code, which anyone could use to forge it).
         flask.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
         flask.config["MAX_CONTENT_LENGTH"] = WebApp.MAX_UPLOAD_BYTES
+        flask.config["SESSION_COOKIE_SAMESITE"] = "Lax"       # the cookie holds only the signed-in email
         flask.jinja_env.loader = DictLoader(TEMPLATES)
         flask.jinja_env.globals.update(PEP_OPTIONS=ClientForm.PEP_OPTIONS, PAYMENT_OPTIONS=ClientForm.PAYMENT_METHODS)
+        flask.before_request(self.gate)
+        flask.context_processor(lambda: {"account": self.__current()})
+        flask.add_url_rule('/signin', endpoint='signin', view_func=self.signin, methods=['GET', 'POST'])
+        flask.add_url_rule('/signout', endpoint='signout', view_func=self.signout, methods=['POST'])
         flask.add_url_rule('/', endpoint='home', view_func=self.home)
         flask.add_url_rule('/find', endpoint='find', view_func=self.find)
         flask.add_url_rule('/client/new', endpoint='new_client', view_func=self.new_client, methods=['GET', 'POST'])
@@ -149,6 +167,81 @@ class WebApp:
 
     def today(self) -> str:
         return self.__app.today()
+
+    # ----- who is signed in ------------------------------------------------------------------
+
+    def __current(self) -> Account | None:
+        """The signed-in account: the one whose email the session holds, if it is still a configured
+        account. None if nobody is signed in."""
+        if "account" in g:
+            return g.account
+        email = session.get("account")
+        g.account = self.__app.account(email) if isinstance(email, str) and self.__app is not None else None
+        return g.account
+
+    def __actor(self) -> str:
+        """The name to record as the actor of a write. Raises ValueError if nobody is signed in
+        (the gate stops that before any route runs)."""
+        account = self.__current()
+        if account is None:
+            raise ValueError("Nobody is signed in.")
+        return account.name
+
+    def __flash_audit_failure(self) -> None:
+        """Tell the officer when the last action was kept but its audit line could not be written."""
+        if self.__app.audit_write_failed():
+            flash(App.AUDIT_NOT_WRITTEN)
+
+    def gate(self) -> Any:
+        """Runs before every route. Nobody signed in: go to /signin (the progress poll gets a 401). The
+        admin may only look: every route that changes something is refused. An officer may not open the audit log."""
+        endpoint = request.endpoint
+        if endpoint in ("signin", "static"):
+            return None
+        account = self.__current()
+        if account is None:
+            if endpoint == "assess_poll":
+                return {"status": "error", "error": "Please sign in again."}, 401
+            return redirect(url_for("signin"))
+        if endpoint in WebApp.AUDIT_ENDPOINTS and not account.is_admin():
+            self.__app.refused(account.name, "opening the audit log")
+            self.__flash_audit_failure()
+            return render_template("forbidden.html", message=WebApp.NOT_ADMIN), 403
+        if account.is_admin() and endpoint in WebApp.ADMIN_REFUSED:
+            self.__app.refused(account.name, WebApp.ADMIN_REFUSED[endpoint])
+            self.__flash_audit_failure()
+            flash(WebApp.ADMIN_ONLY_REVIEWS)
+            ref = (request.view_args or {}).get("client_ref")
+            return redirect(url_for("view_client", client_ref=ref) if ref else url_for("home"))
+        return None
+
+    def signin(self) -> str | Response:
+        """Pick an account. Anyone already signed in goes home."""
+        account = self.__current()
+        if account is not None:
+            return redirect(url_for("home"))
+        if request.method == "POST":
+            chosen = self.__app.account(request.form.get("email", ""))
+            if chosen is None:
+                return render_template("signin.html", accounts=self.__app.accounts(), problem=WebApp.CHOOSE_ACCOUNT)
+            signed_in = self.__app.sign_in(chosen.email)
+            if signed_in is None:
+                return render_template("signin.html", accounts=self.__app.accounts(), problem=WebApp.CHOOSE_ACCOUNT)
+            session.clear()
+            session["account"] = signed_in.email
+            g.account = signed_in
+            self.__flash_audit_failure()
+            return redirect(url_for("home"))
+        return render_template("signin.html", accounts=self.__app.accounts(), problem="")
+
+    def signout(self) -> Response:
+        """Sign out: the audit log is told, the session is emptied."""
+        account = self.__current()
+        self.__app.sign_out(account)
+        session.clear()
+        g.account = None
+        self.__flash_audit_failure()
+        return redirect(url_for("signin"))
 
     def trim(self, number: Any) -> str:
         """60000.0 -> '60000', 7.5 -> '7.5'. Anything that isn't a number is shown as it is."""
@@ -497,9 +590,10 @@ class WebApp:
         return [{"file_name": secure_filename(name) or "document", "file_id": file_id}
                 for name, file_id in zip(names, ids) if self._is_stored_document(file_id)]
 
-    def store_uploads(self, files: list[FileStorage]) -> tuple[list[dict], list[dict]]:
+    def store_uploads(self, files: list[FileStorage], client_ref: str = "") -> tuple[list[dict], list[dict]]:
         """Keep each uploaded file as a supporting document and read it for the AI.
         Returns (supporting document entries, documents read for extraction)."""
+        actor = self.__actor()
         stored, read = [], []
         for uploaded in files:
             if not uploaded or not uploaded.filename:
@@ -510,23 +604,25 @@ class WebApp:
                 path = os.path.join(folder, name)
                 uploaded.save(path)
                 read.append(self.__app.read_document_for_extraction(path, name))
-                file_id = self.__app.upload_document(path)
+                file_id = self.__app.upload_document(path, actor, client_ref)
+                self.__flash_audit_failure()
                 if file_id is not None:
                     stored.append({"file_name": name, "file_id": file_id})
             finally:
                 shutil.rmtree(folder, ignore_errors=True)
         return stored, read
 
-    def autofill_form(self, heading: str, form: MultiDict, files: list[FileStorage]) -> str:
+    def autofill_form(self, heading: str, form: MultiDict, files: list[FileStorage], client_ref: str = "") -> str:
         """Read the uploaded documents and show the form again with the blanks filled in."""
         values = self.values_from_form(form)
         documents = self.pending_documents(form)
-        stored, read = self.store_uploads(files)
+        stored, read = self.store_uploads(files, client_ref)
         documents += stored
         if not read:
             return self.show_form(heading, values, ["Choose at least one document to read."], documents=documents)
 
-        extracted, warnings = self.__app.read_documents(read)
+        extracted, warnings = self.__app.read_documents(read, self.__actor())
+        self.__flash_audit_failure()
         if extracted is None:
             flash("Document reading is not available right now — please try again later.")
         filled, notes = [], list(warnings)
@@ -575,7 +671,9 @@ class WebApp:
         except (ValueError, TypeError, AttributeError) as error:
             logger.error("WebApp: the form for %s did not make a valid record: %r", record.get("client_ref"), error)
             return [f"The client could not be saved because {ClientRecord.why_unreadable(error)}."]
-        if not self.__app.save_client(client):
+        saved = self.__app.save_client(client, self.__actor())
+        self.__flash_audit_failure()
+        if not saved:
             return ["The client was not saved because the client database cannot be read or written right now. "
                     "Please try again later."]
         return []
@@ -597,9 +695,10 @@ class WebApp:
                                field_errors=field_errors or {}, documents=documents or [],
                                autofilled=autofilled or [], notes=notes or [], notes_title=notes_title)
 
-    def __run_in_background(self, job_id: str, record: ClientRecord, case: dict) -> None:
+    def __run_in_background(self, job_id: str, record: ClientRecord, case: dict, actor: str) -> None:
         """The assessment, in the background: App.assess, the very method the command
-        line runs, then the same save."""
+        line runs, then the same save. actor is the signed-in name, taken in the request: this thread
+        has no session, and the audit flag it reads is its own."""
         job = self.__jobs[job_id]
 
         def step(number, label):
@@ -607,13 +706,15 @@ class WebApp:
             job["step"] = label
 
         try:
-            result = self.__app.assess(case, record.documents(), on_step=step, show_failures=False)
+            result = self.__app.assess(case, record.documents(), on_step=step, show_failures=False, actor=actor)
             if result is None:
                 logger.error("WebApp: the assessment of %s stopped at a critical step", record.client_ref)
                 job["status"] = "error"
-                job["error"] = WebApp.ASSESSMENT_STOPPED
+                job["error"] = WebApp.ASSESSMENT_STOPPED + (
+                    " " + App.AUDIT_NOT_WRITTEN if self.__app.audit_write_failed() else "")
                 return
-            assessment_id = self.__app.save_assessment(result, record, on_step=step)
+            assessment_id = self.__app.save_assessment(result, record, on_step=step, actor=actor)
+            audit_failed = self.__app.audit_write_failed()
 
             # Per-feature failure flags — feature names passed to flash_ai_unavailable in assess_result
             ai_warnings = []
@@ -629,6 +730,7 @@ class WebApp:
                 "report":        result["verdict"].report,
                 "assessment_id": assessment_id,
                 "saved":         assessment_id is not None,
+                "audit_failed":  audit_failed,
                 "assessed_at":   result["verdict"].assessed_at,   # the same time App saved
                 "ai_warnings":   ai_warnings,
                 "crime_result":  WebApp.__crime_result_layout(result.get("crime_result")),
@@ -691,10 +793,10 @@ class WebApp:
         flash(f"No client found with reference '{client_ref}'.")
         return redirect(url_for("home"))
 
-    def _documents_on_save(self, form: MultiDict, files: list[FileStorage]) -> list[dict]:
+    def _documents_on_save(self, form: MultiDict, files: list[FileStorage], client_ref: str = "") -> list[dict]:
         """Documents to attach when the form is saved: ones kept from auto-fill, plus any
         files chosen in the upload box without pressing "Read documents"."""
-        stored, _ = self.store_uploads(files)
+        stored, _ = self.store_uploads(files, client_ref)
         return self.pending_documents(form) + stored
 
     def new_client(self) -> str | Response:
@@ -769,13 +871,14 @@ class WebApp:
             if saved is None:
                 abort(404)
             if archive:
-                result = self.__app.archive_assessment(saved["assessment_id"], reason)
+                result = self.__app.archive_assessment(saved["assessment_id"], reason, self.__actor())
             else:
-                result = self.__app.restore_assessment(saved["assessment_id"])
+                result = self.__app.restore_assessment(saved["assessment_id"], self.__actor())
         except (OSError, ValueError) as error:
             logger.error("WebApp.__change_archive: the saved assessments cannot be read: %r", error)
             flash(App.ASSESSMENTS_UNAVAILABLE)
             return redirect(url_for("home"))
+        self.__flash_audit_failure()
         client_ref = saved["client_ref"]
         keep_archived = False
         if result == App.ARCHIVE_CHANGED and not archive:
@@ -833,7 +936,7 @@ class WebApp:
  
         if request.method == "POST":
             values = self.values_from_form(request.form)
-            documents = self._documents_on_save(request.form, request.files.getlist("autofill_files"))
+            documents = self._documents_on_save(request.form, request.files.getlist("autofill_files"), client_ref)
             record, problems, field_errors = self.build_record(values, client_ref, old)
             if not problems:
                 problems = self.check_record(record)
@@ -860,7 +963,7 @@ class WebApp:
             return redirect(url_for("home"))
         if not found:
             abort(404)
-        return self.autofill_form(f"Edit {client_ref}", request.form, request.files.getlist("autofill_files"))
+        return self.autofill_form(f"Edit {client_ref}", request.form, request.files.getlist("autofill_files"), client_ref)
 
     def upload_documents(self, client_ref: str) -> Response:
         try:
@@ -871,6 +974,7 @@ class WebApp:
         if record is None:
             abort(404)
  
+        actor = self.__actor()
         added = 0
         chosen = 0
         for uploaded in request.files.getlist("files"):
@@ -883,7 +987,8 @@ class WebApp:
             folder = tempfile.mkdtemp()
             path = os.path.join(folder, name)
             uploaded.save(path)
-            file_id = self.__app.upload_document(path)
+            file_id = self.__app.upload_document(path, actor, client_ref)
+            self.__flash_audit_failure()
             shutil.rmtree(folder, ignore_errors=True)
  
             if file_id is None:
@@ -893,7 +998,9 @@ class WebApp:
             added += 1
  
         if added:
-            if self.__app.save_client(record):
+            saved = self.__app.save_client(record, actor)
+            self.__flash_audit_failure()
+            if saved:
                 flash(f"{added} document(s) uploaded.")
             else:
                 flash("Documents uploaded, but the record could not be saved.")
@@ -920,7 +1027,8 @@ class WebApp:
         name = secure_filename(document.get("file_name", "")) or "document"
         folder = tempfile.mkdtemp()
         path = os.path.join(folder, name)
-        ok = self.__app.download_document(document.get("file_path") or file_id, path)   # local copy
+        ok = self.__app.download_document(document.get("file_path") or file_id, path, self.__actor(), client_ref)   # local copy
+        self.__flash_audit_failure()
         data = b""
         if ok:
             with open(path, "rb") as handle:
@@ -972,7 +1080,7 @@ class WebApp:
             "client_ref": client_ref,
         }
         threading.Thread(
-            target=self.__run_in_background, args=(job_id, record, case), daemon=True
+            target=self.__run_in_background, args=(job_id, record, case, self.__actor()), daemon=True
         ).start()
         return redirect(url_for("assess_loading", job_id=job_id))
 
@@ -1007,6 +1115,8 @@ class WebApp:
         for feature in job["result"].get("ai_warnings", []):
             self.flash_ai_unavailable(feature)
         r = job["result"]
+        if r.get("audit_failed"):
+            flash(App.AUDIT_NOT_WRITTEN)
         if not r.get("saved", True):
             flash(WebApp.ASSESSMENT_NOT_SAVED)
         return self.show_report(r["record"], r["report"], r.get("assessed_at", ""), r.get("assessment_id"),
@@ -1025,7 +1135,8 @@ class WebApp:
         return render_template("assessments.html", assessments=assessments, archived_count=archived_count)
 
     def sync_to_cloud(self) -> Response:
-        stats = self.__app.sync_to_cloud()
+        stats = self.__app.sync_to_cloud(self.__actor())
+        self.__flash_audit_failure()
         cases = stats["cases_synced"]
         assessments = stats["assessments_synced"]
         skipped = stats["skipped"]

@@ -6,6 +6,7 @@ import re
 import shutil
 import time
 
+import flask
 import pytest
 from markupsafe import escape
 
@@ -15,6 +16,7 @@ from app.interface.web_app import WebApp
 from app.model.client_record import ClientRecord
 from tests import fake_ai, fake_services
 from tests.logic_fixtures import sample_case
+from tests.web_session import account_with_role, sign_in
 
 
 def _no_answer(prompt, schema, options):
@@ -29,7 +31,9 @@ def web(tmp_path, monkeypatch):
     application = App(_no_answer, data_folder=str(tmp_path))
     site = WebApp(application)
     site.flask().config["TESTING"] = True
-    return application, site, site.flask().test_client()
+    client = site.flask().test_client()
+    sign_in(client, application)
+    return application, site, client
 
 
 def _form_fields(site, record: dict) -> dict:
@@ -72,6 +76,7 @@ def test_a_handed_in_rate_limiter_decides_when_an_assessment_may_start(tmp_path,
     limiter = RateLimiter(60)
     limiter.record("127.0.0.1")                       # this browser has just started one
     client = WebApp(application, limiter).flask().test_client()
+    sign_in(client, application)
     page = client.post(f"/client/{ref}/assess", follow_redirects=True).get_data(as_text=True)
     assert "Rate limit: please wait" in page
     assert application.rate_limiter().check("127.0.0.1") == (True, 0)   # the App's limiter was not used
@@ -98,8 +103,9 @@ def test_pages_return_html_text_and_redirects_return_a_response(web):
     redirect() and send_file() give a werkzeug Response object, and the progress poll is a dict
     that Flask sends as JSON."""
     from werkzeug.wrappers import Response
-    _, site, _ = web
+    application, site, _ = web
     with site.flask().test_request_context("/find?ref=NOBODY"):
+        flask.session["account"] = account_with_role(application).email
         assert isinstance(site.home(), str)
         assert isinstance(site.find(), Response)
         assert isinstance(site.sync_to_cloud(), Response)
@@ -241,6 +247,7 @@ def test_with_no_api_key_the_assessment_is_refused_with_a_message(tmp_path, monk
     application = App(None, data_folder=str(tmp_path))
     application.clients().save(sample_case())
     client = WebApp(application).flask().test_client()
+    sign_in(client, application)
     page = client.post(f"/client/{sample_case()['client_ref']}/assess", follow_redirects=True)
     assert page.status_code == 200
     assert application.assessments().load() == []
@@ -273,6 +280,7 @@ def test_the_result_page_shows_the_crime_cards_from_the_typologies(tmp_path, mon
     monkeypatch.setenv("MONGODB_URI", "")
     application = App(fake_ai.caller(), data_folder=str(tmp_path))
     client = WebApp(application).flask().test_client()
+    sign_in(client, application)
     record = sample_case()
     application.clients().save(record)
     case, _ = application.read_case(ClientRecord.from_dict(record))
@@ -301,6 +309,7 @@ def test_when_the_research_fails_the_page_says_the_typologies_were_not_checked(t
     monkeypatch.setenv("MONGODB_URI", "")
     application = App(fake_ai.caller(research_reply=None), data_folder=str(tmp_path))
     client = WebApp(application).flask().test_client()
+    sign_in(client, application)
     record = sample_case()
     application.clients().save(record)
     case, _ = application.read_case(ClientRecord.from_dict(record))
@@ -393,7 +402,9 @@ def reading_web(tmp_path, monkeypatch):
     application = App(fake_ai.caller(documents_reply=AI_READING), data_folder=str(tmp_path))
     site = WebApp(application)
     site.flask().config["TESTING"] = True
-    return application, site, site.flask().test_client()
+    client = site.flask().test_client()
+    sign_in(client, application)
+    return application, site, client
 
 
 def _empty_values(site):
@@ -468,7 +479,9 @@ def test_a_reading_with_an_impossible_value_keeps_the_good_fields_and_says_which
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MONGODB_URI", "")
     reading = {**AI_READING, "client": {**AI_READING["client"], "age": 200, "date_of_birth": None}}
-    client = WebApp(App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))).flask().test_client()
+    application = App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))
+    client = WebApp(application).flask().test_client()
+    sign_in(client, application)
     response = client.post("/client/new/autofill", content_type="multipart/form-data", data={
         "autofill_files": (io.BytesIO(b"Daniel Tan, Portfolio Manager at Temasek since 2012"), "cv.txt"),
     })
@@ -494,6 +507,7 @@ def test_a_reading_that_cannot_be_a_record_fills_nothing_and_says_why(tmp_path, 
     monkeypatch.setenv("MONGODB_URI", "")
     application = _UnusableReadingApp(fake_ai.caller(documents_reply=AI_READING), data_folder=str(tmp_path))
     client = WebApp(application).flask().test_client()
+    sign_in(client, application)
     response = client.post("/client/new/autofill", content_type="multipart/form-data", data={
         "autofill_files": (io.BytesIO(b"Daniel Tan, Portfolio Manager at Temasek since 2012"), "cv.txt"),
     })
@@ -683,6 +697,7 @@ def test_the_result_page_gets_the_time_the_assessment_was_saved_with(tmp_path, m
     application = App(fake_ai.caller(), data_folder=str(tmp_path))
     site = _CapturingWebApp(application)
     client = site.flask().test_client()
+    sign_in(client, application)
     record = sample_case()
     application.clients().save(record)
     case, _ = application.read_case(ClientRecord.from_dict(record))
@@ -701,7 +716,7 @@ class _BrokenAssessApp(App):
         super().__init__(*args, **kwargs)
         self.stop = stop
 
-    def assess(self, case, documents=None, on_step=None, show_failures=True):
+    def assess(self, case, documents=None, on_step=None, show_failures=True, actor=App.TERMINAL):
         if self.stop:
             return None
         raise KeyError("benchmark")
@@ -714,6 +729,7 @@ def test_a_failed_web_assessment_shows_a_plain_message_and_logs_the_real_error(t
     monkeypatch.setenv("MONGODB_URI", "")
     application = _BrokenAssessApp(fake_ai.caller(), data_folder=str(tmp_path), stop=stop)
     client = WebApp(application).flask().test_client()
+    sign_in(client, application)
     record = sample_case()
     application.clients().save(record)
     job_id = client.post(f"/client/{record['client_ref']}/assess").headers["Location"].rsplit("/", 1)[-1]
@@ -980,3 +996,273 @@ def test_the_assessments_page_hides_archived_ones_and_says_when_all_are_archived
     client.post("/assessment/A2/archive")
     page = client.get("/assessments").get_data(as_text=True)
     assert "All 2 assessment(s) are archived." in page and "No assessments saved yet" not in page
+
+
+# ----- sign-in, the gate and the roles -------------------------------------------------------
+
+def _anonymous(tmp_path, monkeypatch, ai=_no_answer):
+    """A WebApp with nobody signed in: (application, site, browser)."""
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    application = App(ai, data_folder=str(tmp_path))
+    site = WebApp(application)
+    site.flask().config["TESTING"] = True
+    return application, site, site.flask().test_client()
+
+
+def _events(application):
+    from app.model.audit_filter import AuditFilter
+    return list(reversed(application.audit_log(AuditFilter(days=0))[0]))
+
+
+def test_nobody_signed_in_is_sent_to_the_sign_in_page_from_every_route(tmp_path, monkeypatch):
+    _, site, browser = _anonymous(tmp_path, monkeypatch)
+    routes = [rule for rule in site.flask().url_map.iter_rules() if rule.endpoint not in ("signin", "static")]
+    assert routes
+    for rule in routes:
+        url = re.sub(r"<[^>]+>", "x", rule.rule)
+        for method in sorted(rule.methods & {"GET", "POST"}):
+            reply = browser.open(url, method=method)
+            if rule.endpoint == "assess_poll":
+                assert reply.status_code == 401 and reply.get_json()["status"] == "error", url
+            else:
+                assert reply.status_code == 302 and reply.headers["Location"].endswith("/signin"), (method, url)
+    assert browser.get("/no/such/page").status_code == 302
+
+
+def test_the_sign_in_page_lists_every_account_with_its_role(tmp_path, monkeypatch):
+    application, _, browser = _anonymous(tmp_path, monkeypatch)
+    page = browser.get("/signin").get_data(as_text=True)
+    for account in application.accounts():
+        assert account.name in page and account.email in page and f"({account.role})" in page
+    assert "Signed in as" not in page
+
+
+def test_choosing_an_officer_signs_in_records_it_and_goes_home(tmp_path, monkeypatch):
+    application, _, browser = _anonymous(tmp_path, monkeypatch)
+    officer = account_with_role(application, "officer")
+    reply = browser.post("/signin", data={"email": officer.email})
+    assert reply.status_code == 302 and reply.headers["Location"].endswith("/")
+    with browser.session_transaction() as session:
+        assert dict(session) == {"account": officer.email}
+    page = browser.get("/").get_data(as_text=True)
+    assert f"Signed in as {officer.name} (officer)" in page and "Sign out" in page
+    assert "Audit" not in page.split("<main>")[0]
+    [event] = _events(application)
+    assert (event.action, event.actor) == ("signed_in", officer.name)
+
+
+def test_signing_in_as_the_admin_hides_the_officer_buttons(tmp_path, monkeypatch):
+    application, _, browser = _anonymous(tmp_path, monkeypatch)
+    admin = account_with_role(application, "admin")
+    assert browser.post("/signin", data={"email": admin.email}).status_code == 302
+    page = browser.get("/").get_data(as_text=True)
+    assert f"Signed in as {admin.name} (admin)" in page
+    assert "New client" not in page and "Sync to Cloud" not in page
+
+
+def test_an_unknown_or_missing_account_shows_the_page_again_and_signs_nobody_in(tmp_path, monkeypatch):
+    application, _, browser = _anonymous(tmp_path, monkeypatch)
+    for data in ({"email": "nobody@example.com"}, {"email": ""}, {}):
+        reply = browser.post("/signin", data=data)
+        assert reply.status_code == 200
+        assert "Please choose one of the listed accounts." in reply.get_data(as_text=True)
+    with browser.session_transaction() as session:
+        assert "account" not in session
+    assert _events(application) == []
+
+
+def test_a_signed_in_visitor_who_opens_the_sign_in_page_goes_home(web):
+    _, _, browser = web
+    reply = browser.get("/signin")
+    assert reply.status_code == 302 and reply.headers["Location"].endswith("/")
+
+
+def test_an_email_that_is_no_longer_configured_counts_as_signed_out(web):
+    _, _, browser = web
+    with browser.session_transaction() as session:
+        session["account"] = "gone@orbit.local"
+    assert browser.get("/").headers["Location"].endswith("/signin")
+    with browser.session_transaction() as session:
+        session["account"] = 5
+    assert browser.get("/").headers["Location"].endswith("/signin")
+
+
+def test_signing_out_records_it_empties_the_session_and_closes_the_gate(web):
+    application, _, browser = web
+    reply = browser.post("/signout")
+    assert reply.status_code == 302 and reply.headers["Location"].endswith("/signin")
+    with browser.session_transaction() as session:
+        assert "account" not in session
+    assert browser.get("/").headers["Location"].endswith("/signin")
+    assert [event.action for event in _events(application)] == ["signed_out"]
+
+
+def test_signing_out_needs_a_post_and_a_signed_in_visitor(web, tmp_path, monkeypatch):
+    _, _, browser = web
+    assert browser.get("/signout").status_code in (405, 500)     # the app turns every error into its error page
+    _, _, stranger = _anonymous(tmp_path / "other", monkeypatch)
+    assert stranger.post("/signout").headers["Location"].endswith("/signin")
+
+
+def test_the_poll_of_a_signed_out_visitor_is_a_401_not_a_redirect(tmp_path, monkeypatch):
+    _, _, browser = _anonymous(tmp_path, monkeypatch)
+    reply = browser.get("/assess/poll/anything")
+    assert reply.status_code == 401 and reply.get_json() == {"status": "error", "error": "Please sign in again."}
+
+
+def test_the_session_holds_only_the_email_and_the_cookie_is_not_readable_by_scripts(tmp_path, monkeypatch):
+    application, _, browser = _anonymous(tmp_path, monkeypatch)
+    officer = account_with_role(application)
+    reply = browser.post("/signin", data={"email": officer.email})
+    cookie = reply.headers["Set-Cookie"]
+    assert "HttpOnly" in cookie and "SameSite=Lax" in cookie
+
+
+def _admin_web(web):
+    application, site, browser = web
+    sign_in(browser, application, "admin")
+    return application, site, browser
+
+
+def test_the_admin_may_view_clients_and_assessments_and_download_documents(web):
+    application, _, browser = _admin_web(web)
+    ref = _two_assessments(application)
+    assert browser.get("/").status_code == 200
+    page = browser.get(f"/client/{ref}")
+    assert page.status_code == 200
+    assert browser.get("/assessments").status_code == 200
+    assert browser.get("/assessment/A1").status_code == 200
+    body = page.get_data(as_text=True)
+    for hidden in ("Run Assessment", ">Edit<", "Upload", ">Archive<", "Add documents"):
+        assert hidden not in body, hidden
+
+
+def test_the_admin_is_refused_on_every_write_route_and_each_refusal_is_recorded(web):
+    application, _, browser = _admin_web(web)
+    ref = _two_assessments(application)
+    admin = account_with_role(application, "admin")
+    before = application.clients().find(ref)
+    writes = [("get", "/client/new"), ("post", "/client/new"), ("post", "/client/new/autofill"),
+              ("get", f"/client/{ref}/edit"), ("post", f"/client/{ref}/edit"),
+              ("post", f"/client/{ref}/autofill"), ("post", f"/client/{ref}/documents"),
+              ("post", f"/client/{ref}/assess"), ("post", "/assessment/A1/archive"),
+              ("post", "/assessment/A1/restore"), ("post", "/sync")]
+    for method, url in writes:
+        reply = getattr(browser, method)(url)
+        assert reply.status_code == 302, url
+        assert reply.headers["Location"].endswith(f"/client/{ref}" if f"/client/{ref}" in url else "/"), url
+        assert "The admin account can only review the audit log." in _flashes(browser), url
+        browser.get("/")                                             # shows, and so clears, the message
+    refused = [event for event in _events(application) if event.action == "access_refused"]
+    assert len(refused) == len(writes) and {event.actor for event in refused} == {admin.name}
+    assert "archiving an assessment" in {event.details["what"] for event in refused}
+    assert application.clients().find(ref) == before
+    assert application.find_assessment("A1").get("archive_log") is None
+    assert application.assessments().load()[0].get("archive_log") is None
+
+
+def test_a_client_saved_on_the_web_is_recorded_under_the_signed_in_name(web):
+    application, site, browser = web
+    officer = account_with_role(application)
+    assert browser.post("/client/new", data=_form_fields(site, sample_case())).status_code == 302
+    [event] = _events(application)
+    assert (event.action, event.actor) == ("client_created", officer.name)
+
+
+def test_every_web_write_passes_the_signed_in_name_as_the_actor(web):
+    application, site, browser = web
+    officer = account_with_role(application)
+    ref = _two_assessments(application)
+    fields = _form_fields(site, sample_case())
+    fields["client.name"] = "Daniel K. Tan"
+    browser.post(f"/client/{ref}/edit", data=fields)
+    browser.post(f"/client/{ref}/documents", content_type="multipart/form-data",
+                 data={"files": (io.BytesIO(b"payslip"), "payslip.txt")})
+    file_id = application.find_client(ref).documents()[0]["file_id"]
+    assert browser.get(f"/client/{ref}/documents/{file_id}").status_code == 200
+    browser.post("/assessment/A1/archive", data={"reason": "duplicate"})
+    browser.post("/assessment/A1/restore")
+    browser.post("/sync")
+    events = _events(application)
+    assert [event.action for event in events] == [
+        "client_edited", "document_uploaded", "client_edited", "document_downloaded",
+        "assessment_archived", "assessment_restored", "cloud_sync"]
+    assert {event.actor for event in events} == {officer.name}
+    assert [event.client_ref for event in events[1:4]] == [ref] * 3
+    assert [entry["by"] for entry in application.find_assessment("A1")["archive_log"]] == [officer.name] * 2
+
+
+def test_reading_documents_on_the_web_records_the_reading_and_the_uploads(tmp_path, monkeypatch):
+    application = App(fake_ai.caller(documents_reply=AI_READING), data_folder=str(tmp_path))
+    client = WebApp(application).flask().test_client()
+    officer = sign_in(client, application)
+    client.post("/client/new/autofill", content_type="multipart/form-data", data={
+        "autofill_files": (io.BytesIO(b"Daniel Tan, Portfolio Manager"), "cv.txt")})
+    assert [(event.action, event.actor) for event in _events(application)] == [
+        ("document_uploaded", officer.name), ("autofill_used", officer.name)]
+
+
+def test_a_web_assessment_is_recorded_under_the_name_taken_in_the_request(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    application = App(fake_ai.caller(), data_folder=str(tmp_path))
+    client = WebApp(application).flask().test_client()
+    officer = sign_in(client, application)
+    record = sample_case()
+    application.clients().save(record)
+    case, _ = application.read_case(ClientRecord.from_dict(record))
+    fake_services.save_forecast_replies(application.response_cache(), case)
+    job_id = client.post(f"/client/{record['client_ref']}/assess").headers["Location"].rsplit("/", 1)[-1]
+    assert _wait_for(client, job_id)["status"] == "done"
+    assert [(event.action, event.actor) for event in _events(application)] == [("assessment_run", officer.name)]
+    assert "could not be written" not in client.get(f"/assess/result/{job_id}").get_data(as_text=True)
+
+
+def test_an_audit_line_that_could_not_be_written_is_flashed_after_a_web_save(web, monkeypatch):
+    application, site, browser = web
+    monkeypatch.setattr(getattr(application, "_App__audit"), "save", lambda record: False)
+    assert browser.post("/client/new", data=_form_fields(site, sample_case())).status_code == 302
+    assert App.AUDIT_NOT_WRITTEN in _flashes(browser)
+    assert len(application.clients().load()) == 1
+
+
+def test_an_audit_failure_in_the_assessment_job_is_shown_on_the_result_page(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    application = App(fake_ai.caller(), data_folder=str(tmp_path))
+    client = WebApp(application).flask().test_client()
+    sign_in(client, application)
+    record = sample_case()
+    application.clients().save(record)
+    case, _ = application.read_case(ClientRecord.from_dict(record))
+    fake_services.save_forecast_replies(application.response_cache(), case)
+    monkeypatch.setattr(getattr(application, "_App__audit"), "save", lambda row: False)
+    job_id = client.post(f"/client/{record['client_ref']}/assess").headers["Location"].rsplit("/", 1)[-1]
+    assert _wait_for(client, job_id)["status"] == "done"
+    page = client.get(f"/assess/result/{job_id}").get_data(as_text=True)
+    assert App.AUDIT_NOT_WRITTEN in page
+    assert len(application.assessments().load()) == 1
+
+
+def test_a_stopped_web_assessment_whose_audit_line_failed_says_so_in_its_message(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    application = _StopAssessApp(fake_ai.caller(), data_folder=str(tmp_path))
+    client = WebApp(application).flask().test_client()
+    sign_in(client, application)
+    record = sample_case()
+    application.clients().save(record)
+    job_id = client.post(f"/client/{record['client_ref']}/assess").headers["Location"].rsplit("/", 1)[-1]
+    state = _wait_for(client, job_id)
+    assert state["status"] == "error"
+    assert state["error"] == f"{WebApp.ASSESSMENT_STOPPED} {App.AUDIT_NOT_WRITTEN}"
+
+
+class _StopAssessApp(App):
+    """An App whose assessment stops at once and whose audit line then cannot be written."""
+
+    def assess(self, case, documents=None, on_step=None, show_failures=True, actor=App.TERMINAL):
+        getattr(self, "_App__audit").save = lambda row: False
+        self.refused(actor, "forcing a failed audit line")         # makes the thread's flag True
+        return None

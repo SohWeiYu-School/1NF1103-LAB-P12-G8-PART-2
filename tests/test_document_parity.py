@@ -19,6 +19,7 @@ from app.logic.case_reader import CaseReader
 from app.logic.document_record_builder import DocumentRecordBuilder
 from app.model.client_record import ClientRecord
 from tests.logic_fixtures import CONFIG
+from tests.web_session import sign_in
 
 FOLDER = os.path.join(os.path.dirname(__file__), "documents", "marcus_lim")
 TODAY = "2026-10-13"
@@ -139,5 +140,7 @@ def test_assessments_are_always_dated_today(site, tmp_path):
     assert case["current_date"] == today                       # command line: not asked
 
     assert web_record(site, expected_reply())["current_date"] == today   # web form: no date box
-    page = site.flask().test_client().get("/client/new").get_data(as_text=True)
+    browser = site.flask().test_client()
+    sign_in(browser, site._WebApp__app)
+    page = browser.get("/client/new").get_data(as_text=True)
     assert 'name="client.current_date"' not in page
