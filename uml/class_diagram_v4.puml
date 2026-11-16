@@ -591,7 +591,6 @@ package "Application (app/application)" {
     +start(arguments : list[str]) : int
     +run_menu() : None
     +run_case_file(path : str) : bool
-    +use_recorded_replies() : int
     +assess_client_record(record : ClientRecord) : Verdict | None
     +find_client(client_ref : str) : ClientRecord | None
     +save_client(record : ClientRecord) : bool

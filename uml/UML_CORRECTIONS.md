@@ -446,3 +446,9 @@ Marcus asked for a separate model for web searches, as Gemini already has (`GEMI
 was dropped in Part 1 (6dc338b, "one AI model for every call"); it is read again. The AI caller functions gained
 `search_model` / `search_model_name()`. They are module functions, not drawn in the class diagram.
 - Added `App.-__ai_search_model() : str` (**B**): the model ResearchAI is given. layout_check 0.
+
+## Demo mode removed (2026-11-16): code changed, the diagram follows it
+
+Marcus: the app runs in normal mode only (no cache yet means the live AI is asked; its answers are then cached).
+`--demo` never worked: the recorded replies it loaded (`tests/golden/*/ai_responses.json`) were never committed, so it
+quietly used the live AI. Removed `App.+use_recorded_replies() : int`. `run.sh` (never committed) deleted. layout_check 0.
