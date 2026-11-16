@@ -1,6 +1,5 @@
 """App: creates every object of the system and coordinates them."""
 
-import json
 import logging
 import os
 from datetime import datetime
@@ -198,7 +197,6 @@ class App:
             (no arguments)          the menu
             --case FILE             assess one case file
             --all-samples           assess every sample case
-            --demo                  use the recorded AI replies in tests/golden (no API key needed)
             --web                   start the web app instead of the menu
         """
         self.__configure_logging()
@@ -214,8 +212,6 @@ class App:
             return self.start_web()
         if not self.ai_available():
             self.__ui.show_error("No OPENAI_API_KEY set: only saved AI replies can be used.")
-        if "--demo" in arguments:
-            self.__ui.show(f"Demo mode: {self.use_recorded_replies()} recorded AI replies loaded from tests/golden.")
         try:
             if "--all-samples" in arguments:
                 paths = self.__case_files.list_samples()
@@ -433,24 +429,6 @@ class App:
                                                crime_result=result.get("crime_result"),
                                                typologies=result.get("typologies"))
         return result["forecast"] is not None
-
-    def use_recorded_replies(self) -> int:
-        """Copy the recorded AI replies from tests/golden into the reply cache. Only fills
-        gaps, so real replies already saved are never overwritten. Returns how many were copied."""
-        golden = os.path.join(self.__root, "tests", "golden")
-        copied = 0
-        for path in self.__case_files.list_samples():
-            name = os.path.splitext(os.path.basename(path))[0]
-            recorded = self.__case_files.load(os.path.join(golden, name, "ai_responses.json"), default={})
-            case = self.__case_files.load(path)
-            if not self.__case_files.is_forecasting_case(case) or not isinstance(recorded, dict):
-                continue
-            saved = self.__response_cache.load_raw_replies(case["client_ref"])
-            missing = {piece: {"ok": True, "from_cache": False, "raw": json.dumps(reply),
-                               "prompt_version": "recorded"}
-                       for piece, reply in recorded.items() if piece not in saved}
-            copied += self.__response_cache.save_raw_replies(case["client_ref"], missing)
-        return copied
 
     # ----- clients and records ---------------------------------------------------------------
 

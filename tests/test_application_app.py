@@ -102,7 +102,7 @@ def test_every_sample_is_assessed_from_saved_replies_with_no_ai(app, capsys):
 
 
 def test_with_no_saved_replies_the_samples_still_get_a_verdict_but_the_run_reports_failure(app, capsys):
-    assert app.start(["--all-samples", "--demo"]) == 1          # the forecast could not run
+    assert app.start(["--all-samples"]) == 1          # the forecast could not run
     out = capsys.readouterr().out
     assert "The forecast could not be completed and is left out" in out
     assert len(app.assessments().load()) == 2
@@ -265,14 +265,6 @@ def test_syncing_with_no_database_reports_it_and_keeps_the_local_data(app):
     assert stats["cases_synced"] == 0
     assert "Cannot reach the cloud database" in stats["errors"][0]
     assert len(app.clients().load()) == 1
-
-
-def test_recorded_replies_never_overwrite_replies_already_saved(app):
-    case = sample_case()
-    fake_services.save_forecast_replies(app.response_cache(), case)
-    before = app.response_cache().load_raw_replies(case["client_ref"])
-    app.use_recorded_replies()
-    assert app.response_cache().load_raw_replies(case["client_ref"]) == before
 
 
 def _broken_record() -> dict:
