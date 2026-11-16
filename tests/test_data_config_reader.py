@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from werkzeug.security import generate_password_hash
 
 from app.data.config_reader import ConfigReader
 
@@ -104,8 +105,9 @@ def test_a_rate_limit_with_no_cooldown_is_not_a_problem(tmp_path):
     assert not any("cooldown_seconds" in p for p in ConfigReader(str(folder)).problems())
 
 
-ADMIN = {"email": "admin@orbit.local", "name": "Orbit Admin", "role": "admin"}
-OFFICER = {"email": "shareen@orbit.local", "name": "Shareen", "role": "officer"}
+HASH = generate_password_hash("demo-password")
+ADMIN = {"email": "admin@orbit.local", "name": "Orbit Admin", "role": "admin", "password_hash": HASH}
+OFFICER = {"email": "shareen@orbit.local", "name": "Shareen", "role": "officer", "password_hash": HASH}
 
 
 def _config_with_accounts(tmp_path, accounts):
@@ -171,3 +173,13 @@ def test_there_must_be_exactly_one_admin_and_at_least_one_officer(tmp_path):
     folder3.mkdir()
     no_admin = _config_with_accounts(folder3, [OFFICER]).problems()
     assert any("exactly one admin" in p and "found 0" in p for p in no_admin)
+
+
+def test_an_account_without_a_password_hash_is_a_problem(tmp_path):
+    problems = _config_with_accounts(tmp_path, [ADMIN, {"email": "a@b.com", "name": "Wei Yu", "role": "officer"}]).problems()
+    assert problems == ["config/accounts.json account 2 (Wei Yu) has no password_hash"]
+
+
+def test_a_plain_text_password_in_the_accounts_file_is_refused(tmp_path):
+    problems = _config_with_accounts(tmp_path, [ADMIN, {**OFFICER, "password_hash": "officer123"}]).problems()
+    assert len(problems) == 1 and "account 2 is not valid" in problems[0] and "plain password" in problems[0]

@@ -100,6 +100,9 @@ class ConfigReader:
                 problems.append(f"config/accounts.json account {number} is not valid: {error}")
         if problems:
             return problems
+        for number, account in enumerate(accounts, start=1):
+            if not account.has_password:
+                problems.append(f"config/accounts.json account {number} ({account.name}) has no password_hash")
         for label, values in (("email", [a.email for a in accounts]), ("name", [a.name.lower() for a in accounts])):
             repeated = sorted({value for value in values if values.count(value) > 1})
             if repeated:
