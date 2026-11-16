@@ -474,6 +474,10 @@ one line to an assessment's `archive_log`, and the last line decides whether it 
   `include_archived`. Not a diagram change: `save_assessment` saves a copy of the case under `"case"`.
 - `WebApp` (**T**): added `archive_assessment()`, `restore_assessment()`, `-__change_archive()`; `show_report()` gained
   `archive` and `archive_state`.
-- `ReportView` (**T**): added `ARCHIVE_MARKS`; `format_assessment_list()` and `show_assessment_list()` gained `states`.
+- `ReportView` (**T**): added `ARCHIVE_MARKS`; `format_assessment_list()` and `show_assessment_list()` gained `states`
+  (`list[str] | None`, one state per record in the same order: old records may share a missing id, so a dict keyed by
+  id would mark the wrong rows; Opus review).
+- `AssessmentRepository` (**B**): added `-__good_entry()` (Opus review: an archive line whose time or reason is not text
+  now counts as damaged, instead of breaking the assessment page).
 - Layout: WebApp and AssessmentRepository grew, so RateLimiter, CaseBuilder, ClientForm, DocumentReaderFactory and
   CaseFiles moved down; every line was re-routed. layout_check 0.

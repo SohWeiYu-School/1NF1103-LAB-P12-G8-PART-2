@@ -28,6 +28,7 @@ package "Data Manager (app/data)" {
     {static} +archive_state(record : dict) : str
     {static} +is_archived(record : dict) : bool
     +restore(assessment_id : str) : str
+    {static} -__good_entry(entry : object) : bool
   }
   class CaseFiles {
     -__folder : str = ".../data/sample"
@@ -308,7 +309,7 @@ package "IO Manager (app/interface)" {
     +__init__(ui : ConsoleUI | None = None, width : int = REPORT_WIDTH)
     +show_verdict_report(verdict : Verdict, ask_for_evidence : bool = True, crime_result : dict | None = None, typologies : list[Typology] | None = None) : None
     +show_onboarding(assessment : dict) : None
-    +show_assessment_list(records : list[dict], states : dict[str, str] | None = None) : None
+    +show_assessment_list(records : list[dict], states : list[str] | None = None) : None
     +show_client_list(records : list[dict]) : None
     +display_client_record(record : ClientRecord) : None
     +format_evidence(verdict : Verdict) : str
@@ -317,7 +318,7 @@ package "IO Manager (app/interface)" {
     #_field_name(key : str) : str
     #_field_value(key : str, value : Any) : str
     #_summary_value(row : dict) : str
-    +format_assessment_list(records : list[dict], states : dict[str, str] | None = None) : str
+    +format_assessment_list(records : list[dict], states : list[str] | None = None) : str
     +format_onboarding(assessment : dict) : str
     +format_verdict_report(verdict : Verdict, crime_result : dict | None = None, typologies : list[Typology] | None = None) : str
     +show_document_summary(rows : list[dict], files : list[str], notes : list[str], checks : list[str]) : None
