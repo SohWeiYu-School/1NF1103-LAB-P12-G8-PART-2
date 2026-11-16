@@ -877,6 +877,48 @@ def test_a_damaged_archive_record_gives_a_banner_and_no_button_on_the_assessment
     assert "/assessment/A1/restore" not in page and "/assessment/A1/archive" not in page
 
 
+def test_an_archive_line_with_a_time_that_is_not_text_gives_the_damaged_banner_not_an_error(web):
+    application, _, client = web
+    _two_assessments(application)
+    records = application.assessments().load()
+    records[0]["archive_log"] = [{"action": "archived", "at": 12345}]
+    application.assessments()._write_all(records)
+    reply = client.get("/assessment/A1")
+    assert reply.status_code == 200
+    assert "This assessment's archive record is damaged" in reply.get_data(as_text=True)
+
+
+def test_old_records_without_an_id_each_show_their_own_archive_state(web):
+    application, _, client = web
+    application.clients().save(sample_case())
+    ref = sample_case()["client_ref"]
+    application.assessments()._write_all([
+        {"client_ref": ref, "kind": "onboarding", "outcome": "PASSED", "assessed_at": "2026-02-05T10:30:00+00:00",
+         "archive_log": [{"action": "archived", "at": "2026-03-01T00:00:00+00:00"}]},
+        {"client_ref": ref, "kind": "onboarding", "outcome": "SERIOUS_RISK", "assessed_at": "2026-01-05T10:30:00+00:00"}])
+    page = client.get(f"/client/{ref}").get_data(as_text=True)
+    assert "SERIOUS RISK" in page and "Show archived (1)" in page and "(archived)" not in page
+    page = client.get(f"/client/{ref}?archived=1").get_data(as_text=True)
+    assert page.count("(archived)") == 1
+
+
+def test_a_restore_that_worked_is_reported_even_if_the_list_cannot_be_read_afterwards(web, monkeypatch):
+    application, _, client = web
+    ref = _two_assessments(application)
+    client.post("/assessment/A1/archive")
+    _flashes(client)
+
+    def unreadable(client_ref, include_archived=False):
+        raise ValueError("the file is damaged")
+
+    monkeypatch.setattr(application, "client_assessments", unreadable)
+    reply = client.post("/assessment/A1/restore")
+    assert reply.headers["Location"].endswith(f"/client/{ref}")
+    flashes = _flashes(client)
+    assert "Assessment restored." in flashes and App.ASSESSMENTS_UNAVAILABLE not in flashes
+    assert application.find_assessment("A1")["archive_log"][-1]["action"] == "restored"
+
+
 def test_an_assessment_page_uses_the_name_the_client_had_when_it_was_assessed(web):
     application, _, client = web
     ref = _two_assessments(application)

@@ -732,14 +732,17 @@ class WebApp:
             abort(404)
         saved = record.to_dict()                 # the page template reads the saved layout
         show_archived = request.args.get("archived") == "1"
-        archive_states: dict[str, str] = {}
+        archive_states: list[str] = []           # one state per shown assessment, in the same order
         archived_count = 0
         try:
             everything = self.__app.client_assessments(client_ref, include_archived=True)
-            archive_states = {a.get("assessment_id"): App.archive_state(a) for a in everything}
-            hidden = [a for a in everything if archive_states[a.get("assessment_id")] != App.ARCHIVE_ACTIVE]
-            archived_count = len(hidden)
-            assessments = everything if show_archived else [a for a in everything if a not in hidden]
+            # The state is worked out per record, not per id: old records may share a missing id.
+            rows = [(a, App.archive_state(a)) for a in everything]
+            archived_count = sum(1 for _, state in rows if state != App.ARCHIVE_ACTIVE)
+            if not show_archived:
+                rows = [(a, state) for a, state in rows if state == App.ARCHIVE_ACTIVE]
+            assessments = [a for a, _ in rows]
+            archive_states = [state for _, state in rows]
         except (OSError, ValueError) as error:
             logger.error("WebApp.view_client: the saved assessments cannot be read: %r", error)
             flash(App.ASSESSMENTS_UNAVAILABLE)
@@ -765,15 +768,19 @@ class WebApp:
             if saved is None:
                 abort(404)
             result = (self.__app.archive_assessment if archive else self.__app.restore_assessment)(saved["assessment_id"])
-            client_ref = saved["client_ref"]
-            keep_archived = False
-            if result == App.ARCHIVE_CHANGED and not archive:
-                keep_archived = any(App.archive_state(a) != App.ARCHIVE_ACTIVE
-                                    for a in self.__app.client_assessments(client_ref, include_archived=True))
         except (OSError, ValueError) as error:
             logger.error("WebApp.__change_archive: the saved assessments cannot be read: %r", error)
             flash(App.ASSESSMENTS_UNAVAILABLE)
             return redirect(url_for("home"))
+        client_ref = saved["client_ref"]
+        keep_archived = False
+        if result == App.ARCHIVE_CHANGED and not archive:
+            # Only chooses which view to go back to; if it cannot be read, the restore still happened.
+            try:
+                keep_archived = any(App.archive_state(a) != App.ARCHIVE_ACTIVE
+                                    for a in self.__app.client_assessments(client_ref, include_archived=True))
+            except (OSError, ValueError) as error:
+                logger.error("WebApp.__change_archive: restored, but the client's list cannot be read: %r", error)
         done, nothing_to_do = (("Assessment archived. It is hidden from the lists, not deleted.",
                                 "This assessment is already archived.") if archive else
                                ("Assessment restored.", "This assessment is not archived."))

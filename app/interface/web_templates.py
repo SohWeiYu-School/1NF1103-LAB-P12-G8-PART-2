@@ -337,7 +337,7 @@ VIEW = """{% extends "base.html" %}
   <table style="table-layout:fixed">
     <colgroup><col style="width:17%"><col style="width:15%"><col style="width:34%"><col style="width:12%"><col style="width:22%"></colgroup>
     {% for a in assessments %}
-    {% set state = archive_states.get(a.get('assessment_id'), 'active') %}
+    {% set state = archive_states[loop.index0] if loop.index0 < archive_states|length else 'active' %}
     <tr{% if state != 'active' %} style="opacity:.55"{% endif %}>
       <td>{{ a.get('assessed_at', '')[:10] }}</td>
       <td>{{ a.get('assessed_at', '')[11:16] }} UTC</td>
