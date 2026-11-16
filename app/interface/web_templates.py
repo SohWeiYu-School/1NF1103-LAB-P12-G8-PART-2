@@ -5,7 +5,7 @@ BASE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}Source of Wealth Screening{% endblock %}</title>
+<title>{% block title %}Orbit{% endblock %}</title>
 <style>
   :root { --ink:#1f2933; --muted:#616e7c; --line:#d9dee3; --bg:#f0f2f5; --accent:#1d4f7a; --bad:#a61b1b; }
   * { box-sizing: border-box; }
@@ -54,7 +54,7 @@ BASE = """<!doctype html>
 </head>
 <body>
 <header>
-  <a class="brand" href="{{ url_for('home') }}">Source of Wealth Screening</a>
+  <a class="brand" href="{{ url_for('home') }}">Orbit</a>
   <nav>
     <a class="nav-link" href="{{ url_for('list_assessments_view') }}">Assessments</a>
     <form method="post" action="{{ url_for('sync_to_cloud') }}" style="margin:0">
@@ -627,7 +627,7 @@ ASSESSMENTS = """{% extends "base.html" %}
 """
 
 ASSESS_LOADING = """{% extends "base.html" %}
-{% block title %}Assessing {{ record.get('name', '') }} — Source of Wealth Screening{% endblock %}
+{% block title %}Assessing {{ record.get('name', '') }} — Orbit{% endblock %}
 {% block content %}
 <h1>Assessing {{ record.get('name', '') }}
   <span class="muted" style="font-size:1rem">{{ record.get('client_ref', '') }}</span>
@@ -713,7 +713,7 @@ ASSESS_LOADING = """{% extends "base.html" %}
 
 
 ERROR = """{% extends "base.html" %}
-{% block title %}Error — Source of Wealth Screening{% endblock %}
+{% block title %}Error — Orbit{% endblock %}
 {% block content %}
 <div class="panel" style="text-align:center; padding:40px 22px">
   <div style="font-size:2.5rem; margin-bottom:12px; color:var(--bad)">&#9888;</div>

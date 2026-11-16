@@ -106,6 +106,12 @@ def test_pages_return_html_text_and_redirects_return_a_response(web):
         assert site.assess_poll("no-such-job") == {"status": "error", "error": "Job not found."}
 
 
+def test_every_page_is_branded_orbit(web):
+    _, _, client = web
+    page = client.get("/").get_data(as_text=True)
+    assert "<title>Orbit</title>" in page and 'class="brand"' in page and ">Orbit</a>" in page
+
+
 def test_the_home_page_lists_the_saved_clients(web):
     application, _, client = web
     application.clients().save(sample_case())
