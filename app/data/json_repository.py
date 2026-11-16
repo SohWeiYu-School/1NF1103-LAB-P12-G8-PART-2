@@ -18,8 +18,15 @@ class JsonRepository(Repository):
 
     DATA_DIR: str = os.path.join(ROOT_DIR, "data", "local database")
 
-    def __init__(self, path: str = "", key_field: str = "") -> None:
+    def __init__(self, path: str, key_field: str) -> None:
+        """path and key_field must be given and cannot be empty (ValueError): a repository with
+        no file has nowhere to keep its records, and one with no key cannot tell them apart."""
         super().__init__()
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError("A JSON repository needs the path of its file (it cannot be empty).")
+        if not isinstance(key_field, str) or not key_field.strip():
+            raise ValueError("A JSON repository needs a key field, the field that tells one record "
+                             "from another (it cannot be empty).")
         self._path: str = path
         self._key_field: str = key_field
 
@@ -28,19 +35,30 @@ class JsonRepository(Repository):
         """Store one record. Returns False if it could not be stored."""
 
     def load(self) -> list[dict]:
-        """Every record in the file. A missing or damaged file gives []."""
+        """Every record in the file. A missing file means no records yet and gives [].
+        Raises OSError if the file cannot be read and ValueError if its content is damaged
+        (not valid JSON, not a list, or a list with something other than records in it);
+        the real details are logged first."""
         if not os.path.exists(self._path):
             return []
         try:
             with open(self._path, "r", encoding="utf-8") as handle:
                 data = json.load(handle)
-        except (json.JSONDecodeError, OSError) as error:
-            logger.warning("JsonRepository.load: could not read %s: %s", self._path, repr(error))
-            return []
-        return data if isinstance(data, list) else []
+        except OSError as error:
+            logger.error("JsonRepository.load: could not read %s: %s", self._path, repr(error))
+            raise
+        except ValueError as error:      # includes JSONDecodeError and UnicodeDecodeError
+            logger.error("JsonRepository.load: %s is damaged: %s", self._path, repr(error))
+            raise ValueError(f"The file {os.path.basename(self._path)} is damaged: {error}") from error
+        if not isinstance(data, list) or not all(isinstance(record, dict) for record in data):
+            logger.error("JsonRepository.load: %s does not hold a list of records", self._path)
+            raise ValueError(f"The file {os.path.basename(self._path)} is damaged: "
+                             "it must hold a list of records.")
+        return data
 
     def find(self, ref: str) -> dict | None:
-        """The record whose key matches ref (upper and lower case are treated the same), or None."""
+        """The record whose key matches ref (upper and lower case are treated the same), or None
+        if there is none. Raises what load() raises when the file cannot be read."""
         wanted = str(ref or "").strip().upper()
         if not wanted:
             return None

@@ -5,14 +5,14 @@ class Claims:
     """Declared net worth, the money he expects to place with the bank, his PEP status,
     how his wealth is split and where it came from."""
 
-    NO_PEP_VALUES: tuple[str, ...] = ("", "none", "no", "not a pep", "n/a", "na")
+    NO_PEP_VALUES: tuple[str, ...] = ("none", "no", "not a pep", "n/a", "na")
     LIQUID_PARTS: tuple[str, ...] = ("listed_equities", "cash")
 
     def __init__(self, declared_net_worth: float | None = None, expected_aum: float | None = None, pep_status: str = "",
                  asset_composition: dict | None = None, wealth_countries: list[str] | None = None,
                  declared_counterparties: list[str] | None = None, biggest_wealth_jump: float | None = None,
                  wealth_jump_years: int | None = None, extra: dict | None = None) -> None:
-        self.__check_positive(declared_net_worth)
+        self.__check_net_worth(declared_net_worth)
         self.__check_positive(expected_aum)
         self.__check_positive(biggest_wealth_jump)
         self.__check_positive(wealth_jump_years)
@@ -33,7 +33,7 @@ class Claims:
 
     @declared_net_worth.setter
     def declared_net_worth(self, value: float | None) -> None:
-        self.__check_positive(value)
+        self.__check_net_worth(value)
         self.__declared_net_worth = value
 
     @property
@@ -95,7 +95,8 @@ class Claims:
         self.__wealth_jump_years = value
 
     def is_pep(self) -> bool:
-        """True unless the PEP status is empty or one of the ways of writing "no"."""
+        """True unless the PEP status is one of the ways of writing "no". A blank status is
+        unknown, not "no": it counts as a PEP (the cautious side) and problems() lists it."""
         return str(self.__pep_status or "").strip().lower() not in Claims.NO_PEP_VALUES
 
     def liquid_share(self) -> float:
@@ -106,7 +107,10 @@ class Claims:
         """What stops these claims being used. Empty list = nothing."""
         problems = []
         if self.__declared_net_worth is None:
-            problems.append("Declared net worth is missing.")
+            problems.append("Declared net worth is missing: enter an amount greater than 0.")
+        if not str(self.__pep_status or "").strip():
+            problems.append("The PEP question is not answered. Answer \"None\" if the client is not a "
+                            "politically exposed person, or say which kind of PEP the client is.")
         shares = [share for share in self.__asset_composition.values() if isinstance(share, (int, float))]
         if shares and abs(sum(shares) - 1.0) > 0.01:
             problems.append(f"The asset split adds up to {sum(shares):.0%}, not 100%.")
@@ -128,6 +132,11 @@ class Claims:
                 "biggest_wealth_jump": self.__biggest_wealth_jump,
                 "wealth_jump_years": self.__wealth_jump_years,
                 "declared_counterparties": list(self.__declared_counterparties)}
+
+    def __check_net_worth(self, value: float | None) -> None:
+        self.__check_positive(value)
+        if value is not None and value <= 0:
+            raise ValueError("declared net worth must be greater than 0 (or left empty if not given)")
 
     def __check_positive(self, value: float | None) -> None:
         if value is None:

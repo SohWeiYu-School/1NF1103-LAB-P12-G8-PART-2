@@ -2,8 +2,11 @@
 
 import copy
 import datetime
+import re
+from typing import Any
 
 from app.logic.case_reader import CaseReader
+from app.model.client_record import ClientRecord
 from app.model.config import Config
 
 
@@ -12,20 +15,25 @@ class DocumentRecordBuilder:
     still missing, checks the record for values that cannot be right, and summarises it
     for the officer to review. Nothing is saved here: the officer confirms every value.
 
+    The record it gives and takes is a ClientRecord; inside, it works on the record's saved
+    layout, where every field has a path (["career_history", 0, "start_year"]).
     It stores the Config (asset names from the policy) and today's date.
     """
 
-    SUMMARY_SECTIONS = {"name": "Client", "nationality": "Client", "career": "Client",
+    SUMMARY_SECTIONS: dict[str, str] = {"name": "Client", "nationality": "Client", "career": "Client",
                         "career_history": "Career history", "investments": "Assets",
                         "claims": "Financial claims", "sow_declaration": "Source of wealth declaration"}
-    CAREER_JOB_KEYS = ["occupation", "seniority", "industry", "employer_name", "employer_size"]
 
     def __init__(self, config: Config | None = None, today: str = "") -> None:
+        if config is not None and not isinstance(config, Config):
+            raise ValueError(f"the config must be a Config (or None), not {type(config).__name__}")
+        if not isinstance(today, str) or (today and not CaseReader.is_iso_date(today)):
+            raise ValueError(f"today must be empty or a real date written YYYY-MM-DD, not {today!r}")
         self.__config: Config = config or Config({}, {})
         self.__policy: dict = self.__config.policy
         self.__today: str = today
 
-    def _age_from_birth(self, date_of_birth) -> int | None:
+    def __age_from_birth(self, date_of_birth: str | None) -> int | None:
         """Whole years between date_of_birth and today, or None if either can't be read."""
         today = self.__today
         try:
@@ -36,15 +44,22 @@ class DocumentRecordBuilder:
         age = day.year - born.year - ((day.month, day.day) < (born.month, born.day))
         return age if 0 < age < 130 else None
 
-    def _blank(self, value) -> bool:
+    def _blank(self, value: Any) -> bool:
         return value is None or (isinstance(value, str) and not value.strip()) or value == []
 
-    def build(self, extracted: dict, client_ref: str) -> tuple[dict, list[str]]:
+    def build(self, extracted: dict, client_ref: str) -> tuple[ClientRecord, list[str], list[dict]]:
         """Build a client record (the same layout the New Client form saves) from the AI's
-        reading of the documents. Returns (record, paths of the fields that came from the documents).
+        reading of the documents. Returns (record, paths of the fields that came from the documents,
+        one entry for each field that was dropped: {"path", "message", "optional_field"}; the message
+        is plain text, and optional_field is the field to ask for when the form does not insist on
+        it, else None).
 
-        Every job, including the current one (end_year None), goes into career_history;
-        finish_document_record then copies the current job into "career".
+        Every job, including the current one (end_year None), goes into career_history, and
+        the current job is copied into "career". The AI only helps and the officer checks everything:
+        a value no client record can have (an age of 12, a negative price) is left empty, so it is
+        asked for like any missing detail, and is named in the dropped messages; every good field
+        is kept. Raises ValueError, saying what is wrong, only if the reading as a whole cannot be
+        a record even with those fields left empty.
         """
         today = self.__today
         client = extracted.get("client") or {}
@@ -73,11 +88,11 @@ class DocumentRecordBuilder:
                 "income_produced": asset.get("income_produced_sgd"),   # the AI gives every amount in SGD
             })
 
-        split = {key: composition.get(key) for key in CaseReader.COMPOSITION_KEYS}
-        if all(isinstance(v, (int, float)) for v in split.values()):
-            split = {key: value / 100 for key, value in split.items()}    # AI gives percentages
+        # The AI gives percentages; a share it did not give stays empty and is asked for.
+        split = {key: composition.get(key) / 100 if self.__is_number(composition.get(key)) else None
+                 for key in CaseReader.COMPOSITION_KEYS}
 
-        age = client.get("age") or self._age_from_birth(client.get("date_of_birth"))
+        age = client.get("age") or self.__age_from_birth(client.get("date_of_birth"))
         record = {
             "client_ref": client_ref,
             "name": client.get("name"),
@@ -99,11 +114,79 @@ class DocumentRecordBuilder:
             "sow_declaration": extracted.get("sow_declaration"),
             "supporting_documents": [],
         }
+        dropped: list[dict] = []
+        try:
+            client = ClientRecord.from_dict(self.__finish_layout(record))
+        except (ValueError, TypeError):
+            record, dropped = self.__without_impossible_fields(record)
+            client = ClientRecord.from_dict(self.__finish_layout(record))      # still impossible: the whole reading
         found = [".".join(str(part) for part in item["path"])
                  for item in self._required_fields(record) if not self._missing(record, item)]
-        return record, found
+        return client, found, dropped
 
-    def get_path(self, record: dict, path: list):
+    def __leaf_paths(self, record: dict) -> list[list[str | int]]:
+        """The path of every single value in a record that the AI's reading fills in."""
+        paths: list[list[str | int]] = [["name"], ["nationality"], ["career", "country_of_residence"], ["career", "age"]]
+        for section in ("career_history", "investments"):
+            for index, row in enumerate(record.get(section) or []):
+                paths += [[section, index, key] for key in row]
+        paths += [["claims", key] for key in record["claims"] if key != "asset_composition"]
+        paths += [["claims", "asset_composition", key] for key in record["claims"]["asset_composition"]]
+        return paths + [["sow_declaration"]]
+
+    def __without_impossible_fields(self, record: dict) -> tuple[dict, list[dict]]:
+        """The record with each impossible value left empty, and one entry for each: {"path", "message",
+        "optional_field"}. optional_field is the field (path, label, kind) when the form does not insist on
+        it, so it will not be asked for with the missing details and the caller has to ask for it; it is
+        None for a required field. A value is impossible when a record holding only that value
+        (everything else empty) is rejected."""
+        empty = copy.deepcopy(record)
+        paths = self.__leaf_paths(record)
+        for path in paths:
+            self.__set(empty, path, [] if isinstance(self.get_path(record, path), list) else None)
+        ClientRecord.from_dict(self.__finish_layout(empty))      # an empty record must be possible; else raise
+        cleaned, found = copy.deepcopy(record), []
+        for path in paths:
+            value = self.get_path(record, path)
+            if self._blank(value):
+                continue
+            trial = copy.deepcopy(empty)
+            self.__set(trial, path, value)
+            try:
+                ClientRecord.from_dict(self.__finish_layout(trial))
+            except (ValueError, TypeError) as error:
+                self.__set(cleaned, path, [] if isinstance(value, list) else None)
+                found.append((path, value, error))
+        # the labels come from the cleaned record, so a job is named without its impossible value
+        required = {tuple(field["path"]): field for field in self._required_fields(cleaned)}
+        optional = {tuple(field["path"]): field for field in self._optional_fields(cleaned)}
+        dropped = []
+        for path, value, error in found:
+            field = required.get(tuple(path)) or optional.get(tuple(path))
+            if path[:2] == ["claims", "asset_composition"]:
+                label = f"Asset composition: {path[2].replace('_', ' ')}"
+                value = f"{value * 100:g}%" if isinstance(value, (int, float)) else value
+            elif field:
+                short = re.sub(r" \(blank[^)]*\)$", "", field["short"])
+                label = (f"{field['group']}: " if field["group"] else "") + short
+            else:
+                label = " ".join(str(part) for part in path[-1:]).replace("_", " ")
+            label = label[:1].upper() + label[1:]
+            optional_field = None if tuple(path) in required else optional.get(tuple(path))
+            ask = "You can enter it, or leave it empty." if optional_field else "Please enter it."
+            dropped.append({"path": list(path), "optional_field": optional_field,
+                            "message": f"{label}: the value read from the documents ({value}) is not possible "
+                                       f"({error}), so it was left empty. {ask}"})
+        return cleaned, dropped
+
+    @staticmethod
+    def __set(record: dict, path: list[str | int], value: Any) -> None:
+        target = record
+        for part in path[:-1]:
+            target = target[part]
+        target[path[-1]] = value
+
+    def get_path(self, record: dict, path: list[str | int]) -> Any:
         """The value at path (e.g. ["career_history", 0, "start_year"]), or None if it isn't there."""
         value = record
         for part in path:
@@ -115,14 +198,15 @@ class DocumentRecordBuilder:
                 return None
         return value
 
-    def set_path(self, record: dict, path: list, value) -> dict:
-        """Return a copy of record with the value at path replaced."""
-        new = copy.deepcopy(record)
+    def set_path(self, record: ClientRecord, path: list[str | int], value: Any) -> ClientRecord:
+        """Return a copy of record with the value at path replaced. Raises ValueError, saying
+        what is wrong, if the value is not possible there."""
+        new = record.to_dict()
         target = new
         for part in path[:-1]:
             target = target[part]
         target[path[-1]] = value
-        return new
+        return ClientRecord.from_dict(self.__finish_layout(new))
 
     def _field(self, path: list, short: str, kind: str, group: str = "", label: str = "") -> dict:
         """One form field. label is the full question (when asking); short + group are for the summary."""
@@ -194,11 +278,17 @@ class DocumentRecordBuilder:
             return self._blank(value)
         return self._blank(value)
 
-    def missing_fields(self, record: dict) -> list[dict]:
+    def missing_fields(self, record: ClientRecord) -> list[dict]:
         """The required fields still empty (or unusable) after reading the documents, in form order."""
-        return [field for field in self._required_fields(record) if self._missing(record, field)]
+        data = record.to_dict()
+        return [field for field in self._required_fields(data) if self._missing(data, field)]
 
-    def finish(self, record: dict) -> dict:
+    def finish(self, record: ClientRecord) -> ClientRecord:
+        """The record with its current job (the one with no end year, else the last one listed)
+        copied into "career" again - after the officer has edited the jobs."""
+        return ClientRecord.from_dict(self.__finish_layout(record.to_dict()))
+
+    def __finish_layout(self, record: dict) -> dict:
         """Copy the current job (the one with no end year) into "career", and the first job's start year
         into career_start_year - the same layout the New Client form saves."""
         record = copy.deepcopy(record)
@@ -211,9 +301,12 @@ class DocumentRecordBuilder:
         career["career_start_year"] = min(starts) if starts else None
         return record
 
-    def check(self, record: dict) -> list[str]:
+    def check(self, client: ClientRecord) -> list[str]:
         """Things worth a second look in a record filled from documents. Empty list = nothing spotted."""
+        record = client.to_dict()
         today = self.__today
+        if not today:
+            raise ValueError("today's date is needed to check a record: make the DocumentRecordBuilder with it")
         warnings = []
         this_year = int(today[:4])
         age = record.get("career", {}).get("age")
@@ -278,16 +371,17 @@ class DocumentRecordBuilder:
                   for i, job in enumerate(record.get("career_history", []))]
         return fields + [
             self._field(["claims", "biggest_wealth_jump"], "Biggest single-period wealth increase (SGD)", "money"),
-            self._field(["claims", "wealth_jump_years"], "Over how many years", "money"),
+            self._field(["claims", "wealth_jump_years"], "Biggest wealth increase: over how many years", "money"),
             self._field(["claims", "declared_counterparties"], "Known counterparties", "countries"),
         ]
 
-    def summarise(self, record: dict, doc_record: dict) -> list[dict]:
+    def summarise(self, client: ClientRecord, doc_client: ClientRecord) -> list[dict]:
         """One row per field for the officer to check: its value and where it came from.
 
         source: "documents" (read from the documents, unchanged), "edited" (read from the documents,
         then changed by the officer), "entered" (typed by the officer) or "blank".
         """
+        record, doc_record = client.to_dict(), doc_client.to_dict()
         rows = []
         fields = self._required_fields(record) + self._optional_fields(record)
         order = {name: i for i, name in enumerate(DocumentRecordBuilder.SUMMARY_SECTIONS.values())}
@@ -309,16 +403,6 @@ class DocumentRecordBuilder:
                                   row["path"][1] if len(row["path"]) > 2 and isinstance(row["path"][1], int) else -1))
         return rows
 
-    def sync_after_edit(self, before: dict, after: dict) -> dict:
-        """After the officer edits the record, keep "career" and the current job in career_history the same.
-        If the profile screen changed "career", copy that into the current job; otherwise copy the
-        (possibly edited) current job into "career"."""
-        after = copy.deepcopy(after)
-        jobs = after.get("career_history", [])
-        open_jobs = [i for i, job in enumerate(jobs) if job.get("end_year") in (None, "")]
-        changed = any((before.get("career") or {}).get(k) != (after.get("career") or {}).get(k)
-                      for k in DocumentRecordBuilder.CAREER_JOB_KEYS)
-        if changed and open_jobs:
-            for key in DocumentRecordBuilder.CAREER_JOB_KEYS:
-                jobs[open_jobs[-1]][key] = after["career"].get(key)
-        return self.finish(after)
+    @staticmethod
+    def __is_number(value: object) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)

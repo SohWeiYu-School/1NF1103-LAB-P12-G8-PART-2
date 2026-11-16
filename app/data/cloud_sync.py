@@ -29,15 +29,25 @@ class CloudSync:
         return self.__local is not None and self.__remote is not None and self.__remote.is_online()
 
     def sync(self) -> dict:
-        """Send new and changed records. Returns {"synced", "skipped", "errors"}."""
+        """Send new and changed records. Returns {"synced", "skipped", "errors"}. If the local
+        records cannot be read, nothing is sent and the failure is listed in "errors"."""
         stats = {"synced": 0, "skipped": 0, "errors": []}
         if not self.is_online():
             stats["errors"].append("Cannot reach the cloud database. Your data is still safe in the local files.")
             return stats
 
+        try:
+            records = self.__local.load()
+        except (OSError, ValueError) as error:
+            # Not "0 records synced": the local records could not be read, so nothing was backed up.
+            logger.error("CloudSync.sync: the local records cannot be read: %r", error)
+            stats["errors"].append(f"The local records for {self.__remote.name.replace('_', ' ')} could not be read, "
+                                   "so nothing was sent to the cloud database.")
+            return stats
+
         state = self.__load_state()
         sent = state.setdefault(self.__remote.name, {})
-        for record in self.__local.load():
+        for record in records:
             # Upload local-only documents first: this writes each file's id onto the record.
             if self.__remote.upload_local_documents(record):
                 self.__local.save(record)

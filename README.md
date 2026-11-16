@@ -73,7 +73,7 @@ never import each other**; `tests/test_manager_boundaries.py` checks this on the
 | `app/application/` | Application | `App` (creates and keeps every object, decides what happens when a step fails: `CRITICAL_STEPS`), `AssessmentRunner` (runs the steps of one assessment) |
 | `app/interface/` | IO Manager | `ConsoleUI` (every `print()`/`input()`), `ReportView`, `ClientForm`, `CaseBuilder`, `RateLimiter`, `WebApp` (the web front end; it only calls `App`) |
 | `app/ai/` | AI Manager | `AIService` and its children `ResearchAI`, `TypologyAI`, `BenchmarkAI`, `DocumentAI`, `ForecastAI`; `ResponseCache`; the AI caller functions in `ai_caller.py` |
-| `app/logic/` | Logic Manager | `VerdictEngine`; `Feature` and its children `CrimeScan`, `DocumentEvidence`, `Benchmark`, `Forecast`; `Indicator` and its five warning signs; the forecast arithmetic (`MarketModel`, `CareerSavings`, `AssetPath`, `FuturePaths`, `OnboardingAssessor`, `PayCalibrator`); `CaseReader`, `DocumentRecordBuilder`, `CaseTimeline`, `Formatter` |
+| `app/logic/` | Logic Manager | `VerdictEngine`; `RiskAnalysis` and its children `CrimeScan`, `DocumentEvidence`, `Benchmark`, `Forecast`; `Indicator` and its five warning signs; the forecast arithmetic (`MarketModel`, `CareerSavings`, `AssetPath`, `FuturePaths`, `OnboardingAssessor`, `PayCalibrator`); `CaseReader`, `DocumentRecordBuilder`, `CaseTimeline`, `Formatter` |
 | `app/data/` | Data Manager | `Repository` → `JsonRepository` (`ClientRepository`, `AssessmentRepository`) and `DatabaseRepository` (`MongoRepository`); `CloudSync`; `DocumentStore`, `DocumentReaderFactory` and the five `DocumentReader`s; `ConfigReader`; `CaseFiles` |
 | `app/model/` | Domain Model | `ClientRecord` (with `ClientProfile`, `Job`, `Investment`, `Claims`, `Declaration`/`ClaimedSource`, `ReviewStatus`), `Verdict`, `Check`, `Band`, `Config`, `Typology`, `MatchResult`, `ResearchReport` |
 
@@ -137,8 +137,10 @@ python main.py                                  # the menu
 python main.py --web                            # the web app
 python main.py --case data/sample/case_001.json # assess one case file
 python main.py --all-samples                    # assess every sample case
-python main.py --all-samples --demo             # the same, with recorded AI replies (no API key)
 ```
+
+On a Mac, port 5000 is often taken by AirPlay. Start the web app on another port instead:
+`PORT=5001 python main.py --web`, then open http://127.0.0.1:5001.
 
 ---
 
@@ -168,8 +170,10 @@ How it works — the web app and the command line share every step, so the same 
 
 The form records what the client **declares** (from the KYC / declaration form). Anything the other documents show that the client did not declare — an offshore company, unexplained payments, a purchase funded differently — is not added to the form; it appears in the **Notes** as "Not declared:", "Conflict:" or "Check:".
 
-Every AI call (document reading, research, typologies, forecast, benchmark) uses the ONE model set
-as `OPENAI_MODEL` in `.env` (see `.env.example`). `FORECAST_WEB_SEARCH=on` lets the forecast check
+Every AI call (document reading, typologies, forecast, benchmark) uses the model set as
+`OPENAI_MODEL` in `.env` (see `.env.example`). Web searches (the crime scan's research, and the
+forecast's market check) use `OPENAI_RESEARCH_MODEL`, which must support limiting a search to given
+sites; when it is empty they use `OPENAI_MODEL` too. `FORECAST_WEB_SEARCH=on` lets the forecast check
 market figures online. If the AI can't describe one asset sensibly even after the system repairs its
 answer, that asset is held at its purchase price and the report says so; the rest still runs.
 

@@ -15,6 +15,10 @@ class PayCalibrator:
     """
 
     def __init__(self, career_savings: CareerSavings | None = None, policy: dict | None = None) -> None:
+        if career_savings is not None and not isinstance(career_savings, CareerSavings):
+            raise ValueError(f"the career savings must be a CareerSavings (or None), not {type(career_savings).__name__}")
+        if policy is not None and not isinstance(policy, dict):
+            raise ValueError(f"the policy must be a dict (or None), not {type(policy).__name__}")
         self.__career_savings: CareerSavings = career_savings or CareerSavings()
         self.__policy: dict = policy or {}
 

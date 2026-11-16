@@ -64,7 +64,7 @@ BASE = """<!doctype html>
   </nav>
 </header>
 <main>
-  {% for message in get_flashed_messages() %}<div class="msg">{{ message }}</div>{% endfor %}
+  {% for message in get_flashed_messages()|unique(case_sensitive=True) %}<div class="msg">{{ message }}</div>{% endfor %}
   {% block content %}{% endblock %}
 </main>
 </body>
@@ -83,7 +83,9 @@ HOME = """{% extends "base.html" %}
 </div>
 
 <div class="panel" style="padding:0; overflow:hidden">
-  {% if not clients %}
+  {% if clients is none %}
+    <p class="muted" style="padding:20px 22px; margin:0">The list of clients cannot be shown because the client database could not be read.</p>
+  {% elif not clients %}
     <p class="muted" style="padding:20px 22px; margin:0">No clients yet — click <strong>+ New client</strong> in the top right to add the first one.</p>
   {% else %}
   <table>
@@ -202,7 +204,7 @@ FORM = """{% extends "base.html" %}
     {% endif %}
     {% if notes %}
     <div class="notes">
-      <strong>Notes from reading the documents</strong>
+      <strong>{{ notes_title or 'Notes from reading the documents' }}</strong>
       <ul>{% for n in notes %}<li>{{ n }}</li>{% endfor %}</ul>
     </div>
     {% endif %}
@@ -317,7 +319,19 @@ VIEW = """{% extends "base.html" %}
   <a class="button secondary" href="{{ url_for('home') }}" style="color:var(--muted); border-color:var(--line)">← Back</a>
 </div>
 
-{% if assessments %}
+{% if problems %}
+<div class="notes" style="margin-bottom:20px">
+  <strong>To complete or check (use Edit)</strong>
+  <ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if assessments is none %}
+<div class="panel" style="margin-bottom:20px">
+  <h2>Assessment History</h2>
+  <p class="muted">The assessment history cannot be shown because the saved assessments could not be read.</p>
+</div>
+{% elif assessments %}
 <div class="panel" style="margin-bottom:20px">
   <h2>Assessment History</h2>
   <table>
@@ -447,7 +461,7 @@ ASSESS_RESULT = """{% extends "base.html" %}
 <div class="panel">
   <h2>{{ section['title'] }}</h2>
   <div style="display:flex; gap:16px; margin-bottom:18px; font-size:.85rem; border-bottom:1px solid var(--line); padding-bottom:12px">
-    <span style="color:var(--muted)">{{ crime_result.get('match_results', []) | length }} typologies checked</span>
+    <span style="color:var(--muted)">{{ crime_result.get('match_results', []) | length }} typologies scanned</span>
     <span style="color:#b91c1c; font-weight:600">{{ crime_result.get('match_count', 0) }} matched</span>
     <span style="color:var(--muted)">{{ (crime_result.get('match_results', []) | length) - crime_result.get('match_count', 0) }} no match</span>
   </div>
@@ -461,6 +475,9 @@ ASSESS_RESULT = """{% extends "base.html" %}
       <span style="font-size:.7rem; font-weight:700; letter-spacing:.06em; padding:2px 8px; border-radius:3px;
                    background:{{ CAT_BORDER.get(cat,'#9ca3af') }}; color:#fff">{{ CAT_LABEL.get(cat, cat.upper()) }}</span>
       <strong style="font-size:.97rem; color:#111">{{ m.get('name', m.get('typology_id')) }}</strong>
+      {% if not typologies_checked %}
+      <span style="font-size:.76rem; color:#92400e; background:#fef3c7; padding:1px 7px; border-radius:3px; border:1px solid #fcd34d">not checked against research</span>
+      {% endif %}
       {% if typo.get('crime_category') %}
       <span style="font-size:.76rem; color:#6b7280; background:#f3f4f6; padding:1px 7px; border-radius:3px; border:1px solid #e5e7eb">{{ typo['crime_category'].replace('_', ' ') }}</span>
       {% endif %}
@@ -545,7 +562,9 @@ ASSESSMENTS = """{% extends "base.html" %}
   <a class="button secondary" href="{{ url_for('home') }}">Back to clients</a>
 </div>
 <div class="panel">
-  {% if not assessments %}
+  {% if assessments is none %}
+    <p class="muted">The saved assessments cannot be shown because they could not be read.</p>
+  {% elif not assessments %}
     <p class="muted">No assessments saved yet. Open a client and click Run Assessment.</p>
   {% else %}
   <table>

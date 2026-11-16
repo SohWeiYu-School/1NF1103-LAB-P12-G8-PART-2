@@ -1,4 +1,4 @@
-"""Golden case test harness — see tests/golden/README.md for format."""
+"""Golden case test harness — see tests/cases/README.md for format."""
 
 import glob
 import json
@@ -43,5 +43,5 @@ def test_golden_case(case):
         f"[{case['_path']}] {case['description']}\n"
         f"  Expected breach_count: {case['expected_breach_count']}\n"
         f"  Got:                   {result['breach_count']}\n"
-        f"  Match results: {[(mr['typology_id'], mr['breached']) for mr in result['match_results']]}"
+        f"  Match results: {[(mr.typology.typology_id, mr.breached) for mr in result['match_results']]}"
     )

@@ -19,11 +19,17 @@ class OnboardingAssessor:
 
     def __init__(self, future_paths: FuturePaths | None = None, policy: dict | None = None,
                  config: Config | None = None) -> None:
+        if future_paths is not None and not isinstance(future_paths, FuturePaths):
+            raise ValueError(f"the future paths must be a FuturePaths (or None), not {type(future_paths).__name__}")
+        if policy is not None and not isinstance(policy, dict):
+            raise ValueError(f"the policy must be a dict (or None), not {type(policy).__name__}")
+        if config is not None and not isinstance(config, Config):
+            raise ValueError(f"the config must be a Config (or None), not {type(config).__name__}")
         self.__future_paths: FuturePaths = future_paths or FuturePaths()
         self.__policy: dict = policy or {}
         self.__config: Config = config or Config()
 
-    def _check_asset_values(self, record: dict, forecast: dict, paths: list[dict], end: int,
+    def __check_asset_values(self, record: dict, forecast: dict, paths: list[dict], end: int,
                            scale: float = 1.0) -> list[dict]:
         """Is each declared asset value within what its markets explain?"""
         policy = self.__policy
@@ -58,7 +64,7 @@ class OnboardingAssessor:
                           f"{expected['typical']:,.0f} (up to {ceiling:,.0f})"})
         return findings
 
-    def _check_affordability(self, record: dict, savings_rows: list[dict], paths: list[dict], behaviour: dict,
+    def __check_affordability(self, record: dict, savings_rows: list[dict], paths: list[dict], behaviour: dict,
                             scale: float = 1.0) -> list[dict]:
         """For one type: could he pay the cash part of each purchase from what he had that year?"""
         policy = self.__policy
@@ -83,11 +89,11 @@ class OnboardingAssessor:
             spent += needed
         return rows
 
-    def _check_jurisdictions(self, record: dict, forecast: dict) -> dict:
+    def __check_jurisdictions(self, record: dict, forecast: dict) -> dict:
         """Countries he named with nothing behind them, and linked countries on a risk list."""
         behind = {self.__config.same_country(job.get("country", "")) for job in CaseTimeline(record).positions()}
         behind |= {self.__config.same_country(asset.get("country", "")) for asset in record.get("investments", [])}
-        behind |= {self.__config.same_country(source["country"]) for source in forecast["declaration"]["claimed_sources"]}
+        behind |= {self.__config.same_country(source.country) for source in forecast["declaration"].sources()}
         named = {self.__config.same_country(country) for country in record.get("claims", {}).get("wealth_countries", [])}
         unexplained = sorted(named - behind)
         listed = sorted(j["country"] for j in forecast["markets"]["jurisdictions"]
@@ -103,17 +109,17 @@ class OnboardingAssessor:
         policy = self.__policy
         explained_by_career = set(policy.get("self_explained_source_types", []))
         findings = []
-        for source in forecast["declaration"]["claimed_sources"]:
-            unquantified = (source["amount"] is None and source["linked_position_index"] is None
-                            and source["linked_asset_index"] is None
-                            and source["source_type"] not in explained_by_career)
-            years = f"{source['start_year'] or '?'}-{source['end_year'] or '?'}"
+        for source in forecast["declaration"].sources():
+            unquantified = (source.amount is None and source.linked_position_index is None
+                            and source.linked_asset_index is None
+                            and source.source_type not in explained_by_career)
+            years = f"{source.start_year or '?'}-{source.end_year or '?'}"
             findings.append({
-                "rule_id": "UNQUANTIFIED_SOURCE", "source_id": source["source_id"],
-                "source_type": source["source_type"], "failed": unquantified,
-                "detail": f"{source['source_id']} {source['description']} ({years}, {source['country']}): "
+                "rule_id": "UNQUANTIFIED_SOURCE", "source_id": source.source_id,
+                "source_type": source.source_type, "failed": unquantified,
+                "detail": f"{source.source_id} {source.description} ({years}, {source.country}): "
                           + ("no amount and no job or asset behind it" if unquantified else "backed"),
-                "quote": source["quote"]})
+                "quote": source.quote})
         return findings
 
     def _fit_for_type(self, type_id: str, wealth_now: dict, affordability: list[dict], asset_checks: list[dict],
@@ -139,7 +145,7 @@ class OnboardingAssessor:
                 "purchases_affordable": f"{affordable} of {len(affordability)}",
                 "fits_at_typical": declared <= wealth["typical"] * (1 + policy["tolerance"]["typical_band"])}
 
-    def _decide_onboarding(self, fits: dict, t1_affordability_breach: bool, other_failures: list[str]) -> str:
+    def __decide_onboarding(self, fits: dict, t1_affordability_breach: bool, other_failures: list[str]) -> str:
         """The onboarding rule. fits = {type_id: fit result}."""
         t1 = fits[FuturePaths.BASELINE_TYPE]
         others_fit = [t for t, result in fits.items() if t != FuturePaths.BASELINE_TYPE and result["fits"]]
@@ -171,21 +177,21 @@ class OnboardingAssessor:
 
         # an asset the AI couldn't describe is held at its purchase price and not checked
         unmodelled = {a["asset_index"] for a in forecast["earnings"].get("fallback_assets", [])}
-        asset_values = [c for c in self._check_asset_values(record, forecast, paths, end, scale)
+        asset_values = [c for c in self.__check_asset_values(record, forecast, paths, end, scale)
                         if c["asset_index"] not in unmodelled]
         asset_income = [c for c in self._check_asset_income(record, paths, end, scale)
                         if c["asset_index"] not in unmodelled]
         asset_checks = asset_values + asset_income
-        affordability = {t: self._check_affordability(record, savings_rows, paths, b, scale)
+        affordability = {t: self.__check_affordability(record, savings_rows, paths, b, scale)
                          for t, b in behaviours.items()}
         fits = {t: self._fit_for_type(t, wealth_now[t], affordability[t], asset_checks, declared, scale)
                 for t in behaviours}
 
-        jurisdiction = self._check_jurisdictions(record, forecast)
+        jurisdiction = self.__check_jurisdictions(record, forecast)
         sources = self._check_declared_sources(forecast)
         t1_breach = not all(row["affordable"] for row in affordability[FuturePaths.BASELINE_TYPE])
         other_failures = [c["rule_id"] for c in asset_checks + [jurisdiction] + sources if c["failed"]]
-        outcome = self._decide_onboarding(fits, t1_breach, other_failures)
+        outcome = self.__decide_onboarding(fits, t1_breach, other_failures)
         return {"outcome": outcome, "fits": fits, "affordability": affordability,
                 "asset_checks": asset_checks, "jurisdiction": jurisdiction, "sources": sources,
                 "t1_affordability_breach": t1_breach}

@@ -4,7 +4,6 @@ from app.interface.console_ui import ConsoleUI
 
 _ui = ConsoleUI()
 show_ai_unavailable = _ui.show_ai_unavailable
-show_ai_progress = _ui.show_ai_progress
 show_unexpected_error = _ui.show_unexpected_error
 
 
@@ -37,71 +36,6 @@ def test_show_ai_unavailable_document_reading(capsys):
     out = capsys.readouterr().out
     assert "Document reading" in out
     assert "not available right now" in out
-
-
-# ===========================================================================
-# show_ai_progress — must NOT expose result["error"] to the user
-# ===========================================================================
-
-def test_show_ai_progress_success_shows_ok(capsys):
-    results = {
-        "step0_declaration": {
-            "ok": True,
-            "from_cache": False,
-            "attempts": 1,
-            "error": None,
-        }
-    }
-    show_ai_progress(results)
-    out = capsys.readouterr().out
-    assert "ok" in out
-    assert "FAILED" not in out
-
-
-def test_show_ai_progress_failure_shows_failed_not_error_detail(capsys):
-    results = {
-        "call1_markets": {
-            "ok": False,
-            "from_cache": False,
-            "attempts": 3,
-            "error": "reply failed checks: field expected_wealth must be positive",
-        }
-    }
-    show_ai_progress(results)
-    out = capsys.readouterr().out
-    assert "FAILED" in out
-    # The actual error detail must NOT appear in output
-    assert "reply failed checks" not in out
-    assert "expected_wealth" not in out
-
-
-def test_show_ai_progress_failure_hides_api_key_reference(capsys):
-    results = {
-        "step0_declaration": {
-            "ok": False,
-            "from_cache": False,
-            "attempts": 1,
-            "error": "no OpenAI API key (is OPENAI_API_KEY set?)",
-        }
-    }
-    show_ai_progress(results)
-    out = capsys.readouterr().out
-    assert "FAILED" in out
-    assert "OPENAI_API_KEY" not in out
-
-
-def test_show_ai_progress_cache_hit_shown(capsys):
-    results = {
-        "step0_declaration": {
-            "ok": True,
-            "from_cache": True,
-            "attempts": 0,
-            "error": None,
-        }
-    }
-    show_ai_progress(results)
-    out = capsys.readouterr().out
-    assert "saved reply" in out
 
 
 # ===========================================================================

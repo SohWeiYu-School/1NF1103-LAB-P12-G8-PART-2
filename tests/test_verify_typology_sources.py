@@ -1,9 +1,10 @@
-"""Tests for logic_manager.verify_typology_sources.
+"""Tests for CrimeScan.verify_typology_sources.
 
-verify_typology_sources returns (cleaned_typologies, warnings):
-  - cleaned_typologies: typology dicts with bad source_ids/quotes removed;
+verify_typology_sources returns the verified Typology objects; CrimeScan.warnings() then
+holds what was removed:
+  - the typologies: bad source_ids/quotes removed;
     typologies with zero verified quotes are dropped entirely.
-    Each kept typology carries extra metadata: corroborated (bool),
+    Each kept typology is verified and carries corroborated (bool) and
     outdated_source_ids (list[str]).
   - warnings: ONLY for removals / invalid data:
       - source_id not found in research
@@ -12,14 +13,20 @@ verify_typology_sources returns (cleaned_typologies, warnings):
       - typology dropped (no verified quotes remain)
       - source has no valid year
     Corroboration status and outdated age are NOT warnings — they are
-    stored in the returned typology dict for display.
+    stored on the returned typology for display.
 """
 
 from app.logic.crime_scan import CrimeScan
+from app.model.research_report import ResearchReport
+from app.model.typology import Typology
 
 
 def verify_typology_sources(typologies, clean_research, policy):
-    return CrimeScan(policy).verify_typology_sources(typologies, clean_research)
+    """The research dict's reports become ResearchReports, as verify_research hands them over."""
+    reports = [ResearchReport.from_dict(report, clean_research["retrieved_at"]) for report in clean_research["reports"]]
+    scan = CrimeScan(policy)
+    kept = scan.verify_typology_sources(typologies, reports)
+    return kept, scan.warnings()
 
 
 def _sample_policy(max_age=10):
@@ -48,6 +55,7 @@ def _sample_typology(typology_id, source_ids, source_quotes):
     return {
         "typology_id": typology_id,
         "name": "Test Typology",
+        "crime_category": "TRADE_BASED_ML",
         "description": "Sentence one. Sentence two.",
         "source_ids": source_ids,
         "source_quotes": source_quotes,
@@ -68,7 +76,7 @@ def test_valid_source_id_retained():
     cleaned, warnings = verify_typology_sources([typ], clean, _sample_policy())
 
     assert len(cleaned) == 1
-    assert "R1" in cleaned[0]["source_ids"]
+    assert "R1" in cleaned[0].cited_report_ids()
     assert not any("not found in research" in w for w in warnings)
 
 
@@ -89,8 +97,8 @@ def test_invalid_source_id_removed():
     cleaned, warnings = verify_typology_sources([typ], clean, _sample_policy())
 
     assert len(cleaned) == 1
-    assert "R99" not in cleaned[0]["source_ids"]
-    assert "R1" in cleaned[0]["source_ids"]
+    assert "R99" not in cleaned[0].cited_report_ids()
+    assert "R1" in cleaned[0].cited_report_ids()
     assert any("R99" in w and "not found in research" in w for w in warnings)
 
 
@@ -106,7 +114,7 @@ def test_valid_quote_retained():
     cleaned, warnings = verify_typology_sources([typ], clean, _sample_policy())
 
     assert len(cleaned) == 1
-    assert cleaned[0]["source_quotes"][0]["quote"] == "important text"
+    assert cleaned[0].source_quotes[0]["quote"] == "important text"
     assert not any("not found verbatim" in w for w in warnings)
 
 
@@ -126,7 +134,7 @@ def test_invalid_quote_removed_from_output():
     cleaned, warnings = verify_typology_sources([typ], clean, _sample_policy())
 
     assert len(cleaned) == 1
-    quotes = [q["quote"] for q in cleaned[0]["source_quotes"]]
+    quotes = [q["quote"] for q in cleaned[0].source_quotes]
     assert "Valid excerpt text." in quotes
     assert "This quote does not exist in excerpts" not in quotes
     assert any("not found verbatim" in w for w in warnings)
@@ -169,7 +177,7 @@ def test_corroborated_different_orgs():
     cleaned, warnings = verify_typology_sources([typ], clean, _sample_policy())
 
     assert len(cleaned) == 1
-    assert cleaned[0]["corroborated"] is True
+    assert cleaned[0].corroborated is True
     assert not any("corroborat" in w for w in warnings)
 
 
@@ -193,7 +201,7 @@ def test_not_corroborated_same_org():
     cleaned, warnings = verify_typology_sources([typ], clean, _sample_policy())
 
     assert len(cleaned) == 1
-    assert cleaned[0]["corroborated"] is False
+    assert cleaned[0].corroborated is False
     assert not any("corroborat" in w for w in warnings)  # not a warning
 
 
@@ -215,7 +223,7 @@ def test_org_splitting():
         [{"report_id": "R1", "quote": "quote"}, {"report_id": "R2", "quote": "quote"}],
     )
     cleaned_same, _ = verify_typology_sources([typ_same], clean_same, _sample_policy())
-    assert cleaned_same[0]["corroborated"] is False
+    assert cleaned_same[0].corroborated is False
 
     # R1 + R3: "fatf"/"egmont group" vs "mas" → disjoint → corroborated
     clean_diff = _sample_clean_research([r1, r3_diff])
@@ -225,7 +233,7 @@ def test_org_splitting():
         [{"report_id": "R1", "quote": "quote"}, {"report_id": "R3", "quote": "quote"}],
     )
     cleaned_diff, _ = verify_typology_sources([typ_diff], clean_diff, _sample_policy())
-    assert cleaned_diff[0]["corroborated"] is True
+    assert cleaned_diff[0].corroborated is True
 
 
 # ---------------------------------------------------------------------------
@@ -241,7 +249,7 @@ def test_outdated_source_tracked_not_warned():
     cleaned, warnings = verify_typology_sources([typ], clean, _sample_policy(max_age=10))
 
     assert len(cleaned) == 1
-    assert "R1" in cleaned[0]["outdated_source_ids"]
+    assert "R1" in cleaned[0].outdated_source_ids
     assert not any("years old" in w for w in warnings)  # outdated is not a warning
 
 
@@ -257,7 +265,7 @@ def test_not_outdated():
     cleaned, _ = verify_typology_sources([typ], clean, _sample_policy(max_age=10))
 
     assert len(cleaned) == 1
-    assert cleaned[0]["outdated_source_ids"] == []
+    assert cleaned[0].outdated_source_ids == []
 
 
 # ---------------------------------------------------------------------------
@@ -291,7 +299,7 @@ def test_unknown_age_not_counted_as_outdated():
     cleaned, warnings = verify_typology_sources([typ], clean, _sample_policy(max_age=10))
 
     assert len(cleaned) == 1
-    assert cleaned[0]["outdated_source_ids"] == []
+    assert cleaned[0].outdated_source_ids == []
     assert any("no valid year" in w for w in warnings)
 
 
@@ -307,5 +315,42 @@ def test_missing_year_treated_as_unknown():
     cleaned, warnings = verify_typology_sources([typ], clean, _sample_policy(max_age=10))
 
     assert len(cleaned) == 1
-    assert cleaned[0]["outdated_source_ids"] == []
+    assert cleaned[0].outdated_source_ids == []
     assert any("no valid year" in w for w in warnings)
+
+
+# ---------------------------------------------------------------------------
+# Test 14: The kept typologies are verified Typology objects, every field kept
+# ---------------------------------------------------------------------------
+
+def test_kept_typologies_are_verified_typology_objects():
+    report = _sample_report("R1", year=2006, excerpts=["quote"])
+    clean = _sample_clean_research([report], retrieved_at="2026-01-01T00:00:00Z")
+    typ = _sample_typology("T1", ["R1", "R9"], [{"report_id": "R1", "quote": "quote"}])
+
+    cleaned, _ = verify_typology_sources([typ], clean, _sample_policy(max_age=10))
+
+    assert isinstance(cleaned[0], Typology) and cleaned[0].verified
+    saved = cleaned[0].to_dict()
+    # the layout the code always had: the reply's fields, then the two the check adds
+    assert list(saved) == ["typology_id", "name", "crime_category", "description", "source_ids",
+                           "source_quotes", "indicators", "typical_documents", "corroborated",
+                           "outdated_source_ids"]
+    assert saved == {**typ, "source_ids": ["R1"], "corroborated": False, "outdated_source_ids": ["R1"]}
+
+
+# ---------------------------------------------------------------------------
+# Test 15: A typology that cannot be read is dropped with a warning, not a crash
+# ---------------------------------------------------------------------------
+
+def test_unreadable_typology_dropped_not_crashed():
+    clean = _sample_clean_research([_sample_report("R1", excerpts=["quote"])])
+    good = _sample_typology("T1", ["R1"], [{"report_id": "R1", "quote": "quote"}])
+    broken = {**good, "typology_id": "T2", "indicators": [{"indicator": "x", "weight": "optional"}]}
+
+    cleaned, warnings = verify_typology_sources([good, broken, "T3"], clean, _sample_policy())
+
+    assert [t.typology_id for t in cleaned] == ["T1"]
+    assert any("'T2'" in w and "could not be read" in w for w in warnings)
+    assert any("'unknown'" in w and "could not be read" in w for w in warnings)
+    assert "Typology 'T2': dropped — it could not be read." in warnings   # plain words, no raw error text

@@ -11,12 +11,28 @@ trade-based laundering story through his current job that would explain much mor
 """
 
 import json
+from types import SimpleNamespace
 
 from app.logic.case_timeline import CaseTimeline
 
 
 def _r(low: float, typical: float, high: float) -> dict:
     return {"low": low, "typical": typical, "high": high}
+
+
+def _as_web_search(reply: dict, options: dict | None) -> dict:
+    """Answer the research question the way the real OpenAI caller does: the reply holds only what
+    the AI writes (the schema's fields), and the pages the web search opened go back through
+    options["raw_response"], where ResearchAI reads them. research() keeps the finished layout
+    (with api_sources) because the CrimeScan tests use it directly."""
+    if options is not None:
+        pages = [SimpleNamespace(url=source["url"]) for source in reply.get("api_sources", [])]
+        options["raw_response"] = SimpleNamespace(output=[SimpleNamespace(
+            type="web_search_call", action=SimpleNamespace(sources=pages))])
+        options["answered_by"] = "fake-model"
+    fields = ("organisation", "title", "year", "url", "excerpts", "summary")
+    return {"reports": [{key: report[key] for key in fields if key in report}
+                        for report in reply.get("reports", [])]}
 
 
 def research() -> dict:
@@ -184,6 +200,8 @@ def caller(research_reply: dict | None = "default", typologies_reply: dict | Non
         for key, reply in replies.items():
             if key in keys:
                 asked.append((key, dict(options or {})))
+                if reply is not None and key == "reports":
+                    reply = _as_web_search(reply, options)
                 return None if reply is None else json.dumps(reply)
         asked.append(("other", dict(options or {})))
         return None

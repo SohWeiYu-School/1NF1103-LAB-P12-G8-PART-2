@@ -1,7 +1,9 @@
 """DocumentEvidence: the documents feature."""
 
+import pytest
+
 from app.logic.document_evidence import DocumentEvidence
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.model.check import Check
 from tests.logic_fixtures import POLICY
 
@@ -24,7 +26,7 @@ def _run(reading=READING, files=FILES):
 
 
 def test_document_evidence_is_a_feature():
-    assert isinstance(DocumentEvidence(POLICY), Feature)
+    assert isinstance(DocumentEvidence(POLICY), RiskAnalysis)
     assert DocumentEvidence.NAME == "documents"
 
 
@@ -63,3 +65,24 @@ def test_each_finding_becomes_a_check_that_names_its_source_files():
 def test_documents_that_show_nothing_new_pass():
     feature, _ = _run(reading={"evidence": {"documented_pay": [], "findings": []}})
     assert [check.check for check in feature.checks({})] == ["DOCUMENTS_AGREE"]
+
+
+def test_a_finding_check_names_the_crime_stories_it_supports():
+    feature, _ = _run()
+    supports = POLICY["verdict"]["document_evidence"][KIND]["supports"]
+    first = next(check for check in feature.checks({"types": []}) if check.check == KIND.upper())
+    assert first.supports == supports
+    assert (first.group, first.label) == ("Documents", POLICY["verdict"]["document_evidence"][KIND]["label"])
+
+
+def test_a_finding_without_source_files_still_saves_an_empty_list():
+    feature, _ = _run()
+    other = next(check for check in feature.checks({"types": []}) if check.check == "OTHER")
+    assert other.sources == []
+    saved = other.to_dict()
+    assert list(saved.items())[-2:] == [("sources", []), ("supports", [])]   # the saved layout keeps both
+
+
+def test_the_document_evidence_rejects_a_policy_that_is_not_a_dict():
+    with pytest.raises(ValueError, match="policy must be a dict"):
+        DocumentEvidence("policy")

@@ -3,14 +3,16 @@
 import re
 
 from app.logic.case_timeline import CaseTimeline
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.logic.formatter import Formatter
 from app.logic.market_model import MarketModel
 from app.model.check import Check
+from app.model.claims import Claims
 from app.model.config import Config
+from app.model.declaration import Declaration
 
 
-class Benchmark(Feature):
+class Benchmark(RiskAnalysis):
     """The benchmark feature. It compares what the client declared with what the AI says a
     typical person with his career would have: total wealth, liquidity, the asset mix, the
     speed of his biggest wealth jump, his counterparties and his countries.
@@ -19,7 +21,7 @@ class Benchmark(Feature):
     forecast explains is marked "explained" and does not count towards the verdict.
     """
 
-    LIMITS = {
+    LIMITS: dict[str, int] = {
         "total_wealth": 3,
         "liquidity": 2,
         "composition": 40,
@@ -27,13 +29,13 @@ class Benchmark(Feature):
         "counterparties": 1,
         "jurisdiction": 1
     }
-    _COMPOSITION_PARTS = [
+    _COMPOSITION_PARTS: list[tuple[str, str, str, str]] = [
         ("COMPOSITION_PROPERTY",  "property",        "expected_property",        "Property"),
         ("COMPOSITION_EQUITIES",  "listed_equities",  "expected_listed_equities", "Listed equities"),
         ("COMPOSITION_BUSINESS",  "private_business", "expected_private_business","Private business"),
         ("COMPOSITION_CASH",      "cash",             "expected_cash",            "Cash"),
     ]
-    BENCHMARK_LABELS = {
+    BENCHMARK_LABELS: dict[str, str] = {
         "TOTAL_WEALTH": "Total wealth", "UNEXPLAINED_GAP": "Unexplained wealth",
         "VELOCITY": "Wealth growth speed", "JUMP_VS_ECONOMY": "Wealth jump vs economy",
         "LIQUIDITY": "Liquidity", "AUM_FUNDING": "Money brought to the bank",
@@ -41,34 +43,37 @@ class Benchmark(Feature):
         "COMPOSITION_BUSINESS": "Asset mix: private business", "COMPOSITION_CASH": "Asset mix: cash",
         "COUNTERPARTIES": "Counterparties", "JURISDICTION": "Countries", "PEP_STATUS": "PEP status",
     }
-    FORECAST_DERIVED = ("UNEXPLAINED_GAP", "PEP_STATUS", "PEER_BENCHMARK")
-    COMPOSITION_RULES = {"COMPOSITION_PROPERTY": "property", "COMPOSITION_EQUITIES": "listed_equities",
+    FORECAST_DERIVED: tuple[str, ...] = ("UNEXPLAINED_GAP", "PEP_STATUS", "PEER_BENCHMARK")
+    COMPOSITION_RULES: dict[str, str] = {"COMPOSITION_PROPERTY": "property", "COMPOSITION_EQUITIES": "listed_equities",
                          "COMPOSITION_BUSINESS": "private_business", "COMPOSITION_CASH": "cash"}
 
     NAME: str = "benchmark"
 
     def __init__(self, policy: dict | None = None, config: Config | None = None) -> None:
         super().__init__(policy)
+        if config is not None and not isinstance(config, Config):
+            raise ValueError(f"the config must be a Config (or None), not {type(config).__name__}")
         self.__config: Config = config or Config(self._policy, {})
 
     def run(self, case: dict, ai_data: dict) -> dict:
         """Run the benchmark rules. ai_data is {"benchmark_input", "benchmark_ai"}.
         Returns {} if the AI gave no benchmark."""
-        self._results = self._run_rules(ai_data.get("benchmark_input"), ai_data.get("benchmark_ai")) or {}
-        return self._results
+        results = self._run_rules(ai_data.get("benchmark_input"), ai_data.get("benchmark_ai")) or {}
+        self._results = results
+        return results          # the local value: another run may replace self._results meanwhile
 
     def checks(self, context: dict) -> list[Check]:
         """The benchmark's findings. context holds case, bench_input, ai_data, findings, honest,
-        assessment, declaration, markets and types."""
-        return self._as_checks(self._benchmark_checks(
+        assessment, declaration (the forecast's Declaration), markets and types."""
+        return self._benchmark_checks(
             context["case"], context.get("bench_input"), context.get("ai_data"), context.get("findings"),
             context.get("honest"), context.get("assessment"), context.get("declaration"),
-            context.get("markets"), context.get("types") or []))
+            context.get("markets"), context.get("types") or [])
 
     def _market_history(self, forecast: dict) -> dict:
         return MarketModel(forecast).history()
 
-    def _total_wealth(self, client_data, ai_data):
+    def __total_wealth(self, client_data: dict, ai_data: dict) -> float:
 
         declared = client_data["declared_net_worth"]
         expected = ai_data["expected_wealth"]
@@ -77,7 +82,7 @@ class Benchmark(Feature):
 
         return result1
 
-    def _liquidity(self, client_data, ai_data):
+    def __liquidity(self, client_data: dict, ai_data: dict) -> float:
 
         declared = client_data["listed_equities"] + client_data["cash"]
         expected = ai_data["expected_liquidity"]
@@ -86,7 +91,7 @@ class Benchmark(Feature):
 
         return result2
 
-    def _composition(self, client_data, ai_data):
+    def __composition(self, client_data: dict, ai_data: dict) -> list[dict]:
         results = []
         for rule_id, client_key, ai_key, label in Benchmark._COMPOSITION_PARTS:
             declared = client_data[client_key]
@@ -96,7 +101,7 @@ class Benchmark(Feature):
                             "detail": f"{label}: declared {declared}%, expected {expected}%, diff {diff}%"})
         return results
 
-    def _velocity(self, client_data, ai_data):
+    def __velocity(self, client_data: dict, ai_data: dict) -> tuple[float | None, float | None]:
         jump = client_data.get("biggest_wealth_jump")
         years = client_data.get("wealth_jump_years")
         expected = ai_data.get("expected_velocity")
@@ -105,7 +110,7 @@ class Benchmark(Feature):
         per_year = jump / years
         return per_year / expected, per_year
 
-    def _counterparties(self, declared, expected):
+    def __counterparties(self, declared: list[str], expected: list[str]) -> list[str]:
         unknown = []
 
         for item in declared:
@@ -114,7 +119,7 @@ class Benchmark(Feature):
 
         return unknown
 
-    def _clean_country(self, country):
+    def _clean_country(self, country: str) -> str:
         if country == "SG":
             return "Singapore"
         elif country == "MY":
@@ -128,7 +133,7 @@ class Benchmark(Feature):
 
         return country
 
-    def _jurisdiction(self, declared, expected):
+    def __jurisdiction(self, declared: list[str], expected: list[str]) -> list[str]:
         unknown = []
 
         for country in declared:
@@ -139,7 +144,7 @@ class Benchmark(Feature):
 
         return unknown
 
-    def _run_rules(self, client_data: dict, ai_data: dict):
+    def _run_rules(self, client_data: dict, ai_data: dict) -> dict | None:
         """Run all benchmark checks for a client."""
         policy = self._policy
 
@@ -149,20 +154,20 @@ class Benchmark(Feature):
         findings = []
 
         # 1. TOTAL WEALTH CHECK
-        result1 = self._total_wealth(client_data, ai_data)
+        result1 = self.__total_wealth(client_data, ai_data)
         findings.append({"rule_id": "TOTAL_WEALTH", "failed": result1 > Benchmark.LIMITS["total_wealth"],
                          "detail": f"Declared {client_data['declared_net_worth']:,}, expected {ai_data['expected_wealth']:,}, ratio {round(result1, 2)}"})
 
         # 2. LIQUIDITY CHECK
-        result2 = self._liquidity(client_data, ai_data)
+        result2 = self.__liquidity(client_data, ai_data)
         findings.append({"rule_id": "LIQUIDITY", "failed": result2 > Benchmark.LIMITS["liquidity"],
                          "detail": f"Declared {client_data['listed_equities'] + client_data['cash']}%, expected {ai_data['expected_liquidity']}%, ratio {round(result2, 2)}"})
 
         # 3. ASSET COMPOSITION CHECK
-        findings += self._composition(client_data, ai_data)
+        findings += self.__composition(client_data, ai_data)
 
         # 4. VELOCITY CHECK
-        ratio, per_year = self._velocity(client_data, ai_data)
+        ratio, per_year = self.__velocity(client_data, ai_data)
         if ratio is None:
             findings.append({"rule_id": "VELOCITY", "failed": False,
                              "detail": "Skipped — missing or invalid wealth timeline data"})
@@ -177,14 +182,14 @@ class Benchmark(Feature):
             declared_counterparties = [c for c in declared_counterparties
                                        if not any(re.search(rf"\b{re.escape(w)}\b", c.lower()) for w in words)]
         expected_counterparties = ai_data.get("expected_counterparties", [])
-        unknown_counterparties = self._counterparties(declared_counterparties, expected_counterparties)
+        unknown_counterparties = self.__counterparties(declared_counterparties, expected_counterparties)
         findings.append({"rule_id": "COUNTERPARTIES", "failed": len(unknown_counterparties) > Benchmark.LIMITS["counterparties"],
                          "detail": f"Unknown counterparties: {unknown_counterparties or 'none'}"})
 
         # 6. JURISDICTION CHECK
         declared_countries = client_data.get("declared_countries", [])
         expected_countries = ai_data.get("expected_jurisdiction", [])
-        unknown_countries = self._jurisdiction(declared_countries, expected_countries)
+        unknown_countries = self.__jurisdiction(declared_countries, expected_countries)
         findings.append({"rule_id": "JURISDICTION", "failed": len(unknown_countries) > Benchmark.LIMITS["jurisdiction"],
                          "detail": f"Unknown countries: {unknown_countries or 'none'}"})
 
@@ -218,14 +223,14 @@ class Benchmark(Feature):
                 best = (round(average, 1), last - years + 1, last)
         return best
 
-    def is_pep(self, case: dict) -> bool:
-        policy = self._policy
+    def __is_pep(self, case: dict) -> bool:
         status = str(case.get("claims", {}).get("pep_status") or "").strip().lower()
-        return status not in policy["verdict"]["no_pep_values"]
+        # A blank answer is unknown, not "no": it is not in Claims.NO_PEP_VALUES, so it counts as a PEP.
+        return status not in Claims.NO_PEP_VALUES
 
     def _benchmark_checks(self, case: dict, bench_input: dict | None, ai_data: dict | None, findings: list[dict] | None,
-                         honest: dict | None, assessment: dict | None, declaration: dict | None,
-                         markets: dict | None, types: list[dict]) -> list[dict]:
+                         honest: dict | None, assessment: dict | None, declaration: Declaration | None,
+                         markets: dict | None, types: list[dict]) -> list[Check]:
         """The peer benchmark's checks, each cross-checked against the forecast: a failure the
         honest forecast explains is marked "explained" and doesn't count towards the verdict."""
         policy = self._policy
@@ -248,7 +253,7 @@ class Benchmark(Feature):
             return ("explained", yes) if explained else ("failed", no)
 
         if findings is None:
-            checks.append(self._row("benchmark", "PEER_BENCHMARK", "Peer benchmark", "wealth", "skipped",
+            checks.append(self._check("PEER_BENCHMARK", "Peer benchmark", "wealth", "skipped",
                                  "The peer benchmark couldn't run, so declared figures weren't compared with peers."))
 
         # Total wealth vs peers
@@ -262,7 +267,7 @@ class Benchmark(Feature):
                 + ("covers it." if worth <= t1["wealth_now"]["optimistic"] else
                    f"is within the {policy['tolerance']['net_worth']:.0%} tolerance.") if t1 else "",
                 f"Not explained: the honest forecast reaches at most {Formatter.sgd(t1['wealth_now']['optimistic'])}." if t1 else "")
-            checks.append(self._row("benchmark", "TOTAL_WEALTH", Benchmark.BENCHMARK_LABELS["TOTAL_WEALTH"], "wealth", status,
+            checks.append(self._check("TOTAL_WEALTH", Benchmark.BENCHMARK_LABELS["TOTAL_WEALTH"], "wealth", status,
                                  f"Declared {Formatter.sgd(worth)} vs about {Formatter.sgd(expected)} for peers in this economy "
                                  f"({ratio:.1f}x; flagged above {Benchmark.LIMITS['total_wealth']}x)", why))
 
@@ -281,10 +286,10 @@ class Benchmark(Feature):
                           f"{policy['tolerance']['net_worth']:.0%} tolerance of the declared {Formatter.sgd(worth)}.")
             else:
                 detail = f"The honest story reaches up to {Formatter.sgd(reach)}, which covers the declared {Formatter.sgd(worth)}."
-            checks.append(self._row("benchmark", "UNEXPLAINED_GAP", Benchmark.BENCHMARK_LABELS["UNEXPLAINED_GAP"], "wealth",
+            checks.append(self._check("UNEXPLAINED_GAP", Benchmark.BENCHMARK_LABELS["UNEXPLAINED_GAP"], "wealth",
                                  "failed" if over else "passed", detail))
         else:
-            checks.append(self._row("benchmark", "UNEXPLAINED_GAP", Benchmark.BENCHMARK_LABELS["UNEXPLAINED_GAP"], "wealth",
+            checks.append(self._check("UNEXPLAINED_GAP", Benchmark.BENCHMARK_LABELS["UNEXPLAINED_GAP"], "wealth",
                                  "skipped", "Needs the honest forecast, which didn't finish."))
 
         # Wealth growth speed vs peers, cross-checked with the honest path
@@ -293,7 +298,7 @@ class Benchmark(Feature):
         if "VELOCITY" in by_rule:
             finding = by_rule["VELOCITY"]
             if finding["detail"].startswith("Skipped") or jump is None:
-                checks.append(self._row("benchmark", "VELOCITY", Benchmark.BENCHMARK_LABELS["VELOCITY"], "wealth", "skipped",
+                checks.append(self._check("VELOCITY", Benchmark.BENCHMARK_LABELS["VELOCITY"], "wealth", "skipped",
                                      "No biggest wealth jump was recorded, so growth speed wasn't checked."))
             else:
                 velocity_failed = finding["failed"]
@@ -310,20 +315,20 @@ class Benchmark(Feature):
                     f"Not explained: the honest story gains at most {Formatter.sgd(best[0])} in any {jump_years}-year "
                     f"stretch (best {best[1]}-{best[2]})." if honest else "")
                 velocity_status = status
-                checks.append(self._row("benchmark", "VELOCITY", Benchmark.BENCHMARK_LABELS["VELOCITY"], "wealth", status,
+                checks.append(self._check("VELOCITY", Benchmark.BENCHMARK_LABELS["VELOCITY"], "wealth", status,
                                      f"Biggest jump {Formatter.sgd(jump)} over {jump_years} year(s) = {Formatter.sgd(per_year)} a year vs "
                                      f"about {Formatter.sgd(expected)} a year for peers ({per_year / expected if expected else 0:.1f}x; "
                                      f"flagged above {Benchmark.LIMITS['velocity']}x)", why))
 
         # NEW: was the economy strong enough for such a jump?
         if jump is None:
-            checks.append(self._row("benchmark", "JUMP_VS_ECONOMY", Benchmark.BENCHMARK_LABELS["JUMP_VS_ECONOMY"], "wealth",
+            checks.append(self._check("JUMP_VS_ECONOMY", Benchmark.BENCHMARK_LABELS["JUMP_VS_ECONOMY"], "wealth",
                                  "skipped", "No biggest wealth jump was recorded."))
         else:
             start, end = CaseTimeline(case).career_years()
             best = self._best_market_stretch(markets, jump_years, start, end)
             if best is None or velocity_failed is None:
-                checks.append(self._row("benchmark", "JUMP_VS_ECONOMY", Benchmark.BENCHMARK_LABELS["JUMP_VS_ECONOMY"], "wealth",
+                checks.append(self._check("JUMP_VS_ECONOMY", Benchmark.BENCHMARK_LABELS["JUMP_VS_ECONOMY"], "wealth",
                                      "skipped", "Needs the economy forecast and the peer growth speed."))
             else:
                 average, first, last = best
@@ -343,7 +348,7 @@ class Benchmark(Feature):
                     status, detail = "failed", (f"Faster than peers, and his markets never boomed: their best "
                                                 f"{jump_years}-year stretch was {first}-{last} at {average:+.1f}% a year "
                                                 f"(a boom is {boom:g}% or more). {note}")
-                checks.append(self._row("benchmark", "JUMP_VS_ECONOMY", Benchmark.BENCHMARK_LABELS["JUMP_VS_ECONOMY"], "wealth",
+                checks.append(self._check("JUMP_VS_ECONOMY", Benchmark.BENCHMARK_LABELS["JUMP_VS_ECONOMY"], "wealth",
                                      status, detail))
 
         # Liquidity vs peers, cross-checked with the honest story's cash and shares
@@ -357,7 +362,7 @@ class Benchmark(Feature):
                 f"shares, enough for the {Formatter.sgd(declared_liquid)} he declares." if honest else "",
                 f"Not explained: he declares {Formatter.sgd(declared_liquid)} in cash and shares; the honest story leaves "
                 f"at most {Formatter.sgd(honest['liquid']['optimistic'])}." if honest else "")
-            checks.append(self._row("benchmark", "LIQUIDITY", Benchmark.BENCHMARK_LABELS["LIQUIDITY"], "wealth", status,
+            checks.append(self._check("LIQUIDITY", Benchmark.BENCHMARK_LABELS["LIQUIDITY"], "wealth", status,
                                  f"{declared_pct}% of his wealth in cash and listed shares vs about "
                                  f"{ai_data['expected_liquidity']:g}% for peers ("
                                  + (f"{declared_pct / ai_data['expected_liquidity']:.1f}x; " if ai_data['expected_liquidity'] else "")
@@ -372,9 +377,9 @@ class Benchmark(Feature):
             detail = f"Plans to bring {Formatter.sgd(aum)}; by his own split he holds {Formatter.sgd(declared_liquid)} in cash and shares"
             if honest:
                 detail += f", and the honest story leaves him up to {Formatter.sgd(honest['liquid']['optimistic'])}"
-            checks.append(self._row("benchmark", "AUM_FUNDING", Benchmark.BENCHMARK_LABELS["AUM_FUNDING"], "wealth",
+            checks.append(self._check("AUM_FUNDING", Benchmark.BENCHMARK_LABELS["AUM_FUNDING"], "wealth",
                                  "failed" if short_own or short_honest else "passed", detail + "."))
-            checks[-1]["independent"] = short_own        # short by his OWN figures, not only by the forecast
+            checks[-1].set_extra("independent", short_own)   # short by his OWN figures, not only by the forecast
 
         # Asset mix vs peers, cross-checked with his listed assets and their markets
         history = self._market_history({"markets": markets}) if markets and markets.get("series") else {}
@@ -418,7 +423,7 @@ class Benchmark(Feature):
                           + ("" if values_ok else ", and their declared values are above what their markets explain")
                           + ".")
             status, why = failed_or_explained(by_rule[rule]["failed"], explained, yes, no)
-            checks.append(self._row("benchmark", rule, Benchmark.BENCHMARK_LABELS[rule], "wealth", status,
+            checks.append(self._check(rule, Benchmark.BENCHMARK_LABELS[rule], "wealth", status,
                                  f"Declared {declared_pct}% vs about {expected_pct:g}% for peers "
                                  f"(off by {abs(declared_pct - expected_pct):g} points; flagged above "
                                  f"{Benchmark.LIMITS['composition']})", why, group="Asset mix"))
@@ -429,23 +434,22 @@ class Benchmark(Feature):
             providers = [c for c in bench_input.get("declared_counterparties", [])
                          if any(re.search(rf"\b{re.escape(w)}\b", c.lower()) for w in words)]
             # Service providers were already excluded by run_benchmark — unknown comes from its finding
-            unknown = self._counterparties([c for c in bench_input.get("declared_counterparties", [])
+            unknown = self.__counterparties([c for c in bench_input.get("declared_counterparties", [])
                                                 if c not in providers], ai_data.get("expected_counterparties", []))
-            sources = (declaration or {}).get("claimed_sources", [])
+            sources = declaration.sources() if declaration is not None else []
 
             def backed(name: str) -> bool:
                 low = name.lower()
-                return any((source.get("linked_position_index") is not None
-                            or source.get("linked_asset_index") is not None)
-                           and source.get("counterparty")
-                           and (low in source["counterparty"].lower() or source["counterparty"].lower() in low)
+                return any((source.linked_position_index is not None or source.linked_asset_index is not None)
+                           and source.counterparty
+                           and (low in source.counterparty.lower() or source.counterparty.lower() in low)
                            for source in sources)
-            explained = all(backed(name) for name in unknown) if declaration else None
+            explained = all(backed(name) for name in unknown) if declaration is not None else None
             status, why = failed_or_explained(
                 by_rule["COUNTERPARTIES"]["failed"], explained,
                 "Explained: each one is named in his declaration as linked to one of his jobs or assets.",
                 "Not explained: not every one is linked to a job or asset in his declaration.")
-            checks.append(self._row("benchmark", "COUNTERPARTIES", Benchmark.BENCHMARK_LABELS["COUNTERPARTIES"], "people", status,
+            checks.append(self._check("COUNTERPARTIES", Benchmark.BENCHMARK_LABELS["COUNTERPARTIES"], "people", status,
                                  ((f"{len(unknown)} not usual for his career: {', '.join(unknown)} "
                                    f"(flagged when more than {Benchmark.LIMITS['counterparties']})") if unknown
                                   else "All usual for his career.")
@@ -454,7 +458,7 @@ class Benchmark(Feature):
 
         # Countries not expected for his career, cross-checked with the forecast's countries
         if "JURISDICTION" in by_rule:
-            unknown = self._jurisdiction(bench_input.get("declared_countries", []),
+            unknown = self.__jurisdiction(bench_input.get("declared_countries", []),
                                              ai_data.get("expected_jurisdiction", []))
             explained = None
             if assessment:
@@ -465,23 +469,31 @@ class Benchmark(Feature):
                 by_rule["JURISDICTION"]["failed"], explained,
                 "Explained: each has a job, asset or declared source behind it, and none is on a risk list.",
                 "Not explained: at least one has nothing behind it or is on a risk list.")
-            checks.append(self._row("benchmark", "JURISDICTION", Benchmark.BENCHMARK_LABELS["JURISDICTION"], "countries", status,
+            checks.append(self._check("JURISDICTION", Benchmark.BENCHMARK_LABELS["JURISDICTION"], "countries", status,
                                  (f"{len(unknown)} not usual for his career: {', '.join(unknown)} "
                                   f"(flagged when more than {Benchmark.LIMITS['jurisdiction']})") if unknown
                                  else "All usual for his career.", why))
 
         # NEW: PEP status (a PEP always needs a person to look, and a public-office crime story matters more)
         status_text = str(claims.get("pep_status") or "None")
-        pep = self.is_pep(case)
+        pep = self.__is_pep(case)
         pep_types = [t for t in types if t["fits"] and t["category"] in settings["pep_crime_categories"]]
-        checks.append(self._row(
-            "benchmark", "PEP_STATUS", Benchmark.BENCHMARK_LABELS["PEP_STATUS"], "pattern", "failed" if pep else "passed",
-            f"{status_text}" + (" - a politically exposed person needs enhanced due diligence" if pep else " - not a PEP"),
-            ("A public-office crime story also fits his money: "
-             + "; ".join(f"{t['type_id']} {t['name']}" for t in pep_types) + ".") if pep and pep_types else ""))
+        if not str(claims.get("pep_status") or "").strip():
+            # Unanswered: the check could not run. The verdict treats him as a PEP until a person asks.
+            checks.append(self._check(
+                "PEP_STATUS", Benchmark.BENCHMARK_LABELS["PEP_STATUS"], "pattern", "skipped",
+                "Not answered - treated as a politically exposed person until the client is asked",
+                "The PEP question was left blank, so it is unknown, not \"no\"."))
+        else:
+            checks.append(self._check(
+                "PEP_STATUS", Benchmark.BENCHMARK_LABELS["PEP_STATUS"], "pattern", "failed" if pep else "passed",
+                f"{status_text}" + (" - a politically exposed person needs enhanced due diligence" if pep else " - not a PEP"),
+                ("A public-office crime story also fits his money: "
+                 + "; ".join(f"{t['type_id']} {t['name']}" for t in pep_types) + ".") if pep and pep_types else ""))
         # Which failures are evidence of their own (from peers or his own figures), rather than the
         # forecast's honest story seen again: only these can be the "second feature" that agrees.
         for item in checks:
-            item.setdefault("independent", item["check"] not in Benchmark.FORECAST_DERIVED)
-            item["optional"] = item["status"] == "skipped" and item["detail"].startswith("No biggest wealth jump")
+            if item.extra("independent") is None:
+                item.set_extra("independent", item.check not in Benchmark.FORECAST_DERIVED)
+            item.set_extra("optional", item.status == "skipped" and item.detail.startswith("No biggest wealth jump"))
         return checks

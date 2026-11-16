@@ -8,8 +8,6 @@ starts App. App creates every other object and coordinates them.
     python main.py --case data/sample/case_001.json
                                             assess one sample case
     python main.py --all-samples            assess every sample case in the forecasting format
-    python main.py --all-samples --demo     the same, using the recorded AI replies in tests/golden
-                                            (for machines with no API key)
     python main.py --web                    the web app (http://127.0.0.1:5000)
 """
 

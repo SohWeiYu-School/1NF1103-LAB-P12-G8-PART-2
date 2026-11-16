@@ -116,6 +116,34 @@ def test_a_good_answer_is_saved_and_reused_without_asking_again(tmp_path):
     assert second.prompts == []
 
 
+class _FallbackReplies(_Replies):
+    """A made-up caller whose answers come from a fallback model, as with_fallback reports it."""
+
+    def __call__(self, prompt, schema, options):
+        options["answered_by"] = "fallback-model"
+        return super().__call__(prompt, schema, options)
+
+
+def test_an_answer_from_a_fallback_model_is_used_but_not_saved(tmp_path):
+    cache = ResponseCache(str(tmp_path))
+    assert _Question("fake", _FallbackReplies(GOOD), "gpt-test", 0.0, cache).run(SOURCE) == {"answer": "yes"}
+    later = _Replies(json.dumps({"answer": "from the main model"}))
+    assert _Question("fake", later, "gpt-test", 0.0, cache).run(SOURCE) == {"answer": "from the main model"}
+    assert len(later.prompts) == 1                       # asked again: the fallback's answer was not kept
+
+
+def test_an_answer_from_the_services_own_model_is_saved(tmp_path):
+    cache = ResponseCache(str(tmp_path))
+    class _OwnModel(_Replies):
+        def __call__(self, prompt, schema, options):
+            options["answered_by"] = "gpt-test"
+            return super().__call__(prompt, schema, options)
+    _Question("fake", _OwnModel(GOOD), "gpt-test", 0.0, cache).run(SOURCE)
+    later = _Replies()
+    assert _Question("fake", later, "gpt-test", 0.0, cache).run(SOURCE)["answer"] == "yes"
+    assert later.prompts == []                           # reused from the saved answer
+
+
 def test_a_different_payload_is_not_answered_from_the_saved_answer(tmp_path):
     cache = ResponseCache(str(tmp_path))
     _Question("fake", _Replies(GOOD), "gpt-test", 0.0, cache).run(SOURCE)

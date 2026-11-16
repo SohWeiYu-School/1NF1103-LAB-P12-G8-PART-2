@@ -1,10 +1,14 @@
-"""Tests for logic_manager.verify_research."""
+"""Tests for CrimeScan.verify_research: the trusted research reports, as ResearchReport objects."""
 
 from app.logic.crime_scan import CrimeScan
+from app.model.research_report import ResearchReport
 
 
 def verify_research(research, policy):
-    return CrimeScan(policy).verify_research(research)
+    """(the kept ResearchReports, the warnings), as these tests have always used it."""
+    scan = CrimeScan(policy)
+    reports = scan.verify_research(research)
+    return reports, scan.warnings()
 
 
 def _sample_policy(trusted=None):
@@ -45,9 +49,9 @@ def test_url_not_in_api_sources_removed():
     research = _sample_research([report], api_sources=[])  # empty api_sources
     policy = _sample_policy()
 
-    clean, warnings = verify_research(research, policy)
+    reports, warnings = verify_research(research, policy)
 
-    assert clean["reports"] == []
+    assert reports == []
     assert any("R1" in w and "web search" in w for w in warnings)
 
 
@@ -60,9 +64,9 @@ def test_untrusted_domain_removed():
     research = _sample_research([report])
     policy = _sample_policy()
 
-    clean, warnings = verify_research(research, policy)
+    reports, warnings = verify_research(research, policy)
 
-    assert clean["reports"] == []
+    assert reports == []
     assert any("R1" in w and "trusted" in w for w in warnings)
 
 
@@ -77,9 +81,9 @@ def test_duplicate_url_second_removed():
     research = _sample_research([r1, r2], api_sources=[{"url": url}])
     policy = _sample_policy()
 
-    clean, warnings = verify_research(research, policy)
+    reports, warnings = verify_research(research, policy)
 
-    assert len(clean["reports"]) == 1
+    assert len(reports) == 1
     assert any("R2" in w and "duplicate" in w for w in warnings)
 
 
@@ -101,9 +105,9 @@ def test_original_ids_preserved_after_filtering():
     )
     policy = _sample_policy()
 
-    clean, warnings = verify_research(research, policy)
+    reports, warnings = verify_research(research, policy)
 
-    ids = [r["report_id"] for r in clean["reports"]]
+    ids = [r.report_id for r in reports]
     # R2 removed (untrusted), R1 and R3 survive with their original IDs (gap is intentional)
     assert ids == ["R1", "R3"]
 
@@ -118,9 +122,9 @@ def test_all_valid_nothing_removed():
     research = _sample_research([r1, r2])
     policy = _sample_policy()
 
-    clean, warnings = verify_research(research, policy)
+    reports, warnings = verify_research(research, policy)
 
-    assert len(clean["reports"]) == 2
+    assert len(reports) == 2
     assert warnings == []
 
 
@@ -132,9 +136,9 @@ def test_empty_reports():
     research = _sample_research([], api_sources=[])
     policy = _sample_policy()
 
-    clean, warnings = verify_research(research, policy)
+    reports, warnings = verify_research(research, policy)
 
-    assert clean["reports"] == []
+    assert reports == []
     assert warnings == []
 
 
@@ -147,7 +151,49 @@ def test_subdomain_matches_trusted():
     research = _sample_research([report])
     policy = _sample_policy()
 
-    clean, warnings = verify_research(research, policy)
+    reports, warnings = verify_research(research, policy)
 
-    assert len(clean["reports"]) == 1
+    assert len(reports) == 1
     assert warnings == []
+
+
+# ---------------------------------------------------------------------------
+# Test 8: The kept reports are ResearchReport objects with every field
+# ---------------------------------------------------------------------------
+
+def test_kept_reports_are_research_report_objects():
+    report = _sample_report("R1", "https://www.fatf-gafi.org/report.pdf")
+    reports, _ = verify_research(_sample_research([report]), _sample_policy())
+    assert all(isinstance(kept, ResearchReport) for kept in reports)
+    kept = reports[0]
+    assert (kept.report_id, kept.url, kept.organisation, kept.year, kept.title) == (
+        "R1", "https://www.fatf-gafi.org/report.pdf", "FATF", 2020, "Test Report")
+    assert kept.excerpts == ["Excerpt one.", "Excerpt two."]
+    assert kept.retrieved_at == "2025-01-01T00:00:00Z"        # the age check measures from it
+
+
+# ---------------------------------------------------------------------------
+# Test 9: A report that cannot be read is removed with a warning, not a crash
+# ---------------------------------------------------------------------------
+
+def test_unreadable_report_removed_not_crashed():
+    good = _sample_report("R1", "https://fatf-gafi.org/r1.pdf")
+    broken = {**_sample_report("R2", "https://mas.gov.sg/r2.pdf"), "excerpts": "one long excerpt"}
+    research = _sample_research([good, broken, "not a report"], api_sources=[{"url": good["url"]}, {"url": broken["url"]}])
+    reports, warnings = verify_research(research, _sample_policy())
+    assert [r.report_id for r in reports] == ["R1"]
+    assert any("R2" in w and "could not be read" in w for w in warnings)
+    assert any("?" in w and "could not be read" in w for w in warnings)
+    assert "Removed R2: the report could not be read." in warnings     # plain words, no raw error text
+
+
+# ---------------------------------------------------------------------------
+# Test 10: warnings() only describes the last call
+# ---------------------------------------------------------------------------
+
+def test_warnings_are_those_of_the_last_call():
+    scan = CrimeScan(_sample_policy())
+    scan.verify_research(_sample_research([_sample_report("R1", "https://untrusted.com/x")]))
+    assert scan.warnings()
+    scan.verify_research(_sample_research([]))
+    assert scan.warnings() == []

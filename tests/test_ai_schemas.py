@@ -81,6 +81,13 @@ def test_missing_source_ids_fails_schema():
         jsonschema.validate(instance=_valid_typology_response(typologies=[t]), schema=TYPOLOGY_SCHEMA)
 
 
+def test_empty_quote_fails_schema():
+    t = _valid_typology()
+    t["source_quotes"] = [{"report_id": "R1", "quote": ""}]
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=_valid_typology_response(typologies=[t]), schema=TYPOLOGY_SCHEMA)
+
+
 def test_extra_risk_level_field_fails_schema():
     t = {**_valid_typology(), "risk_level": "high"}
     with pytest.raises(jsonschema.ValidationError):

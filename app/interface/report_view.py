@@ -2,8 +2,12 @@
 
 import os
 import textwrap
+from typing import Any
 
 from app.interface.console_ui import ConsoleUI
+from app.model.client_record import ClientRecord
+from app.model.typology import Typology
+from app.model.verdict import Verdict
 
 
 class ReportView:
@@ -12,16 +16,16 @@ class ReportView:
     past assessments. It only arranges text; the ConsoleUI it is handed does the printing.
     """
 
-    REPORT_WIDTH = 96
-    _CRIME_SECTION_TITLE = "Crime - known patterns for his industry"
-    _CRIME_INDICATOR_LABEL = {
+    REPORT_WIDTH: int = 96
+    _CRIME_SECTION_TITLE: str = "Crime - known patterns for his industry"
+    _CRIME_INDICATOR_LABEL: dict[str, str] = {
         "counterparty_unnamed":          "Money from unnamed counterparty",
         "gift_or_inheritance_unnamed":   "Gift or inheritance from unnamed person",
         "source_contradicts_occupation": "Source of wealth contradicts occupation",
         "unvalued_source_present":       "Source with no declared amount",
         "related_party_transaction":     "Related party transaction",
     }
-    _CRIME_CATEGORY_LABEL = {
+    _CRIME_CATEGORY_LABEL: dict[str, str] = {
         "critical":    "CRITICAL MATCH",
         "high":        "HIGH MATCH",
         "medium":      "MEDIUM MATCH",
@@ -29,24 +33,33 @@ class ReportView:
         "weak_signal": "WEAK SIGNAL",
         "no_match":    "NO MATCH",
     }
-    FIELD_NAMES = {"expected_aum": "Expected AUM", "pep_status": "PEP Status",
+    FIELD_NAMES: dict[str, str] = {"expected_aum": "Expected AUM", "pep_status": "PEP Status",
                    "current_declared_value": "Current Value (SGD)", "income_produced": "Yearly Income (SGD)"}
-    SOURCE_TAGS = {"documents": "[DOC]   ", "edited": "[EDITED]", "entered": "[YOU]   ", "blank": "[ -- ]  "}
-    OUTCOME_LABELS = {
+    SOURCE_TAGS: dict[str, str] = {"documents": "[DOC]   ", "edited": "[EDITED]", "entered": "[YOU]   ", "blank": "[ -- ]  "}
+    OUTCOME_LABELS: dict[str, str] = {
         "PASSED": "PASSED",
         "MANUAL_REVIEW": "MANUAL REVIEW",
         "RISKY": "RISKY",
         "SERIOUS_RISK": "SERIOUS RISK",
     }
 
-    def __init__(self, ui: ConsoleUI | None = None) -> None:
-        self.__ui: ConsoleUI = ui or ConsoleUI()
+    MIN_WIDTH: int = 20
 
-    def _format_crime_section(self, crime_result: dict, typologies: list, width: int) -> list[str]:
-        """Build lines for the structured crime section inside the verdict report."""
-        typ_lookup    = {t.get("typology_id", ""): t for t in typologies}
-        match_results = crime_result.get("match_results", [])
-        match_count   = crime_result.get("match_count", 0)
+    def __init__(self, ui: ConsoleUI | None = None, width: int = REPORT_WIDTH) -> None:
+        """width is how many characters wide the verdict report and the evidence are laid out."""
+        if isinstance(width, bool) or not isinstance(width, int) or width < ReportView.MIN_WIDTH:
+            raise ValueError(f"the report width must be a whole number of at least {ReportView.MIN_WIDTH} "
+                             f"characters (got {width!r})")
+        self.__ui: ConsoleUI = ui or ConsoleUI()
+        self.__width: int = width
+
+    def __format_crime_section(self, crime: dict, typologies: list[Typology]) -> list[str]:
+        """Build lines for the structured crime section inside the verdict report. crime is
+        CrimeScan.run's result: its match_results are MatchResult objects."""
+        width         = self.__width
+        typ_lookup    = {t.typology_id: t for t in typologies}
+        match_results = crime.get("match_results", [])
+        match_count   = crime.get("match_count", 0)
         total         = len(match_results)
         div           = "  " + "\u2500" * (width - 2)
 
@@ -54,19 +67,20 @@ class ReportView:
                  f"  {total} typologies  \u00b7  {match_count} matched  \u00b7  {total - match_count} no match"]
 
         for mr in match_results:
-            typ_id    = mr.get("typology_id", "")
-            name      = mr.get("name", typ_id or "?")
-            category  = mr.get("category", "no_match")
+            typ_id    = mr.typology.typology_id
+            name      = mr.typology.name
+            category  = mr.category
             label     = ReportView._CRIME_CATEGORY_LABEL.get(category, category.upper())
-            typ_data  = typ_lookup.get(typ_id, {})
-            core_inds  = mr.get("core_indicators", [])
-            core_fired = set(mr.get("core_fired", []))
-            sup_inds   = mr.get("supporting_indicators", [])
-            sup_fired  = set(mr.get("supporting_fired", []))
+            typ_data  = typ_lookup.get(typ_id)
+            core_inds  = mr.typology.core_indicators()
+            core_fired = set(mr.core_fired)
+            sup_inds   = mr.typology.supporting_indicators()
+            sup_fired  = set(mr.supporting_fired)
 
-            lines += ["", f"  [{label}]  {name}"]
+            unchecked = "" if mr.typology.verified else "  (not checked against research)"
+            lines += ["", f"  [{label}]  {name}{unchecked}"]
 
-            desc = (typ_data.get("description") or "").strip()
+            desc = (typ_data.description if typ_data else "").strip()
             if desc:
                 lines += textwrap.wrap(desc, width - 4, initial_indent="    ", subsequent_indent="    ")
 
@@ -79,7 +93,7 @@ class ReportView:
                     f"{'✓' if i in sup_fired else '—'} {ReportView._CRIME_INDICATOR_LABEL.get(i, i.replace('_', ' '))}"
                     for i in sup_inds))
 
-            quotes = typ_data.get("source_quotes") or []
+            quotes = typ_data.source_quotes if typ_data else []
             if quotes and quotes[0].get("quote"):
                 q   = quotes[0]
                 rid = q.get("report_id", "")
@@ -90,59 +104,62 @@ class ReportView:
         lines.append(div)
         return lines
 
-    def format_verdict_report(self, report: dict, crime_result: dict | None = None,
-                              typologies: list | None = None) -> str:
-        """The combined assessment as text: the same header, sections and evidence the web app shows."""
+    def format_verdict_report(self, verdict: Verdict, crime_result: dict | None = None,
+                              typologies: list[Typology] | None = None) -> str:
+        """The combined assessment as text: the same header, sections and evidence the web app shows
+        (the verdict's report)."""
+        report = verdict.report
         head = report["header"]
         symbols = {entry["mark"]: entry["symbol"] for entry in report["legend"]}
-        rule = "\u2550" * ReportView.REPORT_WIDTH
+        rule = "\u2550" * self.__width
         lines = [rule, f"  COMBINED ASSESSMENT  {head['client_ref']}  {head['name']}  ({head['assessed_on']})", rule,
                  f"  VERDICT:      {head['verdict_label']}",
                  f"  Next step:    {head['next_step']}",
                  f"  Next review:  {head['next_review_date']}",
                  f"  Policy:       {head['policy_version']}", ""]
-        lines += textwrap.wrap(head["summary"], ReportView.REPORT_WIDTH - 2, initial_indent="  ", subsequent_indent="  ")
+        lines += textwrap.wrap(head["summary"], self.__width - 2, initial_indent="  ", subsequent_indent="  ")
         lines += ["", "  " + "   ".join(f"{e['symbol']} {e['meaning']}" for e in report["legend"])]
 
         def section(title: str, items: list[dict]) -> None:
-            lines.extend(["", f"  {title.upper()}", "  " + "\u2500" * (ReportView.REPORT_WIDTH - 2)])
+            lines.extend(["", f"  {title.upper()}", "  " + "\u2500" * (self.__width - 2)])
             for item in items:
-                lines.extend(textwrap.wrap(item["text"], ReportView.REPORT_WIDTH - 2,
+                lines.extend(textwrap.wrap(item["text"], self.__width - 2,
                                            initial_indent=f"  {symbols[item['mark']]} ", subsequent_indent="    "))
                 for sub in item["sub"]:
-                    lines.extend(textwrap.wrap(sub, ReportView.REPORT_WIDTH - 2, initial_indent="      ",
+                    lines.extend(textwrap.wrap(sub, self.__width - 2, initial_indent="      ",
                                                subsequent_indent="      "))
 
         for part in report["sections"]:
             if crime_result is not None and part["title"] == ReportView._CRIME_SECTION_TITLE:
-                lines += self._format_crime_section(crime_result, typologies or [], ReportView.REPORT_WIDTH)
+                lines += self.__format_crime_section(crime_result, typologies or [])
             else:
                 section(part["title"], part["items"])
         lines.extend(["", "  FULL EVIDENCE: " + " \u00b7 ".join(report.get("evidence_titles", [])), rule])
         return "\n".join(lines)
 
-    def format_evidence(self, report: dict) -> str:
+    def format_evidence(self, verdict: Verdict) -> str:
         """The full evidence behind the verdict (the web app shows the same sections, collapsed)."""
-        rule = "\u2550" * ReportView.REPORT_WIDTH
+        report = verdict.report
+        rule = "\u2550" * self.__width
         lines = [rule, f"  FULL EVIDENCE  {report['header']['client_ref']}", rule]
         for part in report["evidence"]:
             lines.extend(["", f"  {part['title']}"])
             for line in part["lines"]:
-                lines.extend(textwrap.wrap(line, ReportView.REPORT_WIDTH - 2, initial_indent="    ", subsequent_indent="      "))
+                lines.extend(textwrap.wrap(line, self.__width - 2, initial_indent="    ", subsequent_indent="      "))
         lines.append(rule)
         return "\n".join(lines)
 
-    def show_verdict_report(self, report: dict, ask_for_evidence: bool = True,
-                            crime_result: dict | None = None, typologies: list | None = None) -> None:
+    def show_verdict_report(self, verdict: Verdict, ask_for_evidence: bool = True,
+                            crime_result: dict | None = None, typologies: list[Typology] | None = None) -> None:
         """The short report, then (if the officer wants it) the full evidence."""
-        self.__ui.show("\n" + self.format_verdict_report(report, crime_result=crime_result, typologies=typologies) + "\n")
+        self.__ui.show("\n" + self.format_verdict_report(verdict, crime_result=crime_result, typologies=typologies) + "\n")
         if ask_for_evidence and self.__ui.ask_yes_no("Show the full evidence?"):
-            self.__ui.show("\n" + self.format_evidence(report) + "\n")
+            self.__ui.show("\n" + self.format_evidence(verdict) + "\n")
 
     def _field_name(self, key: str) -> str:
         return ReportView.FIELD_NAMES.get(key, key.replace("_", " ").title())
 
-    def _field_value(self, key: str, value) -> str:
+    def _field_value(self, key: str, value: Any) -> str:
         """A saved value as a person would write it: 6,000,000 not 6000000.0, Singapore not ['Singapore']."""
         if key == "end_year" and value in (None, ""):
             return "present (current job)"
@@ -158,28 +175,57 @@ class ReportView:
             return f"{value:,}"
         return str(value)
 
-    def display_client_record(self, record: dict):
+    def __display_section(self, title: str) -> None:
+        """Print a formatted section heading."""
+        self.__ui.show("\n" + "=" * 60)
+        self.__ui.show(title)
+        self.__ui.show("=" * 60)
+
+    def show_client_list(self, records: list[dict]) -> None:
+        """Print a compact table of all saved clients."""
+        if not records:
+            self.__ui.show("\n  No clients saved yet.\n")
+            return
+        W = 68
+        self.__ui.show("\n" + "─" * W)
+        self.__ui.show(f"  {'#':<4}{'Reference':<18}{'Name':<28}Industry")
+        self.__ui.show("─" * W)
+        for i, r in enumerate(records, start=1):
+            ref      = r.get("client_ref", "—")
+            name     = r.get("name") or r.get("client_profile", {}).get("full_name", "—")
+            industry = r.get("career", {}).get("industry") or r.get("client_profile", {}).get("industry", "—")
+            self.__ui.show(f"  {i:<4}{ref:<18}{name:<28}{industry}")
+        self.__ui.show("─" * W + "\n")
+
+    def display_client_record(self, record: ClientRecord) -> None:
         """Display all information collected for the client."""
 
-        self.__ui.display_section("CLIENT INFORMATION REVIEW")
+        self.__display_section("CLIENT INFORMATION REVIEW")
 
-        self.__ui.show(f"Client Reference: {record['client_ref']}")
+        self.__ui.show(f"Client Reference: {record.client_ref}")
+
+        # Things to fix: shown, never a reason to refuse the save (the officer can complete them later)
+        problems = record.problems()
+        if problems:
+            self.__display_section("TO FIX")
+            for problem in problems:
+                self.__ui.show(f"  - {problem}")
 
         # -------------------------------------------------
         # Client Profile
         # -------------------------------------------------
 
-        self.__ui.display_section("CLIENT PROFILE")
-        self.__ui.show(f"Name:        {record.get('name', '—')}")
-        self.__ui.show(f"Nationality: {record.get('nationality', '—')}")
+        self.__display_section("CLIENT PROFILE")
+        self.__ui.show(f"Name:        {record.profile.name or '—'}")
+        self.__ui.show(f"Nationality: {record.profile.nationality or '—'}")
 
         # -------------------------------------------------
         # Career History
         # -------------------------------------------------
 
-        self.__ui.display_section("CAREER HISTORY")
+        self.__display_section("CAREER HISTORY")
 
-        for index, career in enumerate(record.get("career_history", []), start=1):
+        for index, career in enumerate([job.to_dict() for job in record.jobs()], start=1):
             self.__ui.show(f"\n--- Job {index} ---")
             for key, value in career.items():
                 self.__ui.show(f"{self._field_name(key)}: {self._field_value(key, value)}")
@@ -188,9 +234,9 @@ class ReportView:
         # Investments
         # -------------------------------------------------
 
-        investments = record.get("investments", [])
+        investments = [asset.to_dict() for asset in record.investments()]
         if investments:
-            self.__ui.display_section("INVESTMENTS")
+            self.__display_section("INVESTMENTS")
             for index, inv in enumerate(investments, start=1):
                 self.__ui.show(f"\n--- Investment {index} ---")
                 for key, value in inv.items():
@@ -202,9 +248,9 @@ class ReportView:
         # Claims
         # -------------------------------------------------
 
-        claims = record.get("claims", {})
+        claims = record.claims.to_dict() if record.claims is not None else {}
         if claims:
-            self.__ui.display_section("CLAIMS")
+            self.__display_section("CLAIMS")
             for key, value in claims.items():
                 self.__ui.show(f"{self._field_name(key)}: {self._field_value(key, value)}")
 
@@ -212,18 +258,18 @@ class ReportView:
         # Source of Wealth Declaration
         # -------------------------------------------------
 
-        sow = record.get("sow_declaration")
+        sow = record.sow_declaration
         if sow:
-            self.__ui.display_section("SOURCE OF WEALTH DECLARATION")
+            self.__display_section("SOURCE OF WEALTH DECLARATION")
             self.__ui.show(sow)
 
         # -------------------------------------------------
         # Supporting Documents
         # -------------------------------------------------
 
-        self.__ui.display_section("SUPPORTING DOCUMENTS")
+        self.__display_section("SUPPORTING DOCUMENTS")
 
-        documents = record.get("supporting_documents", [])
+        documents = record.documents()
 
         if not documents:
             self.__ui.show("No supporting documents provided.")

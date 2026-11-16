@@ -70,7 +70,14 @@ class AIService(ABC):
                 logger.warning("%s: attempt %d gave no usable answer", type(self).__name__, attempt)
                 continue
             data = self._post_process(data, options)
-            self._save(cache_payload, version, data)
+            answered_by = options.get("answered_by")
+            if answered_by and self._model and answered_by != self._model:
+                # A fallback model answered. Saving it under this model's name would make every
+                # later run reuse the fallback's answer, even once the main model works again.
+                logger.info("%s: answered by the fallback %s, so the answer is not saved for %s",
+                            type(self).__name__, answered_by, self._model)
+            else:
+                self._save(cache_payload, version, data)
             return data
         logger.error("%s: no usable answer after %d attempt(s)", type(self).__name__, self.ATTEMPTS)
         self._warnings = []

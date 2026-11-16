@@ -17,6 +17,7 @@ from app.interface.console_ui import ConsoleUI
 from app.interface.web_app import WebApp
 from app.logic.case_reader import CaseReader
 from app.logic.document_record_builder import DocumentRecordBuilder
+from app.model.client_record import ClientRecord
 from tests.logic_fixtures import CONFIG
 
 FOLDER = os.path.join(os.path.dirname(__file__), "documents", "marcus_lim")
@@ -37,11 +38,11 @@ def expected_reply() -> dict:
 def cli_record(reply: dict) -> dict:
     """What menu option 2 saves: documents -> record, the officer types what's missing."""
     builder = DocumentRecordBuilder(CONFIG, TODAY)
-    record, _ = builder.build(reply, "CL-MARCUS")
+    record, _, _ = builder.build(reply, "CL-MARCUS")
     for field in builder.missing_fields(record):
         assert field["path"] == ["investments", 2, "income_produced"], field   # the only gap
         record = builder.set_path(record, field["path"], 0)
-    return builder.finish(record)
+    return builder.finish(record).to_dict()
 
 
 def web_record(site: WebApp, reply: dict) -> dict:
@@ -123,7 +124,7 @@ def test_the_case_uses_the_saved_values_without_asking(site):
 
 def test_the_split_matches_the_listed_assets():
     builder = DocumentRecordBuilder(CONFIG, TODAY)
-    record = cli_record(expected_reply())
+    record = ClientRecord.from_dict(cli_record(expected_reply()))
     assert builder.check(record) == []
 
     misread = builder.set_path(record, ["investments", 0, "current_declared_value"], 19000000)
@@ -134,7 +135,7 @@ def test_assessments_are_always_dated_today(site, tmp_path):
     today = datetime.date.today().isoformat()
     application = App(None, data_folder=str(tmp_path))
 
-    case, _ = application.read_case(cli_record(expected_reply()))
+    case, _ = application.read_case(ClientRecord.from_dict(cli_record(expected_reply())))
     assert case["current_date"] == today                       # command line: not asked
 
     assert web_record(site, expected_reply())["current_date"] == today   # web form: no date box

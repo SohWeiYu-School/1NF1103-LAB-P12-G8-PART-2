@@ -122,11 +122,29 @@ class ClientRecord:
         return self.__claims
 
     def current_job(self) -> Job | None:
-        """The latest job with no end year; if every job has ended, the last one listed."""
+        """The latest job with no end year.
+
+        The command line's New Client form keeps the current job only in "career", so when no listed
+        job is open and "career" names another job, that job is returned (its own start year is not
+        known). When "career" only repeats the last listed job (the web form copies it there, even
+        once it has ended), or names none, the last job listed is the best available answer.
+        Accepted limit: a client back in an earlier job (same occupation and employer) gets that earlier
+        listed job; the saved data cannot tell this apart from the web form's copy."""
         for job in reversed(self.__career_history):
             if job.is_current():
                 return job
-        return self.__career_history[-1] if self.__career_history else None
+        last = self.__career_history[-1] if self.__career_history else None
+        occupation = str(self.__career_extra.get("occupation") or "").strip()
+        if last is not None and (occupation, str(self.__career_extra.get("employer_name") or "").strip()) == \
+                (str(last.occupation or "").strip(), str(last.employer_name or "").strip()):
+            return last                     # the web form copies the last listed job (even an ended one) into career
+        if occupation:
+            details = {key: self.__career_extra.get(key) for key in ClientRecord.CAREER_JOB_KEYS}
+            return Job(occupation=str(details["occupation"] or ""), seniority=str(details["seniority"] or ""),
+                       industry=str(details["industry"] or ""), employer_name=str(details["employer_name"] or ""),
+                       employer_size=str(details["employer_size"] or ""),
+                       country=str(self.__career_extra.get("country") or ""))
+        return last
 
     def career_start_year(self) -> int | None:
         starts = [job.start_year for job in self.__career_history if job.start_year is not None]
@@ -148,9 +166,11 @@ class ClientRecord:
     # ----- checks only the whole record can make ------------------------------
 
     def problems(self) -> list[str]:
-        """What is wrong with the record. Empty list = nothing."""
+        """What is wrong with the record, claims included (a record with no claims has none to
+        add). Empty list = nothing."""
         return (self.__check_schema() + self.__check_job_order()
-                + self.__check_one_current_job() + self.__check_asset_years())
+                + self.__check_one_current_job() + self.__check_asset_years()
+                + (self.__claims.problems() if self.__claims else []))
 
     def warnings(self, policy: dict) -> list[str]:
         """Things worth a second look. Empty list = nothing spotted."""
@@ -267,13 +287,19 @@ class ClientRecord:
     # ----- saving and loading ---------------------------------------------------
 
     def to_dict(self) -> dict:
-        """The saved layout every screen reads. "career" is the current job plus the profile."""
+        """The saved layout every screen reads. "career" is the current job plus the profile.
+
+        When career_history holds an open job (no end year), that job is copied into "career".
+        When every listed job has ended, the current job is the one saved in "career" (the
+        command line's New Client form keeps it there and lists only earlier jobs in
+        career_history), so "career" is kept as it was saved. A saved career start year is kept."""
         career = dict(self.__career_extra)
-        job = self.current_job()
-        if job is not None:
-            job_data = job.to_dict()
+        open_jobs = [job for job in self.__career_history if job.is_current()]
+        if open_jobs:
+            job_data = open_jobs[-1].to_dict()
             for key in ClientRecord.CAREER_JOB_KEYS:
                 career[key] = job_data[key]
+        if self.__career_history and career.get("career_start_year") is None:
             career["career_start_year"] = self.career_start_year()
         career["country_of_residence"] = self.__profile.country_of_residence
         career["age"] = self.__profile.age
@@ -288,6 +314,14 @@ class ClientRecord:
                 "supporting_documents": list(self.__supporting_documents)}
         data.update(self.__review_status.to_dict())
         return data
+
+    @staticmethod
+    def why_unreadable(error: Exception) -> str:
+        """Why from_dict could not make a record, in words safe to show: a ValueError says what is
+        wrong; any other error is a record not laid out as expected (its details belong in the log)."""
+        if isinstance(error, ValueError):
+            return str(error)
+        return "some of the details are not in the expected layout"
 
     @staticmethod
     def from_dict(data: dict) -> "ClientRecord":

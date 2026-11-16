@@ -1,17 +1,22 @@
 """ClientForm: the questions that create and edit a client record."""
 
 import datetime
+import logging
 import os
 import uuid
+from typing import Callable
 
 from app.interface.console_ui import ConsoleUI
 from app.interface.report_view import ReportView
+from app.model.client_record import ClientRecord
 
 try:                                  # the file pickers need a desktop; servers have none
     import tkinter as tk
     from tkinter import filedialog
 except ImportError:
     tk = filedialog = None
+
+logger = logging.getLogger(__name__)
 
 
 class ClientForm:
@@ -21,9 +26,10 @@ class ClientForm:
 
     It never saves or loads by itself: the caller passes in the functions that do
     (save_fn, find_fn, upload_fn, ...), so this class does not know where records are kept.
+    The answers are collected in the saved layout and handed back as a ClientRecord.
     """
 
-    PAYMENT_METHODS = ["cash", "loan", "asset_sale"]
+    PAYMENT_METHODS: list[str] = ["cash", "loan", "asset_sale"]
 
     PEP_OPTIONS: list[str] = ["None", "Domestic PEP", "Foreign PEP", "International organisation PEP",
                               "Family member / close associate of a PEP"]
@@ -32,10 +38,20 @@ class ClientForm:
         self.__ui: ConsoleUI = ui or ConsoleUI()
         self.__report_view: ReportView = report_view or ReportView(self.__ui)
 
-    def generate_client_id(self) -> str:
-        """Generate a unique client reference ID."""
+    MAX_ID_TRIES: int = 10
 
-        return "CL-" + uuid.uuid4().hex[:8].upper()
+    def generate_client_id(self, is_taken_fn: Callable[[str], bool] | None = None) -> str:
+        """Generate a client reference ID. is_taken_fn(ref) says whether a saved client already has
+        that reference; a taken one is thrown away and another made, up to MAX_ID_TRIES times.
+        Raises ValueError (with a message that is safe to show) if no free reference was found, and
+        whatever is_taken_fn raises if the saved clients cannot be checked: that is an error, never
+        "the reference is free"."""
+        for _ in range(ClientForm.MAX_ID_TRIES):
+            client_ref = "CL-" + uuid.uuid4().hex[:8].upper()
+            if is_taken_fn is None or not is_taken_fn(client_ref):
+                return client_ref
+        logger.error("ClientForm.generate_client_id: %d references in a row were already taken", ClientForm.MAX_ID_TRIES)
+        raise ValueError("A new client reference could not be made. Please try again.")
 
     def get_client_profile(self) -> dict:
         """Collect name, nationality and current position."""
@@ -60,9 +76,14 @@ class ClientForm:
                   "country_of_residence": residence, "age": age, "career_start_year": start}
         return {"name": name, "nationality": nationality, "career": career}
 
-    def _ask_job(self) -> dict:
+    def __ask_job(self, previous: bool = False) -> dict:
+        """One job. A previous job must have an end year: the current job is asked for in the
+        profile, so an open "previous" job would replace it when the record is saved."""
         start_year = self.__ui.ask_year("Start year")
-        end_year   = self.__ui.ask_year("End year (leave blank if current)", minimum=start_year, allow_blank=True)
+        if previous:
+            end_year = self.__ui.ask_year("End year", minimum=start_year)
+        else:
+            end_year = self.__ui.ask_year("End year (leave blank if current)", minimum=start_year, allow_blank=True)
         return {
             "start_year": start_year, "end_year": end_year,
             "occupation":    self.__ui.ask_words("Job title", ConsoleUI.LABEL),
@@ -79,11 +100,11 @@ class ClientForm:
         prompt = "\nDoes the client have a previous job to add?"
         while self.__ui.ask_yes_no(prompt):
             self.__ui.show("\n=== Previous Job ===")
-            career_history.append(self._ask_job())
+            career_history.append(self.__ask_job(previous=True))
             prompt = "\nAdd another previous job?"
         return career_history
 
-    def _ask_asset(self) -> dict:
+    def __ask_asset(self) -> dict:
         asset_type  = self.__ui.ask_words("Asset type (e.g. Property, Shares)", ConsoleUI.LABEL)
         description = self.__ui.ask_words("Description", ConsoleUI.LABEL)
         country     = self.__ui.ask_words("Country")
@@ -93,7 +114,7 @@ class ClientForm:
         year_sold = sale_price = None
         if self.__ui.ask_yes_no("Has this asset been sold?"):
             year_sold  = self.__ui.ask_year("Year sold", minimum=year_acquired)
-            sale_price = self.__ui.ask_money("Sale price")
+            sale_price = self.__ui.ask_money("Sale price", allow_zero=True)
         # Same layout as the web form and the documents auto-fill: "Property - Condo", current_declared_value,
         # income_produced. year_sold, sale_price and currency are extra details only this screen asks for.
         return {
@@ -101,8 +122,8 @@ class ClientForm:
             "country": country,
             "year_acquired": year_acquired, "price_paid": price_paid,
             "payment_method": payment_method, "year_sold": year_sold, "sale_price": sale_price,
-            "current_declared_value": self.__ui.ask_money("Current value (0 if sold)"),
-            "income_produced":        self.__ui.ask_money("Yearly income from this asset (0 if none)"),
+            "current_declared_value": self.__ui.ask_money("Current value (0 if sold)", allow_zero=True),
+            "income_produced":        self.__ui.ask_money("Yearly income from this asset (0 if none)", allow_zero=True),
             "currency":               self.__ui.ask_currency(),
         }
 
@@ -111,11 +132,11 @@ class ClientForm:
         prompt = "\nDoes the client have any investments or assets?"
         while self.__ui.ask_yes_no(prompt):
             self.__ui.show("\n=== Investment / Asset ===")
-            investments.append(self._ask_asset())
+            investments.append(self.__ask_asset())
             prompt = "\nAdd another investment or asset?"
         return investments
 
-    def get_claims(self) -> dict:
+    def __get_claims(self) -> dict:
         """Collect financial claims and asset composition."""
         self.__ui.show("\n=== Financial Claims ===")
         declared_net_worth = self.__ui.ask_money("Declared net worth (SGD)", allow_zero=False)
@@ -149,7 +170,7 @@ class ClientForm:
         self.__ui.show("\n=== Source of Wealth Declaration ===")
         return self.__ui.ask_text("Describe how the client accumulated their wealth (min 50 characters)", min_length=50)
 
-    def get_supporting_documents(self, upload_fn=None) -> list:
+    def get_supporting_documents(self, upload_fn: Callable[[str], str | None] | None = None) -> list[dict[str, str]]:
         """
         Ask whether the client has supporting documents.
 
@@ -211,8 +232,12 @@ class ClientForm:
 
         return documents
 
-    def create_new_client(self, save_fn=None, upload_fn=None):
-        """Collect, review and optionally save a new client."""
+    def create_new_client(self, save_fn: Callable[[ClientRecord], bool] | None = None,
+                          upload_fn: Callable[[str], str | None] | None = None,
+                          is_taken_fn: Callable[[str], bool] | None = None) -> ClientRecord | None:
+        """Collect, review and optionally save a new client. save_fn is given the ClientRecord;
+        is_taken_fn(ref) says whether a saved client already has that reference.
+        Returns the saved record when the officer wants to assess it now, otherwise None."""
 
         self.__ui.show("\n")
         self.__ui.show("=" * 60)
@@ -220,7 +245,11 @@ class ClientForm:
         self.__ui.show("=" * 60)
 
         # Generate client reference
-        client_ref = self.generate_client_id()
+        try:
+            client_ref = self.generate_client_id(is_taken_fn)
+        except ValueError as error:
+            self.__ui.show_error(str(error))
+            return None
 
         self.__ui.show(f"\nGenerated Client Reference: {client_ref}")
 
@@ -228,12 +257,12 @@ class ClientForm:
         profile_data         = self.get_client_profile()
         career_history       = self.get_career_history()
         investments          = self.get_investments()
-        claims               = self.get_claims()
+        claims               = self.__get_claims()
         sow_declaration      = self.get_sow_declaration()
         supporting_documents = self.get_supporting_documents(upload_fn)
 
         # Create complete record
-        client_record = {
+        answers = {
             "client_ref":          client_ref,
             "name":                profile_data["name"],
             "nationality":         profile_data["nationality"],
@@ -245,6 +274,15 @@ class ClientForm:
             "sow_declaration":     sow_declaration,
             "supporting_documents": supporting_documents,
         }
+        try:
+            client_record = ClientRecord.from_dict(answers)
+        except (ValueError, TypeError, AttributeError) as error:
+            logger.error("ClientForm.create_new_client: the answers for %s are not a valid record: %r",
+                         client_ref, error)
+            self.__ui.show_error(f"The client could not be created because "
+                                 f"{ClientRecord.why_unreadable(error)}. Nothing was saved.")
+            self.__ui.read_answer("\nPress Enter to return to the main menu...")
+            return None
 
         # Show everything before saving
         self.__report_view.display_client_record(client_record)
@@ -283,7 +321,7 @@ class ClientForm:
 
         return client_record
 
-    def ask_missing_field(self, field: dict):
+    def ask_missing_field(self, field: dict) -> str | int | float | list[str] | dict[str, float]:
         """Ask for one detail the documents didn't give. field comes from logic_manager.missing_client_fields."""
         label, kind = field["label"], field["kind"]
         if kind == "words":
@@ -301,7 +339,7 @@ class ClientForm:
         if kind == "money_positive":
             return self.__ui.ask_money(label, allow_zero=False)
         if kind == "money":
-            return self.__ui.ask_money(label)
+            return self.__ui.ask_money(label, allow_zero=True)
         if kind == "payment":
             return ClientForm.PAYMENT_METHODS[self.__ui.ask_choice(label, ClientForm.PAYMENT_METHODS)]
         if kind == "pep":
@@ -317,7 +355,27 @@ class ClientForm:
             return self.__ui.ask_text("Describe how the client accumulated their wealth", min_length=50)
         return self.__ui.ask_text(label)
 
-    def ask_after_save(self, record: dict) -> bool:
+    def ask_optional_field(self, field: dict) -> int | float | list[str] | None:
+        """Ask for a detail the form does not insist on, whose value read from the documents was not
+        possible. Enter leaves it empty (None, or [] for a list), and the prompt says what that means:
+        for an end year, a blank is the current job."""
+        label, kind = field["label"], field["kind"]
+        if "blank =" not in label:
+            label += " (press Enter to leave it empty)"
+        if field["path"][-1] == "wealth_jump_years":
+            return self.__ui.ask_int(label, minimum=1, maximum=60, allow_blank=True)   # the form's limits
+        if kind == "year":
+            return self.__ui.ask_year(label, allow_blank=True)
+        if kind == "money":
+            return self.__ui.ask_money(label, allow_zero=False, allow_blank=True)
+        if field["path"][-1] == "declared_counterparties":                  # firm names, as the form takes them
+            answer = self.__ui.read_answer(f"{label}, comma-separated: ").strip()
+            return [name.strip() for name in answer.split(",") if name.strip()]
+        if kind == "countries":
+            return self.__ui.ask_countries(label, allow_blank=True)
+        return self.__ui.ask_text(label)
+
+    def ask_after_save(self, record: ClientRecord) -> bool:
         """After a client is saved: view the saved details, run the assessment, or go back.
         Returns True if the assessment should run now."""
         options = ["View the saved client details",
@@ -330,7 +388,7 @@ class ClientForm:
                 continue
             return choice == 1
 
-    def edit_client_profile(self, record):
+    def edit_client_profile(self, record: dict) -> None:
         """Edit name, nationality and current career info."""
         self.__ui.show("\n=== Edit Client Profile ===")
         self.__ui.show("Press Enter to keep the existing value.")
@@ -348,16 +406,21 @@ class ClientForm:
         career["age"] = self.__ui.keep_int("Age", career.get("age", ""), 18, 100)
         career["career_start_year"] = self.__ui.keep_int("Year first career started",
                                                career.get("career_start_year", ""), 1940, this_year)
+        # The current job is also listed in career_history (web form, documents): keep the two the same.
+        open_jobs = [job for job in record.get("career_history") or [] if job.get("end_year") in (None, "")]
+        if open_jobs:
+            for key in ClientRecord.CAREER_JOB_KEYS:
+                open_jobs[-1][key] = career[key]
 
         self.__ui.show("\nClient profile updated.")
 
-    def add_career_record(self, record):
+    def add_career_record(self, record: dict) -> None:
         """Add a job to career_history."""
         self.__ui.show("\n=== Add Career Record ===")
-        record.setdefault("career_history", []).append(self._ask_job())
+        record.setdefault("career_history", []).append(self.__ask_job())
         self.__ui.show("\nCareer record added.")
 
-    def edit_career_record(self, record):
+    def __edit_career_record(self, record: dict) -> None:
         """Edit a job in career_history."""
         careers = record.get("career_history", [])
         if not careers:
@@ -394,13 +457,13 @@ class ClientForm:
         career["country"]       = self.__ui.keep_words("Country", career.get("country", ""))
         self.__ui.show("\nCareer record updated.")
 
-    def add_asset_record(self, record):
+    def add_asset_record(self, record: dict) -> None:
         """Add an entry to investments."""
         self.__ui.show("\n=== Add Investment / Asset ===")
-        record.setdefault("investments", []).append(self._ask_asset())
+        record.setdefault("investments", []).append(self.__ask_asset())
         self.__ui.show("\nAsset added.")
 
-    def edit_asset_record(self, record):
+    def __edit_asset_record(self, record: dict) -> None:
         """Edit an entry in investments."""
         assets = record.get("investments", [])
         if not assets:
@@ -419,7 +482,7 @@ class ClientForm:
         asset["asset_type"]        = self.__ui.keep_words("Asset (e.g. Property - Condo)", asset.get("asset_type", ""), ConsoleUI.LABEL)
         asset["country"]           = self.__ui.keep_words("Country", asset.get("country", ""))
         asset["year_acquired"] = self.__ui.keep_int("Year acquired", asset.get("year_acquired", ""), 1940, this_year)
-        asset["price_paid"]    = self.__ui.keep_money("Price paid", asset.get("price_paid", ""))
+        asset["price_paid"]    = self.__ui.keep_money("Price paid", asset.get("price_paid"))
         while True:
             v = self.__ui.read_answer(f"Payment method {ClientForm.PAYMENT_METHODS} [{asset.get('payment_method', '')}]: ").strip().lower()
             if not v:
@@ -442,8 +505,8 @@ class ClientForm:
                 asset["sale_price"] = self.__ui.keep_money("Sale price", asset.get("sale_price") or 0)
                 break
             self.__ui.show_error(f"Enter a year between {bought} and {this_year}, 'none', or press Enter to keep.")
-        asset["current_declared_value"] = self.__ui.keep_money("Current value", asset.get("current_declared_value", ""))
-        asset["income_produced"]        = self.__ui.keep_money("Yearly income", asset.get("income_produced", ""))
+        asset["current_declared_value"] = self.__ui.keep_money("Current value", asset.get("current_declared_value"))
+        asset["income_produced"]        = self.__ui.keep_money("Yearly income", asset.get("income_produced"))
         while True:
             v = self.__ui.read_answer(f"Currency [{asset.get('currency', '')}]: ").strip().upper()
             if not v:
@@ -454,7 +517,7 @@ class ClientForm:
             self.__ui.show_error("Please enter a 3-letter currency code like SGD.")
         self.__ui.show("\nAsset updated.")
 
-    def edit_asset_composition(self, record):
+    def edit_asset_composition(self, record: dict) -> None:
         """Edit asset composition inside claims."""
         self.__ui.show("\n=== Edit Asset Composition ===")
         composition = record.setdefault("claims", {}).setdefault("asset_composition", {})
@@ -462,30 +525,28 @@ class ClientForm:
         record["claims"]["asset_composition"] = self.__ui.ask_composition(current=composition)
         self.__ui.show("\nAsset composition updated.")
 
-    def edit_client_declarations(self, record):
+    def edit_client_declarations(self, record: dict) -> None:
         """Edit claims fields."""
         self.__ui.show("\n=== Edit Financial Claims ===")
         claims = record.setdefault("claims", {})
         self.__ui.show("Press Enter to keep the existing value.")
 
-        claims["declared_net_worth"] = self.__ui.keep_money("Declared net worth (SGD)", claims.get("declared_net_worth", ""))
-        claims["expected_aum"]       = self.__ui.keep_money("Expected AUM (SGD)", claims.get("expected_aum", ""))
+        claims["declared_net_worth"] = self.__ui.keep_money("Declared net worth (SGD)", claims.get("declared_net_worth"),
+                                                              allow_zero=False)
+        claims["expected_aum"]       = self.__ui.keep_money("Expected AUM (SGD)", claims.get("expected_aum"), allow_zero=False)
 
         self.__ui.show(f"PEP status [{claims.get('pep_status', '')}]")
         if self.__ui.ask_yes_no("Change PEP status?"):
             claims["pep_status"] = ClientForm.PEP_OPTIONS[self.__ui.ask_choice("PEP status", ClientForm.PEP_OPTIONS)]
 
-        v = self.__ui.read_answer(f"Wealth countries [{', '.join(claims.get('wealth_countries', []))}]: ").strip()
-        if v:
-            items = [c.strip() for c in v.split(",") if c.strip()]
-            if items and all(self.__ui._only(c, ConsoleUI.LETTERS) for c in items):
-                claims["wealth_countries"] = items
-            else:
-                self.__ui.show_error("Not changed. Countries must be letters only, separated by commas.")
+        current = claims.get("wealth_countries", [])
+        countries = self.__ui.keep_countries("Wealth countries", current)
+        if countries is not current:          # only a valid new list is written back
+            claims["wealth_countries"] = countries
 
         self.__ui.show("\nClaims updated.")
 
-    def edit_sow_declaration(self, record):
+    def __edit_sow_declaration(self, record: dict) -> None:
         """Edit the Source of Wealth declaration string."""
         self.__ui.show("\n=== Edit Source of Wealth Declaration ===")
         current = record.get("sow_declaration", "")
@@ -494,7 +555,7 @@ class ClientForm:
         if v: record["sow_declaration"] = v
         self.__ui.show("\nDeclaration updated.")
 
-    def add_supporting_documents(self, record, upload_fn=None):
+    def add_supporting_documents(self, record: dict, upload_fn: Callable[[str], str | None] | None = None) -> None:
         """Add supporting documents to an existing client."""
 
         new_documents = self.get_supporting_documents(upload_fn)
@@ -511,8 +572,13 @@ class ClientForm:
             f"\n{len(new_documents)} document(s) added."
         )
 
-    def edit_existing_client(self, record, upload_fn=None):
-        """Allow the user to edit or add information to an existing client."""
+    def edit_existing_client(self, record: ClientRecord,
+                             upload_fn: Callable[[str], str | None] | None = None) -> ClientRecord:
+        """Allow the user to edit or add information to an existing client. Returns the edited
+        record as a new ClientRecord. If the changes do not make a valid record, it says why and
+        returns the SAME object it was given, unchanged, so the caller knows not to save."""
+
+        answers = record.to_dict()     # the answers are edited in the saved layout, then checked as a whole
 
         while True:
 
@@ -535,7 +601,7 @@ class ClientForm:
 
             if choice == "1":
 
-                self.edit_client_profile(record)
+                self.edit_client_profile(answers)
 
             elif choice == "2":
 
@@ -547,10 +613,10 @@ class ClientForm:
                 ).strip()
 
                 if career_choice == "1":
-                    self.edit_career_record(record)
+                    self.__edit_career_record(answers)
 
                 elif career_choice == "2":
-                    self.add_career_record(record)
+                    self.add_career_record(answers)
 
                 else:
                     self.__ui.show("Invalid choice.")
@@ -565,29 +631,29 @@ class ClientForm:
                 ).strip()
 
                 if asset_choice == "1":
-                    self.edit_asset_record(record)
+                    self.__edit_asset_record(answers)
 
                 elif asset_choice == "2":
-                    self.add_asset_record(record)
+                    self.add_asset_record(answers)
 
                 else:
                     self.__ui.show("Invalid choice.")
 
             elif choice == "4":
 
-                self.edit_asset_composition(record)
+                self.edit_asset_composition(answers)
 
             elif choice == "5":
 
-                self.edit_client_declarations(record)
+                self.edit_client_declarations(answers)
 
             elif choice == "6":
 
-                self.edit_sow_declaration(record)
+                self.__edit_sow_declaration(answers)
 
             elif choice == "7":
 
-                self.add_supporting_documents(record, upload_fn)
+                self.add_supporting_documents(answers, upload_fn)
 
             elif choice == "8":
 
@@ -601,25 +667,73 @@ class ClientForm:
             if not self.__ui.ask_yes_no("Make another change?"):
                 break
 
-    def find_existing_client(self, find_fn=None, load_fn=None, save_fn=None, download_fn=None, upload_fn=None):
-        """Find, display, edit and manage an existing client from local records."""
+        try:
+            return ClientRecord.from_dict(answers)
+        except (ValueError, TypeError, AttributeError) as error:
+            logger.error("ClientForm.edit_existing_client: the edited record %s is not valid: %r",
+                         record.client_ref, error)
+            self.__ui.show_error(f"The changes could not be kept because {ClientRecord.why_unreadable(error)}. "
+                                 f"The record is unchanged.")
+            return record
 
-        self.__ui.show("\n=== Existing Client ===")
-
+    def pick_client(self, find_fn: Callable[[str], ClientRecord | None]) -> ClientRecord | None:
+        """Ask for a client reference and look the client up with find_fn. Returns the ClientRecord,
+        or None if the officer went back, no client has that reference, or the saved record cannot
+        be read (find_fn raises ValueError saying why). The officer is told which of these it was."""
         client_ref = self.__ui.read_answer(
             "Enter client reference (0 to go back): "
         ).strip()
 
         if client_ref == "0":
-            return
+            return None
 
         self.__ui.show("\nSearching saved clients...")
 
-        client_record = find_fn(client_ref) if find_fn else None
+        try:
+            client_record = find_fn(client_ref)
+        except ValueError as error:      # the saved record, or the client database, cannot be read
+            self.__ui.show_error(str(error))
+            self.__ui.read_answer("\nPress Enter to return to the main menu...")
+            return None
 
         if client_record is None:
             self.__ui.show(f"\nNo client found with reference: {client_ref}")
             self.__ui.read_answer("\nPress Enter to return to the main menu...")
+            return None
+        return client_record
+
+    def ask_document_folder(self) -> str | None:
+        """Ask which folder holds the client's documents. Returns the folder path, or None to cancel."""
+        self.__ui.show("\n" + "=" * 60)
+        self.__ui.show("              NEW CLIENT FROM DOCUMENTS")
+        self.__ui.show("=" * 60)
+        self.__ui.show("Put the client's documents in one folder (CV, payslips, employment letter, tax notices,")
+        self.__ui.show("bank statements, property papers, KYC form). PDF, Word, Excel, text and images are read.")
+        if tk is not None and self.__ui.ask_yes_no("\nChoose the folder in a file explorer window?"):
+            root = tk.Tk()
+            root.withdraw()
+            folder = filedialog.askdirectory(title="Select the folder with the client's documents")
+            root.destroy()
+            if folder:
+                self.__ui.show(f"Folder: {folder}")
+                return folder
+            self.__ui.show("No folder was chosen.")
+        folder = self.__ui.read_answer("\nFolder path (or press Enter to go back to the menu): ").strip()
+        folder = folder.strip('"').strip("'")          # paths dragged into the terminal come quoted
+        return folder or None
+
+    def find_existing_client(self, find_fn: Callable[[str], ClientRecord | None],
+                             save_fn: Callable[[ClientRecord], bool] | None = None,
+                             download_fn: Callable[[str, str], bool] | None = None,
+                             upload_fn: Callable[[str], str | None] | None = None) -> None:
+        """Find, display, edit and manage an existing client from local records.
+        find_fn gives a ClientRecord or None (and raises ValueError if the saved record cannot be
+        read); save_fn is given the edited ClientRecord."""
+
+        self.__ui.show("\n=== Existing Client ===")
+
+        client_record = self.pick_client(find_fn)
+        if client_record is None:
             return
 
         self.__ui.show("\nClient found!")
@@ -658,20 +772,25 @@ class ClientForm:
 
             if choice == "1":
 
-                self.edit_existing_client(client_record, upload_fn)
+                edited = self.edit_existing_client(client_record, upload_fn)
 
-                self.__ui.show("\nSaving changes locally...")
-
-                success = save_fn(client_record) if save_fn else False
-
-                if success:
-                    self.__ui.show(
-                        "\nChanges saved successfully."
-                    )
+                if edited is client_record:
+                    # The changes did not make a valid record: edit_existing_client has said why.
+                    self.__ui.show("\nNothing was saved.")
                 else:
-                    self.__ui.show(
-                        "\nERROR: Changes could not be saved."
-                    )
+                    client_record = edited
+                    self.__ui.show("\nSaving changes locally...")
+
+                    success = save_fn(client_record) if save_fn else False
+
+                    if success:
+                        self.__ui.show(
+                            "\nChanges saved successfully."
+                        )
+                    else:
+                        self.__ui.show(
+                            "\nERROR: Changes could not be saved."
+                        )
 
                 self.__ui.show("\n=== UPDATED CLIENT RECORD ===")
 
@@ -683,10 +802,7 @@ class ClientForm:
 
             elif choice == "2":
 
-                documents = client_record.get(
-                    "supporting_documents",
-                    []
-                )
+                documents = client_record.documents()
 
                 if not documents:
                     self.__ui.show(

@@ -19,10 +19,17 @@ class FuturePaths:
 
     def __init__(self, market_model: MarketModel | None = None, forecast: dict | None = None,
                  policy: dict | None = None) -> None:
+        if market_model is not None and not isinstance(market_model, MarketModel):
+            raise ValueError(f"the market model must be a MarketModel (or None), not {type(market_model).__name__}")
+        for name, value in (("forecast", forecast), ("policy", policy)):
+            if value is not None and not isinstance(value, dict):
+                raise ValueError(f"the {name} must be a dict (or None), not {type(value).__name__}")
+        earnings = (forecast or {}).get("earnings") or {}
+        if not isinstance(earnings, dict):
+            raise ValueError(f"the forecast's earnings must be a dict, not {type(earnings).__name__}")
         self.__forecast: dict = forecast or {}
         self.__policy: dict = policy or {}
         self.__market_model: MarketModel = market_model or MarketModel()
-        earnings = self.__forecast.get("earnings") or {}
         self.__career_savings: CareerSavings = CareerSavings(earnings)
         self.__asset_path: AssetPath = AssetPath(self.__market_model, earnings.get("assets"))
         self.__paths: dict = {}

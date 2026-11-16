@@ -76,12 +76,12 @@ def compare_pay(forecast: dict, rows: list[dict]) -> list[tuple[bool, str]]:
 
 
 def compare_declaration(forecast: dict, items: list[dict]) -> list[tuple[bool, str]]:
-    found = forecast["declaration"]["claimed_sources"]
+    found = forecast["declaration"].sources()
     results = []
     for item in items:
-        match = [s for s in found if s["source_type"] == item["source_type"]]
+        match = [s for s in found if s.source_type == item["source_type"]]
         if "amount" in item:
-            match = [s for s in match if s["amount"] == item["amount"]]
+            match = [s for s in match if s.amount == item["amount"]]
         results.append((bool(match), f"{item['source_type']} (amount {item.get('amount', 'any')}): "
                                      f"'{item['from_text']}'"))
     return results

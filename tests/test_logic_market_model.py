@@ -59,3 +59,22 @@ def test_a_model_with_no_forecast_knows_no_markets():
     model = MarketModel()
     assert model.history() == {} and model.scenario_chances() == {}
     assert model.change("PROP_SG", 2027, "steady") == 0.0
+
+
+@pytest.mark.parametrize("forecast, message", [
+    ("markets", "forecast must be a dict"),
+    ({"markets": [1]}, "markets must be a dict"),
+    ({"markets": {"series": [1]}}, "market series must be a dict"),
+    ({"markets": {"series": {"M1": "flat"}}}, "market M1 must be a dict with a list called history"),
+    ({"markets": {"series": {"M1": {"history": [{"year": 2024}], "outlook": []}}}}, "history row of market M1"),
+    ({"markets": {"series": {"M1": {"history": [], "outlook": [{"year": 2027}]}}}}, "outlook row of market M1"),
+    ({"markets": {"scenario_chances": {"year": 2027}}}, "scenario_chances must be a list"),
+    ({"markets": {"scenario_chances": [{"year": 2027, "steady": 1}]}}, "scenario chance must be a dict"),
+])
+def test_a_forecast_of_the_wrong_shape_is_a_value_error_that_says_which_part(forecast, message):
+    with pytest.raises(ValueError, match=message):
+        MarketModel(forecast)
+
+
+def test_no_forecast_or_no_markets_is_an_empty_model():
+    assert MarketModel().history() == {} and MarketModel({}).outlook() == {}

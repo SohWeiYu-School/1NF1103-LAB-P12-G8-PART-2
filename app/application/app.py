@@ -1,10 +1,8 @@
 """App: creates every object of the system and coordinates them."""
 
-import json
 import logging
 import os
-import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Callable
 
 from dotenv import load_dotenv
@@ -23,6 +21,7 @@ from app.data.cloud_sync import CloudSync
 from app.data.config_reader import ConfigReader
 from app.data.document_store import DocumentStore
 from app.data.mongo_repository import MongoRepository
+from app.data.repository import Repository
 from app.interface.case_builder import CaseBuilder
 from app.interface.client_form import ClientForm
 from app.interface.console_ui import ConsoleUI
@@ -31,9 +30,9 @@ from app.interface.report_view import ReportView
 from app.logic.case_reader import CaseReader
 from app.logic.case_timeline import CaseTimeline
 from app.logic.document_record_builder import DocumentRecordBuilder
-from app.model.check import Check
 from app.model.client_record import ClientRecord
 from app.model.config import Config
+from app.model.declaration import Declaration
 from app.model.verdict import Verdict
 
 logger = logging.getLogger(__name__)
@@ -60,23 +59,41 @@ class App:
     # Network libraries that log every connection step; only their warnings are kept.
     NOISY_LOGGERS: tuple[str, ...] = ("httpx", "httpcore", "httpx2", "httpcore2", "openai", "urllib3",
                                       "google_genai", "hpack", "pymongo")
+    # What the user is told when the settings files cannot be loaded (the real error goes to the log).
+    SETTINGS_UNAVAILABLE: str = "The app's settings could not be loaded. Please contact your administrator."
+    LOG_HANDLER_NAME: str = "app_log_file"
     CLIENT_COLLECTION: str = "client_cases"
     ASSESSMENT_COLLECTION: str = "ai_assessments"
+    # What the user is told when saved records cannot be read (the real error goes to the log).
+    CLIENTS_UNAVAILABLE: str = "We can't load the client database right now. Please try again later."
+    ASSESSMENTS_UNAVAILABLE: str = "We can't load the saved assessments right now. Please try again later."
 
     def __init__(self, ai_caller: Callable[[str, dict, dict], str | None] | None = None,
                  root: str = ROOT_DIR, data_folder: str = "data") -> None:
-        load_dotenv(os.path.join(root, ".env"))
         self.__root: str = root
+        # Settings errors are logged while App is built, so the log file must exist before that.
+        if not logging.getLogger().handlers:
+            self.__configure_logging()
+        load_dotenv(os.path.join(root, ".env"))
         data_dir = data_folder if os.path.isabs(data_folder) else os.path.join(root, data_folder)
         database_dir = os.path.join(data_dir, "local database")
 
         # Settings (read by the Data Manager, held by a Domain Model object)
         self.__config_reader: ConfigReader = ConfigReader(os.path.join(root, "config"))
-        self.__config: Config = Config(self.__config_reader.read("policy"), self.__config_reader.read("vocabulary"))
+        self.__settings_ok: bool = True
+        try:
+            policy_file, vocabulary_file = (self.__config_reader.read(name) for name in ConfigReader.FILE_NAMES)
+        except (OSError, ValueError) as error:
+            # App must not crash while it is built, and must not run on empty rules: start() and
+            # start_web() see this flag, tell the officer and stop. The reader has logged the details.
+            logger.error("App: the settings could not be loaded: %r", error)
+            self.__settings_ok = False
+            policy_file, vocabulary_file = {}, {}
+        self.__config: Config = Config(policy_file, vocabulary_file)
         policy = self.__config.policy
 
         # Data Manager
-        self.__clients: ClientRepository = ClientRepository(os.path.join(database_dir, "sow_cases.json"))
+        self.__clients: Repository = ClientRepository(os.path.join(database_dir, "sow_cases.json"))
         self.__assessments: AssessmentRepository = AssessmentRepository(
             os.path.join(database_dir, "ai_assessments.json"))
         # Document ids are paths from the folder that holds the data folder ("data/documents/...").
@@ -85,7 +102,7 @@ class App:
         self.__case_files: CaseFiles = CaseFiles(os.path.join(root, "data", "sample"))   # shipped with the code
         uri = os.getenv("MONGODB_URI") or ""
         state_path = os.path.join(database_dir, "sync_state.json")
-        self.__cloud_syncs: list[CloudSync] = [
+        self.__syncs: list[CloudSync] = [
             CloudSync(self.__clients, MongoRepository(App.CLIENT_COLLECTION, "client_ref", uri), state_path),
             CloudSync(self.__assessments, MongoRepository(App.ASSESSMENT_COLLECTION, "assessment_id", uri),
                       state_path)]
@@ -95,6 +112,8 @@ class App:
         cache_folder = os.getenv("CACHE_DIR") or os.path.join(data_folder, "cache")
         self.__response_cache: ResponseCache = ResponseCache(
             cache_folder if os.path.isabs(cache_folder) else os.path.join(root, cache_folder))
+        # Kept by App because the new-client screen also reads documents outside an assessment.
+        self.__document_ai: DocumentAI = self.__create_document_ai()
         self.__runner: AssessmentRunner = self.__create_runner(policy)
 
         # IO Manager
@@ -103,7 +122,19 @@ class App:
         self.__client_form: ClientForm = ClientForm(self.__ui, self.__report_view)
         schema = self.__case_files.load(os.path.join(root, "app", "schemas", "case_input.schema.json"), default={})
         self.__case_builder: CaseBuilder = CaseBuilder(self.__ui, schema)
-        self.__rate_limiter: RateLimiter = RateLimiter(policy.get("assessment_rate_limit", {}))
+        limits = policy.get("assessment_rate_limit", {})
+        if not isinstance(limits, dict):
+            # start() reports the setting through ConfigReader.problems() and stops.
+            logger.warning("App: 'assessment_rate_limit' in policy.json must be an object, not %r; "
+                           "using the default rate limit", limits)
+            limits = {}
+        try:
+            self.__limiter: RateLimiter = RateLimiter(
+                limits.get("cooldown_seconds", RateLimiter.DEFAULT_COOLDOWN_SECONDS), limits.get("enabled", True))
+        except ValueError as error:
+            # start() reports the setting through ConfigReader.problems() and stops; App itself must not crash.
+            logger.error("App: the assessment rate limit setting is not valid, using the default: %s", error)
+            self.__limiter = RateLimiter()
 
     # ----- what the front ends are given ----------------------------------------------
 
@@ -111,11 +142,31 @@ class App:
     def config(self) -> Config:
         return self.__config
 
+    @staticmethod
+    def typologies_checked(report: dict | None) -> bool:
+        """False when the report says the crime scan's research could not run, so the typologies it
+        shows were taken from the AI unchecked. Works for a fresh report and a saved one alike."""
+        for section in (report or {}).get("sections", []):
+            if section.get("title") == "Could not run":
+                if any(item.get("text") == AssessmentRunner.RESEARCH_STEP for item in section.get("items", [])):
+                    return False
+        return True
+
+    def settings_ok(self) -> bool:
+        """False when the settings files could not be loaded: no assessment can then be trusted."""
+        return self.__settings_ok
+
+    def __require_settings(self) -> None:
+        """Raises RuntimeError(SETTINGS_UNAVAILABLE) instead of running on empty rules."""
+        if not self.__settings_ok:
+            raise RuntimeError(App.SETTINGS_UNAVAILABLE)
+
     def steps(self) -> list[str]:
         """The steps of an assessment, in the order they are announced."""
         return list(AssessmentRunner.STEPS)
 
-    def today(self) -> str:
+    @staticmethod
+    def today() -> str:
         """Every assessment is dated today (the command line and the web app both use this)."""
         return datetime.now().date().isoformat()
 
@@ -146,21 +197,28 @@ class App:
             (no arguments)          the menu
             --case FILE             assess one case file
             --all-samples           assess every sample case
-            --demo                  use the recorded AI replies in tests/golden (no API key needed)
             --web                   start the web app instead of the menu
         """
         self.__configure_logging()
-        if "--web" in arguments:
-            return self.start_web()
+        allowed = ("--web", "--case", "--all-samples")
+        unknown = [argument for position, argument in enumerate(arguments)
+                   if argument not in allowed and not (position > 0 and arguments[position - 1] == "--case")]
+        if unknown:
+            self.__ui.show_error(f"Unknown option {unknown[0]}. Allowed: --web, --case FILE, --all-samples "
+                                 "(or nothing, for the menu).")
+            return 1
+        if not self.__settings_ok:
+            self.__ui.show_error(App.SETTINGS_UNAVAILABLE)
+            return 1
         problems = self.__config_reader.problems()
         if problems:
             for problem in problems:
                 self.__ui.show_error(problem)
             return 1
+        if "--web" in arguments:
+            return self.start_web()
         if not self.ai_available():
             self.__ui.show_error("No OPENAI_API_KEY set: only saved AI replies can be used.")
-        if "--demo" in arguments:
-            self.__ui.show(f"Demo mode: {self.use_recorded_replies()} recorded AI replies loaded from tests/golden.")
         try:
             if "--all-samples" in arguments:
                 paths = self.__case_files.list_samples()
@@ -186,40 +244,58 @@ class App:
         """Start the web app. HOST and PORT in .env set where it listens (default 127.0.0.1:5000)."""
         from app.interface.web_app import WebApp    # imported here: WebApp itself imports App
         self.__configure_logging()
-        WebApp(self).run(host or os.getenv("HOST") or "127.0.0.1", port or int(os.getenv("PORT") or 5000))
+        if not self.__settings_ok:
+            self.__ui.show_error(App.SETTINGS_UNAVAILABLE)
+            return 1
+        WebApp(self, self.__limiter).start(host or os.getenv("HOST") or "127.0.0.1", port or int(os.getenv("PORT") or 5000))
         return 0
 
     def run_menu(self) -> None:
         """Show the main menu until the officer chooses to leave."""
-        self.__ui.show_message(f"{len(self.__assessments.load())} saved assessment(s) loaded.")
+        try:
+            self.__ui.show_message(f"{len(self.__assessments.load())} saved assessment(s) loaded.")
+        except (OSError, ValueError) as error:
+            logger.error("App.run_menu: the saved assessments cannot be read: %r", error)
+            self.__ui.show_error(App.ASSESSMENTS_UNAVAILABLE)
         while True:
             choice = self.__ui.show_app_menu()
             if choice == "1":
-                record = self.__client_form.create_new_client(save_fn=self.__clients.save,
-                                                             upload_fn=self.__documents.upload)
+                record = self.__client_form.create_new_client(save_fn=self.save_client,
+                                                             upload_fn=self.upload_document,
+                                                             is_taken_fn=self.client_ref_taken)
                 if record is not None:
-                    self.__assess_if_allowed(record)
+                    self.__maybe_assess(record)
             elif choice == "2":
-                record = self.new_client_from_documents()
+                record = self.__new_client_from_documents()
                 if record is not None:
-                    self.__assess_if_allowed(record)
+                    self.__maybe_assess(record)
             elif choice == "3":
                 self.__client_form.find_existing_client(
-                    find_fn=self.__clients.find, save_fn=self.__clients.save,
-                    download_fn=self.__documents.download, upload_fn=self.__documents.upload)
+                    find_fn=self.find_client, save_fn=self.save_client,
+                    download_fn=self.download_document, upload_fn=self.upload_document)
             elif choice == "4":
                 ref = self.__ui.ask_client_ref()
                 if ref is None:
                     continue
-                record = self.__clients.find(ref)
+                try:
+                    record = self.find_client(ref)
+                except ValueError as error:
+                    self.__ui.show_error(str(error))
+                    continue
                 if record is None:
                     self.__ui.show_error(f"No client found with reference {ref}.")
                     continue
-                self.__assess_if_allowed(record)
+                self.__maybe_assess(record)
             elif choice == "5":
                 self.list_assessments()
             elif choice == "6":
-                self.__ui.show_client_list(self.__clients.load())
+                try:
+                    clients = self.__clients.load()
+                except (OSError, ValueError) as error:
+                    logger.error("App.run_menu: the client records cannot be read: %r", error)
+                    self.__ui.show_error(App.CLIENTS_UNAVAILABLE)
+                    continue
+                self.__report_view.show_client_list(clients)
                 self.__ui.read_answer("Press Enter to continue...")
             elif choice == "7":
                 self.__ui.show_message("\n--- Synchronizing Local Data to Cloud Database ---")
@@ -230,25 +306,25 @@ class App:
 
     # ----- assessing ---------------------------------------------------------------------------
 
-    def prepare_case(self, client_record: dict) -> dict | None:
+    def __prepare_case(self, record: ClientRecord) -> dict | None:
         """The case to assess, built from a saved client record. The officer is only asked for
         what cannot be read from the record. None if no usable case could be made."""
-        case, missing = CaseReader(self.today()).forecasting_case(client_record)
+        case, missing = self.read_case(record)
         if case is None:
             self.__ui.show_error("Needed before the assessment can run: " + ", ".join(missing))
-            case = self.__case_builder.case_from_client_record(client_record)
+            case = self.__case_builder.build(record)
             if case is None:
                 return None
         problems = self.__case_builder.validate_case(case)
         if problems:
-            self.__ui.show_case_problems(case["client_ref"], problems)
+            self.__case_builder.show_case_problems(case["client_ref"], problems)
             return None
         return case
 
-    def read_case(self, client_record: dict) -> tuple[dict | None, list[str]]:
+    def read_case(self, record: ClientRecord) -> tuple[dict | None, list[str]]:
         """(case, []) when the record can be read into a case, otherwise (None, what is missing).
         Nothing is asked and nothing is shown: the web app uses this."""
-        return CaseReader(self.today()).forecasting_case(client_record)
+        return CaseReader(self.today()).forecasting_case(record.to_dict())
 
     def assess(self, case: dict, supporting_documents: list[dict] | None = None,
                on_step: Callable[[int, str], None] | None = None,
@@ -257,62 +333,89 @@ class App:
         """Run one assessment. Returns the result, or None if a critical step failed.
         on_failure defaults to App's own rule (CRITICAL_STEPS). show_failures=False keeps
         failed steps off the terminal (the web app shows them in the report instead)."""
+        self.__require_settings()
         if on_failure is None:
             on_failure = self.__handle_failure if show_failures else self.__handle_failure_quietly
         return self.__runner.run(case, supporting_documents, on_step, on_failure)
 
-    def assess_client_record(self, client_record: dict) -> dict | None:
-        """The command line's assessment of a saved client: prepare, run, save, show."""
-        case = self.prepare_case(client_record)
+    def assess_client_record(self, record: ClientRecord) -> Verdict | None:
+        """The command line's assessment of a saved client: prepare, run, save, show.
+        Returns the Verdict, or None if no assessment could be made."""
+        self.__require_settings()
+        case = self.__prepare_case(record)
         if case is None:
             return None
         self.__ui.show_message(f"\nAssessing {case['client_ref']}: documents, crime scan, forecast "
                                "and benchmark together.")
-        result = self.assess(case, client_record.get("supporting_documents"), on_step=self.__show_step)
+        result = self.assess(case, record.documents(), on_step=self.__show_step)
         if result is None:
             self.__ui.show_error("The assessment was stopped. Nothing was saved.")
             return None
-        saved = self.save_assessment(result, client_record, on_step=self.__show_step)
-        self.__report_view.show_verdict_report(result["report"], crime_result=result.get("crime_result"),
+        saved = self.save_assessment(result, record, on_step=self.__show_step)
+        verdict = result["verdict"]
+        self.__report_view.show_verdict_report(verdict, crime_result=result.get("crime_result"),
                                                typologies=result.get("typologies"))
         if saved:
             self.__ui.show_message("Assessment saved.")
         else:
             self.__ui.show_error("Could not save the assessment.")
-        return result
+        return verdict
 
-    def save_assessment(self, result: dict, client_record: dict | None = None,
+    def save_assessment(self, result: dict, record: ClientRecord | None = None,
                         on_step: Callable[[int, str], None] | None = None) -> str | None:
-        """Save the assessment as ONE record, and its outcome on the client record when given.
-        Returns the assessment id, or None if it could not be saved."""
+        """Save the assessment as ONE record, then its outcome on the client record when given.
+        Returns the assessment id, or None if the assessment could not be saved (the client
+        record is then left as it was)."""
         if on_step is not None:
             on_step(len(AssessmentRunner.STEPS), AssessmentRunner.STEPS[-1])
         case = result["case"]
-        verdict = self.__verdict_object(result)
-        if client_record is not None:
-            self.__record_outcome(client_record, verdict, case, result["verdict"].get("assessed_on") or self.today())
-            if not self.__clients.save(client_record):
-                logger.error("App.save_assessment: could not save the client record for %s", verdict.client_ref)
+        verdict: Verdict = result["verdict"]
+        details = verdict.details()             # the layout saved under "verdict"
         saved = self.__assessments.save({
             "assessment_id": verdict.assessment_id,
             "client_ref": verdict.client_ref,
             "kind": "onboarding",
             "assessed_at": verdict.assessed_at,
             "outcome": verdict.outcome,
-            "verdict": result["verdict"],
+            "verdict": details,
             "report": verdict.report,
             "crime_scan": {"research": result["research"], "typologies": result["typology_response"],
-                           "declaration": result["crime_declaration"]},
-            "crime_result": result["crime_result"],
+                           "declaration": App.__crime_declaration_layout(result["crime_declaration"])},
+            "crime_result": App.__crime_result_layout(result["crime_result"]),
             "benchmark": result["benchmark"],
             "document_evidence": result["evidence"],
             "forecast": result["forecast_assessment"],
             "assessment": result["forecast_assessment"],
         })
-        return verdict.assessment_id if saved else None
+        if not saved:
+            # The client record is not touched: its outcome must never point at an assessment
+            # that was not saved.
+            logger.error("App.save_assessment: the assessment for %s was not saved", verdict.client_ref)
+            return None
+        if record is not None:
+            # The record keeps the case's date (assessed_on), not the time the verdict was made
+            # (assessed_at), so ClientRecord.record_assessment is not used here.
+            record.review_status.update(verdict.outcome, verdict.next_step, verdict.next_review_date,
+                                        details["assessed_on"] or self.today(), case)
+            if not self.save_client(record):
+                logger.error("App.save_assessment: could not save the client record for %s", verdict.client_ref)
+        return verdict.assessment_id
+
+    @staticmethod
+    def __crime_declaration_layout(declaration: Declaration | None) -> dict | None:
+        """The crime scan's reading of the declaration as it is saved: its rows {"sources": [...]}."""
+        return None if declaration is None else declaration.to_scan_dict()
+
+    @staticmethod
+    def __crime_result_layout(crime_result: dict | None) -> dict | None:
+        """The crime scan's result as it is saved: each MatchResult in its to_dict() layout."""
+        if crime_result is None:
+            return None
+        return {**crime_result, "match_results": [match.to_dict() for match in crime_result["match_results"]]}
 
     def run_case_file(self, path: str) -> bool:
         """Assess a case file (the same assessment as the menu). False if it could not be assessed."""
+        self.__require_settings()
         case = self.__case_files.load(path)
         if case is not None and not self.__case_files.is_forecasting_case(case):
             self.__ui.show(f"\n{os.path.basename(path)}: not in the forecasting format "
@@ -320,7 +423,7 @@ class App:
             return True
         problems = self.__case_builder.validate_case(case)
         if problems:
-            self.__ui.show_case_problems(path, problems)
+            self.__case_builder.show_case_problems(path, problems)
             return False
         self.__ui.show_message(f"\nAssessing {case['client_ref']} ({os.path.basename(path)}).")
         result = self.assess(case, on_step=self.__show_step)
@@ -329,37 +432,44 @@ class App:
             return False
         if not self.save_assessment(result, on_step=self.__show_step):
             self.__ui.show_error("Could not save the assessment.")
-        self.__report_view.show_verdict_report(result["report"], ask_for_evidence=False,
+        self.__report_view.show_verdict_report(result["verdict"], ask_for_evidence=False,
                                                crime_result=result.get("crime_result"),
                                                typologies=result.get("typologies"))
         return result["forecast"] is not None
 
-    def use_recorded_replies(self) -> int:
-        """Copy the recorded AI replies from tests/golden into the reply cache. Only fills
-        gaps, so real replies already saved are never overwritten. Returns how many were copied."""
-        golden = os.path.join(self.__root, "tests", "golden")
-        copied = 0
-        for path in self.__case_files.list_samples():
-            name = os.path.splitext(os.path.basename(path))[0]
-            recorded = self.__case_files.load(os.path.join(golden, name, "ai_responses.json"), default={})
-            case = self.__case_files.load(path)
-            if not self.__case_files.is_forecasting_case(case) or not isinstance(recorded, dict):
-                continue
-            saved = self.__response_cache.load_raw_replies(case["client_ref"])
-            missing = {piece: {"ok": True, "from_cache": False, "raw": json.dumps(reply),
-                               "prompt_version": "recorded"}
-                       for piece, reply in recorded.items() if piece not in saved}
-            copied += self.__response_cache.save_raw_replies(case["client_ref"], missing)
-        return copied
-
     # ----- clients and records ---------------------------------------------------------------
 
-    def new_client_from_documents(self) -> dict | None:
+    def find_client(self, client_ref: str) -> ClientRecord | None:
+        """The saved client with this reference, or None if no client has it.
+        Raises ValueError, with a message that is safe to show, if the client database cannot
+        be read or the saved record is not valid."""
+        try:
+            saved = self.__clients.find(client_ref)
+        except (OSError, ValueError) as error:
+            logger.error("App.find_client: the client records cannot be read: %r", error)
+            raise ValueError(App.CLIENTS_UNAVAILABLE) from error
+        if saved is None:
+            return None
+        try:
+            return ClientRecord.from_dict(saved)
+        except (ValueError, TypeError, AttributeError) as error:
+            logger.error("App.find_client: the saved record %s cannot be read: %r", client_ref, error)
+            raise ValueError(f"Client {client_ref} could not be loaded because the saved record is "
+                             f"not valid: {ClientRecord.why_unreadable(error)}.") from error
+
+    def save_client(self, record: ClientRecord) -> bool:
+        """Save the client (replacing the saved record with the same reference). False if not saved."""
+        saved = self.__clients.save(record.to_dict())
+        if not saved:
+            logger.error("App.save_client: could not save the client record %s", record.client_ref)
+        return saved
+
+    def __new_client_from_documents(self) -> ClientRecord | None:
         """Read a folder of documents, pre-fill the client, ask for what is missing, show a
         summary to check, then save. Returns the saved record (to assess) or None."""
         # 1. Which folder
         while True:
-            folder = self.__ui.ask_document_folder()
+            folder = self.__client_form.ask_document_folder()
             if folder is None:
                 return None
             paths = self.__documents.list_folder(folder)
@@ -382,14 +492,35 @@ class App:
 
         # 3. Build the record and ask for anything missing
         builder = self.record_builder()
-        document_record, _ = builder.build(extracted, self.__client_form.generate_client_id())
+        try:
+            client_ref = self.new_client_ref()
+        except ValueError as error:
+            self.__ui.show_error(str(error))
+            return None
+        try:
+            document_record, _, dropped = builder.build(extracted, client_ref)
+        except ValueError as error:
+            logger.error("App.__new_client_from_documents: the AI's reading is not a possible record: %r", error)
+            self.__ui.show_error(f"The details read from the documents cannot be used because {error}.")
+            if not self.__ui.ask_yes_no("Type the details in yourself?"):
+                return None
+            extracted = {}
+            document_record, _, dropped = builder.build(extracted, client_ref)
+        if dropped:
+            messages = [entry["message"] for entry in dropped]
+            logger.warning("App.__new_client_from_documents: left out of the AI's reading: %s", " | ".join(messages))
+            self.__ui.show_dropped_fields(messages)
         record = document_record
         missing = builder.missing_fields(record)
         self.__ui.show_missing_intro(len(missing))
         for field in missing:
-            record = builder.set_path(record, field["path"], self.__client_form.ask_missing_field(field))
-        record = builder.finish(record)
-        document_record = builder.finish(document_record)
+            record = self.__fill_field(builder, record, field)
+        # a dropped detail the form does not insist on is asked for too: the message said to enter it
+        optional = [entry["optional_field"] for entry in dropped if entry["optional_field"]]
+        if optional:
+            self.__ui.show_optional_intro(len(optional))
+            for field in optional:
+                record = self.__fill_field(builder, record, field, optional=True)
 
         # 4. Summary to check, edit until right, then save or discard
         notes = list(extracted.get("notes") or []) + list(warnings)
@@ -401,27 +532,24 @@ class App:
                 self.__ui.show_message("\nClient discarded. Nothing was saved.")
                 return None
             if action == "edit":
-                before = json.loads(json.dumps(record))
-                self.__client_form.edit_existing_client(record, self.__documents.upload)
-                record = builder.sync_after_edit(before, record)
+                record = builder.finish(self.__client_form.edit_existing_client(record, self.upload_document))
                 for field in builder.missing_fields(record):
-                    record = builder.set_path(record, field["path"], self.__client_form.ask_missing_field(field))
+                    record = self.__fill_field(builder, record, field)
                 continue
             break
 
         # 5. Keep the documents with the client, then save
         for path in paths:
-            stored = self.__documents.upload(path)
+            stored = self.upload_document(path)
             if stored is None:
                 self.__ui.show_error(f"Could not keep a copy of {os.path.basename(path)}.")
             else:
-                record.setdefault("supporting_documents", []).append(
-                    {"file_name": os.path.basename(path), "file_path": stored})
-        if not self.__clients.save(record):
+                record.add_document({"file_name": os.path.basename(path), "file_path": stored})
+        if not self.save_client(record):
             self.__ui.show_error("The client could not be saved.")
             return None
-        self.__ui.show_message(f"\nClient saved. Reference: {record['client_ref']} "
-                               f"({len(record.get('supporting_documents', []))} document(s) attached).")
+        self.__ui.show_message(f"\nClient saved. Reference: {record.client_ref} "
+                               f"({len(record.documents())} document(s) attached).")
         return record if self.__client_form.ask_after_save(record) else None
 
     def read_documents(self, documents: list[dict]) -> tuple[dict | None, list[str]]:
@@ -438,8 +566,18 @@ class App:
         return DocumentRecordBuilder(self.__config, date or self.today())
 
     def new_client_ref(self) -> str:
-        """A new, unused client reference."""
-        return self.__client_form.generate_client_id()
+        """A new client reference that no saved client has. Raises ValueError, with a message that
+        is safe to show, if the saved clients cannot be read or no free reference was found."""
+        return self.__client_form.generate_client_id(self.client_ref_taken)
+
+    def client_ref_taken(self, client_ref: str) -> bool:
+        """True if a saved client has this reference. Raises ValueError, with a message that is
+        safe to show, if the client database cannot be read (that is never "not taken")."""
+        try:
+            return self.__clients.find(client_ref) is not None
+        except (OSError, ValueError) as error:
+            logger.error("App.client_ref_taken: the client records cannot be read: %r", error)
+            raise ValueError(App.CLIENTS_UNAVAILABLE) from error
 
     def validate_case(self, case: object) -> list[str]:
         """Everything wrong with a case. [] means it can be assessed."""
@@ -456,30 +594,101 @@ class App:
         if choice is None:
             return          # 0 = back to the main menu
         picked = outcomes[choice]
-        matches = self.__assessments.query("" if picked == "(all)" else picked)
+        try:
+            matches = self.__assessments.query("" if picked == "(all)" else picked)
+        except (OSError, ValueError) as error:
+            logger.error("App.list_assessments: the saved assessments cannot be read: %r", error)
+            self.__ui.show_error(App.ASSESSMENTS_UNAVAILABLE)
+            return
         self.__report_view.show_assessment_list(matches)
         if matches and self.__ui.ask_yes_no("Open one in full?"):
             labels = [f"{match['client_ref']}  {match['kind']}" for match in matches]
             chosen = matches[self.__ui.ask_choice("Which one?", labels)]
-            if chosen.get("report"):
-                self.__report_view.show_verdict_report(chosen["report"])     # the combined assessment
+            if chosen.get("report"):                                         # the combined assessment
+                verdict = self.__saved_verdict(chosen)
+                if verdict is None:
+                    self.__ui.show_error("This saved assessment could not be read, so its report cannot be "
+                                         "shown. The other saved assessments are not affected.")
+                else:
+                    self.__report_view.show_verdict_report(verdict)
             else:
                 self.__report_view.show_onboarding(chosen["assessment"])     # saved before the combined verdict
+
+    def client_assessments(self, client_ref: str) -> list[dict]:
+        """Every saved assessment of one client, newest first. Nothing is hidden or caught here:
+        whatever the AssessmentRepository reports (a list, or an OSError or ValueError it raises when
+        the saved assessments cannot be read) comes straight back. The caller shows ASSESSMENTS_UNAVAILABLE."""
+        return self.__assessments.for_client(client_ref)
+
+    def find_assessment(self, assessment_id: str) -> dict | None:
+        """The saved assessment with this id, or None if there is none. Raises OSError or ValueError
+        when the saved assessments cannot be read; the caller shows ASSESSMENTS_UNAVAILABLE."""
+        return self.__assessments.find(assessment_id)
+
+    def upload_document(self, file_path: str) -> str | None:
+        """Keep a copy of a supporting document. Returns its id (to save in the client's
+        document list), or None if it could not be copied."""
+        return self.__documents.upload(file_path)
+
+    def download_document(self, file_id: str, output_path: str) -> bool:
+        """Copy a kept document out to output_path. False if it could not be copied."""
+        return self.__documents.download(file_id, output_path)
 
     def sync_to_cloud(self) -> dict:
         """Back up clients and assessments to the cloud database.
         Returns {"cases_synced", "assessments_synced", "skipped", "errors"}."""
         stats = {"cases_synced": 0, "assessments_synced": 0, "skipped": 0, "errors": []}
-        for name, sync in zip(("cases_synced", "assessments_synced"), self.__cloud_syncs):
+        for name, sync in zip(("cases_synced", "assessments_synced"), self.__syncs):
             result = sync.sync()
             stats[name] = result["synced"]
             stats["skipped"] += result["skipped"]
             stats["errors"] += [error for error in result["errors"] if error not in stats["errors"]]
         return stats
 
-    # ----- the objects the web app reaches through App ---------------------------------------
+    # ----- what the web app asks for, so it never works a manager's object itself --------------
 
-    def clients(self) -> ClientRepository:
+    def owns_document(self, file_id: str) -> bool:
+        """True only for a document reference this app made (the DocumentStore decides)."""
+        return self.__documents.owns(file_id)
+
+    def read_document_for_extraction(self, path: str, name: str) -> dict:
+        """One file read so the AI can pull client details out of it: {"file_name", "kind", ...}.
+        A file that cannot be read comes back with kind "error" and a message that is safe to show."""
+        return self.__documents.read_for_extraction(path, name)
+
+    def all_clients(self) -> list[dict]:
+        """Every saved client; [] only when there are none yet. Raises ValueError(CLIENTS_UNAVAILABLE)
+        if the client database cannot be read (that is never "no clients")."""
+        try:
+            return self.__clients.load()
+        except (OSError, ValueError) as error:
+            logger.error("App.all_clients: the client records cannot be read: %r", error)
+            raise ValueError(App.CLIENTS_UNAVAILABLE) from error
+
+    def all_assessments(self) -> list[dict]:
+        """Every saved assessment; [] only when there are none yet. Raises
+        ValueError(ASSESSMENTS_UNAVAILABLE) if the saved assessments cannot be read."""
+        try:
+            return self.__assessments.load()
+        except (OSError, ValueError) as error:
+            logger.error("App.all_assessments: the saved assessments cannot be read: %r", error)
+            raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
+
+    def record_from_reading(self, extracted: dict, today: str = "") -> tuple[ClientRecord, list[dict]]:
+        """The client record made from the AI's reading of documents, and one entry for each field
+        left out because no client record can have that value: {"path", "message", "optional_field"}.
+        Raises ValueError, saying what is wrong, if today is not a YYYY-MM-DD date or if the
+        reading as a whole cannot be a record."""
+        record, _, dropped = self.record_builder(today).build(extracted, "")
+        return record, dropped
+
+    def reading_problems(self, record: ClientRecord, today: str = "") -> list[str]:
+        """Things worth a second look in a record filled from documents. [] = nothing spotted."""
+        return self.record_builder(today).check(record)
+
+    # ----- the objects set-up code and tests reach through App ------------------------------
+
+    def clients(self) -> Repository:
         return self.__clients
 
     def assessments(self) -> AssessmentRepository:
@@ -489,7 +698,7 @@ class App:
         return self.__documents
 
     def rate_limiter(self) -> RateLimiter:
-        return self.__rate_limiter
+        return self.__limiter
 
     def response_cache(self) -> ResponseCache:
         return self.__response_cache
@@ -499,17 +708,34 @@ class App:
 
     # ----- private ---------------------------------------------------------------------------------
 
+    def __ai_model(self) -> str:
+        """The model name the AI caller reports, or "" when there is no caller."""
+        return getattr(self.__ai_caller, "model_name", lambda: "")() if self.__ai_caller else ""
+
+    def __ai_search_model(self) -> str:
+        """The model the AI caller uses for a web search (research), or the normal model's name
+        when the caller has no separate one."""
+        if not self.__ai_caller:
+            return ""
+        return getattr(self.__ai_caller, "search_model_name", self.__ai_model)()
+
+    def __create_document_ai(self) -> DocumentAI:
+        """The document reader. It gets no caller when the AI is unavailable, so it then uses
+        saved replies only."""
+        caller = self.__ai_caller if self.ai_available() else None
+        return DocumentAI("ai", caller, self.__ai_model(), 0.0, self.__response_cache)
+
     def __create_runner(self, policy: dict) -> AssessmentRunner:
         """The AssessmentRunner and the five AI services it is handed. App creates the services
-        but does not keep them, except the document reader the new-client screen also uses."""
+        but does not keep them, except the document reader (created in __init__), which the
+        new-client screen also uses."""
         caller = self.__ai_caller if self.ai_available() else None
-        model = getattr(self.__ai_caller, "model_name", lambda: "")() if self.__ai_caller else ""
+        model = self.__ai_model()
         cache = self.__response_cache
         settings = self.forecast_settings()
-        self.__document_ai: DocumentAI = DocumentAI("ai", caller, model, 0.0, cache)
         return AssessmentRunner(
             self.__config,
-            ResearchAI("ai", self.__ai_caller, model, 0.0, cache, policy.get("research_max_reports", 8),
+            ResearchAI("ai", self.__ai_caller, self.__ai_search_model(), 0.0, cache, policy.get("research_max_reports", 8),
                        policy.get("research_max_excerpts_per_report", 5)),
             TypologyAI("ai", self.__ai_caller, model, 0.0, cache, policy.get("typology_max_patterns", 5)),
             BenchmarkAI("ai", self.__ai_caller, model, 0.0, cache),
@@ -518,69 +744,73 @@ class App:
                        self.__config.vocabulary),
             self.__documents, cache)
 
-    def __handle_failure(self, step: str, reason: str) -> bool:
+    def __handle_failure(self, step: str, error: str) -> bool:
         """Decide what happens when a step of an assessment fails. Returns True to carry on
         without the step, False to stop the assessment."""
         if step in App.CRITICAL_STEPS:
-            logger.error("App: critical step failed, stopping the assessment: %s (%s)", step, reason)
-            self.__ui.show_error(f"{step} failed, so no verdict can be given: {reason}")
+            logger.error("App: critical step failed, stopping the assessment: %s (%s)", step, error)
+            self.__ui.show_error(f"{step} failed, so no verdict can be given: {error}")
             return False
-        logger.warning("App: step failed, carrying on without it: %s (%s)", step, reason)
-        self.__ui.show_message(f"   ! {step} could not be completed and is left out: {reason}")
+        logger.warning("App: step failed, carrying on without it: %s (%s)", step, error)
+        self.__ui.show_message(f"   ! {step} could not be completed and is left out: {error}")
         return True
 
-    def __handle_failure_quietly(self, step: str, reason: str) -> bool:
+    def __handle_failure_quietly(self, step: str, error: str) -> bool:
         """The same decision as __handle_failure, written to the log only."""
         critical = step in App.CRITICAL_STEPS
         logger.log(logging.ERROR if critical else logging.WARNING,
-                   "App: step failed (%s): %s (%s)", "stopping" if critical else "carrying on", step, reason)
+                   "App: step failed (%s): %s (%s)", "stopping" if critical else "carrying on", step, error)
         return not critical
 
-    def __assess_if_allowed(self, client_record: dict) -> None:
+    def __maybe_assess(self, record: ClientRecord) -> None:
         """Check the rate limit; if clear, run the assessment."""
-        allowed, wait = self.__rate_limiter.check("cli")
+        allowed, wait = self.__limiter.check("cli")
         if not allowed:
             self.__ui.show_rate_limit_error(wait)
             return
-        self.__rate_limiter.record("cli")
-        self.assess_client_record(client_record)
+        self.__limiter.record("cli")
+        self.assess_client_record(record)
+
+    def __fill_field(self, builder: DocumentRecordBuilder, record: ClientRecord, field: dict,
+                     optional: bool = False) -> ClientRecord:
+        """Ask the officer for one missing detail until the record accepts it. An optional detail
+        may be left empty by pressing Enter (the record is then unchanged)."""
+        while True:
+            try:
+                if optional:
+                    answer = self.__client_form.ask_optional_field(field)
+                    return record if answer in (None, []) else builder.set_path(record, field["path"], answer)
+                return builder.set_path(record, field["path"], self.__client_form.ask_missing_field(field))
+            except ValueError as error:
+                logger.warning("App: %s was not accepted: %r", field["label"], error)
+                self.__ui.show_error(f"That value cannot be used because {error}. Please try again.")
 
     def __show_step(self, number: int, label: str) -> None:
         self.__ui.show_step(number, len(AssessmentRunner.STEPS), label)
 
-    def __verdict_object(self, result: dict) -> Verdict:
-        """The assessment's result as a Verdict: the outcome, the checks behind it and the report."""
-        data = result["verdict"]
-        verdict = Verdict(str(uuid.uuid4()), result["case"]["client_ref"], datetime.now(timezone.utc).isoformat(),
-                          data["verdict"], data.get("next_step", ""), data.get("next_review_date", ""),
-                          data.get("notes"), data.get("not_run"))
-        for key in ("benchmark", "forecast", "crime", "document_findings"):
-            for row in data.get(key) or []:
-                verdict.add_check(Check.from_dict(row))
-        verdict.report = result["report"]
+    def __saved_verdict(self, saved: dict) -> Verdict | None:
+        """A saved assessment as a Verdict holding its saved report, so it can be shown again.
+        None (and logged) if the saved outcome or report is not possible."""
+        try:
+            verdict = Verdict(str(saved.get("assessment_id") or ""), str(saved.get("client_ref") or ""),
+                              str(saved.get("assessed_at") or ""), saved.get("outcome"))
+            verdict.report = saved["report"]
+        except ValueError as error:
+            logger.error("App: the saved assessment %s cannot be read: %r", saved.get("assessment_id"), error)
+            return None
         return verdict
 
-    def __record_outcome(self, client_record: dict, verdict: Verdict, case: dict, assessed_on: str) -> None:
-        """Write the outcome onto the client record. The record's ReviewStatus checks the values;
-        a record saved in an older layout that ClientRecord cannot read is updated field by field."""
-        try:
-            record = ClientRecord.from_dict(client_record)
-            record.review_status.update(verdict.outcome, verdict.next_step, verdict.next_review_date,
-                                        assessed_on, case)
-            client_record.update(record.review_status.to_dict())
-        except (ValueError, KeyError, TypeError) as error:
-            logger.warning("App: client record %s is in an older layout (%s); outcome written directly",
-                           verdict.client_ref, repr(error))
-            client_record.update(forecasting_case=case, outcome=verdict.outcome, routing=verdict.next_step,
-                                 next_review_date=verdict.next_review_date, last_assessed_on=assessed_on)
-
     def __configure_logging(self) -> None:
-        """Send all logging to logs/app.log. Nothing goes to the console."""
+        """Send all logging to logs/app.log. Nothing goes to the console. Done once: a second
+        call keeps the handler it made (no duplicate lines)."""
+        root_logger = logging.getLogger()
+        if any(getattr(handler, "name", None) == App.LOG_HANDLER_NAME for handler in root_logger.handlers):
+            return
         log_dir = os.path.join(self.__root, "logs")
         os.makedirs(log_dir, exist_ok=True)
         handler = logging.FileHandler(os.path.join(log_dir, "app.log"), encoding="utf-8")
+        handler.set_name(App.LOG_HANDLER_NAME)
         handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
-        root_logger = logging.getLogger()
         root_logger.setLevel(logging.DEBUG)
         root_logger.handlers.clear()
         root_logger.addHandler(handler)

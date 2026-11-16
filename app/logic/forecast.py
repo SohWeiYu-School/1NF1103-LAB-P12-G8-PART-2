@@ -1,7 +1,7 @@
 """Forecast: could the money add up under each person type?"""
 
 from app.logic.case_timeline import CaseTimeline
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.logic.formatter import Formatter
 from app.logic.future_paths import FuturePaths
 from app.logic.market_model import MarketModel
@@ -12,7 +12,7 @@ from app.model.check import Check
 from app.model.config import Config
 
 
-class Forecast(Feature):
+class Forecast(RiskAnalysis):
     """The forecast feature. From the AI's forecast (markets, pay, assets, person types,
     events) it works out, with arithmetic only, whether the declared wealth fits the honest
     type or a crime type, how stable that answer is, what to watch and which documents
@@ -26,6 +26,8 @@ class Forecast(Feature):
 
     def __init__(self, policy: dict | None = None, config: Config | None = None) -> None:
         super().__init__(policy)
+        if config is not None and not isinstance(config, Config):
+            raise ValueError(f"the config must be a Config (or None), not {type(config).__name__}")
         self.__config: Config = config or Config(self._policy, {})
         self.__forecast: dict = {}
         self.__market_model: MarketModel = MarketModel()
@@ -36,19 +38,20 @@ class Forecast(Feature):
     def run(self, case: dict, ai_data: dict) -> dict:
         """The forecast assessment for this case. ai_data is {"forecast": the finished forecast}."""
         self.__use(ai_data["forecast"])
-        self._results = self._assess(case)
-        return self._results
+        results = self._assess(case)
+        self._results = results
+        return results          # the local value: another run may replace self._results meanwhile
 
     def checks(self, context: dict) -> list[Check]:
         """The forecast's findings. context holds case, assessment, honest, types, failed_step, unmodelled."""
-        return self._as_checks(self._forecast_checks(
+        return self._forecast_checks(
             context["case"], context.get("assessment"), context.get("honest"), context.get("types") or [],
-            context.get("failed_step"), context.get("unmodelled")))
+            context.get("failed_step"), context.get("unmodelled"))
 
     def honest_numbers(self, case: dict, forecast: dict, assessment: dict) -> dict:
         """The honest type's figures the benchmark and the report compare against."""
         self.__use(forecast)
-        return self._honest_numbers(case, assessment)
+        return self.__honest_numbers(case, assessment)
 
     def calibrate_pay(self, case: dict, forecast: dict, documented_pay: list[dict]) -> tuple[dict, list[dict]]:
         """The forecast with its pay set to what his documents show, and what was changed."""
@@ -81,7 +84,7 @@ class Forecast(Feature):
             parts.append(f"declared source {person_type['enabled_by_source_id']}")
         return " and ".join(parts) or "not stated"
 
-    def _rank_documents(self, candidates: list[str]) -> list[dict]:
+    def __rank_documents(self, candidates: list[str]) -> list[dict]:
         """Documents ordered by how many candidate types each one would rule out."""
         forecast = self.__forecast
         pool = set(candidates)
@@ -118,11 +121,11 @@ class Forecast(Feature):
             for code in lookup.get(key, []):
                 add(code, failure["detail"])
         if len(candidates) > 1:
-            for document in self._rank_documents(candidates):
+            for document in self.__rank_documents(candidates):
                 add(document["document_code"], f"rules out {', '.join(document['rules_out'])}")
         return request[:policy["max_documents"]]
 
-    def _data_quality(self) -> dict:
+    def __data_quality(self) -> dict:
         """How many market figures the AI could only give from memory or not at all."""
         forecast = self.__forecast
         figures = [row for series in forecast["markets"]["series"].values() for row in series["history"]]
@@ -243,7 +246,7 @@ class Forecast(Feature):
             "documents": documents,
             "watch_dates": watch_dates,
             "next_review_date": min([scheduled] + first_divergence),
-            "data_quality": self._data_quality(),
+            "data_quality": self.__data_quality(),
         }
 
     def economy_brief(self, markets: dict | None) -> dict | None:
@@ -260,7 +263,7 @@ class Forecast(Feature):
                                  for j in markets.get("jurisdictions", [])],
         }
 
-    def _honest_numbers(self, case: dict, assessment: dict) -> dict:
+    def __honest_numbers(self, case: dict, assessment: dict) -> dict:
         """T1's fit, wealth today, liquid wealth, wealth by year and peak pay."""
         forecast = self.__forecast
         policy = self._policy
@@ -288,12 +291,12 @@ class Forecast(Feature):
                 "models": sorted(forecast["earnings"]["assets"], key=lambda a: a["asset_index"])}
 
     def _forecast_checks(self, case: dict, assessment: dict | None, honest: dict | None, types: list[dict],
-                        failed_step: str | None, unmodelled: list[dict] | None = None) -> list[dict]:
+                        failed_step: str | None, unmodelled: list[dict] | None = None) -> list[Check]:
         """The forecast's checks in the shared shape, plus the two new ones (wealth jump, liquid wealth).
         failed_step: why the forecast stopped, in words (if it did)."""
         policy = self._policy
         if not assessment or not honest:
-            return [self._row("forecast", "FORECAST", "Forecast", "wealth", "skipped",
+            return [self._check("FORECAST", "Forecast", "wealth", "skipped",
                            f"The forecast stopped at {failed_step or 'an early step'}, so the stories couldn't be tested.")]
         worth = case["claims"]["declared_net_worth"]
         t1 = honest["t1"]
@@ -305,23 +308,23 @@ class Forecast(Feature):
             status, note = "failed", "It only reaches the declared wealth at the optimistic edge."
         else:
             status, note = "passed", "That covers the declared wealth."
-        checks.append(self._row("forecast", "NET_WORTH_FIT", "Honest story (T1)", "wealth", status,
+        checks.append(self._check("NET_WORTH_FIT", "Honest story (T1)", "wealth", status,
                              f"Explains {Formatter.sgd(wealth['cautious'])} to {Formatter.sgd(wealth['optimistic'])} today (typical "
                              f"{Formatter.sgd(wealth['typical'])}); declared {Formatter.sgd(worth)}. {note}"))
 
         assets = case.get("investments", [])
         for row in assessment["affordability"]:
             asset = assets[row["asset_index"]] if row["asset_index"] < len(assets) else {}
-            checks.append(self._row(
-                "forecast", "AFFORDABILITY", f"{row['year']} purchase: {asset.get('asset_type', 'asset')}", "purchases",
+            checks.append(self._check(
+                "AFFORDABILITY", f"{row['year']} purchase: {asset.get('asset_type', 'asset')}", "purchases",
                 "passed" if row["affordable"] else "failed",
                 f"Needed {Formatter.sgd(row['needed'])} ({row['payment_method'].replace('_', ' ')}); the honest story had up to "
                 f"{Formatter.sgd(row['available']['optimistic'])}", group="Purchases"))
         for check in assessment["asset_checks"]:
             asset = assets[check["asset_index"]] if check["asset_index"] < len(assets) else {}
             is_value = check["rule_id"] == "ASSET_VALUE"
-            checks.append(self._row(
-                "forecast", check["rule_id"],
+            checks.append(self._check(
+                check["rule_id"],
                 f"{asset.get('asset_type', 'Asset')}: {'value' if is_value else 'income'}", "wealth",
                 "failed" if check["failed"] else "passed",
                 (f"Declared {Formatter.sgd(check['declared'])}; its markets explain about {Formatter.sgd(check['expected']['typical'])} "
@@ -331,18 +334,18 @@ class Forecast(Feature):
                 group="Asset values" if is_value else "Asset income"))
         for missing in unmodelled or []:
             asset = assets[missing["asset_index"]] if missing["asset_index"] < len(assets) else {}
-            checks.append(self._row("forecast", "ASSET_NOT_MODELLED", f"{asset.get('asset_type', 'Asset')}: not modelled",
+            checks.append(self._check("ASSET_NOT_MODELLED", f"{asset.get('asset_type', 'Asset')}: not modelled",
                                  "wealth", "skipped",
                                  f"The AI's answers about this asset failed the sense checks ({missing['error']}), so it is "
                                  f"held at its purchase price {Formatter.sgd(asset.get('price_paid'))} and its value and income "
                                  "weren't checked.", group="Asset values"))
         juris = assessment["jurisdiction"]
-        checks.append(self._row("forecast", "JURISDICTION", "Countries behind his wealth", "countries",
+        checks.append(self._check("JURISDICTION", "Countries behind his wealth", "countries",
                              "failed" if juris["failed"] else "passed",
                              f"With nothing behind them: {', '.join(juris['unexplained_countries']) or 'none'}. "
                              f"On a risk list: {', '.join(juris['listed_countries']) or 'none'}."))
         for source in assessment["declared_sources"]:
-            checks.append(self._row("forecast", "UNQUANTIFIED_SOURCE", f"Declared source {source['source_id']}", "sources",
+            checks.append(self._check("UNQUANTIFIED_SOURCE", f"Declared source {source['source_id']}", "sources",
                                  "failed" if source["failed"] else "passed", source["detail"], group="Declared sources"))
 
         # NEW: could the honest path make his biggest wealth jump?
@@ -350,21 +353,21 @@ class Forecast(Feature):
         if jump is not None:
             gain, first, last = self._best_honest_jump(honest, jump_years)
             fits = jump <= gain * (1 + policy["tolerance"]["net_worth"])
-            checks.append(self._row("forecast", "WEALTH_JUMP", "Wealth jump vs honest path", "wealth",
+            checks.append(self._check("WEALTH_JUMP", "Wealth jump vs honest path", "wealth",
                                  "passed" if fits else "failed",
                                  f"Declared jump {Formatter.sgd(jump)} over {jump_years} year(s); the honest story gains at most "
                                  f"{Formatter.sgd(gain)} in any {jump_years}-year stretch (best {first}-{last})"))
         # NEW: cash and shares the honest story leaves him today (used by "Money brought to the bank")
         liquid = honest["liquid"]
-        checks.append(self._row("forecast", "LIQUID_WEALTH", "Liquid wealth today", "wealth", "info",
+        checks.append(self._check("LIQUID_WEALTH", "Liquid wealth today", "wealth", "info",
                              f"The honest story leaves him {Formatter.sgd(liquid['cautious'])} to {Formatter.sgd(liquid['optimistic'])} "
                              f"in cash and listed shares"))
-        checks.append(self._row("forecast", "STABILITY", "Stability", "wealth",
+        checks.append(self._check("STABILITY", "Stability", "wealth",
                              "weak" if assessment["borderline"] else "passed",
                              "Moving every forecast 10% changes the result, so it is borderline."
                              if assessment["borderline"] else "The result holds when every forecast moves 10%."))
         for row in types:
-            checks.append(self._row("forecast", "CRIME_STORY", f"{row['type_id']} {row['name']}", "pattern", "info",
+            checks.append(self._check("CRIME_STORY", f"{row['type_id']} {row['name']}", "pattern", "info",
                                  f"{'Fits' if row['fits'] else 'Does not fit'} his money (fit {row['fit_score'] or 0:.2f}"
                                  f"{', open ' + row['route_years'] if row['route_years'] else ''})",
                                  group="Crime stories"))

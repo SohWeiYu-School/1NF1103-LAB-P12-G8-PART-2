@@ -5,11 +5,14 @@ import pytest
 from app.logic.future_paths import FuturePaths
 from app.logic.market_model import MarketModel
 from app.logic.onboarding_assessor import OnboardingAssessor
+from app.model.declaration import Declaration
 from tests.logic_fixtures import CONFIG, POLICY, sample_case, sample_forecast
 
 
-def _evaluate(case, scale=1.0, **options):
+def _evaluate(case, scale=1.0, declaration=None, **options):
     forecast = sample_forecast(case, **options)
+    if declaration is not None:
+        forecast["declaration"] = declaration
     paths = FuturePaths(MarketModel(forecast), forecast, POLICY)
     assessor = OnboardingAssessor(paths, POLICY, CONFIG)
     savings = paths.career_savings().rows(1998, 2026)
@@ -19,10 +22,6 @@ def _evaluate(case, scale=1.0, **options):
 
 def _assessor():
     return OnboardingAssessor(FuturePaths(MarketModel()), POLICY, CONFIG)
-
-
-def _fit(fits=True, at_typical=True):
-    return {"fits": fits, "fits_at_typical": at_typical}
 
 
 def test_evaluate_gives_an_outcome_and_a_fit_for_every_type():
@@ -59,24 +58,73 @@ def test_a_source_with_no_amount_and_nothing_behind_it_is_unquantified():
     assert sources["S2"]["failed"] is True        # "some advisory work": no amount, no job, no asset
 
 
+def _source(source_id, country, amount=None, job=None, asset=None, kind="advisory_fees"):
+    return {"source_id": source_id, "source_type": kind, "description": f"about {source_id}", "start_year": 2010,
+            "end_year": 2012, "amount": amount, "country": country, "linked_position_index": job,
+            "linked_asset_index": asset, "quote": f"quote {source_id}", "counterparty": None,
+            "occupation_mismatch": False}
+
+
+def test_a_declared_source_puts_its_country_behind_a_named_country():
+    case = sample_case()
+    case["claims"]["wealth_countries"] = ["Singapore", "Panama"]
+    declaration = Declaration.from_dict({"claimed_sources": [_source("S1", "Panama", amount=1000)]})
+    jurisdiction = _evaluate(case, declaration=declaration)["jurisdiction"]
+    assert "panama" not in jurisdiction["unexplained_countries"]
+
+
+def test_each_declared_source_is_checked_from_the_declaration():
+    declaration = Declaration.from_dict({"claimed_sources": [
+        _source("S1", "Hong Kong"), _source("S2", "Singapore", amount=5000), _source("S3", "Singapore", asset=0),
+        _source("S4", "Singapore", job=1), _source("S5", "Singapore", kind="employment")]})
+    sources = _evaluate(sample_case(), declaration=declaration)["sources"]
+    assert [source["failed"] for source in sources] == [True, False, False, False, False]
+    assert sources[0] == {"rule_id": "UNQUANTIFIED_SOURCE", "source_id": "S1", "source_type": "advisory_fees",
+                          "failed": True, "quote": "quote S1",
+                          "detail": "S1 about S1 (2010-2012, Hong Kong): no amount and no job or asset behind it"}
+
+
+def _outcome(declared, clean=False):
+    """The onboarding outcome for the sample case declaring this net worth. clean = no unexplained
+    assets, countries or sources, so no other check can fail."""
+    case = sample_case()
+    case["claims"]["declared_net_worth"] = declared
+    if not clean:
+        return _evaluate(case)["outcome"]
+    case["investments"] = []
+    case["claims"]["wealth_countries"] = ["Singapore"]
+    return _evaluate(case, declaration=Declaration.from_dict({"claimed_sources": []}))["outcome"]
+
+
 def test_only_a_crime_type_explaining_him_is_serious_risk():
-    fits = {"T1": _fit(fits=False), "T2": _fit(fits=True)}
-    assert _assessor()._decide_onboarding(fits, False, []) == "SERIOUS_RISK"
+    assert _outcome(20_000_000) == "SERIOUS_RISK"       # only T2 (a crime type) fits
 
 
 def test_no_type_explaining_him_is_risky():
-    fits = {"T1": _fit(fits=False), "T2": _fit(fits=False)}
-    assert _assessor()._decide_onboarding(fits, False, []) == "RISKY"
+    assert _outcome(100_000_000) == "RISKY"
 
 
-def test_honest_only_at_the_optimistic_edge_or_an_unaffordable_purchase_is_risky():
-    assert _assessor()._decide_onboarding({"T1": _fit(at_typical=False)}, False, []) == "RISKY"
-    assert _assessor()._decide_onboarding({"T1": _fit()}, True, []) == "RISKY"
+def test_honest_only_at_the_optimistic_edge_is_risky():
+    assert _outcome(16_500_000) == "RISKY"              # T1 fits, but not at the typical wealth
+    assert _outcome(10_000_000, clean=True) == "RISKY"
+
+
+def test_an_unaffordable_purchase_is_risky_even_when_the_honest_type_fits():
+    case = sample_case()
+    case["claims"]["declared_net_worth"] = 2_000_000
+    case["claims"]["wealth_countries"] = ["Singapore"]
+    case["investments"] = [{"asset_type": "Residential property", "country": "Singapore", "year_acquired": 2000,
+                            "price_paid": 5_000_000, "current_declared_value": 1_000_000,
+                            "payment_method": "cash", "income_produced": 0}]   # cash he could not have had in 2000
+    result = _evaluate(case, declaration=Declaration.from_dict({"claimed_sources": []}))
+    assert result["fits"]["T1"]["fits_at_typical"] is True
+    assert result["t1_affordability_breach"] is True
+    assert result["outcome"] == "RISKY"
 
 
 def test_other_failed_checks_mean_manual_review_and_a_clean_case_passes():
-    assert _assessor()._decide_onboarding({"T1": _fit()}, False, ["JURISDICTION"]) == "MANUAL_REVIEW"
-    assert _assessor()._decide_onboarding({"T1": _fit()}, False, []) == "PASSED"
+    assert _outcome(1_000_000) == "MANUAL_REVIEW"
+    assert _outcome(2_000_000, clean=True) == "PASSED"
 
 
 def test_an_answer_that_changes_when_the_forecasts_shift_goes_to_manual_review():
@@ -87,3 +135,13 @@ def test_an_answer_that_changes_when_the_forecasts_shift_goes_to_manual_review()
 
 def test_a_borderline_case_is_never_downgraded():
     assert _assessor().stable_outcome("SERIOUS_RISK", {"-10%": "RISKY", "+10%": "SERIOUS_RISK"}) == ("SERIOUS_RISK", True)
+
+
+@pytest.mark.parametrize("args, message", [
+    (("paths",), "future paths must be a FuturePaths"),
+    ((None, ["policy"]), "policy must be a dict"),
+    ((None, None, {"policy": {}}), "config must be a Config"),
+])
+def test_the_onboarding_assessor_rejects_wrong_typed_inputs(args, message):
+    with pytest.raises(ValueError, match=message):
+        OnboardingAssessor(*args)
