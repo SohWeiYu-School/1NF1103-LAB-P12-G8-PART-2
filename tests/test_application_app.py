@@ -1294,3 +1294,19 @@ def test_the_menu_flow_that_reads_documents_records_every_step(tmp_path, monkeyp
     assert actions.count("document_uploaded") == len(os.listdir(folder))
     assert {event.actor for event in _events(app)} == {App.TERMINAL}
     assert App.AUDIT_NOT_WRITTEN not in capsys.readouterr().out
+
+
+def test_a_hand_added_row_without_a_time_or_id_is_not_listed_but_verify_reports_it(app, tmp_path, caplog):
+    app.sync_to_cloud("Shareen")
+    path = tmp_path / "local database" / "audit_log.json"
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    rows.append({"action": "cloud_sync", "actor": "Shareen"})                       # unsealed: no at, no id
+    rows.append({"action": "cloud_sync", "actor": "Shareen", "sequence": 3, "hash": "a" * 64,
+                 "previous_hash": rows[0]["hash"]})                                  # sealed-looking, no at or id
+    path.write_text(json.dumps(rows), encoding="utf-8")
+    events, total = app.audit_log(AuditFilter())
+    assert total == 1 and [event.actor for event in events] == ["Shareen"]
+    assert app.audit_trail("") == []
+    assert "2 audit row(s) cannot be read and are not listed" in caplog.text
+    chain = app.verify_audit_log("Orbit Admin")
+    assert not chain.intact() and len(chain.breaks()) >= 2

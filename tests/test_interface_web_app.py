@@ -1541,3 +1541,18 @@ def test_an_unknown_page_is_still_a_404_and_a_real_error_is_still_a_500(web, mon
     monkeypatch.setattr(application, "all_clients", lambda: 1 / 0)
     reply = browser.get("/")
     assert reply.status_code == 500 and "Something went wrong" in reply.get_data(as_text=True)
+
+
+def test_a_hand_added_row_is_on_neither_the_log_nor_the_history_but_verify_reports_it(web, tmp_path):
+    application, _, browser = web
+    ref = sample_case()["client_ref"]
+    application.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    path = tmp_path / "local database" / "audit_log.json"
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    rows.append({"action": "client_edited", "actor": "Mallory", "client_ref": ref, "details": {"changes": []}})
+    path.write_text(json.dumps(rows), encoding="utf-8")
+    assert "Mallory" not in browser.get(f"/client/{ref}").get_data(as_text=True)
+    sign_in(browser, application, "admin")
+    assert "Mallory" not in browser.get("/audit?days=all").get_data(as_text=True)
+    browser.post("/audit/verify")
+    assert "changed outside the app" in html.unescape(browser.get("/audit").get_data(as_text=True))

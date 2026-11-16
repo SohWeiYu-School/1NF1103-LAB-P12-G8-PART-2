@@ -960,13 +960,20 @@ class App:
 
     @staticmethod
     def __audit_events(rows: list[dict], caller: str) -> list[AuditEvent]:
-        """The rows that can be read as events. Rows that cannot are logged here; Verify log shows them."""
+        """The rows that can be shown as events: sealed, and with a time and an id of their own written in
+        the row (a hand-added row would otherwise be given a made-up time). Others are counted and logged
+        here; Verify log shows them."""
         events: list[AuditEvent] = []
         unreadable = 0
         for row in rows:
             try:
-                events.append(AuditEvent.from_dict(row))
+                event = AuditEvent.from_dict(row)
             except ValueError:
+                unreadable += 1
+                continue
+            if event.is_sealed() and row.get("at") and row.get("event_id"):
+                events.append(event)
+            else:
                 unreadable += 1
         if unreadable:
             logger.warning("App.%s: %d audit row(s) cannot be read and are not listed", caller, unreadable)
