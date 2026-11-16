@@ -36,6 +36,8 @@ class ReportView:
     FIELD_NAMES: dict[str, str] = {"expected_aum": "Expected AUM", "pep_status": "PEP Status",
                    "current_declared_value": "Current Value (SGD)", "income_produced": "Yearly Income (SGD)"}
     SOURCE_TAGS: dict[str, str] = {"documents": "[DOC]   ", "edited": "[EDITED]", "entered": "[YOU]   ", "blank": "[ -- ]  "}
+    # What is added to a list line for an archived assessment (the keys are the archive states).
+    ARCHIVE_MARKS: dict[str, str] = {"archived": " (archived)", "unreadable": " (archive state unreadable)"}
     OUTCOME_LABELS: dict[str, str] = {
         "PASSED": "PASSED",
         "MANUAL_REVIEW": "MANUAL REVIEW",
@@ -378,7 +380,10 @@ class ReportView:
                       f"{quality['unverified_share']:.0%} from AI memory or missing."]
         return "\n".join(lines)
 
-    def format_assessment_list(self, records: list[dict]) -> str:
+    def format_assessment_list(self, records: list[dict], states: dict[str, str] | None = None) -> str:
+        """One line per assessment. states (assessment id -> "archived" or "unreadable") marks the
+        archived ones and the ones whose archive record is damaged; any other state adds no mark."""
+        states = states or {}
         if not records:
             return "No saved assessments match."
         lines = [f"{'Client':<16} {'Kind':<20} {'Date':<12} Outcome"]
@@ -391,7 +396,8 @@ class ReportView:
                 date = assessment.get("assessed_on", "")
                 outcome = assessment.get("outcome")
             lines.append(f"{record['client_ref']:<16} {record['kind']:<20} {date:<12} "
-                         f"{ReportView.OUTCOME_LABELS.get(outcome, '?')}")
+                         f"{ReportView.OUTCOME_LABELS.get(outcome, '?')}"
+                         f"{ReportView.ARCHIVE_MARKS.get(states.get(record.get('assessment_id')), '')}")
         return "\n".join(lines)
 
     def show_onboarding(self, assessment: dict) -> None:
@@ -403,5 +409,5 @@ class ReportView:
         self.__ui.show(self.format_onboarding(assessment))
         self.__ui.show("═" * W + "\n")
 
-    def show_assessment_list(self, records: list[dict]) -> None:
-        self.__ui.show(self.format_assessment_list(records))
+    def show_assessment_list(self, records: list[dict], states: dict[str, str] | None = None) -> None:
+        self.__ui.show(self.format_assessment_list(records, states))
