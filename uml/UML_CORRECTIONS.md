@@ -512,6 +512,8 @@ Phase 2.)
 - `Config`: new `__accounts`, `accounts` property and `account()`; `__init__` takes `accounts`.
 - `ConfigReader`: `FILE_NAMES` now includes `"accounts"`; new `-__account_problems()`.
 - `AssessmentRepository`: `MAX_BY_LENGTH`, `-__checked_by()`; `archive()`, `restore()` and `-__record_action()` take `by`.
+- After the review fixes: `AuditChain` gained `-__broken_ids` and `broken_ids()`; `WebApp` gained `shown_value()` and
+  `-__show_audit_log()`, and `audit_verify()` now returns `str | Response`. The IO column was re-stacked (WebApp grew).
 
 **Arrows added** (16; all confirmed by the checker): `AuditRepository --|> JsonRepository`; `App *-- "1" AuditRepository`;
 `Config o-- "0..*" Account`; `AuditChain *-- "0..*" AuditEvent`; and `uses` arrows `App` to `Account`, `AuditChain`,

@@ -418,11 +418,13 @@ package "IO Manager (app/interface)" {
     -__current() : Account | None
     -__flash_audit_failure(kept : bool = False) : None
     +audit_log_view() : str
-    +audit_verify() : Response
+    +audit_verify() : str | Response
     +gate() : Any
     +signin() : str | Response
     +signout() : Response
     +singapore_time(text : str) : str
+    -__show_audit_log(broken_ids : list[str] | None = None) : str
+    +shown_value(value : Any) : str
   }
 }
 
@@ -796,6 +798,8 @@ package "Logic Manager (app/logic)" {
     +intact() : bool
     +summary() : str
     +unreadable_count() : int
+    -__broken_ids : list[str] = []
+    +broken_ids() : list[str]
   }
   class Benchmark {
     -__config : Config = Config(...)
