@@ -159,9 +159,9 @@ def test_hash_matches_turns_false_when_the_stored_hash_is_wrong():
     ("autofill_used", {"documents": 1}, "", "Used document auto-fill (1 document, 0 fields found)"),
     ("document_uploaded", {"file_id": "data/documents/a.pdf"}, "", "Uploaded document data/documents/a.pdf"),
     ("document_downloaded", {"file_id": "x.pdf"}, "", "Downloaded document x.pdf"),
-    ("assessment_run", {"outcome": "RISKY"}, "C-0007", "Assessment saved for C-0007: RISKY"),
-    ("assessment_run", {}, "C-0007", "Assessment saved for C-0007"),
-    ("assessment_failed", {}, "C-0007", "Assessment for C-0007 could not be completed"),
+    ("assessment_run", {"outcome": "RISKY"}, "C-0007", "Assessment saved for client C-0007: RISKY"),
+    ("assessment_run", {}, "C-0007", "Assessment saved for client C-0007"),
+    ("assessment_failed", {}, "C-0007", "Assessment for client C-0007 could not be completed"),
     ("assessment_archived", {"assessment_id": "1a2b3c4d-9999", "reason": "duplicate"}, "C-0007",
      "Archived assessment 1a2b3c4d… (reason: duplicate)"),
     ("assessment_archived", {"assessment_id": "abc"}, "C-0007", "Archived assessment abc"),
@@ -177,11 +177,43 @@ def test_summary_is_one_plain_line_per_action(action, details, ref, expected):
 
 def test_a_failed_event_says_so_at_the_end():
     assert _event(action="assessment_run", result="failed", details={"outcome": "RISKY"}).summary() == \
-        "Assessment saved for C-0007: RISKY — failed"
+        "Assessment saved for client C-0007: RISKY — failed"
 
 
-def test_a_client_action_with_no_client_ref_still_reads_well():
-    assert _event(action="client_created", client_ref="").summary() == "Created client a client"
+@pytest.mark.parametrize("action, expected", [
+    ("client_created", "Created a client"),
+    ("client_edited", "Edited a client (0 fields changed)"),
+    ("assessment_run", "Assessment saved for a client"),
+    ("assessment_failed", "Assessment for a client could not be completed"),
+])
+def test_an_action_with_no_client_ref_says_a_client_not_client_a_client(action, expected):
+    assert _event(action=action, client_ref="", details={}).summary() == expected
+
+
+@pytest.mark.parametrize("action, details, expected", [
+    ("assessment_archived", {}, "Archived assessment"),
+    ("assessment_archived", {"reason": "duplicate"}, "Archived assessment (reason: duplicate)"),
+    ("assessment_restored", {}, "Restored assessment"),
+    ("document_uploaded", {}, "Uploaded document"),
+    ("document_downloaded", {"file_id": ""}, "Downloaded document"),
+])
+def test_lines_with_missing_parts_have_no_double_or_trailing_spaces(action, details, expected):
+    text = _event(action=action, details=details).summary()
+    assert text == expected and "  " not in text and text == text.strip()
+
+
+@pytest.mark.parametrize("changes", [
+    {"details": {"x": "\ud800"}}, {"details": {"\ud800": 1}}, {"actor": "a\ud800"},
+    {"client_ref": "\udfff"}, {"event_id": "\ud800"},
+])
+def test_a_lone_surrogate_anywhere_is_refused_at_construction(changes):
+    with pytest.raises(ValueError):
+        _event(**changes)
+
+
+def test_non_ascii_text_is_fine_and_is_hashed_as_written():
+    event = _sealed(actor="Zoë Müller", details={"note": "日本語"})
+    assert event.hash_matches() and event.details == {"note": "日本語"}
 
 
 def test_every_action_has_one_group_and_one_label():

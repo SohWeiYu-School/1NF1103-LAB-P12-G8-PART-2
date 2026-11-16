@@ -13,6 +13,11 @@ class AuditEvent:
     A new event is unsealed (sequence 0, no hash). The repository seals it onto the end of the
     chain with seal(): that fixes its place (sequence), the hash of the line before it, and its own
     hash, which covers every other field. Change any field later and hash_matches() turns False.
+
+    The hash covers the fields as this class normalises them (text trimmed, details rewritten as
+    plain JSON), not the raw bytes in the file. The chain can only show that the log is consistent
+    with itself: it cannot detect rows removed from the end, or a file that was emptied or rewritten
+    from the start with a fresh, valid chain.
     """
 
     TERMINAL: str = "terminal"
@@ -54,6 +59,11 @@ class AuditEvent:
         for name, value in text_fields.items():
             if not isinstance(value, str):
                 raise ValueError(f"The audit event's {name} must be text.")
+            try:
+                value.encode("utf-8")
+            except UnicodeEncodeError as error:        # a lone surrogate such as "\ud800" cannot be saved
+                raise ValueError(f"The audit event's {name} holds a character that cannot be saved "
+                                 "as text.") from error
         if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 0:
             raise ValueError(f"The audit event's sequence must be a whole number, 0 or more (got {sequence!r}).")
         actor, client_ref, event_id = actor.strip(), client_ref.strip(), event_id.strip()
@@ -69,7 +79,9 @@ class AuditEvent:
         if not isinstance(details, dict):
             raise ValueError("The details must be an object (a dict).")
         try:
-            details = json.loads(json.dumps(details, allow_nan=False))      # a private copy that JSON can hold
+            text = json.dumps(details, allow_nan=False, ensure_ascii=False)
+            text.encode("utf-8")                       # refuses a lone surrogate, which the file cannot hold
+            details = json.loads(text)                 # a private copy that JSON can hold
         except (TypeError, ValueError) as error:
             raise ValueError(f"The details must hold only plain JSON values: {error}") from error
         if at and not AuditEvent.__good_time(at):
@@ -192,36 +204,36 @@ class AuditEvent:
         """One plain line for the log and the client's history, e.g. "Edited client C-0007 (2 fields
         changed)". A failed event ends with " — failed"."""
         details = self.__details
-        ref = self.__client_ref or "a client"
+        who = f"client {self.__client_ref}" if self.__client_ref else "a client"
         action = self.__action
         if action == "signed_in":
             text = "Signed in"
         elif action == "signed_out":
             text = "Signed out"
         elif action == "client_created":
-            text = f"Created client {ref}"
+            text = f"Created {who}"
         elif action == "client_edited":
             changes = details.get("changes")
             count = len(changes) if isinstance(changes, list) else 0
-            text = f"Edited client {ref} ({count} field{'' if count == 1 else 's'} changed)"
+            text = f"Edited {who} ({count} field{'' if count == 1 else 's'} changed)"
         elif action == "autofill_used":
             text = (f"Used document auto-fill ({AuditEvent.__count(details.get('documents'), 'document')}, "
                     f"{AuditEvent.__count(details.get('fields'), 'field')} found)")
         elif action == "document_uploaded":
-            text = f"Uploaded document {AuditEvent.__plain(details.get('file_id'))}".strip()
+            text = AuditEvent.__words("Uploaded document", AuditEvent.__plain(details.get("file_id")))
         elif action == "document_downloaded":
-            text = f"Downloaded document {AuditEvent.__plain(details.get('file_id'))}".strip()
+            text = AuditEvent.__words("Downloaded document", AuditEvent.__plain(details.get("file_id")))
         elif action == "assessment_run":
             outcome = details.get("outcome")
-            text = f"Assessment saved for {ref}" + (f": {outcome}" if isinstance(outcome, str) and outcome else "")
+            text = f"Assessment saved for {who}" + (f": {outcome}" if isinstance(outcome, str) and outcome else "")
         elif action == "assessment_failed":
-            text = f"Assessment for {ref} could not be completed"
+            text = f"Assessment for {who} could not be completed"
         elif action == "assessment_archived":
             reason = details.get("reason")
-            text = f"Archived assessment {AuditEvent.__short(details.get('assessment_id'))}"
-            text += f" (reason: {reason})" if isinstance(reason, str) and reason else ""
+            text = AuditEvent.__words("Archived assessment", AuditEvent.__short(details.get("assessment_id")),
+                                      f"(reason: {reason})" if isinstance(reason, str) and reason else "")
         elif action == "assessment_restored":
-            text = f"Restored assessment {AuditEvent.__short(details.get('assessment_id'))}"
+            text = AuditEvent.__words("Restored assessment", AuditEvent.__short(details.get("assessment_id")))
         elif action == "cloud_sync":
             text = f"Cloud sync ({AuditEvent.__count(details.get('synced'), 'record')} synced)"
         elif action == "audit_verified":
@@ -232,6 +244,11 @@ class AuditEvent:
         else:
             text = "(no action)"
         return text + (" — failed" if self.__result == "failed" else "")
+
+    @staticmethod
+    def __words(*parts: str) -> str:
+        """The non-empty parts joined by single spaces (no double or trailing spaces)."""
+        return " ".join(part for part in parts if part)
 
     @staticmethod
     def __short(value: object) -> str:
