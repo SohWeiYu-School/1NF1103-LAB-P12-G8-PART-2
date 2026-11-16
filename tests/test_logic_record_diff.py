@@ -151,3 +151,12 @@ def test_touches_sees_a_dotted_parent_and_nothing_when_nothing_changed():
 def test_touches_refuses_fields_that_are_not_a_list_of_text(fields):
     with pytest.raises(ValueError):
         RecordDiff().touches(fields)
+
+
+def test_a_missing_field_and_a_field_holding_none_are_the_same():
+    assert RecordDiff({"a": None}, {}).changes() == [] and RecordDiff({}, {"a": None}).changes() == []
+
+
+def test_a_value_replacing_an_empty_container_shows_the_value_with_before_none():
+    assert RecordDiff({"claims": {}}, {"claims": {"pep_status": True}}).changes() == [
+        {"field": "claims.pep_status", "before": None, "after": True}]

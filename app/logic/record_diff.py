@@ -9,6 +9,11 @@ class RecordDiff:
 
     Only the officer's own edits count: the review-status fields that an assessment writes back
     (and the current date) are left out, so an assessment never looks like an edit.
+
+    Limits to know: an empty dict or list holds nothing, so going from {} or [] to a value (or back)
+    shows the new items with before or after None rather than a change to the empty container. A
+    missing field and a field holding None are the same here. A key that itself contains a dot or
+    "[" gives a path that reads like a nested one, so two different records can in theory share a path.
     """
 
     IGNORED: tuple[str, ...] = ("outcome", "routing", "next_review_date", "last_assessed_on",
