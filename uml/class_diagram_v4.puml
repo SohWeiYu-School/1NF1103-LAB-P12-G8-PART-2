@@ -351,14 +351,17 @@ package "IO Manager (app/interface)" {
     +SOW_FIELDS : list[tuple[str, str, str]] = [...] «const»
     +ASSESSMENT_FAILED : str = "The assessment could not be complete... «const»
     +ASSESSMENT_STOPPED : str = "The assessment was stopped because a... «const»
-    +ADMIN_ONLY_REVIEWS : str = "The admin account can only review th... «const»
-    +ADMIN_REFUSED : dict[str, str] = {...} «const»
     +AUDIT_ENDPOINTS : tuple[str, ...] = ("audit_log_view", "audit_verify") «const»
-    +CHIP_KEYS : dict[str, str] = {...} «const»
-    +CHOOSE_ACCOUNT : str = "Please choose one of the listed acco... «const»
-    +HISTORY_LIMIT : int = 50 «const»
     +NOT_ADMIN : str = "Only the admin can open the audit log." «const»
     +SINGAPORE : timezone = timezone(timedelta(hours=8)) «const»
+    +ADMIN_ENDPOINTS : tuple[str, ...] = (...) «const»
+    +ADMIN_KEY : str = "admin" «const»
+    +ADMIN_TWINS : dict[str, str] = {...} «const»
+    +DEMO_PASSWORDS : dict[str, str] = {...} «const»
+    +DONE_BY : dict[str, str] = {...} «const»
+    +GROUP_COLOURS : dict[str, str] = {...} «const»
+    +OFFICER_KEY : str = "officer" «const»
+    +PROFILE_IN_CAREER : tuple[str, ...] = (...) «const»
     --
     +__init__(app : App | None = None, limiter : RateLimiter | None = None)
     +start(host : str = "127.0.0.1", port : int = 5000, debug : bool = False) : None
@@ -425,6 +428,19 @@ package "IO Manager (app/interface)" {
     +singapore_time(text : str) : str
     -__show_audit_log(broken_ids : list[str] | None = None) : str
     +shown_value(value : Any) : str
+    {static} -__by_day(events : list[AuditEvent]) : list[tuple[str, list[AuditEvent]]]
+    -__home() : Response
+    -__portal() : str
+    -__session_account(key : str) : Account | None
+    {static} -__utc_moment(text : str) : datetime
+    +admin_home() : Response
+    {static} +field_label(path : Any) : str
+    {static} +initials(name : str) : str
+    +portal_link(endpoint : str, **values : Any) : str
+    +short_fields(changes : Any) : str
+    +singapore_clock(text : str) : str
+    +singapore_day(text : str) : str
+    +singapore_long(text : str) : str
   }
 }
 
@@ -661,6 +677,17 @@ package "Application (app/application)" {
     +AUDIT_KEY_MISSING : str = "The audit log is not set up (its key... «const»
     +MIN_AUDIT_KEY : int = 32 «const»
     -__audit_key : str = os.getenv("AUDIT_KEY", "").strip()
+    +ADMIN_PORTAL : str = "admin" «const»
+    +MAX_SIGN_IN_TEXT : int = 200 «const»
+    +OFFICER_PORTAL : str = "officer" «const»
+    +REFUSAL_REPEAT_SECONDS : int = 60 «const»
+    +SIGN_IN_ADMIN_AT_OFFICER : str = "This is an admin account. Admins sig... «const»
+    +SIGN_IN_EMPTY : str = "Please enter your name and password." «const»
+    +SIGN_IN_OFFICER_AT_ADMIN : str = "This is an officer account. Officers... «const»
+    +SIGN_IN_WRONG : str = "Name or password is wrong." «const»
+    +UNKNOWN : str = AuditEvent.UNKNOWN «const»
+    -__recent_refusals : dict[tuple[str, str], float] = {}
+    -__refusal_lock : threading.Lock = threading.Lock()
     --
     +__init__(ai_caller : Callable[[str, dict, dict], str | None] | None = None, root : str = ROOT_DIR, data_folder : str = "data")
     +start(arguments : list[str]) : int
@@ -735,15 +762,16 @@ package "Application (app/application)" {
     -__sync_all() : dict
     +account(email : str) : Account | None
     +accounts() : list[Account]
-    +audit_log(audit_filter : AuditFilter, now : datetime | None = None) : tuple[list[AuditEvent], int, int]
+    +audit_log(audit_filter : AuditFilter, now : datetime | None = None) : AuditPage
     +audit_trail(client_ref : str) : tuple[list[AuditEvent], int]
     +audit_write_failed() : bool
     +client_outcome_failed() : bool
-    +refused(actor : str, what : str) : None
-    +sign_in(email : str) : Account | None
+    +refused(actor : str, what : str, now : float | None = None) : None
+    +sign_in(name : str, password : str, portal : str) : tuple[Account | None, str]
     +sign_out(account : Account) : None
     +verify_audit_log(actor : str) : AuditChain
     +audit_key_ok() : bool
+    +last_activity() : dict[str, AuditEvent]
   }
   class AssessmentRunner {
     -__verdict_engine : VerdictEngine = VerdictEngine(...)
@@ -1125,18 +1153,22 @@ package "Domain Model (app/model)" {
     +MAX_NAME : int = 40 «const»
     +MIN_NAME : int = 2 «const»
     +OFFICER : str = "officer" «const»
-    +RESERVED_NAME : str = "terminal" «const»
     +ROLES : tuple[str, ...] = (ADMIN, OFFICER) «const»
     -__EMAIL_PATTERN : str = "^[a-z0-9._-]+@[a-z0-9.-]+\\.[a-z]+$" «const»
     -__NAME_PATTERN : str = "^[A-Za-z][A-Za-z .'-]*$" «const»
     -__email : str = "" {get}
     -__name : str = "" {get}
     -__role : str = "officer" {get}
+    +HASH_METHODS : tuple[str, ...] = ("scrypt", "pbkdf2") «const»
+    +RESERVED_NAMES : tuple[str, ...] = ("terminal", "unknown") «const»
+    -__password_hash : str = ""
+    +has_password : bool «property»
     --
-    +__init__(email : str = "", name : str = "", role : str = "officer")
+    +__init__(email : str = "", name : str = "", role : str = "officer", password_hash : str = "")
     {static} +from_dict(data : dict) : Account
     +is_admin() : bool
     +to_dict() : dict
+    +check_password(password : str) : bool
   }
   class AuditEvent {
     +ACTIONS : tuple[str, ...] = tuple(...) «const»
@@ -1163,6 +1195,7 @@ package "Domain Model (app/model)" {
     -__sequence : int = 0 {get}
     +group : str «property»
     +label : str «property»
+    +UNKNOWN : str = "unknown" «const»
     --
     {static} -__count(value : object, noun : str) : str
     {static} -__good_time(text : str) : bool
@@ -1179,29 +1212,62 @@ package "Domain Model (app/model)" {
     +to_dict() : dict
   }
   class AuditFilter {
-    +DAY_CHOICES : tuple[int, ...] = (1, 7, 30, 90, 0) «const»
-    +DEFAULT_DAYS : int = 7 «const»
     +MAX_ACTOR : int = AuditEvent.MAX_ACTOR «const»
     +MAX_CLIENT_REF : int = AuditEvent.MAX_CLIENT_REF «const»
-    +PAGE_SIZE : int = 50 «const»
-    +RESULT_CHOICES : tuple[str, ...] = ("", "ok", "failed") «const»
+    +PAGE_SIZE : int = 25 «const»
+    +RESULT_CHOICES : tuple[str, ...] = ("all", "ok", "failed") «const»
     -__actor : str = "" {get}
     -__client_ref : str = "" {get}
-    -__days : int = 7 {get}
-    -__group : str = "" {get}
     -__page : int = 1 {get}
     -__problems : list[str] = []
-    -__result : str = "" {get}
+    -__result : str = "all" {get}
+    +DATE_FORMAT : str = "%Y-%m-%d" «const»
+    +DEFAULT_PRESET : str = "7" «const»
+    +MAX_QUERY : int = 80 «const»
+    +PRESETS : tuple[str, ...] = ("1", "7", "30", "90", "custom") «const»
+    +PROBLEM_BOTH_DATES : str = "Pick both a start a... «const»
+    +PROBLEM_DATE_FORMAT : str = "The dates must look... «const»
+    +PROBLEM_DATE_ORDER : str = "The start date must... «const»
+    +PROBLEM_FUTURE : str = "The dates cannot be... «const»
+    +SINGAPORE : timezone = timezone(timedelta(hours=8)) «const»
+    +SORT_CHOICES : tuple[str, ...] = ("desc", "asc") «const»
+    -__date_from : str = "" {get}
+    -__date_to : str = "" {get}
+    -__dates_ignored : bool = False
+    -__groups : tuple[str, ...] = tuple(AuditEvent.GROUPS) if groups is... {get}
+    -__preset : str = "7" {get}
+    -__query : str = "" {get}
+    -__sort : str = "desc" {get}
     --
-    +__init__(days : int = 7, actor : str = "", group : str = "", client_ref : str = "", result : str = "", page : int = 1)
+    +__init__(preset : str = "7", date_from : str = "", date_to : str = "", groups : Iterable[str] | None = None, result : str = "all", actor : str = "", client_ref : str = "", query : str = "", sort : str = "desc", page : int = 1)
     +chips() : list[tuple[str, str]]
-    {static} +from_query(args : dict) : AuditFilter
+    {static} +from_query(args : Mapping, now : datetime | None = None) : AuditFilter
     +matches(event : AuditEvent, now : datetime) : bool
     +page_count(total : int) : int
     +page_for(total : int) : int
     +page_of(events : list[AuditEvent]) : list[AuditEvent]
     +problems() : list[str]
-    +to_query() : dict[str, str]
+    +to_query() : dict[str, str | list[str]]
+    {static} -__check_day(text : str, which : str) : date | None
+    {static} -__check_groups(groups : Iterable[str]) : tuple[str, ...]
+    {static} -__searchable(event : AuditEvent) : str
+    +all_groups() : bool
+    +day_range(now : datetime) : tuple[date, date] | None
+    {static} +event_day(event : AuditEvent) : date
+    {static} +parse_day(text : str) : date | None
+    +period_text(now : datetime) : str
+    +range_text(now : datetime) : str
+    {static} +singapore_day(moment : datetime) : date
+  }
+  class AuditPage {
+    -__events : list[AuditEvent] = [] {get}
+    -__everything : int = 0 {get}
+    -__failed : int = 0 {get}
+    -__officers : int = 0 {get}
+    -__total : int = 0 {get}
+    -__unreadable : int = 0 {get}
+    --
+    +__init__(events : list[AuditEvent] | None = None, total : int = 0, unreadable : int = 0, everything : int = 0, officers : int = 0, failed : int = 0)
   }
   class Band {
     -__cautious : float = 0.0 {get}
@@ -1470,6 +1536,25 @@ package "Domain Model (app/model)" {
     +update(outcome : str, routing : str, next_review_date : str, assessed_on : str, case : dict) : None
     +to_dict() : dict
   }
+  class TrailFilter {
+    +SHOW : dict[str, tuple[str, ...]] = {...} «const»
+    +SHOW_LABELS : dict[str, str] = {...} «const»
+    +WHEN : tuple[str, ...] = ("all", "7", "30", "90", "custom") «const»
+    +WHEN_LABELS : dict[str, str] = {...} «const»
+    -__date_from : str = "" {get}
+    -__date_to : str = "" {get}
+    -__dates_ignored : bool = False
+    -__problems : list[str] = []
+    -__show : str = "all" {get}
+    -__when : str = "all" {get}
+    --
+    +__init__(show : str = "all", when : str = "all", date_from : str = "", date_to : str = "")
+    +day_range(now : datetime) : tuple[date, date] | None
+    {static} +from_query(args : Mapping, now : datetime | None = None) : TrailFilter
+    +matches(event : AuditEvent, now : datetime) : bool
+    +problems() : list[str]
+    +to_query() : dict[str, str]
+  }
   class Typology {
     -__typology_id : str = "" {get}
     -__name : str = "" {get}
@@ -1544,6 +1629,7 @@ App ..> Account : uses
 App ..> AuditChain : uses
 App ..> AuditEvent : uses
 App ..> AuditFilter : uses
+App ..> AuditPage : uses
 App ..> CaseReader : creates
 App ..> ClientRecord : uses
 App ..> Declaration : uses
@@ -1566,6 +1652,7 @@ AssetPath ..> Band : uses
 AssetPath ..> CaseTimeline : creates
 AuditChain *-- "0..*" AuditEvent
 AuditFilter ..> AuditEvent : uses
+AuditPage *-- "0..*" AuditEvent
 AuditRepository --|> JsonRepository
 AuditRepository ..> AuditEvent : uses
 Benchmark -- Config : reads names
@@ -1664,6 +1751,8 @@ RiskAnalysis ..> Check : creates
 SourceContradictsOccupation --|> Indicator
 SourceContradictsOccupation ..> ClaimedSource : checks
 TextReader --|> DocumentReader
+TrailFilter ..> AuditEvent : uses
+TrailFilter ..> AuditFilter : uses
 Typology -- "1..*" ResearchReport : cites
 TypologyAI --|> AIService
 UnvaluedSource --|> Indicator
@@ -1684,7 +1773,9 @@ WebApp ..> Account : uses
 WebApp ..> AuditChain : uses
 WebApp ..> AuditEvent : uses
 WebApp ..> AuditFilter : uses
+WebApp ..> AuditPage : uses
 WebApp ..> ClientRecord : uses
+WebApp ..> TrailFilter : uses
 WebApp ..> Typology : uses
 WordReader --|> DocumentReader
 

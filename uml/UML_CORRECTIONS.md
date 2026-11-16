@@ -542,3 +542,44 @@ re-routed. Scan 77 differences before, 0 after; round-trip PROBLEMS: 0; layout_c
 
 **Process note:** commit `ace48ab` changed `app/application/app.py` without changing `tests/test_application_app.py` in
 the same commit (CLAUDE.md section 7). Later commits added the tests. The history was not rewritten.
+
+## UI rework: two portals, password sign-in, Activity log filters, History timeline
+
+The code changed first (the audit-trail screens were redone), and the diagram follows it. The checker found 95
+differences. They are all in this section.
+
+**2 classes added** (both in app/model):
+- `AuditPage`: one page of audit lines, plus the counts the page needs (total, failed, officers, unreadable). The
+  Activity log shows 25 lines at a time, so something has to hold one page.
+- `TrailFilter`: the filter of the client History timeline (what to show, and when). The History has its own filter
+  because it has different choices from the Activity log.
+
+**Members changed**
+- `Account`: new `__password_hash`, `has_password`, `check_password()`, `HASH_METHODS`, `RESERVED_NAMES`;
+  `__init__` takes `password_hash`; `RESERVED_NAME` is gone (there are two reserved names now, "terminal" and
+  "unknown"). Why: people now sign in with a password, not by choosing an account.
+- `App`: `sign_in(name, password, portal)` returns `tuple[Account | None, str]` (the account, or a message);
+  new `ADMIN_PORTAL`, `OFFICER_PORTAL`, `SIGN_IN_*` messages, `MAX_SIGN_IN_TEXT`, `UNKNOWN`,
+  `REFUSAL_REPEAT_SECONDS`, `__recent_refusals`, `__refusal_lock`, `last_activity()`; `refused()` takes `now`;
+  `audit_log()` returns an `AuditPage`. Why: password sign-in replaced choosing an account; officers and admins
+  have separate portals (officer at /, admin at /admin); the same refusal is not logged again within 60 seconds.
+- `AuditEvent`: new `UNKNOWN` constant (the actor of a failed sign-in with an unknown name).
+- `AuditFilter`: rebuilt for the Activity log. It now has date presets, custom dates, several groups, a search box,
+  sort order and 25 lines a page (`PAGE_SIZE` 25, `RESULT_CHOICES` starts with "all"). `__init__` takes
+  `preset, date_from, date_to, groups, result, actor, client_ref, query, sort, page`; `from_query` takes `now`;
+  `to_query` can return lists. Removed: `__days`, `__group`, `DAY_CHOICES`, `DEFAULT_DAYS` (replaced by the preset
+  and the groups). Many new helpers and constants were added (chips, matches, paging, the problem messages).
+- `WebApp`: new constants and helpers for the two portals, Singapore time and labelled changed fields.
+  `PROFILE_IN_CAREER` and the private `__utc_moment` helper came from fixing the "Career > Age" label and the
+  UTC/SGT mismatch. Removed: `ADMIN_ONLY_REVIEWS`, `ADMIN_REFUSED`, `CHIP_KEYS`, `CHOOSE_ACCOUNT`,
+  `HISTORY_LIMIT` (they belonged to the old account chooser and the old History list).
+- Very long message constants in `AuditFilter` are shortened with `...` so the box can stay at its width.
+
+**Arrows added** (6, all confirmed by the checker): `AuditPage *-- "0..*" AuditEvent` (the page stores its
+events); `uses` arrows `App` to `AuditPage`, `WebApp` to `AuditPage`, `WebApp` to `TrailFilter`, `TrailFilter` to
+`AuditEvent`, `TrailFilter` to `AuditFilter`.
+
+**Layout:** `AuditPage` and `TrailFilter` sit in the Domain Model folder under `ClientProfile`, next to
+`AuditFilter`. `App`, `WebApp` and `AuditFilter` grew, so the folders were re-packed (the Domain Model folder moved
+down), every line was re-routed and the labels were placed again.
+Scan 95 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.
