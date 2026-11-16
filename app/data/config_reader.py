@@ -4,6 +4,8 @@ import json
 import logging
 import os
 
+from app.model.account import Account
+
 logger = logging.getLogger(__name__)
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -12,9 +14,10 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 class ConfigReader:
     """Reads config/<name>.json. Each file is read once and kept."""
 
-    FILE_NAMES: tuple[str, ...] = ("policy", "vocabulary")     # the files App needs, in this order
+    FILE_NAMES: tuple[str, ...] = ("policy", "vocabulary", "accounts")     # the files App needs, in this order
     REQUIRED: dict[str, tuple[str, ...]] = {
         "vocabulary": ("signal_codes", "document_codes", "source_types", "crime_categories"),
+        "accounts": ("accounts",),
         "policy": ("policy_version", "tolerance", "fit", "review_interval_months", "routing", "forecasting"),
     }
 
@@ -56,12 +59,17 @@ class ConfigReader:
             policy = self.read("policy")
         except (OSError, ValueError):
             return ["config/policy.json could not be read (see the log)."]
+        try:
+            accounts_file = self.read("accounts")
+        except (OSError, ValueError):
+            return ["config/accounts.json could not be read (see the log)."]
         for key in ConfigReader.REQUIRED["vocabulary"]:
             if not vocabulary.get(key):
                 problems.append(f"config/vocabulary.json is missing '{key}'")
         for key in ConfigReader.REQUIRED["policy"]:
             if key not in policy:
                 problems.append(f"config/policy.json is missing '{key}'")
+        problems += ConfigReader.__account_problems(accounts_file)
         limits = policy.get("assessment_rate_limit", {})
         if not isinstance(limits, dict):
             problems.append("config/policy.json 'assessment_rate_limit' must be an object")
@@ -74,4 +82,34 @@ class ConfigReader:
             if not isinstance(limits.get("enabled", True), bool):
                 problems.append("config/policy.json 'assessment_rate_limit.enabled' must be true or false "
                                 f"(got {limits.get('enabled')!r})")
+        return problems
+
+    @staticmethod
+    def __account_problems(accounts_file: dict) -> list[str]:
+        """What is wrong with config/accounts.json: not a non-empty list, an entry that is not a valid
+        account (named by its number), a repeated email or name, or not exactly one admin and at least one officer."""
+        entries = accounts_file.get("accounts")
+        if not isinstance(entries, list) or not entries:
+            return ["config/accounts.json 'accounts' must be a list with at least one account"]
+        problems = []
+        accounts = []
+        for number, entry in enumerate(entries, start=1):
+            try:
+                accounts.append(Account.from_dict(entry))
+            except ValueError as error:
+                problems.append(f"config/accounts.json account {number} is not valid: {error}")
+        if problems:
+            return problems
+        for number, account in enumerate(accounts, start=1):
+            if not account.has_password:
+                problems.append(f"config/accounts.json account {number} ({account.name}) has no password_hash")
+        for label, values in (("email", [a.email for a in accounts]), ("name", [a.name.lower() for a in accounts])):
+            repeated = sorted({value for value in values if values.count(value) > 1})
+            if repeated:
+                problems.append(f"config/accounts.json has the same {label} more than once: {', '.join(repeated)}")
+        admins = [a for a in accounts if a.is_admin()]
+        if len(admins) != 1:
+            problems.append(f"config/accounts.json must have exactly one admin account (found {len(admins)})")
+        if not [a for a in accounts if a.role == Account.OFFICER]:
+            problems.append("config/accounts.json must have at least one officer account")
         return problems

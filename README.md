@@ -110,7 +110,7 @@ git pull
 
 ### 3. Set up your environment file (first time only)
 
-The `.env` file will be handed to you privately. Place it in the root of the project folder. Do not share or commit it.
+The `.env` file will be handed to you privately. Place it in the root of the project folder. Do not share or commit it. It must contain `AUDIT_KEY` (a long random secret that signs the audit log; make one with `python3 -c "import secrets; print(secrets.token_hex(32))"`, see `.env.example`).
 
 ### 4. Build and run with Docker
 

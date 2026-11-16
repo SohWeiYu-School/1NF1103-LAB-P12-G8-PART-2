@@ -8,10 +8,11 @@ import shutil
 import tempfile
 import threading
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from flask import (Flask, abort, flash, redirect, render_template,
-                   request, send_file, url_for)
+from flask import (Flask, abort, flash, g, redirect, render_template,
+                   request, send_file, session, url_for)
 from jinja2 import DictLoader
 from werkzeug.datastructures import FileStorage, MultiDict
 from werkzeug.exceptions import HTTPException
@@ -22,7 +23,12 @@ from app.application.app import App
 from app.interface.client_form import ClientForm
 from app.interface.rate_limiter import RateLimiter
 from app.interface.web_templates import TEMPLATES
+from app.model.account import Account
+from app.model.audit_event import AuditEvent
+from app.model.audit_filter import AuditFilter
+from app.model.audit_page import AuditPage
 from app.model.client_record import ClientRecord
+from app.model.trail_filter import TrailFilter
 from app.model.typology import Typology
 
 logger = logging.getLogger(__name__)
@@ -91,6 +97,31 @@ class WebApp:
         ("sow", "Source of wealth declaration", SOW_FIELDS, "dict"),
     ]
 
+    OFFICER_KEY: str = "officer"           # session keys: one browser can be signed in to both portals
+    ADMIN_KEY: str = "admin"
+    ADMIN_ENDPOINTS: tuple[str, ...] = ("admin_home", "admin_signin", "admin_signout", "audit_log_view", "audit_verify",
+                                        "admin_clients", "admin_view_client", "admin_view_assessment",
+                                        "admin_download_document")
+    AUDIT_ENDPOINTS: tuple[str, ...] = ("audit_log_view", "audit_verify")
+    # The officer page an admin page's address is the twin of: the admin portal shows the same page read-only.
+    ADMIN_TWINS: dict[str, str] = {"home": "admin_clients", "view_client": "admin_view_client",
+                                   "view_assessment": "admin_view_assessment",
+                                   "download_document": "admin_download_document"}
+    # The demo accounts shown beside the sign-in form (the passwords config/accounts.json is shipped with).
+    DEMO_PASSWORDS: dict[str, str] = {"officer": "officer123", "admin": "admin123"}
+    # The colour variable (in the page's CSS) of each audit group, for the dots in the log and the timeline.
+    GROUP_COLOURS: dict[str, str] = {"Sign-in": "--g-signin", "Client": "--g-client", "Documents": "--g-documents",
+                                     "Assessment": "--g-assessment", "System": "--g-system"}
+    # "Done by" in an entry's Info, by action ("Done by" if an action is not here).
+    DONE_BY: dict[str, str] = {"client_created": "Created by", "client_edited": "Edited by",
+                               "assessment_run": "Assessed by", "assessment_failed": "Started by",
+                               "document_uploaded": "Uploaded by", "document_downloaded": "Downloaded by",
+                               "autofill_used": "Filled in by", "assessment_archived": "Archived by",
+                               "assessment_restored": "Restored by", "cloud_sync": "Started by",
+                               "audit_verified": "Checked by"}
+    PROFILE_IN_CAREER: tuple[str, ...] = ("career.age", "career.country_of_residence")   # saved under "career", shown as Client
+    SINGAPORE: timezone = timezone(timedelta(hours=8))      # Singapore has no daylight saving: a fixed offset is exact
+    NOT_ADMIN: str = "Only the admin can open the audit log."
     MAX_UPLOAD_BYTES: int = 40 * 1024 * 1024     # uploads for auto-fill: 40 MB per request
     ASSESSMENT_STOPPED: str = ("The assessment was stopped because a step it cannot do without failed. "
                                "Please try again later.")
@@ -112,8 +143,34 @@ class WebApp:
         # at each start (never a fixed one written in the code, which anyone could use to forge it).
         flask.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
         flask.config["MAX_CONTENT_LENGTH"] = WebApp.MAX_UPLOAD_BYTES
+        flask.config["SESSION_COOKIE_SAMESITE"] = "Lax"       # the cookie holds only the signed-in email
         flask.jinja_env.loader = DictLoader(TEMPLATES)
+        flask.jinja_env.filters["sgt"] = self.singapore_time
+        flask.jinja_env.filters["shown"] = self.shown_value
+        flask.jinja_env.filters["sgt_day"] = self.singapore_day
+        flask.jinja_env.filters["initials"] = self.initials
+        flask.jinja_env.filters["sgt_hm"] = self.singapore_clock
+        flask.jinja_env.filters["sgt_long"] = self.singapore_long
+        flask.jinja_env.filters["field_label"] = self.field_label
+        flask.jinja_env.filters["short_fields"] = self.short_fields
+        flask.jinja_env.globals.update(GROUP_COLOURS=WebApp.GROUP_COLOURS, DONE_BY=WebApp.DONE_BY)
+        flask.jinja_env.globals["link"] = self.portal_link
         flask.jinja_env.globals.update(PEP_OPTIONS=ClientForm.PEP_OPTIONS, PAYMENT_OPTIONS=ClientForm.PAYMENT_METHODS)
+        flask.before_request(self.gate)
+        flask.context_processor(lambda: {"account": self.__current(), "portal": self.__portal()})
+        flask.add_url_rule('/signin', endpoint='signin', view_func=self.signin, methods=['GET', 'POST'])
+        flask.add_url_rule('/signout', endpoint='signout', view_func=self.signout, methods=['POST'])
+        flask.add_url_rule('/admin', endpoint='admin_home', view_func=self.admin_home)
+        flask.add_url_rule('/admin/signin', endpoint='admin_signin', view_func=self.signin, methods=['GET', 'POST'])
+        flask.add_url_rule('/admin/signout', endpoint='admin_signout', view_func=self.signout, methods=['POST'])
+        flask.add_url_rule('/admin/log', endpoint='audit_log_view', view_func=self.audit_log_view)
+        flask.add_url_rule('/admin/log/verify', endpoint='audit_verify', view_func=self.audit_verify, methods=['POST'])
+        flask.add_url_rule('/admin/clients', endpoint='admin_clients', view_func=self.home)
+        flask.add_url_rule('/admin/clients/<client_ref>', endpoint='admin_view_client', view_func=self.view_client)
+        flask.add_url_rule('/admin/clients/<client_ref>/documents/<path:file_id>', endpoint='admin_download_document',
+                           view_func=self.download_document)
+        flask.add_url_rule('/admin/assessment/<assessment_id>', endpoint='admin_view_assessment',
+                           view_func=self.view_assessment)
         flask.add_url_rule('/', endpoint='home', view_func=self.home)
         flask.add_url_rule('/find', endpoint='find', view_func=self.find)
         flask.add_url_rule('/client/new', endpoint='new_client', view_func=self.new_client, methods=['GET', 'POST'])
@@ -149,6 +206,252 @@ class WebApp:
 
     def today(self) -> str:
         return self.__app.today()
+
+    # ----- who is signed in ------------------------------------------------------------------
+
+    def __portal(self) -> str:
+        """"admin" for an address under /admin, otherwise "officer"."""
+        path = request.path
+        return App.ADMIN_PORTAL if path == "/admin" or path.startswith("/admin/") else App.OFFICER_PORTAL
+
+    def __session_account(self, key: str) -> Account | None:
+        """The account whose email the session holds under key (officer or admin), if it is still a configured
+        account of the right role. None if there is none."""
+        email = session.get(key)
+        if not isinstance(email, str) or self.__app is None:
+            return None
+        found = self.__app.account(email)
+        if found is None or found.is_admin() != (key == WebApp.ADMIN_KEY):
+            return None
+        return found
+
+    def __current(self) -> Account | None:
+        """The signed-in account of the portal this address belongs to (an officer at /, the admin under
+        /admin). None if nobody is signed in there."""
+        if "account" not in g:
+            g.account = self.__session_account(WebApp.ADMIN_KEY if self.__portal() == App.ADMIN_PORTAL
+                                               else WebApp.OFFICER_KEY)
+        return g.account
+
+    def __actor(self) -> str:
+        """The name to record as the actor of a write. Raises ValueError if nobody is signed in
+        (the gate stops that before any route runs)."""
+        account = self.__current()
+        if account is None:
+            raise ValueError("Nobody is signed in.")
+        return account.name
+
+    def __flash_audit_failure(self, kept: bool = False) -> None:
+        """Tell the officer when the last action's audit line could not be written. kept is True when the
+        action saved something ("Saved, but ..."); otherwise the message only says the action was not written."""
+        if self.__app.audit_write_failed():
+            flash(App.AUDIT_NOT_WRITTEN if kept else App.AUDIT_LINE_NOT_WRITTEN)
+
+    def portal_link(self, endpoint: str, **values: Any) -> str:
+        """The address of a page for the portal being shown: the admin portal gets the read-only twin of
+        the officer pages (client list, client, assessment, document download)."""
+        if self.__portal() == App.ADMIN_PORTAL:
+            endpoint = WebApp.ADMIN_TWINS.get(endpoint, endpoint)
+        return url_for(endpoint, **values)
+
+    def __home(self) -> Response:
+        """Go to the client list of the portal being shown."""
+        return redirect(self.portal_link("home"))
+
+    def gate(self) -> Any:
+        """Runs before every route. Nobody signed in at this portal: go to its sign-in page (the progress poll
+        gets a 401). An officer who opens an admin page is refused (403, and the refusal is recorded)."""
+        endpoint = request.endpoint
+        if endpoint in ("signin", "admin_signin", "static"):
+            return None
+        if self.__current() is not None:
+            return None
+        if self.__portal() == App.ADMIN_PORTAL:
+            officer = self.__session_account(WebApp.OFFICER_KEY)
+            if officer is None:
+                return redirect(url_for("admin_signin"))
+            if endpoint is None:                # an address or method that does not exist: the 404 or 405 page
+                return None
+            self.__app.refused(officer.name, "opening the audit log" if endpoint in WebApp.AUDIT_ENDPOINTS
+                               else "opening an admin page")
+            self.__flash_audit_failure()
+            return render_template("forbidden.html", message=WebApp.NOT_ADMIN), 403
+        if endpoint == "assess_poll":
+            return {"status": "error", "error": "Please sign in again."}, 401
+        return redirect(url_for("signin"))
+
+    def admin_home(self) -> Response:
+        """The admin portal's front page: for now the activity log."""
+        return redirect(url_for("audit_log_view"))
+
+    def signin(self) -> str | Response:
+        """Sign in by name and password at this portal. Anyone already signed in here goes to the portal's front page."""
+        admin = self.__portal() == App.ADMIN_PORTAL
+        if self.__current() is not None:
+            return redirect(url_for("audit_log_view") if admin else url_for("home"))
+        name = ""
+        problem = ""
+        if request.method == "POST":
+            name = request.form.get("name", "")
+            signed_in, problem = self.__app.sign_in(name, request.form.get("password", ""), self.__portal())
+            if signed_in is not None:
+                session[WebApp.ADMIN_KEY if admin else WebApp.OFFICER_KEY] = signed_in.email
+                g.account = signed_in
+                self.__flash_audit_failure()
+                return redirect(url_for("audit_log_view") if admin else url_for("home"))
+            self.__flash_audit_failure()
+        demo = [{"name": account.name, "password": WebApp.DEMO_PASSWORDS[account.role]}
+                for account in self.__app.accounts() if account.is_admin() == admin]
+        return render_template("signin.html", problem=problem, name=name.strip()[:App.MAX_SIGN_IN_TEXT], demo=demo,
+                               max_text=App.MAX_SIGN_IN_TEXT)
+
+    def shown_value(self, value: Any) -> str:
+        """One value from an audit change as the pages show numbers: thousands separators and no trailing
+        .0 on a whole number (16500000 and 9500000.0 show as 16,500,000 and 9,500,000). Text is unchanged;
+        nothing (None) is "(empty)"."""
+        if value is None:
+            return "(empty)"
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return str(value)
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
+        return f"{value:,}"
+
+    @staticmethod
+    def __utc_moment(text: str) -> datetime:
+        """A saved time as a UTC moment: an audit time ("2026-11-16T06:02:11Z") or an assessment time with
+        its offset ("2026-11-16T06:02:11.123+00:00"). Raises ValueError for anything else, including a
+        time with no offset (its zone is unknown, so it is not guessed) and TypeError for a non-text."""
+        if not isinstance(text, str):
+            raise TypeError("a saved time must be text")
+        moment = datetime.fromisoformat(text)
+        if moment.tzinfo is None:
+            raise ValueError("a saved time must say its offset")
+        return moment.astimezone(timezone.utc)
+
+    @staticmethod
+    def initials(name: str) -> str:
+        """The first letters of the first two words of a name, in capitals ("Wei Yu" -> "WY")."""
+        return "".join(word[0] for word in str(name).split()[:2]).upper()
+
+    def singapore_day(self, text: str) -> str:
+        """An audit time (UTC) as a Singapore day without the year: "16 Nov". Anything that is not such a
+        time is shown as it is."""
+        try:
+            moment = WebApp.__utc_moment(text)
+            local = moment.astimezone(WebApp.SINGAPORE)
+        except (TypeError, ValueError, OverflowError):
+            return str(text)
+        return f"{local.day} {local:%b}"
+
+    def singapore_clock(self, text: str) -> str:
+        """An audit time (UTC) as the Singapore clock time: "14:02". Anything else is shown as it is."""
+        try:
+            moment = WebApp.__utc_moment(text)
+            local = moment.astimezone(WebApp.SINGAPORE)
+        except (TypeError, ValueError, OverflowError):
+            return str(text)
+        return f"{local:%H:%M}"
+
+    def singapore_long(self, text: str) -> str:
+        """An audit time (UTC) as "15 November 2026, 14:02 SGT". Anything else is shown as it is."""
+        try:
+            moment = WebApp.__utc_moment(text)
+            local = moment.astimezone(WebApp.SINGAPORE)
+        except (TypeError, ValueError, OverflowError):
+            return str(text)
+        return f"{local.day} {local:%B %Y}, {local:%H:%M} SGT"
+
+    @staticmethod
+    def field_label(path: Any) -> str:
+        """A changed field's path in words: "claims.declared_net_worth" -> "Claims › Declared net worth",
+        "investments[0].country" -> "Investments 1 › Country"."""
+        parts = []
+        if str(path) in WebApp.PROFILE_IN_CAREER:
+            path = "client." + str(path).split(".", 1)[1]
+        for part in str(path).split("."):
+            name, _, index = part.partition("[")
+            words = name.replace("_", " ").strip().capitalize()
+            parts.append(f"{words} {int(index.rstrip(']')) + 1}" if index.rstrip("]").isdigit() else words)
+        return " › ".join(parts)
+
+    def short_fields(self, changes: Any) -> str:
+        """The changed fields as one phrase for a log line: "Declared net worth and Annual income", or
+        "A, B and 3 more" for many. The last part of each path is used. "" if there are none."""
+        names: list[str] = []
+        for change in changes if isinstance(changes, list) else []:
+            field = change.get("field") if isinstance(change, dict) else None
+            label = self.field_label(field).split(" › ")[-1] if isinstance(field, str) and field else ""
+            if label and label not in names:
+                names.append(label)
+        if len(names) > 3:
+            return f"{names[0]}, {names[1]} and {len(names) - 2} more"
+        return names[0] if len(names) == 1 else (", ".join(names[:-1]) + " and " + names[-1] if names else "")
+
+    def singapore_time(self, text: str) -> str:
+        """An audit time (UTC, 2026-11-16T06:02:11Z) as Singapore time: "16 Nov 2026 14:02". Anything
+        that is not such a time is shown as it is."""
+        try:
+            moment = WebApp.__utc_moment(text)
+            local = moment.astimezone(WebApp.SINGAPORE)
+        except (TypeError, ValueError, OverflowError):
+            return str(text)
+        return f"{local.day} {local:%b %Y %H:%M}"
+
+    def audit_log_view(self) -> str:
+        """The audit log (admin only, the gate checks): filter bar, chips, one page of events."""
+        return self.__show_audit_log()
+
+    def __show_audit_log(self, broken_ids: list[str] | None = None) -> str:
+        """The audit log page. If the log cannot be read the page says so and shows no table (it never shows
+        an empty log for an error). broken_ids are the events a Verify log found changed: their rows are marked."""
+        now = datetime.now(timezone.utc)
+        audit_filter = AuditFilter.from_query(request.args, now)
+        log: AuditPage | None = None
+        error = ""
+        try:
+            log = self.__app.audit_log(audit_filter, now)
+        except ValueError:
+            error = App.AUDIT_UNAVAILABLE
+        query = audit_filter.to_query()
+        chips = [(text, url_for("audit_log_view", **{k: v for k, v in query.items() if k not in (key, "page")}))
+                 for key, text in audit_filter.chips()]
+        keep = {k: v for k, v in query.items() if k in ("preset", "from", "to", "sort")}
+        officers = [account.name for account in self.__app.accounts()] + [App.TERMINAL, App.UNKNOWN]
+        if audit_filter.actor and audit_filter.actor.casefold() not in [name.casefold() for name in officers]:
+            officers.append(audit_filter.actor)
+        total = log.total if log is not None else 0
+        newer = {k: v for k, v in query.items() if k != "page"}
+        return render_template("audit.html", log=log, error=error, audit_filter=audit_filter, query=query,
+                               chips=chips, clear_url=url_for("audit_log_view", **keep), officers=officers,
+                               groups=list(AuditEvent.GROUPS), presets=AuditFilter.PRESETS,
+                               range_text=audit_filter.range_text(now), period=audit_filter.period_text(now),
+                               today=AuditFilter.singapore_day(now).isoformat(),
+                               page=audit_filter.page_for(total), pages=audit_filter.page_count(total),
+                               page_size=AuditFilter.PAGE_SIZE, base_query=newer,
+                               broken_ids=broken_ids or [])
+
+    def audit_verify(self) -> str | Response:
+        """Check the hash chain of the whole log, say what was found, and show the log (the same filters
+        as the page it was pressed on) with the changed rows marked."""
+        try:
+            chain = self.__app.verify_audit_log(self.__actor())
+        except ValueError:
+            flash(App.AUDIT_UNAVAILABLE)
+            return redirect(url_for("audit_log_view"))
+        self.__flash_audit_failure()
+        flash(chain.summary(), "success" if chain.intact() else "warning")
+        return self.__show_audit_log(chain.broken_ids())
+
+    def signout(self) -> Response:
+        """Sign out of this portal: the audit log is told, this portal's part of the session is emptied (the
+        other portal, if signed in, stays signed in)."""
+        admin = self.__portal() == App.ADMIN_PORTAL
+        self.__app.sign_out(self.__current())
+        session.pop(WebApp.ADMIN_KEY if admin else WebApp.OFFICER_KEY, None)
+        g.account = None
+        self.__flash_audit_failure()
+        return redirect(url_for("admin_signin" if admin else "signin"))
 
     def trim(self, number: Any) -> str:
         """60000.0 -> '60000', 7.5 -> '7.5'. Anything that isn't a number is shown as it is."""
@@ -497,9 +800,10 @@ class WebApp:
         return [{"file_name": secure_filename(name) or "document", "file_id": file_id}
                 for name, file_id in zip(names, ids) if self._is_stored_document(file_id)]
 
-    def store_uploads(self, files: list[FileStorage]) -> tuple[list[dict], list[dict]]:
+    def store_uploads(self, files: list[FileStorage], client_ref: str = "") -> tuple[list[dict], list[dict]]:
         """Keep each uploaded file as a supporting document and read it for the AI.
         Returns (supporting document entries, documents read for extraction)."""
+        actor = self.__actor()
         stored, read = [], []
         for uploaded in files:
             if not uploaded or not uploaded.filename:
@@ -510,23 +814,25 @@ class WebApp:
                 path = os.path.join(folder, name)
                 uploaded.save(path)
                 read.append(self.__app.read_document_for_extraction(path, name))
-                file_id = self.__app.upload_document(path)
+                file_id = self.__app.upload_document(path, actor, client_ref)
+                self.__flash_audit_failure(kept=file_id is not None)
                 if file_id is not None:
                     stored.append({"file_name": name, "file_id": file_id})
             finally:
                 shutil.rmtree(folder, ignore_errors=True)
         return stored, read
 
-    def autofill_form(self, heading: str, form: MultiDict, files: list[FileStorage]) -> str:
+    def autofill_form(self, heading: str, form: MultiDict, files: list[FileStorage], client_ref: str = "") -> str:
         """Read the uploaded documents and show the form again with the blanks filled in."""
         values = self.values_from_form(form)
         documents = self.pending_documents(form)
-        stored, read = self.store_uploads(files)
+        stored, read = self.store_uploads(files, client_ref)
         documents += stored
         if not read:
             return self.show_form(heading, values, ["Choose at least one document to read."], documents=documents)
 
-        extracted, warnings = self.__app.read_documents(read)
+        extracted, warnings = self.__app.read_documents(read, self.__actor(), client_ref)
+        self.__flash_audit_failure()
         if extracted is None:
             flash("Document reading is not available right now — please try again later.")
         filled, notes = [], list(warnings)
@@ -568,14 +874,17 @@ class WebApp:
             record = None
         return record.to_dict() if record is not None else {"client_ref": client_ref, "name": client_ref}
 
-    def save_form_record(self, record: dict) -> list[str]:
-        """Save a record built from the form. Returns the problems ([] = saved)."""
+    def save_form_record(self, record: dict, new_client: bool = False) -> list[str]:
+        """Save a record built from the form. Returns the problems ([] = saved). new_client is True for
+        the new-client page."""
         try:
             client = ClientRecord.from_dict(record)
         except (ValueError, TypeError, AttributeError) as error:
             logger.error("WebApp: the form for %s did not make a valid record: %r", record.get("client_ref"), error)
             return [f"The client could not be saved because {ClientRecord.why_unreadable(error)}."]
-        if not self.__app.save_client(client):
+        saved = self.__app.save_client(client, self.__actor(), new_client)
+        self.__flash_audit_failure(kept=saved)
+        if not saved:
             return ["The client was not saved because the client database cannot be read or written right now. "
                     "Please try again later."]
         return []
@@ -597,9 +906,10 @@ class WebApp:
                                field_errors=field_errors or {}, documents=documents or [],
                                autofilled=autofilled or [], notes=notes or [], notes_title=notes_title)
 
-    def __run_in_background(self, job_id: str, record: ClientRecord, case: dict) -> None:
+    def __run_in_background(self, job_id: str, record: ClientRecord, case: dict, actor: str) -> None:
         """The assessment, in the background: App.assess, the very method the command
-        line runs, then the same save."""
+        line runs, then the same save. actor is the signed-in name, taken in the request: this thread
+        has no session, and the audit flag it reads is its own."""
         job = self.__jobs[job_id]
 
         def step(number, label):
@@ -607,13 +917,16 @@ class WebApp:
             job["step"] = label
 
         try:
-            result = self.__app.assess(case, record.documents(), on_step=step, show_failures=False)
+            result = self.__app.assess(case, record.documents(), on_step=step, show_failures=False, actor=actor)
             if result is None:
                 logger.error("WebApp: the assessment of %s stopped at a critical step", record.client_ref)
                 job["status"] = "error"
-                job["error"] = WebApp.ASSESSMENT_STOPPED
+                job["error"] = WebApp.ASSESSMENT_STOPPED + (
+                    " " + App.AUDIT_LINE_NOT_WRITTEN if self.__app.audit_write_failed() else "")
                 return
-            assessment_id = self.__app.save_assessment(result, record, on_step=step)
+            assessment_id = self.__app.save_assessment(result, record, on_step=step, actor=actor)
+            audit_failed = self.__app.audit_write_failed()
+            outcome_failed = self.__app.client_outcome_failed()
 
             # Per-feature failure flags — feature names passed to flash_ai_unavailable in assess_result
             ai_warnings = []
@@ -629,6 +942,8 @@ class WebApp:
                 "report":        result["verdict"].report,
                 "assessment_id": assessment_id,
                 "saved":         assessment_id is not None,
+                "audit_failed":  audit_failed,
+                "outcome_failed": outcome_failed,
                 "assessed_at":   result["verdict"].assessed_at,   # the same time App saved
                 "ai_warnings":   ai_warnings,
                 "crime_result":  WebApp.__crime_result_layout(result.get("crime_result")),
@@ -677,7 +992,14 @@ class WebApp:
         except ValueError as error:
             flash(str(error))
             clients = None
-        return render_template("home.html", clients=clients)
+        activity: dict | None = None
+        activity_error = ""
+        if clients:
+            try:
+                activity = self.__app.last_activity()
+            except ValueError:
+                activity_error = f"{App.AUDIT_UNAVAILABLE} The last activity of each client cannot be shown."
+        return render_template("home.html", clients=clients, activity=activity, activity_error=activity_error)
 
     def find(self) -> Response:
         client_ref = request.args.get("ref", "").strip().upper()
@@ -685,16 +1007,16 @@ class WebApp:
             found = bool(client_ref) and self.get_record(client_ref) is not None
         except ValueError as error:
             flash(str(error))
-            return redirect(url_for("home"))
+            return self.__home()
         if found:
             return redirect(url_for("view_client", client_ref=client_ref))
         flash(f"No client found with reference '{client_ref}'.")
-        return redirect(url_for("home"))
+        return self.__home()
 
-    def _documents_on_save(self, form: MultiDict, files: list[FileStorage]) -> list[dict]:
+    def _documents_on_save(self, form: MultiDict, files: list[FileStorage], client_ref: str = "") -> list[dict]:
         """Documents to attach when the form is saved: ones kept from auto-fill, plus any
         files chosen in the upload box without pressing "Read documents"."""
-        stored, _ = self.store_uploads(files)
+        stored, _ = self.store_uploads(files, client_ref)
         return self.pending_documents(form) + stored
 
     def new_client(self) -> str | Response:
@@ -711,7 +1033,7 @@ class WebApp:
                 field_errors = {}
             if not problems:
                 record["supporting_documents"] = documents
-                problems = self.save_form_record(record)
+                problems = self.save_form_record(record, new_client=True)
                 if not problems:
                     flash("Client saved.")
                     return redirect(url_for("view_client", client_ref=record["client_ref"]))
@@ -727,7 +1049,7 @@ class WebApp:
             record = self.get_record(client_ref)
         except ValueError as error:
             flash(str(error))
-            return redirect(url_for("home"))
+            return self.__home()
         if record is None:
             abort(404)
         saved = record.to_dict()                 # the page template reads the saved layout
@@ -747,11 +1069,40 @@ class WebApp:
             logger.error("WebApp.view_client: the saved assessments cannot be read: %r", error)
             flash(App.ASSESSMENTS_UNAVAILABLE)
             assessments = None
-        return render_template("client_view.html", record=saved,
+        now = datetime.now(timezone.utc)
+        trail_filter = TrailFilter.from_query(request.args, now)
+        history: list | None = None
+        history_error, history_unreadable, history_total, history_count = "", 0, 0, 0
+        try:
+            everything, history_unreadable = self.__app.audit_trail(client_ref)
+            history_total = len(everything)
+            shown = [event for event in everything if trail_filter.matches(event, now)]
+            history_count = len(shown)
+            history = self.__by_day(shown)
+        except ValueError:
+            history_error = App.AUDIT_UNAVAILABLE         # the rest of the page still shows
+        return render_template("client_view.html", record=saved, history=history,
+                               history_error=history_error, history_unreadable=history_unreadable,
+                               history_total=history_total, history_count=history_count,
+                               trail_filter=trail_filter, trail_shows=list(TrailFilter.SHOW_LABELS.items()),
+                               trail_whens=list(TrailFilter.WHEN_LABELS.items()),
+                               today=AuditFilter.singapore_day(now).isoformat(),
                                values=self.values_from_record(saved), SECTIONS=WebApp.SECTIONS,
                                assessments=assessments, problems=record.problems(),
                                show_archived=show_archived, archived_count=archived_count,
                                archive_states=archive_states, max_reason=App.MAX_ARCHIVE_REASON)
+
+    @staticmethod
+    def __by_day(events: list[AuditEvent]) -> list[tuple[str, list[AuditEvent]]]:
+        """Events (newest first) grouped by Singapore day, each day labelled "15 November 2026"."""
+        days: list[tuple[str, list[AuditEvent]]] = []
+        for event in events:
+            day = AuditFilter.event_day(event)
+            label = f"{day.day} {day:%B %Y}"
+            if not days or days[-1][0] != label:
+                days.append((label, []))
+            days[-1][1].append(event)
+        return days
 
     def archive_assessment(self, assessment_id: str) -> Response:
         """Hide one assessment from the lists (nothing is deleted), then go back to its client."""
@@ -769,13 +1120,14 @@ class WebApp:
             if saved is None:
                 abort(404)
             if archive:
-                result = self.__app.archive_assessment(saved["assessment_id"], reason)
+                result = self.__app.archive_assessment(saved["assessment_id"], reason, self.__actor())
             else:
-                result = self.__app.restore_assessment(saved["assessment_id"])
+                result = self.__app.restore_assessment(saved["assessment_id"], self.__actor())
         except (OSError, ValueError) as error:
             logger.error("WebApp.__change_archive: the saved assessments cannot be read: %r", error)
             flash(App.ASSESSMENTS_UNAVAILABLE)
-            return redirect(url_for("home"))
+            return self.__home()
+        self.__flash_audit_failure(kept=result == App.ARCHIVE_CHANGED)
         client_ref = saved["client_ref"]
         keep_archived = False
         if result == App.ARCHIVE_CHANGED and not archive:
@@ -805,7 +1157,7 @@ class WebApp:
         except (OSError, ValueError) as error:
             logger.error("WebApp.view_assessment: the saved assessments cannot be read: %r", error)
             flash(App.ASSESSMENTS_UNAVAILABLE)
-            return redirect(url_for("home"))
+            return self.__home()
         if saved is None:
             abort(404)
         record = self.page_record(saved["client_ref"])
@@ -826,14 +1178,14 @@ class WebApp:
             client = self.get_record(client_ref)
         except ValueError as error:
             flash(str(error))
-            return redirect(url_for("home"))
+            return self.__home()
         if client is None:
             abort(404)
         old = client.to_dict()                   # the form is filled from, and saved in, the saved layout
  
         if request.method == "POST":
             values = self.values_from_form(request.form)
-            documents = self._documents_on_save(request.form, request.files.getlist("autofill_files"))
+            documents = self._documents_on_save(request.form, request.files.getlist("autofill_files"), client_ref)
             record, problems, field_errors = self.build_record(values, client_ref, old)
             if not problems:
                 problems = self.check_record(record)
@@ -857,20 +1209,21 @@ class WebApp:
             found = self.get_record(client_ref) is not None
         except ValueError as error:
             flash(str(error))
-            return redirect(url_for("home"))
+            return self.__home()
         if not found:
             abort(404)
-        return self.autofill_form(f"Edit {client_ref}", request.form, request.files.getlist("autofill_files"))
+        return self.autofill_form(f"Edit {client_ref}", request.form, request.files.getlist("autofill_files"), client_ref)
 
     def upload_documents(self, client_ref: str) -> Response:
         try:
             record = self.get_record(client_ref)
         except ValueError as error:
             flash(str(error))
-            return redirect(url_for("home"))
+            return self.__home()
         if record is None:
             abort(404)
  
+        actor = self.__actor()
         added = 0
         chosen = 0
         for uploaded in request.files.getlist("files"):
@@ -883,7 +1236,8 @@ class WebApp:
             folder = tempfile.mkdtemp()
             path = os.path.join(folder, name)
             uploaded.save(path)
-            file_id = self.__app.upload_document(path)
+            file_id = self.__app.upload_document(path, actor, client_ref)
+            self.__flash_audit_failure(kept=file_id is not None)
             shutil.rmtree(folder, ignore_errors=True)
  
             if file_id is None:
@@ -893,7 +1247,9 @@ class WebApp:
             added += 1
  
         if added:
-            if self.__app.save_client(record):
+            saved = self.__app.save_client(record, actor)
+            self.__flash_audit_failure(kept=saved)
+            if saved:
                 flash(f"{added} document(s) uploaded.")
             else:
                 flash("Documents uploaded, but the record could not be saved.")
@@ -906,7 +1262,7 @@ class WebApp:
             record = self.get_record(client_ref)
         except ValueError as error:
             flash(str(error))
-            return redirect(url_for("home"))
+            return self.__home()
         if record is None:
             abort(404)
  
@@ -920,7 +1276,8 @@ class WebApp:
         name = secure_filename(document.get("file_name", "")) or "document"
         folder = tempfile.mkdtemp()
         path = os.path.join(folder, name)
-        ok = self.__app.download_document(document.get("file_path") or file_id, path)   # local copy
+        ok = self.__app.download_document(document.get("file_path") or file_id, path, self.__actor(), client_ref)   # local copy
+        self.__flash_audit_failure()
         data = b""
         if ok:
             with open(path, "rb") as handle:
@@ -937,7 +1294,7 @@ class WebApp:
             record = self.get_record(client_ref)
         except ValueError as error:
             flash(str(error))
-            return redirect(url_for("home"))
+            return self.__home()
         if record is None:
             abort(404)
         if not self.__app.ai_available():
@@ -972,7 +1329,7 @@ class WebApp:
             "client_ref": client_ref,
         }
         threading.Thread(
-            target=self.__run_in_background, args=(job_id, record, case), daemon=True
+            target=self.__run_in_background, args=(job_id, record, case, self.__actor()), daemon=True
         ).start()
         return redirect(url_for("assess_loading", job_id=job_id))
 
@@ -1007,6 +1364,10 @@ class WebApp:
         for feature in job["result"].get("ai_warnings", []):
             self.flash_ai_unavailable(feature)
         r = job["result"]
+        if r.get("outcome_failed"):
+            flash(App.OUTCOME_NOT_UPDATED)
+        if r.get("audit_failed"):
+            flash(App.AUDIT_NOT_WRITTEN if r.get("saved", True) else App.AUDIT_LINE_NOT_WRITTEN)
         if not r.get("saved", True):
             flash(WebApp.ASSESSMENT_NOT_SAVED)
         return self.show_report(r["record"], r["report"], r.get("assessed_at", ""), r.get("assessment_id"),
@@ -1025,7 +1386,8 @@ class WebApp:
         return render_template("assessments.html", assessments=assessments, archived_count=archived_count)
 
     def sync_to_cloud(self) -> Response:
-        stats = self.__app.sync_to_cloud()
+        stats = self.__app.sync_to_cloud(self.__actor())
+        self.__flash_audit_failure()
         cases = stats["cases_synced"]
         assessments = stats["assessments_synced"]
         skipped = stats["skipped"]
@@ -1044,12 +1406,16 @@ class WebApp:
             )
         else:
             flash("Sync unsuccessful — please try again later or contact your administrator.")
-        return redirect(url_for("home"))
+        return self.__home()
 
     def handle_404(self, e: HTTPException) -> tuple[str, int]:
         return render_template("error.html", error_detail=None), 404
 
     def handle_exception(self, e: Exception) -> tuple[str, int]:
+        """The error page. A web error such as 405 (wrong method) or 413 (upload too large) keeps its own
+        status code; anything else is an unexpected error: logged in full, shown as a plain 500 page."""
+        if isinstance(e, HTTPException):
+            return render_template("error.html", error_detail=None), e.code or 500
         import logging
         import traceback
         logging.error("Unhandled exception: %s", traceback.format_exc())

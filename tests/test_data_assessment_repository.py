@@ -106,7 +106,7 @@ def _with_two(tmp_path):
 def test_archive_adds_a_log_line_and_changes_nothing_else(tmp_path):
     repository = _with_two(tmp_path)
     before = repository.find("A-1")
-    assert repository.archive("A-1", "  duplicate  ") == R.CHANGED
+    assert repository.archive("A-1", "  duplicate  ", "Shareen") == R.CHANGED
     after = repository.find("A-1")
     log = after.pop("archive_log")
     assert after == before
@@ -116,48 +116,48 @@ def test_archive_adds_a_log_line_and_changes_nothing_else(tmp_path):
 
 def test_archive_without_a_reason_leaves_the_reason_out(tmp_path):
     repository = _with_two(tmp_path)
-    repository.archive("A-1")
+    repository.archive("A-1", by="Shareen")
     assert "reason" not in repository.find("A-1")["archive_log"][0]
 
 
 def test_archive_twice_and_restore_when_not_archived_change_nothing(tmp_path):
     repository = _with_two(tmp_path)
-    assert repository.restore("A-1") == R.NO_CHANGE
-    assert repository.archive("A-1") == R.CHANGED
-    assert repository.archive("A-1") == R.NO_CHANGE
+    assert repository.restore("A-1", by="Shareen") == R.NO_CHANGE
+    assert repository.archive("A-1", by="Shareen") == R.CHANGED
+    assert repository.archive("A-1", by="Shareen") == R.NO_CHANGE
     assert len(repository.find("A-1")["archive_log"]) == 1
 
 
 def test_restore_appends_and_the_last_entry_decides(tmp_path):
     repository = _with_two(tmp_path)
-    repository.archive("A-1")
-    assert repository.restore("A-1") == R.CHANGED
+    repository.archive("A-1", by="Shareen")
+    assert repository.restore("A-1", by="Shareen") == R.CHANGED
     record = repository.find("A-1")
     assert [entry["action"] for entry in record["archive_log"]] == ["archived", "restored"]
     assert R.archive_state(record) == R.ACTIVE
-    assert repository.archive("A-1") == R.CHANGED
+    assert repository.archive("A-1", by="Shareen") == R.CHANGED
     assert R.archive_state(repository.find("A-1")) == R.ARCHIVED
 
 
 def test_unknown_or_empty_id_is_not_found(tmp_path):
     repository = _with_two(tmp_path)
-    assert repository.archive("nope") == R.NOT_FOUND
-    assert repository.restore("nope") == R.NOT_FOUND
-    assert repository.archive("  ") == R.NOT_FOUND
+    assert repository.archive("nope", by="Shareen") == R.NOT_FOUND
+    assert repository.restore("nope", by="Shareen") == R.NOT_FOUND
+    assert repository.archive("  ", by="Shareen") == R.NOT_FOUND
 
 
 def test_the_id_is_matched_like_find_does(tmp_path):
     repository = _with_two(tmp_path)
-    assert repository.archive("  a-1 ") == R.CHANGED
+    assert repository.archive("  a-1 ", by="Shareen") == R.CHANGED
 
 
 def test_a_bad_reason_is_refused_and_nothing_is_written(tmp_path):
     repository = _with_two(tmp_path)
     for bad in ("x" * (R.MAX_REASON_LENGTH + 1), "two\nlines", "tab\there", 5):
         with pytest.raises(ValueError):
-            repository.archive("A-1", bad)
+            repository.archive("A-1", bad, "Shareen")
     assert "archive_log" not in repository.find("A-1")
-    assert repository.archive("A-1", "x" * R.MAX_REASON_LENGTH) == R.CHANGED
+    assert repository.archive("A-1", "x" * R.MAX_REASON_LENGTH, "Shareen") == R.CHANGED
 
 
 def test_reason_problem_explains_each_bad_reason_and_accepts_good_ones():
@@ -169,14 +169,14 @@ def test_reason_problem_explains_each_bad_reason_and_accepts_good_ones():
 
 def test_lists_hide_archived_unless_asked(tmp_path):
     repository = _with_two(tmp_path)
-    repository.archive("A-1")
+    repository.archive("A-1", by="Shareen")
     assert [r["assessment_id"] for r in repository.for_client("SOW-1")] == ["A-2"]
     assert [r["assessment_id"] for r in repository.for_client("SOW-1", include_archived=True)] == ["A-2", "A-1"]
     assert [r["assessment_id"] for r in repository.query("")] == ["A-2"]
     assert [r["assessment_id"] for r in repository.query("", True)] == ["A-1", "A-2"]
     assert repository.query("RISKY") == []
     assert [r["assessment_id"] for r in repository.query("RISKY", include_archived=True)] == ["A-1"]
-    repository.restore("A-1")
+    repository.restore("A-1", by="Shareen")
     assert len(repository.for_client("SOW-1")) == 2
 
 
@@ -227,8 +227,8 @@ def test_archive_and_restore_of_a_damaged_log_change_nothing(tmp_path):
     path.write_text(json.dumps([{"client_ref": "C", "assessment_id": "A-1", "archive_log": "text"}]), encoding="utf-8")
     before = path.read_bytes()
     repository = _repository(tmp_path)
-    assert repository.archive("A-1") == R.UNREADABLE
-    assert repository.restore("A-1") == R.UNREADABLE
+    assert repository.archive("A-1", by="Shareen") == R.UNREADABLE
+    assert repository.restore("A-1", by="Shareen") == R.UNREADABLE
     assert path.read_bytes() == before
 
 
@@ -236,7 +236,7 @@ def test_a_null_archive_log_gets_a_fresh_list(tmp_path):
     path = tmp_path / "ai_assessments.json"
     path.write_text(json.dumps([{"client_ref": "C", "assessment_id": "A-1", "archive_log": None}]), encoding="utf-8")
     repository = _repository(tmp_path)
-    assert repository.archive("A-1") == R.CHANGED
+    assert repository.archive("A-1", by="Shareen") == R.CHANGED
     assert repository.find("A-1")["archive_log"][0]["action"] == "archived"
 
 
@@ -244,14 +244,14 @@ def test_archive_and_restore_raise_when_the_file_cannot_be_read(tmp_path):
     (tmp_path / "ai_assessments.json").write_text("{}", encoding="utf-8")
     repository = _repository(tmp_path)
     with pytest.raises(ValueError):
-        repository.archive("A-1")
+        repository.archive("A-1", by="Shareen")
     with pytest.raises(ValueError):
-        repository.restore("A-1")
+        repository.restore("A-1", by="Shareen")
     unreadable = tmp_path / "dir"
     unreadable.mkdir()
     (unreadable / "ai_assessments.json").mkdir()
     with pytest.raises(OSError):
-        AssessmentRepository(str(unreadable / "ai_assessments.json")).archive("A-1")
+        AssessmentRepository(str(unreadable / "ai_assessments.json")).archive("A-1", by="Shareen")
 
 
 def test_a_failed_write_is_reported_as_not_saved(tmp_path, caplog):
@@ -262,7 +262,7 @@ def test_a_failed_write_is_reported_as_not_saved(tmp_path, caplog):
     path.write_text(json.dumps([{"client_ref": "C", "assessment_id": "A-1"}]), encoding="utf-8")
     before = path.read_bytes()
     with caplog.at_level(logging.ERROR):
-        assert FailingWrite(str(path)).archive("A-1") == R.NOT_SAVED
+        assert FailingWrite(str(path)).archive("A-1", by="Shareen") == R.NOT_SAVED
     assert path.read_bytes() == before
     assert any("not saved" in r.getMessage() for r in caplog.records)
 
@@ -289,7 +289,7 @@ def test_save_and_archive_hold_the_same_lock(tmp_path):
     repository.slow_once = True
     saver = threading.Thread(target=lambda: repository.save({"client_ref": "C", "assessment_id": "A-2"}))
     results = []
-    archiver = threading.Thread(target=lambda: results.append(repository.archive("A-1")))
+    archiver = threading.Thread(target=lambda: results.append(repository.archive("A-1", by="Shareen")))
     saver.start()
     assert entered.wait(timeout=5)
     archiver.start()
@@ -302,3 +302,37 @@ def test_save_and_archive_hold_the_same_lock(tmp_path):
     ids = {r["assessment_id"]: r for r in repository.load()}
     assert set(ids) == {"A-1", "A-2"}
     assert R.archive_state(ids["A-1"]) == R.ARCHIVED
+
+
+def test_archive_and_restore_write_who_did_it_on_the_line(tmp_path):
+    repository = _with_two(tmp_path)
+    repository.archive("A-1", "duplicate", "  Shareen ")
+    repository.restore("A-1", "Adrian")
+    log = repository.find("A-1")["archive_log"]
+    assert [(entry["action"], entry["by"]) for entry in log] == [("archived", "Shareen"), ("restored", "Adrian")]
+
+
+def test_a_missing_or_bad_by_is_refused_and_nothing_is_written(tmp_path):
+    repository = _with_two(tmp_path)
+    for bad in ("", "   ", 5, None, "two\nlines", "x" * (R.MAX_BY_LENGTH + 1)):
+        with pytest.raises(ValueError):
+            repository.archive("A-1", "", bad)
+        with pytest.raises(ValueError):
+            repository.restore("A-1", bad)
+    with pytest.raises(ValueError):
+        repository.archive("A-1")
+    with pytest.raises(ValueError):
+        repository.restore("A-1")
+    assert "archive_log" not in repository.find("A-1")
+    assert repository.archive("A-1", "", "x" * R.MAX_BY_LENGTH) == R.CHANGED
+
+
+def test_by_is_checked_before_the_id_is_looked_up(tmp_path):
+    with pytest.raises(ValueError):
+        _with_two(tmp_path).archive("nope", "", "")
+
+
+def test_old_lines_without_by_stay_valid_and_a_bad_by_makes_the_log_unreadable():
+    assert R.archive_state({"archive_log": [{"action": "archived", "at": "2026-11-16"}]}) == R.ARCHIVED
+    assert R.archive_state({"archive_log": [{"action": "archived", "by": "Shareen"}]}) == R.ARCHIVED
+    assert R.archive_state({"archive_log": [{"action": "archived", "by": 7}]}) == R.UNREADABLE

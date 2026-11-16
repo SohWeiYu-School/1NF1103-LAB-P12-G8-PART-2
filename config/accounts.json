@@ -1,0 +1,8 @@
+{"accounts": [
+  {"email": "admin@orbit.local", "name": "Orbit Admin", "role": "admin", "password_hash": "scrypt:32768:8:1$WOssd0rdKxcThQW7$3c1776ba7137ab190c3d8e0ec61bda4731f98cd82ba2c643d575fc59b94ebd200919da3f269b983fd61146b956150d94a6f9927a170d3e679afbd6a0e6d04f02"},
+  {"email": "shareen@orbit.local", "name": "Shareen", "role": "officer", "password_hash": "scrypt:32768:8:1$kedDFr3qDD88puDt$e90f7e96bd22dae2a22f8613446fa2538a17554dba92aed0d78b6e22bfe30db3aec05f6058b2a8d1ca8b9c26729411735df8f9c1ea5ab59c6548959ad8659cf8"},
+  {"email": "adrian@orbit.local", "name": "Adrian", "role": "officer", "password_hash": "scrypt:32768:8:1$9H6XVPM4hHojHwyO$6683f4cd392dc774e62ed2ec5ef42bf3050ab735fb7a542c3286b3c6b222fa67f64dbc46cd6e659bb4bcb9e15806535f3a8c09aefd65ea3e369e3ccaef8487a4"},
+  {"email": "dominic@orbit.local", "name": "Dominic", "role": "officer", "password_hash": "scrypt:32768:8:1$KmZ4Tpm2802xvwGx$ba52efb6aaa8d4611c1a3df7d330e03338131ef4873814e0f9c66408067b027c04c35c279eb37e8e2d05691262aefa5486414bd55eff158afb59937110e8447b"},
+  {"email": "weiyu@orbit.local", "name": "Wei Yu", "role": "officer", "password_hash": "scrypt:32768:8:1$1LbBzOMiExFPpt7E$f3c7cc0677df1471439b1b26ccea15ac0bf71b4839862cab3cd17c53c4fe3bc44fdb52c3eb2e75adc2e38f001759c1250f0b3ac3f2a14bdbcd6c3708e87e59e3"},
+  {"email": "shennon@orbit.local", "name": "Shennon", "role": "officer", "password_hash": "scrypt:32768:8:1$SMbtEcF9IYPbS4Mo$95bcb6201420e9ef5e8fccb7bfcd47f7abc5755bb6b899a7240981567773bc9b706b90a8c29226335efc97d85aa211df205cbf9da868d6b383abd3feca3cf603"}
+]}

@@ -485,3 +485,101 @@ one line to an assessment's `archive_log`, and the last line decides whether it 
   "can't load the saved assessments". The web page has an optional reason box next to Archive. layout_check 0.
 - Layout: WebApp and AssessmentRepository grew, so RateLimiter, CaseBuilder, ClientForm, DocumentReaderFactory and
   CaseFiles moved down; every line was re-routed. layout_check 0.
+
+## Audit trail, Phase 1 (2026-11-16): code changed, the diagram follows it
+
+The boxes were drawn from the built code at the end of the phase, not first. Reason: the members settled while the
+feature was being built, and the checker compares the diagram with the code. (The usual order, UML first, applies to
+Phase 2.)
+
+**6 classes added** (the checker's stage 1; their members came from the scan's stage 5):
+- `Account` (app/model): one officer or admin sign-in (email, name, role), validated in its own setter.
+- `AuditEvent` (app/model): one line of the audit log, sealed with a hash of the line before it.
+- `AuditFilter` (app/model): the audit-log page's filters and paging, checked by itself (`problems()`).
+- `AuditRepository` (app/data, child of `JsonRepository`): stores the audit lines; adds only `save()` and `for_client()`.
+- `RecordDiff` (app/logic): the fields that changed between a client record before and after a save.
+- `AuditChain` (app/logic): walks the saved lines and reports whether the hash chain is intact.
+
+**Members changed on existing classes**
+- `App`: new `__audit`, `__audit_note` and the `AUDIT_*` / `OUTCOME_NOT_UPDATED` / `MAX_REFUSED_TEXT` / `TERMINAL` /
+  `UNEXPECTED_ERROR_STEP` constants; new methods `account()`, `accounts()`, `sign_in()`, `sign_out()`, `refused()`,
+  `audit_log()`, `audit_trail()`, `verify_audit_log()`, `audit_write_failed()`, `client_outcome_failed()` and the private
+  helpers. Eight methods gained an `actor` parameter (and `client_ref` / `new_client` where a record or document is
+  involved): `save_client`, `upload_document`, `download_document`, `sync_to_cloud`, `assess`, `read_documents`,
+  `save_assessment`, `archive_assessment`, `restore_assessment`.
+- `WebApp`: new sign-in/sign-out, `gate()`, `audit_log_view()`, `audit_verify()`, `singapore_time()` and helpers, plus
+  the audit constants; the upload, autofill, save and background methods gained `actor`, `client_ref` or `new_client`.
+- `Config`: new `__accounts`, `accounts` property and `account()`; `__init__` takes `accounts`.
+- `ConfigReader`: `FILE_NAMES` now includes `"accounts"`; new `-__account_problems()`.
+- `AssessmentRepository`: `MAX_BY_LENGTH`, `-__checked_by()`; `archive()`, `restore()` and `-__record_action()` take `by`.
+- After the review fixes: `AuditChain` gained `-__broken_ids` and `broken_ids()`; `WebApp` gained `shown_value()` and
+  `-__show_audit_log()`, and `audit_verify()` now returns `str | Response`. The IO column was re-stacked (WebApp grew).
+
+**Arrows added** (16; all confirmed by the checker): `AuditRepository --|> JsonRepository`; `App *-- "1" AuditRepository`;
+`Config o-- "0..*" Account`; `AuditChain *-- "0..*" AuditEvent`; and `uses` arrows `App` to `Account`, `AuditChain`,
+`AuditEvent`, `AuditFilter`, `RecordDiff`; `AuditFilter`, `AuditRepository` to `AuditEvent`; `ConfigReader` to `Account`;
+`WebApp` to `Account`, `AuditChain`, `AuditEvent`, `AuditFilter`.
+- The checker disagreed with two first drafts, and the diagram follows it: `AuditChain ..> AuditEvent` became a
+  composition (the chain stores the events it builds from the rows), and `AuditRepository` to `JsonRepository` is
+  inheritance, not a plain line. The checker also wants `WebApp` linked to `Account`, `AuditChain` and `AuditEvent`,
+  not only `AuditFilter` (it gets them from `App`), so those three were added.
+- Starting values that change on every run are written as the call (`datetime.now(...)`, `str(uuid.uuid4())`).
+
+**Layout:** the new boxes sit in their manager's folder; `App` and `WebApp` grew, so the Logic and Domain Model areas
+moved down 330 px, the IO column (WebApp, RateLimiter, CaseBuilder, ClientForm) was re-stacked, and every line was
+re-routed. Scan 77 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.
+
+**Review fixes after the build (audit key, unreadable counts, `for_client` removed)**
+- `App` gained `-__audit_key`, `AUDIT_KEY_MISSING`, `MIN_AUDIT_KEY` and `audit_key_ok()`; `AuditEvent.compute_hash()`,
+  `hash_matches()` and `seal()` take a `key`; `AuditChain` and `AuditRepository` take and keep a `-__key`. Why: the hash
+  chain is now signed with a secret `AUDIT_KEY` (HMAC), so someone who edits the file cannot re-hash the log without it.
+- `App.audit_log()` now returns `tuple[list[AuditEvent], int, int]`, `audit_trail()` and `__audit_events()` return
+  `tuple[list[AuditEvent], int]`. Why: rows that cannot be read are counted and reported, not silently hidden (CLAUDE.md
+  section 9).
+- `AuditRepository.for_client()` was removed (code commit `024ca6d`): `App` no longer used it, so the diagram drops it too.
+- Layout: the Application folder grew 40 px and 8 arrows from `App` were re-routed. Scan 15 differences before, 0 after;
+  round-trip PROBLEMS: 0; layout_check 0.
+
+**Process note:** commit `ace48ab` changed `app/application/app.py` without changing `tests/test_application_app.py` in
+the same commit (CLAUDE.md section 7). Later commits added the tests. The history was not rewritten.
+
+## UI rework: two portals, password sign-in, Activity log filters, History timeline
+
+The code changed first (the audit-trail screens were redone), and the diagram follows it. The checker found 95
+differences. They are all in this section.
+
+**2 classes added** (both in app/model):
+- `AuditPage`: one page of audit lines, plus the counts the page needs (total, failed, officers, unreadable). The
+  Activity log shows 25 lines at a time, so something has to hold one page.
+- `TrailFilter`: the filter of the client History timeline (what to show, and when). The History has its own filter
+  because it has different choices from the Activity log.
+
+**Members changed**
+- `Account`: new `__password_hash`, `has_password`, `check_password()`, `HASH_METHODS`, `RESERVED_NAMES`;
+  `__init__` takes `password_hash`; `RESERVED_NAME` is gone (there are two reserved names now, "terminal" and
+  "unknown"). Why: people now sign in with a password, not by choosing an account.
+- `App`: `sign_in(name, password, portal)` returns `tuple[Account | None, str]` (the account, or a message);
+  new `ADMIN_PORTAL`, `OFFICER_PORTAL`, `SIGN_IN_*` messages, `MAX_SIGN_IN_TEXT`, `UNKNOWN`,
+  `REFUSAL_REPEAT_SECONDS`, `__recent_refusals`, `__refusal_lock`, `last_activity()`; `refused()` takes `now`;
+  `audit_log()` returns an `AuditPage`. Why: password sign-in replaced choosing an account; officers and admins
+  have separate portals (officer at /, admin at /admin); the same refusal is not logged again within 60 seconds.
+- `AuditEvent`: new `UNKNOWN` constant (the actor of a failed sign-in with an unknown name).
+- `AuditFilter`: rebuilt for the Activity log. It now has date presets, custom dates, several groups, a search box,
+  sort order and 25 lines a page (`PAGE_SIZE` 25, `RESULT_CHOICES` starts with "all"). `__init__` takes
+  `preset, date_from, date_to, groups, result, actor, client_ref, query, sort, page`; `from_query` takes `now`;
+  `to_query` can return lists. Removed: `__days`, `__group`, `DAY_CHOICES`, `DEFAULT_DAYS` (replaced by the preset
+  and the groups). Many new helpers and constants were added (chips, matches, paging, the problem messages).
+- `WebApp`: new constants and helpers for the two portals, Singapore time and labelled changed fields.
+  `PROFILE_IN_CAREER` and the private `__utc_moment` helper came from fixing the "Career > Age" label and the
+  UTC/SGT mismatch. Removed: `ADMIN_ONLY_REVIEWS`, `ADMIN_REFUSED`, `CHIP_KEYS`, `CHOOSE_ACCOUNT`,
+  `HISTORY_LIMIT` (they belonged to the old account chooser and the old History list).
+- Very long message constants in `AuditFilter` are shortened with `...` so the box can stay at its width.
+
+**Arrows added** (6, all confirmed by the checker): `AuditPage *-- "0..*" AuditEvent` (the page stores its
+events); `uses` arrows `App` to `AuditPage`, `WebApp` to `AuditPage`, `WebApp` to `TrailFilter`, `TrailFilter` to
+`AuditEvent`, `TrailFilter` to `AuditFilter`.
+
+**Layout:** `AuditPage` and `TrailFilter` sit in the Domain Model folder under `ClientProfile`, next to
+`AuditFilter`. `App`, `WebApp` and `AuditFilter` grew, so the folders were re-packed (the Domain Model folder moved
+down), every line was re-routed and the labels were placed again.
+Scan 95 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.

@@ -19,15 +19,20 @@ from app.logic.case_reader import CaseReader
 from app.logic.document_record_builder import DocumentRecordBuilder
 from app.model.client_record import ClientRecord
 from tests.logic_fixtures import CONFIG
+from tests.web_session import sign_in
 
 FOLDER = os.path.join(os.path.dirname(__file__), "documents", "marcus_lim")
 TODAY = "2026-10-13"
 
 
 @pytest.fixture(scope="module")
-def site(tmp_path_factory):
-    folder = tmp_path_factory.mktemp("parity")
-    return WebApp(App(None, data_folder=str(folder)))
+def parity_app(tmp_path_factory):
+    return App(None, data_folder=str(tmp_path_factory.mktemp("parity")))
+
+
+@pytest.fixture(scope="module")
+def site(parity_app):
+    return WebApp(parity_app)
 
 
 def expected_reply() -> dict:
@@ -131,7 +136,7 @@ def test_the_split_matches_the_listed_assets():
     assert any("property assets listed are worth" in warning for warning in builder.check(misread))
 
 
-def test_assessments_are_always_dated_today(site, tmp_path):
+def test_assessments_are_always_dated_today(site, parity_app, tmp_path):
     today = datetime.date.today().isoformat()
     application = App(None, data_folder=str(tmp_path))
 
@@ -139,5 +144,7 @@ def test_assessments_are_always_dated_today(site, tmp_path):
     assert case["current_date"] == today                       # command line: not asked
 
     assert web_record(site, expected_reply())["current_date"] == today   # web form: no date box
-    page = site.flask().test_client().get("/client/new").get_data(as_text=True)
+    browser = site.flask().test_client()
+    sign_in(browser, parity_app)
+    page = browser.get("/client/new").get_data(as_text=True)
     assert 'name="client.current_date"' not in page

@@ -1,9 +1,12 @@
 """App: creates every object of the system and coordinates them."""
 
 import copy
+import functools
 import logging
 import os
-from datetime import datetime
+import threading
+import time
+from datetime import datetime, timezone
 from typing import Callable
 
 from dotenv import load_dotenv
@@ -16,6 +19,7 @@ from app.ai.response_cache import ResponseCache
 from app.ai.typology_ai import TypologyAI
 from app.application.assessment_runner import AssessmentRunner
 from app.data.assessment_repository import AssessmentRepository
+from app.data.audit_repository import AuditRepository
 from app.data.case_files import CaseFiles
 from app.data.client_repository import ClientRepository
 from app.data.cloud_sync import CloudSync
@@ -29,8 +33,14 @@ from app.interface.console_ui import ConsoleUI
 from app.interface.rate_limiter import RateLimiter
 from app.interface.report_view import ReportView
 from app.logic.case_reader import CaseReader
+from app.logic.audit_chain import AuditChain
 from app.logic.case_timeline import CaseTimeline
 from app.logic.document_record_builder import DocumentRecordBuilder
+from app.logic.record_diff import RecordDiff
+from app.model.account import Account
+from app.model.audit_event import AuditEvent
+from app.model.audit_filter import AuditFilter
+from app.model.audit_page import AuditPage
 from app.model.client_record import ClientRecord
 from app.model.config import Config
 from app.model.declaration import Declaration
@@ -62,12 +72,34 @@ class App:
                                       "google_genai", "hpack", "pymongo")
     # What the user is told when the settings files cannot be loaded (the real error goes to the log).
     SETTINGS_UNAVAILABLE: str = "The app's settings could not be loaded. Please contact your administrator."
+    AUDIT_KEY_MISSING: str = "The audit log is not set up (its key is missing). Please contact your administrator."
+    MIN_AUDIT_KEY: int = 32           # a shorter AUDIT_KEY in .env counts as not set
     LOG_HANDLER_NAME: str = "app_log_file"
+    # Who did an action when nobody signed in: the command line.
+    TERMINAL: str = AuditEvent.TERMINAL
+    UNKNOWN: str = AuditEvent.UNKNOWN
+    OFFICER_PORTAL: str = "officer"
+    ADMIN_PORTAL: str = "admin"
+    SIGN_IN_EMPTY: str = "Please enter your name and password."
+    SIGN_IN_WRONG: str = "Name or password is wrong."
+    SIGN_IN_OFFICER_AT_ADMIN: str = "This is an officer account. Officers sign in at / (the officer portal)."
+    SIGN_IN_ADMIN_AT_OFFICER: str = "This is an admin account. Admins sign in at /admin."
+    MAX_SIGN_IN_TEXT: int = 200               # longer names and passwords are refused as wrong, not checked
     CLIENT_COLLECTION: str = "client_cases"
     ASSESSMENT_COLLECTION: str = "ai_assessments"
     # What the user is told when saved records cannot be read (the real error goes to the log).
     CLIENTS_UNAVAILABLE: str = "We can't load the client database right now. Please try again later."
     ASSESSMENTS_UNAVAILABLE: str = "We can't load the saved assessments right now. Please try again later."
+    # Shown when an action was done and kept, but its line could not be added to the audit log.
+    AUDIT_NOT_WRITTEN: str = "Saved, but this change could not be written to the audit log."
+    # Shown instead when the action saved nothing (a refusal, a sign-in, a check, a download, a failed save).
+    AUDIT_LINE_NOT_WRITTEN: str = "This action could not be written to the audit log."
+    AUDIT_UNAVAILABLE: str = "We can't load the audit log right now. Please try again later."
+    MAX_REFUSED_TEXT: int = 200
+    REFUSAL_REPEAT_SECONDS: int = 60          # the same refusal by the same person is written once in this time
+    # Shown when an assessment was saved but the client's outcome could not be written onto the client record.
+    OUTCOME_NOT_UPDATED: str = "The assessment was saved, but the client's outcome could not be updated."
+    UNEXPECTED_ERROR_STEP: str = "Unexpected error"      # the "step" the audit log gets when a run or save raises
 
     # The archive states and results of an assessment, so the web app can ask App without
     # reaching into the data manager.
@@ -95,20 +127,38 @@ class App:
         self.__config_reader: ConfigReader = ConfigReader(os.path.join(root, "config"))
         self.__settings_ok: bool = True
         try:
-            policy_file, vocabulary_file = (self.__config_reader.read(name) for name in ConfigReader.FILE_NAMES)
+            policy_file, vocabulary_file, accounts_file = (self.__config_reader.read(name)
+                                                           for name in ConfigReader.FILE_NAMES)
+            entries = accounts_file.get("accounts")
+            if not isinstance(entries, list):
+                raise ValueError("config/accounts.json 'accounts' must be a list")
+            accounts = [Account.from_dict(entry) for entry in entries]
         except (OSError, ValueError) as error:
             # App must not crash while it is built, and must not run on empty rules: start() and
             # start_web() see this flag, tell the officer and stop. The reader has logged the details.
             logger.error("App: the settings could not be loaded: %r", error)
             self.__settings_ok = False
-            policy_file, vocabulary_file = {}, {}
-        self.__config: Config = Config(policy_file, vocabulary_file)
+            policy_file, vocabulary_file, accounts = {}, {}, []
+        self.__config: Config = Config(policy_file, vocabulary_file, accounts)
         policy = self.__config.policy
 
         # Data Manager
         self.__clients: Repository = ClientRepository(os.path.join(database_dir, "sow_cases.json"))
         self.__assessments: AssessmentRepository = AssessmentRepository(
             os.path.join(database_dir, "ai_assessments.json"))
+        # The key signs the audit chain. App must not crash while it is built without one: start() and
+        # start_web() see audit_key_ok() and stop. The key itself is never logged or shown.
+        self.__audit_key: str = os.getenv("AUDIT_KEY", "").strip()
+        if len(self.__audit_key) < App.MIN_AUDIT_KEY:
+            logger.error("App: AUDIT_KEY is not set or is shorter than %d characters, so the audit log cannot "
+                         "be written or checked", App.MIN_AUDIT_KEY)
+            self.__audit_key = ""
+        self.__audit: AuditRepository = AuditRepository(os.path.join(database_dir, "audit_log.json"),
+                                                        key=self.__audit_key)
+        # Whether the last audit line of this thread could not be written (each web request has its own thread).
+        self.__audit_note: threading.local = threading.local()
+        self.__recent_refusals: dict[tuple[str, str], float] = {}     # (actor, what) -> when it was last written
+        self.__refusal_lock: threading.Lock = threading.Lock()
         # Document ids are paths from the folder that holds the data folder ("data/documents/...").
         self.__documents: DocumentStore = DocumentStore(os.path.join(data_dir, "documents"),
                                                         root=os.path.dirname(data_dir))
@@ -169,6 +219,10 @@ class App:
         """False when the settings files could not be loaded: no assessment can then be trusted."""
         return self.__settings_ok
 
+    def audit_key_ok(self) -> bool:
+        """False when AUDIT_KEY is missing or too short: the audit log cannot then be trusted."""
+        return bool(self.__audit_key)
+
     def __require_settings(self) -> None:
         """Raises RuntimeError(SETTINGS_UNAVAILABLE) instead of running on empty rules."""
         if not self.__settings_ok:
@@ -223,6 +277,9 @@ class App:
         if not self.__settings_ok:
             self.__ui.show_error(App.SETTINGS_UNAVAILABLE)
             return 1
+        if not self.__audit_key:
+            self.__ui.show_error(App.AUDIT_KEY_MISSING)
+            return 1
         problems = self.__config_reader.problems()
         if problems:
             for problem in problems:
@@ -260,6 +317,9 @@ class App:
         if not self.__settings_ok:
             self.__ui.show_error(App.SETTINGS_UNAVAILABLE)
             return 1
+        if not self.__audit_key:
+            self.__ui.show_error(App.AUDIT_KEY_MISSING)
+            return 1
         WebApp(self, self.__limiter).start(host or os.getenv("HOST") or "127.0.0.1", port or int(os.getenv("PORT") or 5000))
         return 0
 
@@ -273,7 +333,7 @@ class App:
         while True:
             choice = self.__ui.show_app_menu()
             if choice == "1":
-                record = self.__client_form.create_new_client(save_fn=self.save_client,
+                record = self.__client_form.create_new_client(save_fn=functools.partial(self.save_client, new_client=True),
                                                              upload_fn=self.upload_document,
                                                              is_taken_fn=self.client_ref_taken)
                 if record is not None:
@@ -342,14 +402,35 @@ class App:
     def assess(self, case: dict, supporting_documents: list[dict] | None = None,
                on_step: Callable[[int, str], None] | None = None,
                on_failure: Callable[[str, str], bool] | None = None,
-               show_failures: bool = True) -> dict | None:
-        """Run one assessment. Returns the result, or None if a critical step failed.
+               show_failures: bool = True, actor: str = TERMINAL) -> dict | None:
+        """Run one assessment. Returns the result, or None if a critical step failed (the audit log
+        then gets an "assessment failed" line for actor).
         on_failure defaults to App's own rule (CRITICAL_STEPS). show_failures=False keeps
         failed steps off the terminal (the web app shows them in the report instead)."""
         self.__require_settings()
+        self.__start(actor)
         if on_failure is None:
             on_failure = self.__handle_failure if show_failures else self.__handle_failure_quietly
-        return self.__runner.run(case, supporting_documents, on_step, on_failure)
+        decide = on_failure
+        stopped_at: list[str] = []
+
+        def watch(step: str, error: str) -> bool:
+            carry_on = decide(step, error)
+            if not carry_on:
+                stopped_at.append(step)
+            return carry_on
+
+        ref = str(case.get("client_ref") or "") if isinstance(case, dict) else ""
+        try:
+            result = self.__runner.run(case, supporting_documents, on_step, watch)
+        except Exception:
+            # The caller decides what the user sees; the audit log only learns that it failed (no error text).
+            self.__record("assessment_failed", actor, ref, "failed", {"step": App.UNEXPECTED_ERROR_STEP})
+            raise
+        if result is None:
+            self.__record("assessment_failed", actor, ref, "failed",
+                          {"step": stopped_at[0] if stopped_at else "The assessment"})
+        return result
 
     def assess_client_record(self, record: ClientRecord) -> Verdict | None:
         """The command line's assessment of a saved client: prepare, run, save, show.
@@ -370,15 +451,34 @@ class App:
                                                typologies=result.get("typologies"))
         if saved:
             self.__ui.show_message("Assessment saved.")
+            if self.client_outcome_failed():
+                self.__ui.show_error(App.OUTCOME_NOT_UPDATED)
         else:
             self.__ui.show_error("Could not save the assessment.")
         return verdict
 
     def save_assessment(self, result: dict, record: ClientRecord | None = None,
-                        on_step: Callable[[int, str], None] | None = None) -> str | None:
+                        on_step: Callable[[int, str], None] | None = None, actor: str = TERMINAL) -> str | None:
         """Save the assessment as ONE record, then its outcome on the client record when given.
         Returns the assessment id, or None if the assessment could not be saved (the client
-        record is then left as it was)."""
+        record is then left as it was). The audit log gets an "assessment run" line, or an
+        "assessment failed" line when it was not saved. If saving raises, that line is written too
+        and the error is raised again."""
+        self.__start(actor)
+        try:
+            return self.__store_assessment(result, record, on_step, actor)
+        except Exception:
+            ref = ""
+            try:
+                ref = str(result["verdict"].client_ref)
+            except Exception:
+                pass                                    # the result itself was unusable: no client to name
+            self.__record("assessment_failed", actor, ref, "failed", {"step": App.UNEXPECTED_ERROR_STEP})
+            raise
+
+    def __store_assessment(self, result: dict, record: ClientRecord | None,
+                           on_step: Callable[[int, str], None] | None, actor: str) -> str | None:
+        """The work of save_assessment."""
         if on_step is not None:
             on_step(len(AssessmentRunner.STEPS), AssessmentRunner.STEPS[-1])
         case = result["case"]
@@ -405,15 +505,34 @@ class App:
             # The client record is not touched: its outcome must never point at an assessment
             # that was not saved.
             logger.error("App.save_assessment: the assessment for %s was not saved", verdict.client_ref)
+            self.__record("assessment_failed", actor, verdict.client_ref, "failed",
+                          {"step": "Saving the assessment", "assessment_id": verdict.assessment_id})
             return None
+        previous_outcome = record.review_status.outcome if record is not None else ""
+        run_details = {"assessment_id": verdict.assessment_id, "outcome": verdict.outcome,
+                       "previous_outcome": previous_outcome,
+                       "not_run": App.__not_run_steps(verdict.report)}
         if record is not None:
             # The record keeps the case's date (assessed_on), not the time the verdict was made
             # (assessed_at), so ClientRecord.record_assessment is not used here.
             record.review_status.update(verdict.outcome, verdict.next_step, verdict.next_review_date,
                                         details["assessed_on"] or self.today(), case)
-            if not self.save_client(record):
+            run_details["record_saved"] = self.__save_record(record)
+            if not run_details["record_saved"]:
+                # The assessment itself was saved, so the audit line stays "ok"; record_saved says what is missing.
+                self.__audit_note.outcome_failed = True
                 logger.error("App.save_assessment: could not save the client record for %s", verdict.client_ref)
+        self.__record("assessment_run", actor, verdict.client_ref, "ok", run_details, kept=True)
         return verdict.assessment_id
+
+    @staticmethod
+    def __not_run_steps(report: dict | None) -> list[str]:
+        """The names of the steps a report lists under "Could not run" (plain step names, no error text)."""
+        names: list[str] = []
+        for section in (report or {}).get("sections", []):
+            if section.get("title") == "Could not run":
+                names += [str(item.get("text")) for item in section.get("items", []) if item.get("text")]
+        return names
 
     @staticmethod
     def __crime_declaration_layout(declaration: Declaration | None) -> dict | None:
@@ -471,11 +590,41 @@ class App:
             raise ValueError(f"Client {client_ref} could not be loaded because the saved record is "
                              f"not valid: {ClientRecord.why_unreadable(error)}.") from error
 
-    def save_client(self, record: ClientRecord) -> bool:
-        """Save the client (replacing the saved record with the same reference). False if not saved."""
+    def save_client(self, record: ClientRecord, actor: str = TERMINAL, new_client: bool = False) -> bool:
+        """Save the client (replacing the saved record with the same reference). False if not saved.
+        The saved record is read first, so the audit log can say "created" or "edited" and which fields
+        changed; if it cannot be read nothing is saved. Saving a record that changed nothing writes
+        no audit line. new_client says this is a new client: it is only used when the saved records cannot be
+        read, to record a failed creation as "created" and not "edited" (otherwise the saved record tells)."""
+        self.__start(actor)
+        client_ref = record.client_ref
+        try:
+            old = self.__clients.find(client_ref)
+        except (OSError, ValueError) as error:
+            logger.error("App.save_client: not saved, the saved client records cannot be read: %r", error)
+            if new_client:
+                self.__record("client_created", actor, client_ref, "failed")
+            else:
+                self.__record("client_edited", actor, client_ref, "failed", {"changes": []})
+            return False
+        new = record.to_dict()
+        changes = RecordDiff(old, new).changes()
+        saved = self.__clients.save(new)
+        if not saved:
+            logger.error("App.save_client: could not save the client record %s", client_ref)
+        if old is None:
+            self.__record("client_created", actor, client_ref, "ok" if saved else "failed", kept=saved)
+        elif changes or not saved:
+            self.__record("client_edited", actor, client_ref, "ok" if saved else "failed", {"changes": changes},
+                          kept=saved)
+        return saved
+
+    def __save_record(self, record: ClientRecord) -> bool:
+        """Save the client record with no audit line: used when an assessment writes its outcome
+        onto the record, which is not an edit by the officer."""
         saved = self.__clients.save(record.to_dict())
         if not saved:
-            logger.error("App.save_client: could not save the client record %s", record.client_ref)
+            logger.error("App.__save_record: could not save the client record %s", record.client_ref)
         return saved
 
     def __new_client_from_documents(self) -> ClientRecord | None:
@@ -559,21 +708,39 @@ class App:
                 self.__ui.show_error(f"Could not keep a copy of {os.path.basename(path)}.")
             else:
                 record.add_document({"file_name": os.path.basename(path), "file_path": stored})
-        if not self.save_client(record):
+        if not self.save_client(record, new_client=True):
             self.__ui.show_error("The client could not be saved.")
             return None
         self.__ui.show_message(f"\nClient saved. Reference: {record.client_ref} "
                                f"({len(record.documents())} document(s) attached).")
         return record if self.__client_form.ask_after_save(record) else None
 
-    def read_documents(self, documents: list[dict]) -> tuple[dict | None, list[str]]:
-        """Ask the AI to read documents the DocumentStore has opened. Returns (details, warnings)."""
+    def read_documents(self, documents: list[dict], actor: str = TERMINAL,
+                       client_ref: str = "") -> tuple[dict | None, list[str]]:
+        """Ask the AI to read documents the DocumentStore has opened. Returns (details, warnings).
+        Reading at least one document is written to the audit log (how many, and how many details were found);
+        client_ref, when the documents are for a saved client, ties that line to the client's History."""
+        self.__start(actor)
         service = self.__document_ai
         extracted = service.run({"documents": documents})
         warnings = service.warnings()
         for warning in warnings:
             logger.info(warning)
+        if documents:
+            self.__record("autofill_used", actor, client_ref, "ok" if extracted is not None else "failed",
+                          {"documents": len(documents), "fields": App.__count_fields(extracted)})
         return extracted, warnings
+
+    @staticmethod
+    def __count_fields(value: object, key: str = "") -> int:
+        """How many details the AI found in a reading: every value that is not empty (notes do not count)."""
+        if key == "notes" or value is None or value == "" or value == [] or value == {}:
+            return 0
+        if isinstance(value, dict):
+            return sum(App.__count_fields(item, name) for name, item in value.items())
+        if isinstance(value, list):
+            return sum(App.__count_fields(item) for item in value)
+        return 1
 
     def record_builder(self, date: str = "") -> DocumentRecordBuilder:
         """A DocumentRecordBuilder for one record, dated today unless another date is given."""
@@ -645,18 +812,37 @@ class App:
         when the saved assessments cannot be read; the caller shows ASSESSMENTS_UNAVAILABLE."""
         return self.__assessments.find(assessment_id)
 
-    def upload_document(self, file_path: str) -> str | None:
+    def upload_document(self, file_path: str, actor: str = TERMINAL, client_ref: str = "") -> str | None:
         """Keep a copy of a supporting document. Returns its id (to save in the client's
-        document list), or None if it could not be copied."""
-        return self.__documents.upload(file_path)
+        document list), or None if it could not be copied. client_ref, when known, ties the audit line to the client."""
+        self.__start(actor)
+        file_id = self.__documents.upload(file_path)
+        self.__record("document_uploaded", actor, client_ref, "ok" if file_id else "failed",
+                      {"file_id": file_id or ""}, kept=bool(file_id))
+        return file_id
 
-    def download_document(self, file_id: str, output_path: str) -> bool:
+    def download_document(self, file_id: str, output_path: str, actor: str = TERMINAL,
+                          client_ref: str = "") -> bool:
         """Copy a kept document out to output_path. False if it could not be copied."""
-        return self.__documents.download(file_id, output_path)
+        self.__start(actor)
+        copied = self.__documents.download(file_id, output_path)
+        self.__record("document_downloaded", actor, client_ref, "ok" if copied else "failed",
+                      {"file_id": file_id if isinstance(file_id, str) else ""})
+        return copied
 
-    def sync_to_cloud(self) -> dict:
+    def sync_to_cloud(self, actor: str = TERMINAL) -> dict:
         """Back up clients and assessments to the cloud database.
-        Returns {"cases_synced", "assessments_synced", "skipped", "errors"}."""
+        Returns {"cases_synced", "assessments_synced", "skipped", "errors"}. The audit log gets the counts
+        (never the error text)."""
+        self.__start(actor)
+        stats = self.__sync_all()
+        self.__record("cloud_sync", actor, "", "failed" if stats["errors"] else "ok",
+                      {"synced": stats["cases_synced"] + stats["assessments_synced"],
+                       "skipped": stats["skipped"], "errors": len(stats["errors"])})
+        return stats
+
+    def __sync_all(self) -> dict:
+        """Run every CloudSync and add up what they report."""
         stats = {"cases_synced": 0, "assessments_synced": 0, "skipped": 0, "errors": []}
         for name, sync in zip(("cases_synced", "assessments_synced"), self.__syncs):
             result = sync.sync()
@@ -694,28 +880,55 @@ class App:
             logger.error("App.all_assessments: the saved assessments cannot be read: %r", error)
             raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
 
-    def archive_assessment(self, assessment_id: str, reason: str = "") -> str:
+    def archive_assessment(self, assessment_id: str, reason: str = "", actor: str = TERMINAL) -> str:
         """Hide one assessment from the lists (nothing is deleted), with an optional reason. Returns
         ARCHIVE_CHANGED, ARCHIVE_NOT_FOUND, ARCHIVE_NO_CHANGE (already archived), ARCHIVE_UNREADABLE (its
         archive log is damaged), ARCHIVE_NOT_SAVED, or ARCHIVE_BAD_REASON (nothing archived; reason_problem
-        says why). Raises ValueError(ASSESSMENTS_UNAVAILABLE) if the saved assessments cannot be read.
-        The client record is not touched."""
+        says why). actor is who did it; it is written on the archive line. Raises ValueError(ASSESSMENTS_UNAVAILABLE)
+        if the saved assessments cannot be read. The client record is not touched. A change (or a failed
+        save) is written to the audit log."""
+        self.__start(actor)
         if AssessmentRepository.reason_problem(reason):
             return App.ARCHIVE_BAD_REASON          # checked first, so it is never taken for a read error
         try:
-            return self.__assessments.archive(assessment_id, reason)
+            result = self.__assessments.archive(assessment_id, reason, actor)
         except (OSError, ValueError) as error:
             logger.error("App.archive_assessment: the saved assessments cannot be read: %r", error)
             raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
+        self.__record_archive("assessment_archived", actor, assessment_id, result, reason.strip())
+        return result
 
-    def restore_assessment(self, assessment_id: str) -> str:
+    def restore_assessment(self, assessment_id: str, actor: str = TERMINAL) -> str:
         """Bring an archived assessment back into the lists. Same results and error as archive_assessment
         (ARCHIVE_NO_CHANGE means it was not archived)."""
+        self.__start(actor)
         try:
-            return self.__assessments.restore(assessment_id)
+            result = self.__assessments.restore(assessment_id, actor)
         except (OSError, ValueError) as error:
             logger.error("App.restore_assessment: the saved assessments cannot be read: %r", error)
             raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
+        self.__record_archive("assessment_restored", actor, assessment_id, result, "")
+        return result
+
+    def __record_archive(self, action: str, actor: str, assessment_id: str, result: str, reason: str) -> None:
+        """Write the audit line for an archive or restore: only when it changed the assessment
+        (CHANGED) or the save failed (NOT_SAVED). Nothing was done in any other case."""
+        if result not in (AssessmentRepository.CHANGED, AssessmentRepository.NOT_SAVED):
+            return
+        try:
+            saved = self.__assessments.find(assessment_id) or {}
+        except (OSError, ValueError) as error:
+            logger.error("App.__record_archive: the saved assessment cannot be read for the audit line: %r", error)
+            saved = {}
+        details = {"assessment_id": str(saved.get("assessment_id") or assessment_id).strip()}
+        outcome = saved.get("outcome")
+        if isinstance(outcome, str) and outcome:
+            details["outcome"] = outcome
+        if reason:
+            details["reason"] = reason
+        self.__record(action, actor, str(saved.get("client_ref") or ""),
+                      "ok" if result == AssessmentRepository.CHANGED else "failed", details,
+                      kept=result == AssessmentRepository.CHANGED)
 
     @staticmethod
     def archive_reason_problem(reason: object) -> str:
@@ -738,6 +951,203 @@ class App:
     def reading_problems(self, record: ClientRecord, today: str = "") -> list[str]:
         """Things worth a second look in a record filled from documents. [] = nothing spotted."""
         return self.record_builder(today).check(record)
+
+    # ----- who is using the app, and the audit log ----------------------------------------------
+
+    def accounts(self) -> list[Account]:
+        """Every account that can sign in."""
+        return list(self.__config.accounts)
+
+    def account(self, email: str) -> Account | None:
+        """The account with this email (upper and lower case are the same), or None."""
+        return self.__config.account(email)
+
+    def sign_in(self, name: str, password: str, portal: str) -> tuple[Account | None, str]:
+        """Sign in by name and password at a portal (OFFICER_PORTAL or ADMIN_PORTAL). Returns (the account, "")
+        and writes a "signed in" line, or (None, the plain message to show) and, if something was typed,
+        a "failed sign-in" line (details: the portal only, never the password; the actor is the account
+        name if the name matched an account, else UNKNOWN). The name is matched ignoring case and extra
+        spaces. An admin account at the officer portal, or an officer at the admin one, is refused with a message
+        that says where to sign in, but only after the password was right. Raises ValueError for an unknown portal."""
+        if portal not in (App.OFFICER_PORTAL, App.ADMIN_PORTAL):
+            raise ValueError(f"The portal must be {App.OFFICER_PORTAL} or {App.ADMIN_PORTAL}.")
+        name = " ".join(name.split()) if isinstance(name, str) else ""
+        password = password if isinstance(password, str) else ""
+        if not name or not password:
+            return None, App.SIGN_IN_EMPTY
+        match = None
+        if len(name) <= App.MAX_SIGN_IN_TEXT and len(password) <= App.MAX_SIGN_IN_TEXT:
+            match = next((a for a in self.__config.accounts
+                          if " ".join(a.name.split()).casefold() == name.casefold()), None)
+        actor = match.name if match is not None else App.UNKNOWN
+        if match is None and self.__config.accounts:
+            # check a password anyway, so a wrong name takes as long as a wrong password and the reply
+            # time does not show which names have accounts (the result is not used)
+            self.__config.accounts[0].check_password(password)
+        self.__start(actor)
+        if match is None or not match.check_password(password):
+            self.__record("sign_in_failed", actor, "", "failed", {"portal": portal})
+            return None, App.SIGN_IN_WRONG
+        if portal == App.ADMIN_PORTAL and not match.is_admin():
+            self.__record("sign_in_failed", actor, "", "failed", {"portal": portal})
+            return None, App.SIGN_IN_OFFICER_AT_ADMIN
+        if portal == App.OFFICER_PORTAL and match.is_admin():
+            self.__record("sign_in_failed", actor, "", "failed", {"portal": portal})
+            return None, App.SIGN_IN_ADMIN_AT_OFFICER
+        self.__record("signed_in", match.name)
+        return match, ""
+
+    def sign_out(self, account: Account) -> None:
+        """Sign out: the audit log gets a "signed out" line. Raises ValueError if this is not a configured account."""
+        if not isinstance(account, Account):
+            raise ValueError("Only an account can sign out.")
+        self.__start(account.name)
+        self.__record("signed_out", account.name)
+
+    def refused(self, actor: str, what: str, now: float | None = None) -> None:
+        """Write that actor was refused: what says what they tried ("opening the audit log"). If the same
+        actor was refused the same thing less than REFUSAL_REPEAT_SECONDS ago, nothing more is written
+        (a reloaded page would otherwise fill the log). now is a clock reading in seconds (time.monotonic()
+        if not given). Raises ValueError if actor is not a known actor or what is not printable text of
+        1 to MAX_REFUSED_TEXT characters."""
+        self.__start(actor)
+        text = what.strip() if isinstance(what, str) else ""
+        if not text or not text.isprintable() or len(text) > App.MAX_REFUSED_TEXT:
+            raise ValueError(f"What was refused must be printable text of 1 to {App.MAX_REFUSED_TEXT} characters.")
+        now = time.monotonic() if now is None else now
+        key = (actor, text)
+        with self.__refusal_lock:
+            last = self.__recent_refusals.get(key)
+            if last is not None and 0 <= now - last < App.REFUSAL_REPEAT_SECONDS:
+                return
+        if self.__record("access_refused", actor, "", "ok", {"what": text}):    # a line that failed is tried again
+            with self.__refusal_lock:
+                self.__recent_refusals = {k: t for k, t in self.__recent_refusals.items()
+                                          if 0 <= now - t < App.REFUSAL_REPEAT_SECONDS}
+                self.__recent_refusals[key] = now
+
+    def audit_log(self, audit_filter: AuditFilter, now: datetime | None = None) -> AuditPage:
+        """One page of the log in the filter's order, with the counts the page needs, all from one read:
+        how many events match, how many rows cannot be read, how many readable events the whole log holds
+        (so a page can tell an empty log from a filter that matches nothing), and how many different people and
+        failures there are among the matches. An empty log gives an empty page. Raises ValueError(AUDIT_UNAVAILABLE)
+        if the log cannot be read, and ValueError if audit_filter is not an AuditFilter."""
+        if not isinstance(audit_filter, AuditFilter):
+            raise ValueError("The audit log needs an AuditFilter.")
+        now = now or datetime.now(timezone.utc)
+        readable, unreadable = App.__audit_events(self.__audit_rows("audit_log"), "audit_log")
+        events = [event for event in readable if audit_filter.matches(event, now)]
+        if audit_filter.sort == "desc":
+            events.reverse()                       # the file is oldest first
+        return AuditPage(audit_filter.page_of(events), len(events), unreadable, len(readable),
+                         len({event.actor.casefold() for event in events
+                              if event.actor not in (AuditEvent.TERMINAL, AuditEvent.UNKNOWN)}),
+                         sum(1 for event in events if event.result == "failed"))
+
+    def audit_trail(self, client_ref: str) -> tuple[list[AuditEvent], int]:
+        """(every audit event about one client, newest first; how many rows of the whole log cannot be read
+        and so may be missing from it). The reference is matched ignoring case; an empty one matches nothing.
+        Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read."""
+        rows = self.__audit_rows("audit_trail")
+        readable, unreadable = App.__audit_events(rows, "audit_trail")
+        wanted = str(client_ref or "").strip().casefold()
+        events = [event for event in readable if wanted and event.client_ref.casefold() == wanted]
+        events.reverse()
+        return events, unreadable
+
+    def last_activity(self) -> dict[str, AuditEvent]:
+        """The newest audit event about each client, by client reference in lower case (one read of the
+        log). Events with no client are not counted. {} if no client has any. Raises ValueError(AUDIT_UNAVAILABLE)
+        if the log cannot be read."""
+        readable, _ = App.__audit_events(self.__audit_rows("last_activity"), "last_activity")
+        latest: dict[str, AuditEvent] = {}
+        for event in readable:                      # file order is oldest first, so a later one replaces an earlier one
+            if event.client_ref:
+                latest[event.client_ref.casefold()] = event
+        return latest
+
+    def verify_audit_log(self, actor: str) -> AuditChain:
+        """Check the hash chain of the whole log and write an "audit verified" line. The line's result is
+        "failed" only when the chain is broken (the check itself ran; if it could not run, nothing is written
+        and ValueError is raised). Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read, and
+        ValueError(AUDIT_KEY_MISSING) if no audit key is set."""
+        self.__start(actor)
+        if not self.__audit_key:
+            raise ValueError(App.AUDIT_KEY_MISSING)
+        rows = self.__audit_rows("verify_audit_log")
+        chain = AuditChain(rows, self.__audit_key)
+        self.__record("audit_verified", actor, "", "ok" if chain.intact() else "failed",
+                      {"entries": len(rows), "intact": chain.intact(), "breaks": len(chain.breaks())})
+        return chain
+
+    def __audit_rows(self, caller: str) -> list[dict]:
+        """Every row of the audit log, file order. Raises ValueError(AUDIT_UNAVAILABLE) if it cannot be read."""
+        try:
+            return self.__audit.load()
+        except (OSError, ValueError) as error:
+            logger.error("App.%s: the audit log cannot be read: %r", caller, error)
+            raise ValueError(App.AUDIT_UNAVAILABLE) from error
+
+    @staticmethod
+    def __audit_events(rows: list[dict], caller: str) -> tuple[list[AuditEvent], int]:
+        """(the rows that can be shown as events, and how many cannot). A row can be shown if it is sealed
+        and has a time and an id of its own written in the row (a hand-added row would otherwise be given a
+        made-up time). The others are counted and logged here; the pages say how many there are, and Verify
+        log shows which."""
+        events: list[AuditEvent] = []
+        unreadable = 0
+        for row in rows:
+            try:
+                event = AuditEvent.from_dict(row)
+            except ValueError:
+                unreadable += 1
+                continue
+            if event.is_sealed() and row.get("at") and row.get("event_id"):
+                events.append(event)
+            else:
+                unreadable += 1
+        if unreadable:
+            logger.warning("App.%s: %d audit row(s) cannot be read and are not listed", caller, unreadable)
+        return events, unreadable
+
+    def client_outcome_failed(self) -> bool:
+        """True if the last save_assessment in this thread saved the assessment but could not write its
+        outcome onto the client record (the audit line then says "record_saved": False)."""
+        return bool(getattr(self.__audit_note, "outcome_failed", False))
+
+    def audit_write_failed(self) -> bool:
+        """True if the last action in this thread was done but its audit line could not be written."""
+        return bool(getattr(self.__audit_note, "failed", False))
+
+    def __start(self, actor: str) -> None:
+        """Begin an action: forget the last audit failure of this thread and check who is acting.
+        Raises ValueError (a programming error) if actor is neither TERMINAL, UNKNOWN nor a configured account name."""
+        self.__audit_note.failed = False
+        self.__audit_note.outcome_failed = False
+        known = isinstance(actor, str) and (actor in (App.TERMINAL, App.UNKNOWN)
+                                            or any(account.name == actor for account in self.__config.accounts))
+        if not known:
+            raise ValueError("The actor must be 'terminal', 'unknown' or the name of a configured account.")
+
+    def __record(self, action: str, actor: str, client_ref: str = "", result: str = "ok",
+                 details: dict | None = None, kept: bool = False) -> bool:
+        """Add one line to the audit log. Never raises: if it cannot be written the real error is logged,
+        audit_write_failed() turns True, and the terminal is told (the web app checks audit_write_failed()).
+        kept is True when the action saved something: the message then says "Saved, but ...", otherwise it
+        only says the action could not be written."""
+        self.__audit_note.failed = False
+        try:
+            event = AuditEvent(actor=actor, action=action, client_ref=client_ref, result=result, details=details)
+            written = self.__audit.save(event.to_dict())
+        except Exception as error:
+            logger.error("App.__record: the audit line for %s could not be made or saved: %r", action, error)
+            written = False
+        if not written:
+            logger.error("App.__record: the audit line for %s by %s was not written", action, actor)
+            self.__audit_note.failed = True
+            if actor == App.TERMINAL:
+                self.__ui.show_error(App.AUDIT_NOT_WRITTEN if kept else App.AUDIT_LINE_NOT_WRITTEN)
+        return written
 
     # ----- the objects set-up code and tests reach through App ------------------------------
 

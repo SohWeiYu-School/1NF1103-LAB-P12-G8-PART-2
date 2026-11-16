@@ -6,65 +6,204 @@ BASE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Orbit{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-  :root { --ink:#1f2933; --muted:#616e7c; --line:#d9dee3; --bg:#f0f2f5; --accent:#1d4f7a; --bad:#a61b1b; }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--ink); background:var(--bg); line-height:1.5; }
-  header { background:var(--accent); padding:0 28px; display:flex; align-items:center; justify-content:space-between; height:54px; }
-  .brand { color:#fff; font-weight:700; font-size:1rem; text-decoration:none; letter-spacing:.02em; }
-  nav { display:flex; gap:8px; align-items:center; }
-  .nav-link { color:rgba(255,255,255,.85); font-size:.875rem; text-decoration:none; padding:5px 11px; border-radius:4px; border:1px solid rgba(255,255,255,.3); transition:background .15s; }
-  .nav-link:hover { background:rgba(255,255,255,.12); }
-  .nav-cta { background:#fff; color:var(--accent); font-size:.875rem; font-weight:600; text-decoration:none; padding:5px 13px; border-radius:4px; border:none; cursor:pointer; font:inherit; }
-  .nav-cta:hover { background:#e8edf2; }
-  main { max-width:960px; margin:0 auto; padding:28px 24px; }
-  h1 { font-size:1.45rem; margin:0 0 18px; }
-  h2 { font-size:1.05rem; margin:0 0 12px; color:var(--ink); }
-  a { color:var(--accent); }
-  .panel { background:#fff; border:1px solid var(--line); border-radius:8px; padding:18px 22px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
-  .msg { background:#e8f1f8; border:1px solid #b9d3e6; border-radius:6px; padding:10px 14px; margin-bottom:14px; }
-  .errors { background:#fdeaea; border:1px solid #e3b0b0; color:var(--bad); border-radius:6px; padding:10px 14px 10px 30px; margin-bottom:14px; }
-  .actions { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-  button, .button { font:inherit; background:var(--accent); color:#fff; border:0; border-radius:5px; padding:7px 16px; cursor:pointer; text-decoration:none; display:inline-block; font-size:.9rem; }
-  button.secondary, .button.secondary { background:#fff; color:var(--accent); border:1px solid var(--accent); }
-  button.danger { background:#fff; color:var(--bad); border:1px solid var(--bad); padding:4px 10px; }
-  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-  label { display:block; font-size:.88rem; color:var(--muted); margin-bottom:10px; }
-  input, select, textarea { display:block; width:100%; font:inherit; color:var(--ink); padding:7px 10px; margin-top:3px; border:1px solid #c4cdd6; border-radius:5px; background:#fff; }
-  fieldset { border:1px solid var(--line); border-radius:8px; background:#fff; padding:16px 20px; margin:0 0 16px; }
-  legend { font-weight:600; padding:0 6px; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:0 16px; }
-  .wide { grid-column:1 / -1; }
-  .entry { border:1px solid var(--line); border-radius:6px; padding:12px 14px; margin-bottom:12px; background:#fafbfc; }
-  table { width:100%; border-collapse:collapse; }
-  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:middle; font-size:.9rem; }
-  th { color:var(--muted); font-weight:500; font-size:.8rem; text-transform:uppercase; letter-spacing:.04em; width:auto; }
-  .muted { color:var(--muted); }
-  .savebar { position:sticky; bottom:0; background:var(--bg); padding:12px 0; border-top:1px solid var(--line); }
-  .autofill { border-color:#b9d3e6; background:#f5f9fc; }
-  .autofilled { background:#fff8db !important; border-color:#e0c25a !important; }
-  .notes { background:#fff8db; border:1px solid #e9d68f; border-radius:6px; padding:10px 14px; margin-top:12px; font-size:.88rem; }
-  .notes ul { margin:6px 0 0; padding-left:18px; }
-  .badge { display:inline-block; font-size:.75rem; font-weight:700; padding:2px 8px; border-radius:12px; letter-spacing:.03em; }
-  .badge-pass { background:#d1fae5; color:#065f46; }
-  .badge-warn { background:#fef3c7; color:#92400e; }
-  .badge-risk { background:#ffedd5; color:#9a3412; }
-  .badge-bad  { background:#fee2e2; color:#991b1b; }
+:root{
+  --bg:#f0f2f5; --surface:#ffffff; --surface-2:#f6f8fa; --ink:#1f2933; --muted:#5f6c7a; --line:#d9dee3; --line-strong:#c4cdd6;
+  --accent:#1d4f7a; --accent-ink:#ffffff; --accent-soft:#e8f1f8; --header:#1d4f7a; --header-ink:#ffffff;
+  --bad:#a61b1b; --bad-soft:#fdeaea; --warn:#a15c07; --warn-soft:#fef3c7; --ok:#1a7a3f; --ok-soft:#dcf5e7;
+  --g-client:#1d4f7a; --g-assessment:#2a9d8f; --g-documents:#c08a2d; --g-system:#7b8794; --g-signin:#b6c2cf;
+  --v-pass-bg:#d1fae5; --v-pass-fg:#065f46; --v-manual-bg:#fef3c7; --v-manual-fg:#92400e; --v-risky-bg:#ffedd5; --v-risky-fg:#9a3412; --v-serious-bg:#fee2e2; --v-serious-fg:#991b1b;
+  --shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
+  color-scheme:light;
+  --font:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14.5px;line-height:1.5;margin:0}
+a{color:var(--accent)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.mono{font-family:var(--mono);font-size:.86em}
+.muted{color:var(--muted)}
+.num{font-variant-numeric:tabular-nums}
+h1{font-size:1.5rem;line-height:1.25;margin:0;font-weight:600;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:1.05rem;margin:0;font-weight:600;text-wrap:balance}
+main > h1{margin:0 0 18px}
+main > h2{margin:0 0 12px}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+header.top{background:var(--header);color:var(--header-ink);position:sticky;top:0;z-index:20}
+header.top.admin{background:#232b36}
+header.top .wrap{display:flex;align-items:center;gap:18px;min-height:56px;flex-wrap:wrap;padding-block:6px}
+.brand{color:var(--header-ink);text-decoration:none;font-weight:700;letter-spacing:.01em;display:flex;gap:10px;align-items:center}
+.brand-mark{width:26px;height:26px;border-radius:6px;background:rgba(255,255,255,.14);display:grid;place-items:center;font-size:.72rem;font-weight:700}
+.portal-tag{font-size:.66rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:#f2c94c;color:#3d2e00;border-radius:4px;padding:2px 6px}
+nav.main{display:flex;gap:4px;flex-wrap:nowrap;flex:1 1 auto;min-width:0;overflow-x:auto}
+nav.main form{display:contents}
+nav.main a,nav.main button{white-space:nowrap;color:rgba(255,255,255,.82);text-decoration:none;padding:6px 11px;border-radius:6px;font-size:.88rem;background:none;border:0;cursor:pointer}
+nav.main a:hover,nav.main button:hover{background:rgba(255,255,255,.1);color:#fff}
+nav.main a[aria-current="page"]{background:rgba(255,255,255,.16);color:#fff;font-weight:600}
+.who{display:flex;gap:10px;align-items:center;font-size:.85rem}
+.who form{margin:0}
+.avatar{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:.72rem;font-weight:700;background:var(--accent-soft);color:var(--accent);flex:none}
+header .avatar{background:rgba(255,255,255,.18);color:#fff}
+.link-btn{background:none;border:0;color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;padding:0;opacity:.85}
+.cta{background:#fff;color:#1d4f7a;border:0;border-radius:6px;padding:6px 12px;font-weight:600;font-size:.86rem;cursor:pointer;text-decoration:none}
+main{padding-block:24px 64px}
+.stack{display:flex;flex-direction:column;gap:16px}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.spread{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);min-width:0;padding:18px 22px;margin-bottom:16px}
+.stack .panel{padding:0;margin-bottom:0}
+.panel-pad{padding:18px 20px}
+.stack .panel.panel-pad{padding:18px 20px}
+.btn{display:inline-flex;gap:6px;align-items:center;border-radius:6px;padding:7px 14px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);cursor:pointer;font-size:.88rem;font-weight:500;text-decoration:none;white-space:nowrap}
+.btn.secondary{background:var(--surface);color:var(--accent)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--accent);padding-inline:8px}
+.btn.sm{padding:4px 10px;font-size:.82rem}
+.btn[aria-disabled="true"]{opacity:.5;pointer-events:none}
+.page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.filters{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow)}
+.f-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0;margin:0}
+.field>span{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.field input,.field select{border:1px solid var(--line-strong);border-radius:6px;padding:6px 9px;background:var(--surface);min-height:34px;margin:0;width:auto}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:6px;overflow:hidden;min-height:34px}
+.seg button{border:0;background:var(--surface);color:var(--ink);padding:6px 10px;cursor:pointer;font-size:.85rem;border-right:1px solid var(--line);border-radius:0}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+details.multi{position:relative}
+details.multi summary{list-style:none;border:1px solid var(--line-strong);border-radius:6px;padding:6px 28px 6px 9px;cursor:pointer;min-height:34px;background:var(--surface);position:relative;white-space:nowrap}
+details.multi summary::after{content:"\\25BE";position:absolute;right:9px;color:var(--muted)}
+details.multi summary::-webkit-details-marker{display:none}
+.multi-pop{position:absolute;z-index:15;top:calc(100% + 4px);left:0;background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);min-width:220px}
+.multi-pop label{display:flex;gap:8px;align-items:center;padding:5px 6px;border-radius:5px;cursor:pointer;margin:0;color:var(--ink)}
+.multi-pop label:hover{background:var(--surface-2)}
+.multi-pop input{width:auto;margin:0}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;display:inline-block}
+.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.chip{display:inline-flex;gap:6px;align-items:center;background:var(--accent-soft);color:var(--accent);border-radius:20px;padding:3px 6px 3px 11px;font-size:.8rem;font-weight:500}
+.chip a{display:inline-grid;place-items:center;color:inherit;text-decoration:none;width:18px;height:18px;border-radius:50%;line-height:1;font-size:.95rem}
+.chip a:hover{background:rgba(0,0,0,.08)}
+.problem{background:var(--warn-soft);color:var(--warn);border-radius:6px;padding:7px 11px;font-size:.84rem}
+.summary{font-size:1rem;line-height:1.55;margin:0}
+.summary strong{font-weight:600}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:6px 12px;font-size:.88rem;margin:0}
+.kv dt{color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;font-weight:600;padding-top:2px}
+.kv dd{margin:0}
+.diff{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.diff .b{text-decoration:line-through;color:var(--muted)}
+.diff .a{font-weight:600}
+.err{color:var(--bad);font-size:.84rem}
+.scroll-x{overflow-x:auto;max-width:100%}
+.small{font-size:.8rem}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top;font-size:.88rem}
+th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;background:var(--surface-2);white-space:nowrap;width:auto}
+tbody tr.ev:hover{background:var(--surface-2)}
+tr.ev:has(details[open]){background:var(--accent-soft)}
+tr.detail td{background:var(--surface-2);padding:12px 16px 14px}
+.pill{display:inline-flex;gap:6px;align-items:center;font-size:.8rem;white-space:nowrap}
+.res-fail{color:var(--bad);font-weight:600;font-size:.8rem;background:var(--bad-soft);padding:1px 7px;border-radius:4px}
+.badge{display:inline-block;font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:12px;letter-spacing:.03em;white-space:nowrap}
+.b-PASSED{background:var(--v-pass-bg);color:var(--v-pass-fg)} .b-MANUAL_REVIEW{background:var(--v-manual-bg);color:var(--v-manual-fg)}
+.b-RISKY{background:var(--v-risky-bg);color:var(--v-risky-fg)} .b-SERIOUS_RISK{background:var(--v-serious-bg);color:var(--v-serious-fg)}
+.pager{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 14px;flex-wrap:wrap;font-size:.85rem}
+.empty{padding:36px 20px;text-align:center;color:var(--muted)}
+.client-head{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:start}
+.facts{display:flex;gap:22px;flex-wrap:wrap;margin-top:10px;font-size:.88rem}
+.facts div > span:first-child{display:block;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.timeline{list-style:none;margin:0;padding:6px 0}
+.day-label{padding:14px 20px 4px;font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tl{display:grid;grid-template-columns:56px 22px 1fr;gap:10px;padding:8px 20px;position:relative}
+.tl time{font-variant-numeric:tabular-nums;color:var(--muted);font-size:.85rem;padding-top:2px}
+.tl .node{width:12px;height:12px;border-radius:50%;margin:5px auto 0;border:2px solid var(--surface);box-shadow:0 0 0 2px currentColor;background:currentColor}
+.tl .rail{position:absolute;left:calc(20px + 56px + 10px + 10px);top:0;bottom:0;width:2px;background:var(--line)}
+.tl .body{min-width:0;display:flex;flex-direction:column;gap:2px;padding-bottom:4px}
+.line{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.line .short{min-width:0}
+.line .by{margin-left:auto;font-size:.82rem}
+details.info summary{display:inline-flex;gap:4px;align-items:center;cursor:pointer;font-size:.78rem;color:var(--accent);list-style:none;padding:1px 0}
+details.info summary::-webkit-details-marker{display:none}
+details.info summary::before{content:"\\25B8";font-size:.7rem;transition:transform .15s}
+details.info[open] summary::before{transform:rotate(90deg)}
+details.info[open]{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px 10px;margin-top:2px}
+details.info .kv{margin-top:6px}
+.signin-wrap{max-width:900px;margin:36px auto 0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
+.signin{padding:28px}
+.signin input{width:100%;border:1px solid var(--line-strong);border-radius:6px;padding:9px 11px;background:var(--surface);margin-top:4px}
+.signin label{margin:0;color:var(--ink);font-size:inherit}
+.demo-note{border:1px solid #e6cf7a;background:#fdf8e4;border-radius:10px;padding:18px 20px}
+.demo-note h2{font-size:1rem;margin:0 0 6px;display:flex;gap:8px;align-items:center}
+.demo-note ul{margin:6px 0 0;padding-left:18px}.demo-note li{margin:3px 0}
+.demo-pill{font-size:.68rem;font-weight:700;letter-spacing:.06em;background:#7a5c00;color:#fff;border-radius:4px;padding:2px 6px}
+.acct{width:100%;font-size:.86rem;margin-top:10px}.acct td{padding:5px 6px;border-top:1px solid #efe3b5;border-bottom:0}.acct th{text-align:left;font-size:.74rem;color:var(--muted);padding:4px 6px;background:none}
+.acct button{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:6px;padding:2px 9px;cursor:pointer;font-size:.8rem}
+.env{font-family:var(--mono);font-size:.74rem;background:#fff;border:1px solid #efe3b5;border-radius:6px;padding:8px 10px;white-space:pre;overflow-x:auto;margin:6px 0 0}
+.ro-pill{font-size:.74rem;border:1px solid var(--line-strong);border-radius:12px;padding:3px 10px;color:var(--muted);background:var(--surface-2);white-space:nowrap}
+@media (max-width:1000px){ .who .name{display:none} }
+@media (max-width:760px){.signin-wrap{grid-template-columns:1fr}}
+@media (max-width:520px){ .client-head{grid-template-columns:1fr} .kv{grid-template-columns:1fr} .tl{grid-template-columns:44px 18px 1fr;padding-inline:12px} .tl .rail{left:calc(12px + 44px + 10px + 8px)} }
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* The pages that are not redesigned keep their own classes (zero specificity, so the classes above win). */
+:where(button,.button){font:inherit;background:var(--accent);color:#fff;border:0;border-radius:5px;padding:7px 16px;cursor:pointer;text-decoration:none;display:inline-block;font-size:.9rem}
+button.secondary,.button.secondary{background:#fff;color:var(--accent);border:1px solid var(--accent)}
+button.danger{background:#fff;color:var(--bad);border:1px solid var(--bad);padding:4px 10px}
+:where(label){display:block;font-size:.88rem;color:var(--muted);margin-bottom:10px}
+:where(input,select,textarea){display:block;width:100%;font:inherit;color:var(--ink);padding:7px 10px;margin-top:3px;border:1px solid #c4cdd6;border-radius:5px;background:#fff}
+fieldset{border:1px solid var(--line);border-radius:8px;background:#fff;padding:16px 20px;margin:0 0 16px}
+legend{font-weight:600;padding:0 6px}
+.msg{background:#e8f1f8;border:1px solid #b9d3e6;border-radius:6px;padding:10px 14px;margin-bottom:14px}
+.msg-warning{background:#fff8db;border-color:#e9d68f}
+.msg-success{background:#e6f6ec;border-color:#a7d9b8}
+.errors{background:#fdeaea;border:1px solid #e3b0b0;color:var(--bad);border-radius:6px;padding:10px 14px 10px 30px;margin-bottom:14px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0 16px}
+.wide{grid-column:1 / -1}
+.entry{border:1px solid var(--line);border-radius:6px;padding:12px 14px;margin-bottom:12px;background:#fafbfc}
+.savebar{position:sticky;bottom:0;background:var(--bg);padding:12px 0;border-top:1px solid var(--line)}
+.autofill{border-color:#b9d3e6;background:#f5f9fc}
+.autofilled{background:#fff8db !important;border-color:#e0c25a !important}
+.notes{background:#fff8db;border:1px solid #e9d68f;border-radius:6px;padding:10px 14px;margin-top:12px;font-size:.88rem}
+.notes ul{margin:6px 0 0;padding-left:18px}
+.badge-pass{background:#d1fae5;color:#065f46}.badge-warn{background:#fef3c7;color:#92400e}
+.badge-risk{background:#ffedd5;color:#9a3412}.badge-bad{background:#fee2e2;color:#991b1b}
 </style>
 </head>
-<body>
-<header>
-  <a class="brand" href="{{ url_for('home') }}">Orbit</a>
-  <nav>
-    <a class="nav-link" href="{{ url_for('list_assessments_view') }}">Assessments</a>
-    <form method="post" action="{{ url_for('sync_to_cloud') }}" style="margin:0">
-      <button class="nav-link" type="submit" style="cursor:pointer">Sync to Cloud</button>
-    </form>
-    <a class="nav-cta" href="{{ url_for('new_client') }}">+ New client</a>
+<body{% if portal == 'admin' %} class="admin-portal"{% endif %}>
+<header class="top{% if portal == 'admin' %} admin{% endif %}"><div class="wrap">
+  <a class="brand" href="{{ url_for('audit_log_view' if portal == 'admin' else 'home') }}"><span class="brand-mark">O</span>Orbit{% if portal == 'admin' %} <span class="portal-tag">Admin</span>{% endif %}</a>
+  {% if account %}
+  {% set here = request.endpoint %}
+  {% if portal == 'admin' %}
+  <nav class="main">
+    <a href="{{ url_for('audit_log_view') }}"{% if here == 'audit_log_view' or here == 'audit_verify' %} aria-current="page"{% endif %}>Activity log</a>
+    <a href="{{ url_for('admin_clients') }}"{% if here in ('admin_clients', 'admin_view_client', 'admin_view_assessment') %} aria-current="page"{% endif %}>Clients</a>
   </nav>
-</header>
-<main>
-  {% for message in get_flashed_messages()|unique(case_sensitive=True) %}<div class="msg">{{ message }}</div>{% endfor %}
+  <div class="who">
+    <span class="avatar" aria-hidden="true">{{ account.name|initials }}</span>
+    <span class="name"><strong>{{ account.name }}</strong> &middot; System admin</span>
+    <form method="post" action="{{ url_for('admin_signout') }}"><button class="link-btn" type="submit">Sign out</button></form>
+  </div>
+  {% else %}
+  <nav class="main">
+    <a href="{{ url_for('home') }}"{% if here in ('home', 'view_client', 'view_assessment', 'edit_client', 'new_client') %} aria-current="page"{% endif %}>Clients</a>
+    <a href="{{ url_for('list_assessments_view') }}"{% if here == 'list_assessments_view' %} aria-current="page"{% endif %}>Assessments</a>
+    <form method="post" action="{{ url_for('sync_to_cloud') }}"><button type="submit">Sync to Cloud</button></form>
+  </nav>
+  <div class="who">
+    <a class="cta" href="{{ url_for('new_client') }}">+ New client</a>
+    <span class="avatar" aria-hidden="true">{{ account.name|initials }}</span>
+    <span class="name"><strong>{{ account.name }}</strong> &middot; KYC officer</span>
+    <form method="post" action="{{ url_for('signout') }}"><button class="link-btn" type="submit">Sign out</button></form>
+  </div>
+  {% endif %}
+  {% endif %}
+</div></header>
+<main class="wrap">
+  {% for category, message in get_flashed_messages(with_categories=true)|unique(case_sensitive=True) %}<div class="msg{% if category in ('success', 'warning') %} msg-{{ category }}{% endif %}">{{ message }}</div>{% endfor %}
   {% block content %}{% endblock %}
 </main>
 </body>
@@ -72,51 +211,45 @@ BASE = """<!doctype html>
 """
  
 HOME = """{% extends "base.html" %}
+{% block title %}Clients — Orbit{% endblock %}
 {% block content %}
-<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; gap:16px">
-  <h1 style="margin:0">Clients</h1>
-  <form action="{{ url_for('find') }}" method="get" style="display:flex; gap:8px; align-items:center">
-    <input name="ref" placeholder="Search by client reference..." aria-label="Client reference"
-           style="width:280px; margin:0; padding:7px 10px">
-    <button class="secondary" type="submit" style="white-space:nowrap">Find</button>
-  </form>
-</div>
-
-<div class="panel" style="padding:0; overflow:hidden">
+<div class="stack">
+  <div class="page-head">
+    <div><div class="eyebrow">Clients</div><h1>Client records</h1></div>
+    {% if account.is_admin() %}<span class="ro-pill">Read-only for admins</span>
+    {% else %}
+    <form action="{{ url_for('find') }}" method="get" class="row" style="gap:8px">
+      <input name="ref" placeholder="Search by client reference..." aria-label="Client reference" style="width:260px; margin:0">
+      <button class="secondary" type="submit">Find</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if activity_error %}<div class="problem" role="alert">{{ activity_error }}</div>{% endif %}
+  <div class="panel scroll-x">
   {% if clients is none %}
     <p class="muted" style="padding:20px 22px; margin:0">The list of clients cannot be shown because the client database could not be read.</p>
   {% elif not clients %}
-    <p class="muted" style="padding:20px 22px; margin:0">No clients yet — click <strong>+ New client</strong> in the top right to add the first one.</p>
+    <p class="muted" style="padding:20px 22px; margin:0">No clients yet{% if not account.is_admin() %} — click <strong>+ New client</strong> in the top right to add the first one{% endif %}.</p>
   {% else %}
   <table>
-    <thead>
-      <tr style="background:#fafbfc">
-        <th>Reference</th>
-        <th>Name</th>
-        <th>Occupation</th>
-        <th>Industry</th>
-        <th></th>
-      </tr>
-    </thead>
+    <thead><tr><th>Ref</th><th>Name</th><th>Latest verdict</th><th>Last activity</th></tr></thead>
     <tbody>
     {% for c in clients %}
-    <tr style="transition:background .1s" onmouseover="this.style.background='#f5f7fa'" onmouseout="this.style.background=''">
-      <td><code style="font-size:.82rem; color:var(--muted)">{{ c.get('client_ref', '') }}</code></td>
-      <td><strong>{{ c.get('name', '') }}</strong></td>
-      <td>{{ (c.get('career') or {}).get('occupation', '') }}</td>
-      <td>{{ (c.get('career') or {}).get('industry', '') }}</td>
-      <td style="text-align:right; padding-right:14px">
-        <a class="button" href="{{ url_for('view_client', client_ref=c.get('client_ref', '')) }}"
-           style="padding:4px 12px; font-size:.82rem">Open →</a>
-      </td>
+    {% set ref = c.get('client_ref', '') %}
+    {% set outcome = c.get('outcome') or '' %}
+    <tr>
+      <td><a class="mono" href="{{ link('view_client', client_ref=ref) }}">{{ ref }}</a></td>
+      <td>{{ c.get('name', '') }}</td>
+      <td>{% if outcome %}<span class="badge b-{{ outcome }}">{{ outcome.replace('_', ' ').capitalize() }}</span>{% else %}<span class="muted">Not assessed</span>{% endif %}</td>
+      <td class="num">{% set last = activity.get(ref|lower) if activity is not none else none %}{% if last %}{{ last.at|sgt_day }} &middot; {{ last.actor }}{% else %}&mdash;{% endif %}</td>
     </tr>
     {% endfor %}
     </tbody>
   </table>
-  <div style="padding:10px 22px; color:var(--muted); font-size:.82rem; border-top:1px solid var(--line)">
-    {{ clients|length }} client{{ 's' if clients|length != 1 else '' }}
-  </div>
+  <div class="pager"><span class="muted">{{ clients|length }} client{{ 's' if clients|length != 1 else '' }}</span></div>
   {% endif %}
+  </div>
+  {% if account.is_admin() %}<p class="muted" style="margin:0">Admins can look at any client to check an entry in the activity log, but can't edit clients or run assessments.</p>{% endif %}
 </div>
 {% endblock %}
 """
@@ -306,17 +439,31 @@ FORM = """{% extends "base.html" %}
 """
  
 VIEW = """{% extends "base.html" %}
+{% from "audit_rows.html" import info, short %}
 {% block content %}
-<h1>{{ record.get('name', 'Client') }}
-  <span class="muted" style="font-size:1rem">{{ record.get('client_ref', '') }}</span></h1>
- 
-<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--line)">
-  <a class="button secondary" href="{{ url_for('edit_client', client_ref=record.get('client_ref', '')) }}">Edit</a>
-  <form method="post" action="{{ url_for('assess_client', client_ref=record.get('client_ref', '')) }}" style="margin:0">
-    <button type="submit">Run Assessment</button>
-  </form>
-  <span style="flex:1"></span>
-  <a class="button secondary" href="{{ url_for('home') }}" style="color:var(--muted); border-color:var(--line)">← Back</a>
+<div class="stack" style="margin-bottom:16px">
+  <a href="{{ link('home') }}" class="muted" style="text-decoration:none">&larr; All clients</a>
+  {% set outcome = record.get('outcome') or '' %}
+  <section class="panel panel-pad"><div class="client-head">
+    <div>
+      <div class="eyebrow mono">{{ record.get('client_ref', '') }}</div>
+      <h1 style="margin-top:2px">{{ record.get('name', 'Client') }}</h1>
+      <div class="facts">
+        <div><span>Nationality</span>{{ record.get('nationality') or '—' }}</div>
+        <div><span>Occupation</span>{{ (record.get('career') or {}).get('occupation') or '—' }}</div>
+        <div><span>Latest verdict</span>{% if outcome %}<span class="badge b-{{ outcome }}">{{ outcome.replace('_', ' ').capitalize() }}</span>{% if record.get('last_assessed_on') %} <span class="muted">{{ record.get('last_assessed_on') }}</span>{% endif %}{% else %}Not assessed{% endif %}</div>
+      </div>
+    </div>
+    {% if account.is_admin() %}<span class="ro-pill">Read-only</span>
+    {% else %}
+    <div class="row">
+      <a class="btn secondary" href="{{ url_for('edit_client', client_ref=record.get('client_ref', '')) }}">Edit</a>
+      <form method="post" action="{{ url_for('assess_client', client_ref=record.get('client_ref', '')) }}" style="margin:0">
+        <button class="btn" type="submit">Run assessment</button>
+      </form>
+    </div>
+    {% endif %}
+  </div></section>
 </div>
 
 {% if problems %}
@@ -339,18 +486,19 @@ VIEW = """{% extends "base.html" %}
     {% for a in assessments %}
     {% set state = archive_states[loop.index0] if loop.index0 < archive_states|length else 'active' %}
     <tr{% if state != 'active' %} style="opacity:.55"{% endif %}>
-      <td>{{ a.get('assessed_at', '')[:10] }}</td>
-      <td>{{ a.get('assessed_at', '')[11:16] }} UTC</td>
-      <td>{{ (a.get('outcome') or (a.get('assessment') or {}).get('outcome') or '—').replace('_', ' ') }}{% if state == 'archived' %} (archived){% elif state == 'unreadable' %} (archive state unreadable){% endif %}</td>
+      {% set when = a.get('assessed_at', '')|sgt %}
+      {% if when != a.get('assessed_at', '') and ' ' in when %}<td>{{ when.rsplit(' ', 1)[0] }}</td><td>{{ when.rsplit(' ', 1)[1] }} SGT</td>
+      {% else %}<td>{{ when }}</td><td></td>{% endif %}
+      <td>{{ (a.get('outcome') or (a.get('assessment') or {}).get('outcome') or '—').replace('_', ' ') }}{% if state == 'archived' %}{% set last = (a.get('archive_log') or [])[-1] %} (archived) &middot; {{ ('by ' ~ last.get('by')) if last.get('by') else 'Not recorded (before sign-in existed)' }}{% elif state == 'unreadable' %} (archive state unreadable){% endif %}</td>
       <td>
         {% if a.get('assessment_id') %}
-        <a href="{{ url_for('view_assessment', assessment_id=a.get('assessment_id')) }}">View</a>
+        <a href="{{ link('view_assessment', assessment_id=a.get('assessment_id')) }}">View</a>
         {% else %}
         <span class="muted">—</span>
         {% endif %}
       </td>
       <td>
-        {% if a.get('assessment_id') and state != 'unreadable' %}
+        {% if a.get('assessment_id') and state != 'unreadable' and not account.is_admin() %}
         <form method="post" action="{{ url_for('restore_assessment' if state == 'archived' else 'archive_assessment', assessment_id=a.get('assessment_id')) }}" style="margin:0; display:flex; gap:8px; align-items:center">
           {% if state != 'archived' %}
           <input type="text" name="reason" maxlength="{{ max_reason }}" placeholder="Reason (optional)" aria-label="Reason for archiving (optional)" style="flex:1; min-width:0; margin:0">
@@ -363,13 +511,72 @@ VIEW = """{% extends "base.html" %}
     {% endfor %}
   </table>
   {% if show_archived %}
-  <p style="margin:12px 0 0"><a href="{{ url_for('view_client', client_ref=record.get('client_ref', '')) }}">Hide archived</a></p>
+  <p style="margin:12px 0 0"><a href="{{ link('view_client', client_ref=record.get('client_ref', '')) }}">Hide archived</a></p>
   {% elif archived_count %}
-  <p style="margin:12px 0 0"><a href="{{ url_for('view_client', client_ref=record.get('client_ref', ''), archived='1') }}">Show archived ({{ archived_count }})</a></p>
+  <p style="margin:12px 0 0"><a href="{{ link('view_client', client_ref=record.get('client_ref', ''), archived='1') }}">Show archived ({{ archived_count }})</a></p>
   {% endif %}
 </div>
 {% endif %}
  
+{% set client_url = link('view_client', client_ref=record.get('client_ref', '')) %}
+<div class="stack" style="margin-bottom:20px"><section class="panel" id="history">
+  <form method="get" action="{{ client_url }}" id="trail-form">
+    <div class="spread panel-pad" style="padding-bottom:8px">
+      <div><h2>History</h2><p class="muted" style="margin:2px 0 0; font-size:.86rem">Every change to this client, newest first. Open <b>Info</b> for the details, or click <b>Assessed</b> to open that assessment.</p></div>
+      <div class="row" style="gap:10px; align-items:flex-end">
+        <button type="submit" tabindex="-1" aria-hidden="true" style="position:absolute; left:-9999px">Apply</button>
+        <div class="field"><span>Show</span><div class="seg" role="group" aria-label="Show">
+          {% for value, label in trail_shows %}<button type="submit" name="show" value="{{ value }}" aria-pressed="{{ 'true' if trail_filter.show == value else 'false' }}">{{ label }}</button>{% endfor %}
+        </div></div>
+        <label class="field" for="trail-when"><span>When</span><select id="trail-when" name="when">
+          {% for value, label in trail_whens %}<option value="{{ value }}"{{ ' selected' if trail_filter.when == value else '' }}>{{ label }}</option>{% endfor %}
+        </select></label>
+        {% if trail_filter.when == 'custom' %}
+        <label class="field" for="trail-from"><span>From</span><input type="date" id="trail-from" name="from" value="{{ trail_filter.date_from }}" max="{{ today }}"></label>
+        <label class="field" for="trail-to"><span>To</span><input type="date" id="trail-to" name="to" value="{{ trail_filter.date_to }}" max="{{ today }}"></label>
+        {% endif %}
+        <button class="btn sm" type="submit" style="margin-bottom:2px">Apply</button>
+      </div>
+    </div>
+    {% if show_archived %}<input type="hidden" name="archived" value="1">{% endif %}
+    <input type="hidden" name="show" value="{{ trail_filter.show }}">
+  </form>
+  {% for problem in trail_filter.problems() %}<div class="panel-pad" style="padding-top:0"><div class="problem" role="alert">{{ problem }}</div></div>{% endfor %}
+  {% if history_error %}
+  <p class="muted" style="padding:0 20px 18px; margin:0">{{ history_error }}</p>
+  {% else %}
+  {% if history_unreadable %}<div class="panel-pad" style="padding-top:0"><div class="problem" role="alert">{{ history_unreadable }} {{ 'entry' if history_unreadable == 1 else 'entries' }} in the audit log can't be read, so this history may be incomplete.</div></div>{% endif %}
+  {% if history %}
+  <ul class="timeline">
+    {% for day, events in history %}
+    <li class="day-label">{{ day }}</li>
+    {% for e in events %}
+    <li class="tl"><span class="rail"></span><time title="{{ e.at.replace('T', ' ').replace('Z', ' UTC') }}">{{ e.at|sgt_hm }}</time><span class="node" style="color:var({{ GROUP_COLOURS[e.group] }})"></span>
+      <div class="body">
+        <div class="line"><strong>{% if e.action == 'assessment_run' and e.details.get('assessment_id') %}<a href="{{ link('view_assessment', assessment_id=e.details.get('assessment_id')) }}">{{ e.label }}</a>{% else %}{{ e.label }}{% endif %}</strong>
+          <span class="short">{{ short(e) }}</span>{% if e.result == 'failed' %}<span class="res-fail">Failed</span>{% endif %}<span class="by muted">{{ e.actor }}</span></div>
+        <details class="info"><summary>Info</summary>{{ info(e) }}</details>
+      </div></li>
+    {% endfor %}
+    {% endfor %}
+  </ul>
+  {% elif history_total %}
+  <div class="empty">Nothing matches these filters. Try &ldquo;All&rdquo; or &ldquo;All time&rdquo;.</div>
+  {% else %}
+  <div class="empty">No history recorded yet.</div>
+  {% endif %}
+  <div class="pager" style="border-top:1px solid var(--line)"><span class="muted">{{ history_count }} entr{{ 'y' if history_count == 1 else 'ies' }}</span></div>
+  {% endif %}
+</section></div>
+<script>
+(function () {
+  var form = document.getElementById('trail-form');
+  form.addEventListener('change', function (event) {
+    if (event.target.matches('select, input[type=date]')) { form.submit(); }
+  });
+})();
+</script>
+
 {% for prefix, title, fields, kind in SECTIONS %}
 <div class="panel">
   <h2>{{ title }}</h2>
@@ -400,13 +607,14 @@ VIEW = """{% extends "base.html" %}
     <p style="margin:4px 0">
       {{ document.get('file_name', 'Unknown file') }}
       {% if document.get('file_id') %}
-        - <a href="{{ url_for('download_document', client_ref=record.get('client_ref', ''), file_id=document.get('file_id')) }}">Download</a>
+        - <a href="{{ link('download_document', client_ref=record.get('client_ref', ''), file_id=document.get('file_id')) }}">Download</a>
       {% endif %}
     </p>
   {% else %}
     <p class="muted">No documents uploaded yet.</p>
   {% endfor %}
  
+  {% if not account.is_admin() %}
   <form method="post" action="{{ url_for('upload_documents', client_ref=record.get('client_ref', '')) }}"
         enctype="multipart/form-data" style="margin-top:14px">
     <label>Add documents
@@ -414,6 +622,7 @@ VIEW = """{% extends "base.html" %}
     </label>
     <button type="submit">Upload</button>
   </form>
+  {% endif %}
 </div>
 {% endblock %}
 """
@@ -440,17 +649,19 @@ ASSESS_RESULT = """{% extends "base.html" %}
   <span class="muted" style="font-size:1rem">{{ record.get('client_ref', '') }}</span>
 </h1>
 <div class="actions" style="margin-bottom:16px">
-  <a class="button secondary" href="{{ url_for('view_client', client_ref=record.get('client_ref', '')) }}">Back to client</a>
+  <a class="button secondary" href="{{ link('view_client', client_ref=record.get('client_ref', '')) }}">Back to client</a>
 </div>
 
 {% if archive_state == 'unreadable' %}
 <div class="msg">This assessment's archive record is damaged, so it cannot be archived or restored.</div>
 {% elif archive %}
 <div class="msg" style="display:flex; justify-content:space-between; align-items:center; gap:12px">
-  <span>This assessment is archived{% if archive.get('at') %} (since {{ archive['at'][:10] }}){% endif %}{% if archive.get('reason') %}: {{ archive['reason'] }}{% endif %}. It is hidden from the lists but kept as a record. The client's current outcome is not changed.</span>
+  <span>This assessment is archived{% if archive.get('at') %} (since {{ archive['at'][:10] }}){% endif %}{% if archive.get('reason') %}: {{ archive['reason'] }}{% endif %}. It is hidden from the lists but kept as a record. The client's current outcome is not changed. Archived by: {{ archive.get('by') or 'Not recorded (before sign-in existed)' }}.</span>
+  {% if not account.is_admin() %}
   <form method="post" action="{{ url_for('restore_assessment', assessment_id=assessment_id) }}" style="margin:0">
     <button type="submit" class="secondary">Restore</button>
   </form>
+  {% endif %}
 </div>
 {% endif %}
 
@@ -725,12 +936,233 @@ ERROR = """{% extends "base.html" %}
   {% if error_detail %}
   <p style="font-size:.8rem; color:var(--muted); font-family:monospace; max-width:600px; margin:0 auto 24px; word-break:break-all">{{ error_detail }}</p>
   {% endif %}
-  <a class="button secondary" href="{{ url_for('home') }}">← Back to home</a>
+  <a class="button secondary" href="{{ link('home') }}">← Back to home</a>
+</div>
+{% endblock %}
+"""
+
+AUDIT_ROWS = """{% macro short(e) -%}
+{%- set d = e.details -%}
+{%- if e.action == 'client_created' -%}New client record
+{%- elif e.action == 'client_edited' -%}{%- if e.result == 'failed' -%}Change was not saved{%- else -%}{{ (d.get('changes')|short_fields) or 'Fields' }} changed{%- endif -%}
+{%- elif e.action == 'assessment_run' -%}{%- set outcome = d.get('outcome') -%}{%- if outcome -%}<span class="badge b-{{ outcome }}">{{ outcome.replace('_', ' ').capitalize() }}</span>{%- else -%}Assessment saved{%- endif -%}
+{%- elif e.action == 'assessment_failed' -%}Stopped before finishing
+{%- elif e.action in ('document_uploaded', 'document_downloaded') -%}<span class="mono">{{ d.get('file_id') or 'a document' }}</span>
+{%- elif e.action == 'autofill_used' -%}Details filled in from documents
+{%- else -%}{{ e.summary().replace(' — failed', '') }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro info(e, seal=false) %}
+{% set d = e.details %}
+<dl class="kv">
+  {% if e.action == 'client_edited' %}
+    {% if e.result == 'failed' %}<dt>Problem</dt><dd>The change could not be saved, so the record stayed as it was.</dd>
+    {% else %}<dt>What changed</dt><dd>{% for c in d.get('changes', []) %}<div>{{ c.get('field')|field_label }}: <span class="diff"><span class="b">{{ c.get('before')|shown }}</span>&rarr;<span class="a">{{ c.get('after')|shown }}</span></span></div>{% else %}Nothing was listed.{% endfor %}</dd>{% endif %}
+  {% elif e.action == 'assessment_run' %}
+    <dt>Result</dt><dd>{% if d.get('outcome') %}<span class="badge b-{{ d.get('outcome') }}">{{ d.get('outcome').replace('_', ' ').capitalize() }}</span>{% else %}Not recorded{% endif %}</dd>
+    <dt>Steps</dt><dd>{% if d.get('not_run') %}Not run: {{ d.get('not_run')|join(', ') }}{% else %}All steps ran{% endif %}</dd>
+    {% if d.get('assessment_id') %}<dt>Record</dt><dd><a href="{{ link('view_assessment', assessment_id=d.get('assessment_id')) }}">Open assessment {{ d.get('assessment_id') }} &rarr;</a></dd>{% endif %}
+  {% elif e.action == 'assessment_failed' %}
+    <dt>Stopped at</dt><dd>{{ d.get('step') or 'Not recorded' }}</dd><dt>Saved?</dt><dd>No. Nothing from this run was saved.</dd>
+  {% elif e.action in ('document_uploaded', 'document_downloaded') %}
+    <dt>File</dt><dd class="mono">{{ d.get('file_id') or 'Not recorded' }}</dd>
+  {% elif e.action == 'autofill_used' %}
+    <dt>Read</dt><dd>{{ d.get('documents', 0) }} document{{ '' if d.get('documents') == 1 else 's' }}, {{ d.get('fields', 0) }} field{{ '' if d.get('fields') == 1 else 's' }} filled in</dd>
+  {% elif e.action in ('assessment_archived', 'assessment_restored') %}
+    <dt>Assessment</dt><dd class="mono">{{ d.get('assessment_id') or 'Not recorded' }}</dd>
+    {% if d.get('reason') %}<dt>Reason</dt><dd>{{ d.get('reason') }}</dd>{% endif %}
+  {% elif e.action == 'cloud_sync' %}
+    <dt>Synced</dt><dd>{{ d.get('synced', 0) }} record{{ '' if d.get('synced') == 1 else 's' }}{% if d.get('errors') %}, {{ d.get('errors') }} could not be synced{% endif %}</dd>
+  {% elif e.action == 'audit_verified' %}
+    <dt>Checked</dt><dd>{{ d.get('entries', 0) }} entries: {{ 'changes found' if e.result == 'failed' else 'no changes found' }}</dd>
+  {% elif e.action == 'access_refused' %}
+    <dt>Tried to</dt><dd>{{ d.get('what') or 'Not recorded' }}</dd>
+  {% elif e.action == 'sign_in_failed' %}
+    <dt>Portal</dt><dd>{{ d.get('portal') or 'Not recorded' }}</dd>
+  {% endif %}
+  <dt>{{ DONE_BY.get(e.action, 'Done by') }}</dt><dd>{{ e.actor }} &middot; {{ e.at|sgt_long }}</dd>
+  {% if seal %}<dt>Log entry</dt><dd class="mono small">#{{ e.sequence }} &middot; fingerprint {{ e.hash[:12] }}&hellip; &middot; {% if e.sequence > 1 %}links to #{{ e.sequence - 1 }}{% else %}first entry{% endif %}</dd>{% endif %}
+</dl>
+{% endmacro %}
+"""
+
+AUDIT = """{% extends "base.html" %}
+{% from "audit_rows.html" import short, info with context %}
+{% block title %}Activity log — Orbit{% endblock %}
+{% block content %}
+<form method="post" action="{{ url_for('audit_verify', **query) }}" id="verify-form"></form>
+<form method="get" action="{{ url_for('audit_log_view') }}" id="filters" class="stack">
+  <button type="submit" tabindex="-1" aria-hidden="true" style="position:absolute; left:-9999px">Apply</button>
+  <div class="page-head">
+    <div><div class="eyebrow">Audit</div><h1>Activity log</h1>
+      <p class="muted" style="margin:4px 0 0">Every action anyone took in the app. Use it to answer &ldquo;who did what, and when?&rdquo;</p></div>
+    <div class="row">
+      <div class="seg" role="group" aria-label="Sort">
+        <button type="submit" name="sort" value="desc" aria-pressed="{{ 'true' if audit_filter.sort == 'desc' else 'false' }}">Newest first</button>
+        <button type="submit" name="sort" value="asc" aria-pressed="{{ 'true' if audit_filter.sort == 'asc' else 'false' }}">Oldest first</button>
+      </div>
+      <button class="btn secondary" type="submit" form="verify-form">Verify log</button>
+    </div>
+  </div>
+
+  <section class="filters" aria-label="Filters">
+    <div class="f-row">
+      <div class="field"><span>Date range</span><div class="seg" role="group" aria-label="Date range">
+        {% for value, label in (('1', 'Today'), ('7', '7 days'), ('30', '30 days'), ('90', '90 days'), ('custom', 'Custom')) %}<button type="submit" name="preset" value="{{ value }}" aria-pressed="{{ 'true' if audit_filter.preset == value else 'false' }}">{{ label }}</button>{% endfor %}
+      </div></div>
+      {% if audit_filter.preset == 'custom' %}
+      <label class="field" for="f-from"><span>From</span><input type="date" id="f-from" name="from" value="{{ audit_filter.date_from }}" max="{{ today }}"></label>
+      <label class="field" for="f-to"><span>To</span><input type="date" id="f-to" name="to" value="{{ audit_filter.date_to }}" max="{{ today }}"></label>
+      {% endif %}
+      <label class="field" for="f-officer"><span>Officer</span><select id="f-officer" name="actor">
+        <option value="">Everyone</option>
+        {% for name in officers %}<option{{ ' selected' if name.casefold() == audit_filter.actor.casefold() and audit_filter.actor else '' }}>{{ name }}</option>{% endfor %}
+      </select></label>
+      <div class="field"><span>Actions</span><details class="multi" id="f-groups"><summary>{{ 'All actions' if audit_filter.all_groups() else (audit_filter.groups|length ~ ' of ' ~ groups|length ~ ' groups') }}</summary>
+        <div class="multi-pop">{% for name in groups %}<label><input type="checkbox" name="group" value="{{ name }}"{{ ' checked' if name in audit_filter.groups else '' }}><span class="dot" style="background:var({{ GROUP_COLOURS[name] }})"></span>{{ name }}</label>{% endfor %}</div></details></div>
+      <div class="field"><span>Result</span><div class="seg" role="group" aria-label="Result">
+        {% for value, label in (('all', 'All'), ('ok', 'OK'), ('failed', 'Failed')) %}<button type="submit" name="result" value="{{ value }}" aria-pressed="{{ 'true' if audit_filter.result == value else 'false' }}">{{ label }}</button>{% endfor %}
+      </div></div>
+    </div>
+    <div class="f-row">
+      <label class="field" for="f-client" style="width:130px"><span>Client</span><input id="f-client" name="client_ref" maxlength="40" placeholder="C-0007" value="{{ audit_filter.client_ref }}"></label>
+      <label class="field" for="f-q" style="flex:1; min-width:180px"><span>Search</span><input id="f-q" name="q" type="search" maxlength="80" placeholder="Name, file, field, officer…" value="{{ audit_filter.query }}"></label>
+      <button class="btn sm" type="submit" style="margin-bottom:2px">Apply</button>
+    </div>
+    {% for problem in audit_filter.problems() %}<div class="problem" role="alert">{{ problem }}</div>{% endfor %}
+    <div class="spread"><div class="chips"><span class="muted" style="font-size:.82rem">{{ range_text }}</span>
+      {% for text, remove in chips %}<span class="chip">{{ text }}<a href="{{ remove }}" aria-label="Remove this filter: {{ text }}">&times;</a></span>{% endfor %}</div>
+      {% if chips %}<a class="btn ghost sm" href="{{ clear_url }}">Clear all</a>{% endif %}</div>
+  </section>
+  <input type="hidden" name="preset" value="{{ audit_filter.preset }}">
+  <input type="hidden" name="result" value="{{ audit_filter.result }}">
+  <input type="hidden" name="sort" value="{{ audit_filter.sort }}">
+</form>
+
+<div class="stack" style="margin-top:16px">
+{% if log and log.unreadable and not error %}<div class="problem" role="alert">{{ log.unreadable }} {{ 'entry' if log.unreadable == 1 else 'entries' }} in the audit log can't be read. Use Verify log to see which.</div>{% endif %}
+{% if log %}<p class="summary">{{ period }}: <strong>{{ log.total }} event{{ '' if log.total == 1 else 's' }}</strong> by {{ log.officers }} officer{{ '' if log.officers == 1 else 's' }}; <strong>{{ log.failed }} failed</strong>.</p>{% endif %}
+<section class="panel">
+  {% if error %}
+    <p class="muted" style="padding:20px 22px; margin:0">{{ error }}</p>
+  {% else %}
+  <div class="scroll-x"><table>
+    <thead><tr><th>Time (SGT)</th><th>Officer</th><th>Action</th><th>Client</th><th>What happened</th></tr></thead>
+    <tbody>
+    {% for e in log.events %}
+    <tr class="ev">
+      <td class="num" title="{{ e.at.replace('T', ' ').replace('Z', ' UTC') }}" style="white-space:nowrap">{{ e.at|sgt_day }} <span class="muted">{{ e.at|sgt_hm }}</span></td>
+      <td style="white-space:nowrap"><span class="pill"><span class="avatar" style="width:22px;height:22px;font-size:.62rem" aria-hidden="true">{{ e.actor|initials }}</span>{{ e.actor }}</span></td>
+      <td style="white-space:nowrap"><span class="pill"><span class="dot" style="background:var({{ GROUP_COLOURS[e.group] }})"></span>{{ e.label }}</span></td>
+      <td>{% if e.client_ref %}<a class="mono" href="{{ link('view_client', client_ref=e.client_ref) }}">{{ e.client_ref }}</a>{% else %}<span class="muted">&mdash;</span>{% endif %}</td>
+      <td style="min-width:260px">
+        <span class="row" style="gap:8px">{{ short(e) }}{% if e.result == 'failed' %}<span class="res-fail">Failed</span>{% endif %}{% if e.event_id in broken_ids %}<span class="badge badge-warn">Changed outside the app</span>{% endif %}</span>
+        <details class="info"><summary>Info</summary>{{ info(e, true) }}</details>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5"><div class="empty">{% if log.everything == 0 and not log.unreadable %}No activity recorded yet.{% elif log.everything == 0 %}No activity can be shown.{% else %}No events match these filters. Try a longer date range or <a href="{{ clear_url }}">clear the filters</a>.{% endif %}</div></td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <div class="pager"><span class="muted">Showing {{ (page - 1) * page_size + 1 if log.total else 0 }}&ndash;{{ [page * page_size, log.total]|min }} of {{ log.total }} &middot; open <b>Info</b> on a row for details</span>
+    <span class="row">
+      {% set back_word, on_word = ('Older', 'Newer') if audit_filter.sort == 'asc' else ('Newer', 'Older') %}
+      {% if page > 1 %}<a class="btn secondary sm" href="{{ url_for('audit_log_view', **(dict(base_query, page=page - 1) if page > 2 else base_query)) }}">&larr; {{ back_word }}</a>{% else %}<span class="btn secondary sm" aria-disabled="true">&larr; {{ back_word }}</span>{% endif %}
+      <span class="num">Page {{ page }} of {{ pages }}</span>
+      {% if page < pages %}<a class="btn secondary sm" href="{{ url_for('audit_log_view', **dict(base_query, page=page + 1)) }}">{{ on_word }} &rarr;</a>{% else %}<span class="btn secondary sm" aria-disabled="true">{{ on_word }} &rarr;</span>{% endif %}
+    </span></div>
+  {% endif %}
+</section>
+</div>
+<script>
+(function () {
+  var form = document.getElementById('filters');
+  form.addEventListener('change', function (event) {
+    if (event.target.matches('select, input[type=date]')) { form.submit(); }
+  });
+  var groups = document.getElementById('f-groups'), before = groups.querySelectorAll('input:checked').length;
+  groups.addEventListener('toggle', function () {
+    if (!groups.open && groups.querySelectorAll('input:checked').length !== before) { form.submit(); }
+  });
+  document.querySelectorAll('tr.ev').forEach(function (row) {
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', function (event) {
+      if (event.target.closest('a, summary, details dl')) { return; }
+      var info = row.querySelector('details.info');
+      if (info) { info.open = !info.open; }
+    });
+  });
+})();
+</script>
+{% endblock %}
+"""
+
+SIGNIN = """{% extends "base.html" %}
+{% block title %}{{ 'Admin sign-in' if portal == 'admin' else 'Sign in' }} — Orbit{% endblock %}
+{% block content %}
+<div class="signin-wrap">
+  <form class="panel signin stack" method="post" action="{{ url_for('admin_signin' if portal == 'admin' else 'signin') }}" id="signin-form" novalidate>
+    <div><div class="eyebrow">{{ 'Admin portal · /admin' if portal == 'admin' else 'Orbit' }}</div>
+      <h1 style="margin-top:4px">{{ 'System admin sign-in' if portal == 'admin' else 'Officer sign-in' }}</h1></div>
+    <p class="muted" style="margin:0">{{ 'The activity log and a read-only view of clients. For system admins only.' if portal == 'admin' else 'Clients, assessments and client history.' }}</p>
+    <label for="signin-name"><span class="eyebrow">Name</span>
+      <input id="signin-name" name="name" autocomplete="username" maxlength="{{ max_text }}" placeholder="e.g. {{ demo[0].name if demo else 'Shareen' }}" value="{{ name }}"></label>
+    <label for="signin-pw"><span class="eyebrow">Password</span>
+      <input id="signin-pw" name="password" type="password" autocomplete="current-password" maxlength="{{ max_text }}"></label>
+    {% if problem %}<div class="err" role="alert">{{ problem }}</div>{% endif %}
+    <button class="btn" type="submit" style="justify-content:center">Sign in</button>
+    <p class="muted" style="margin:0; font-size:.84rem">{% if portal == 'admin' %}Not an admin? <a href="{{ url_for('signin') }}">Officer sign-in is at /</a>{% else %}System admin? <a href="{{ url_for('admin_signin') }}">Admin sign-in is at /admin</a>{% endif %}</p>
+  </form>
+  <aside class="demo-note">
+    <h2><span class="demo-pill">DEMO ONLY</span> This login is for demonstration</h2>
+    <p style="margin:0">It shows <b>who did what</b> in the activity log and keeps the admin pages separate. It is not how a real bank would do login.</p>
+    <ul>
+      <li><b>No sign-up.</b> Accounts are set up by whoever runs the app, in the <span class="mono">config/accounts.json</span> file.</li>
+      <li><b>No password reset.</b> To change a password, put a new hash in <span class="mono">config/accounts.json</span> and restart.</li>
+      <li>Passwords are stored <b>hashed</b>, never as plain text.</li>
+      <li>A real system would add single sign-on, a second factor (MFA), lockout after failed tries and self-service reset.</li>
+    </ul>
+    <table class="acct"><thead><tr><th>Demo account</th><th>Password</th><th></th></tr></thead><tbody>
+      {% for a in demo %}
+      <tr><td>{{ a.name }}</td><td class="mono">{{ a.password }}</td><td style="text-align:right"><button type="button" data-name="{{ a.name }}" data-password="{{ a.password }}">Use</button></td></tr>
+      {% endfor %}
+    </tbody></table>
+    <details style="margin-top:10px"><summary style="cursor:pointer; font-size:.86rem">How accounts look in <span class="mono">config/accounts.json</span></summary>
+      <div class="env">{"email": "shareen@orbit.local", "name": "Shareen", "role": "officer",
+ "password_hash": "scrypt:32768:8:1$…"}</div>
+      <p class="muted small" style="margin:6px 0 0">Make a hash with <span class="mono">python3 -c "from werkzeug.security import generate_password_hash as g; print(g('a-password'))"</span>.</p></details>
+  </aside>
+</div>
+<script>
+document.querySelectorAll('.acct button[data-name]').forEach(function (button) {
+  button.addEventListener('click', function () {
+    document.getElementById('signin-name').value = button.dataset.name;
+    document.getElementById('signin-pw').value = button.dataset.password;
+    document.getElementById('signin-pw').focus();
+  });
+});
+</script>
+{% endblock %}
+"""
+
+FORBIDDEN = """{% extends "base.html" %}
+{% block title %}Not allowed — Orbit{% endblock %}
+{% block content %}
+<div class="panel" style="text-align:center; padding:40px 22px">
+  <h1 style="color:var(--bad); margin-bottom:10px">Not allowed</h1>
+  <p style="color:var(--muted); margin:0 auto 24px">{{ message }}</p>
+  <a class="button secondary" href="{{ url_for('home') }}">← Back to the officer portal</a>
 </div>
 {% endblock %}
 """
 
 TEMPLATES: dict[str, str] = {
+    "audit_rows.html": AUDIT_ROWS,
+    "audit.html": AUDIT,
+    "signin.html": SIGNIN,
+    "forbidden.html": FORBIDDEN,
     "base.html": BASE,
     "home.html": HOME,
     "client_form.html": FORM,

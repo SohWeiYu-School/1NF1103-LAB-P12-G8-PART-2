@@ -16,20 +16,30 @@ package "Data Manager (app/data)" {
     +UNREADABLE : str = "unreadable" «const»
     -__ACTIONS : tuple[str, ...] = ("archived", "restored") «const»
     -__lock : threading.Lock = threading.Lock()
+    +MAX_BY_LENGTH : int = 80 «const»
     --
     +__init__(path : str = ".../ai_assessments.json", key_field : str = "assessment_id")
     +save(record : dict) : bool
     +for_client(client_ref : str, include_archived : bool = False) : list[dict]
     +query(outcome : str, include_archived : bool = False) : list[dict]
     {static} -__old_outcome(record : dict) : str | None
-    -__record_action(assessment_id : str, action : str, reason : str) : str
+    -__record_action(assessment_id : str, action : str, reason : str, by : str) : str
     {static} -__visible(records : list[dict], include_archived : bool) : list[dict]
-    +archive(assessment_id : str, reason : str = "") : str
+    +archive(assessment_id : str, reason : str = "", by : str = "") : str
     {static} +archive_state(record : dict) : str
     {static} +is_archived(record : dict) : bool
-    +restore(assessment_id : str) : str
+    +restore(assessment_id : str, by : str = "") : str
     {static} -__good_entry(entry : object) : bool
     {static} +reason_problem(reason : object) : str
+    {static} -__checked_by(by : object) : str
+  }
+  class AuditRepository {
+    -__HASH_PATTERN : str = "^[0-9a-f]{64}$" «const»
+    -__lock : threading.Lock = threading.Lock()
+    -__key : str = ""
+    --
+    +__init__(path : str = ".../audit_log.json", key_field : str = "event_id", key : str = "")
+    +save(record : dict) : bool
   }
   class CaseFiles {
     -__folder : str = ".../data/sample"
@@ -62,12 +72,13 @@ package "Data Manager (app/data)" {
   class ConfigReader {
     -__folder : str = ".../config"
     -__files : dict[str, dict] = {}
-    +FILE_NAMES : tuple[str, ...] = ("policy", "vocabulary") «const»
+    +FILE_NAMES : tuple[str, ...] = ("policy", "vocabulary", "accounts") «const»
     +REQUIRED : dict[str, tuple[str, ...]] = {...} «const»
     --
     +__init__(folder : str = os.path.join(ROOT_DIR, "config"))
     +read(name : str) : dict
     +problems() : list[str]
+    {static} -__account_problems(accounts_file : dict) : list[str]
   }
   abstract class DatabaseRepository {
     #_collection_name : str
@@ -340,6 +351,17 @@ package "IO Manager (app/interface)" {
     +SOW_FIELDS : list[tuple[str, str, str]] = [...] «const»
     +ASSESSMENT_FAILED : str = "The assessment could not be complete... «const»
     +ASSESSMENT_STOPPED : str = "The assessment was stopped because a... «const»
+    +AUDIT_ENDPOINTS : tuple[str, ...] = ("audit_log_view", "audit_verify") «const»
+    +NOT_ADMIN : str = "Only the admin can open the audit log." «const»
+    +SINGAPORE : timezone = timezone(timedelta(hours=8)) «const»
+    +ADMIN_ENDPOINTS : tuple[str, ...] = (...) «const»
+    +ADMIN_KEY : str = "admin" «const»
+    +ADMIN_TWINS : dict[str, str] = {...} «const»
+    +DEMO_PASSWORDS : dict[str, str] = {...} «const»
+    +DONE_BY : dict[str, str] = {...} «const»
+    +GROUP_COLOURS : dict[str, str] = {...} «const»
+    +OFFICER_KEY : str = "officer" «const»
+    +PROFILE_IN_CAREER : tuple[str, ...] = (...) «const»
     --
     +__init__(app : App | None = None, limiter : RateLimiter | None = None)
     +start(host : str = "127.0.0.1", port : int = 5000, debug : bool = False) : None
@@ -359,14 +381,14 @@ package "IO Manager (app/interface)" {
     +view_assessment(assessment_id : str) : str | Response
     +list_assessments_view() : str
     +sync_to_cloud() : Response
-    -__run_in_background(job_id : str, record : ClientRecord, case : dict) : None
+    -__run_in_background(job_id : str, record : ClientRecord, case : dict, actor : str) : None
     {static} -__crime_result_layout(crime_result : dict | None) : dict | None
     {static} -__typology_layout(typologies : list[Typology] | None) : list[dict] | None
-    #_documents_on_save(form : MultiDict, files : list[FileStorage]) : list[dict]
+    #_documents_on_save(form : MultiDict, files : list[FileStorage], client_ref : str = "") : list[dict]
     #_is_stored_document(file_id : str) : bool
     #_same_entry(prefix : str, a : dict, b : dict) : bool
     #_steps() : list[str]
-    +autofill_form(heading : str, form : MultiDict, files : list[FileStorage]) : str
+    +autofill_form(heading : str, form : MultiDict, files : list[FileStorage], client_ref : str = "") : str
     +build_record(values : dict, client_ref : str, old : dict | None = None) : tuple[dict, list[str], dict[str, str]]
     +check_record(record : dict) : list
     +extracted_to_values(extracted : dict, current_date : str = "") : dict
@@ -382,10 +404,10 @@ package "IO Manager (app/interface)" {
     +pending_documents(form : MultiDict) : list[dict]
     +read_amount(text : str, label : str, problems : list[str], allow_zero : bool = True, blank_zero : bool = False) : float
     +read_year(text : str, label : str, problems : list[str], blank_ok : bool = False) : int | None
-    +save_form_record(record : dict) : list[str]
+    +save_form_record(record : dict, new_client : bool = False) : list[str]
     +show_form(heading : str, values : dict, problems : list, field_errors : dict | None = None, documents : list | None = None, autofilled : list | None = None, notes : list | None = None, notes_title : str = "") : str
     +show_report(record : dict, report : dict | None, assessed_at : str = "", assessment_id : str | None = None, crime_result : dict | None = None, typologies : list[dict] | None = None, benchmark : dict | None = None, archive : dict | None = None, archive_state : str | None = None) : str
-    +store_uploads(files : list[FileStorage]) : tuple[list[dict], list[dict]]
+    +store_uploads(files : list[FileStorage], client_ref : str = "") : tuple[list[dict], list[dict]]
     +to_text(kind : str, value : Any) : str
     +today() : str
     +trim(number : Any) : str
@@ -395,6 +417,30 @@ package "IO Manager (app/interface)" {
     -__change_archive(assessment_id : str, archive : bool) : Response
     +archive_assessment(assessment_id : str) : Response
     +restore_assessment(assessment_id : str) : Response
+    -__actor() : str
+    -__current() : Account | None
+    -__flash_audit_failure(kept : bool = False) : None
+    +audit_log_view() : str
+    +audit_verify() : str | Response
+    +gate() : Any
+    +signin() : str | Response
+    +signout() : Response
+    +singapore_time(text : str) : str
+    -__show_audit_log(broken_ids : list[str] | None = None) : str
+    +shown_value(value : Any) : str
+    {static} -__by_day(events : list[AuditEvent]) : list[tuple[str, list[AuditEvent]]]
+    -__home() : Response
+    -__portal() : str
+    -__session_account(key : str) : Account | None
+    {static} -__utc_moment(text : str) : datetime
+    +admin_home() : Response
+    {static} +field_label(path : Any) : str
+    {static} +initials(name : str) : str
+    +portal_link(endpoint : str, **values : Any) : str
+    +short_fields(changes : Any) : str
+    +singapore_clock(text : str) : str
+    +singapore_day(text : str) : str
+    +singapore_long(text : str) : str
   }
 }
 
@@ -619,6 +665,29 @@ package "Application (app/application)" {
     +ARCHIVE_UNREADABLE : str = AssessmentRepository.UNREADABLE «const»
     +ARCHIVE_BAD_REASON : str = "bad_reason" «const»
     +MAX_ARCHIVE_REASON : int = AssessmentRepository.MAX_REASON_LENGTH «const»
+    +AUDIT_LINE_NOT_WRITTEN : str = "This action could not be written to ... «const»
+    +AUDIT_NOT_WRITTEN : str = "Saved, but this change could not be ... «const»
+    +AUDIT_UNAVAILABLE : str = "We can't load the audit log right no... «const»
+    +MAX_REFUSED_TEXT : int = 200 «const»
+    +OUTCOME_NOT_UPDATED : str = "The assessment was saved, but the cl... «const»
+    +TERMINAL : str = AuditEvent.TERMINAL «const»
+    +UNEXPECTED_ERROR_STEP : str = "Unexpected error" «const»
+    -__audit : AuditRepository = ".../audit_log.json"
+    -__audit_note : threading.local = threading.local()
+    +AUDIT_KEY_MISSING : str = "The audit log is not set up (its key... «const»
+    +MIN_AUDIT_KEY : int = 32 «const»
+    -__audit_key : str = os.getenv("AUDIT_KEY", "").strip()
+    +ADMIN_PORTAL : str = "admin" «const»
+    +MAX_SIGN_IN_TEXT : int = 200 «const»
+    +OFFICER_PORTAL : str = "officer" «const»
+    +REFUSAL_REPEAT_SECONDS : int = 60 «const»
+    +SIGN_IN_ADMIN_AT_OFFICER : str = "This is an admin account. Admins sig... «const»
+    +SIGN_IN_EMPTY : str = "Please enter your name and password." «const»
+    +SIGN_IN_OFFICER_AT_ADMIN : str = "This is an officer account. Officers... «const»
+    +SIGN_IN_WRONG : str = "Name or password is wrong." «const»
+    +UNKNOWN : str = AuditEvent.UNKNOWN «const»
+    -__recent_refusals : dict[tuple[str, str], float] = {}
+    -__refusal_lock : threading.Lock = threading.Lock()
     --
     +__init__(ai_caller : Callable[[str, dict, dict], str | None] | None = None, root : str = ROOT_DIR, data_folder : str = "data")
     +start(arguments : list[str]) : int
@@ -626,13 +695,13 @@ package "Application (app/application)" {
     +run_case_file(path : str) : bool
     +assess_client_record(record : ClientRecord) : Verdict | None
     +find_client(client_ref : str) : ClientRecord | None
-    +save_client(record : ClientRecord) : bool
+    +save_client(record : ClientRecord, actor : str = TERMINAL, new_client : bool = False) : bool
     +client_assessments(client_ref : str, include_archived : bool = False) : list[dict]
     +find_assessment(assessment_id : str) : dict | None
     +list_assessments() : None
-    +upload_document(file_path : str) : str | None
-    +download_document(file_id : str, output_path : str) : bool
-    +sync_to_cloud() : dict
+    +upload_document(file_path : str, actor : str = TERMINAL, client_ref : str = "") : str | None
+    +download_document(file_id : str, output_path : str, actor : str = TERMINAL, client_ref : str = "") : bool
+    +sync_to_cloud(actor : str = TERMINAL) : dict
     {static} +today() : str
     -__new_client_from_documents() : ClientRecord | None
     -__maybe_assess(record : ClientRecord) : None
@@ -650,7 +719,7 @@ package "Application (app/application)" {
     -__saved_verdict(saved : dict) : Verdict | None
     -__show_step(number : int, label : str) : None
     +ai_available() : bool
-    +assess(case : dict, supporting_documents : list[dict] | None = None, on_step : Callable[[int, str], None] | None = None, on_failure : Callable[[str, str], bool] | None = None, show_failures : bool = True) : dict | None
+    +assess(case : dict, supporting_documents : list[dict] | None = None, on_step : Callable[[int, str], None] | None = None, on_failure : Callable[[str, str], bool] | None = None, show_failures : bool = True, actor : str = TERMINAL) : dict | None
     +assessments() : AssessmentRepository
     +clients() : Repository
     +documents() : DocumentStore
@@ -659,11 +728,11 @@ package "Application (app/application)" {
     +rate_limiter() : RateLimiter
     +read_amount(text : object) : float | None
     +read_case(record : ClientRecord) : tuple[dict | None, list[str]]
-    +read_documents(documents : list[dict]) : tuple[dict | None, list[str]]
+    +read_documents(documents : list[dict], actor : str = TERMINAL, client_ref : str = "") : tuple[dict | None, list[str]]
     +record_builder(date : str = "") : DocumentRecordBuilder
     +response_cache() : ResponseCache
     +runner() : AssessmentRunner
-    +save_assessment(result : dict, record : ClientRecord | None = None, on_step : Callable[[int, str], None] | None = None) : str | None
+    +save_assessment(result : dict, record : ClientRecord | None = None, on_step : Callable[[int, str], None] | None = None, actor : str = TERMINAL) : str | None
     +settings_ok() : bool
     +start_web(host : str = "", port : int = 0) : int
     +steps() : list[str]
@@ -677,10 +746,32 @@ package "Application (app/application)" {
     +reading_problems(record : ClientRecord, today : str = "") : list[str]
     +record_from_reading(extracted : dict, today : str = "") : tuple[ClientRecord, list[dict]]
     -__ai_search_model() : str
-    +archive_assessment(assessment_id : str, reason : str = "") : str
+    +archive_assessment(assessment_id : str, reason : str = "", actor : str = TERMINAL) : str
     {static} +archive_state(saved : dict) : str
-    +restore_assessment(assessment_id : str) : str
+    +restore_assessment(assessment_id : str, actor : str = TERMINAL) : str
     {static} +archive_reason_problem(reason : object) : str
+    {static} -__audit_events(rows : list[dict], caller : str) : tuple[list[AuditEvent], int]
+    -__audit_rows(caller : str) : list[dict]
+    {static} -__count_fields(value : object, key : str = "") : int
+    {static} -__not_run_steps(report : dict | None) : list[str]
+    -__record(action : str, actor : str, client_ref : str = "", result : str = "ok", details : dict | None = None, kept : bool = False) : bool
+    -__record_archive(action : str, actor : str, assessment_id : str, result : str, reason : str) : None
+    -__save_record(record : ClientRecord) : bool
+    -__start(actor : str) : None
+    -__store_assessment(result : dict, record : ClientRecord | None, on_step : Callable[[int, str], None] | None, actor : str) : str | None
+    -__sync_all() : dict
+    +account(email : str) : Account | None
+    +accounts() : list[Account]
+    +audit_log(audit_filter : AuditFilter, now : datetime | None = None) : AuditPage
+    +audit_trail(client_ref : str) : tuple[list[AuditEvent], int]
+    +audit_write_failed() : bool
+    +client_outcome_failed() : bool
+    +refused(actor : str, what : str, now : float | None = None) : None
+    +sign_in(name : str, password : str, portal : str) : tuple[Account | None, str]
+    +sign_out(account : Account) : None
+    +verify_audit_log(actor : str) : AuditChain
+    +audit_key_ok() : bool
+    +last_activity() : dict[str, AuditEvent]
   }
   class AssessmentRunner {
     -__verdict_engine : VerdictEngine = VerdictEngine(...)
@@ -721,6 +812,27 @@ package "Logic Manager (app/logic)" {
     +build(record : dict, last_year : int, scenario : str = "steady", shocks : dict | None = None) : list[dict]
     +income_up_to(path : dict, year : int) : dict
     -__one_path(asset : dict, model : dict, end_year : int, last_year : int, scenario : str, shocks : dict | None) : dict
+  }
+  class AuditChain {
+    +MAX_NAMED : int = 5 «const»
+    +REQUIRED_KEYS : tuple[str, ...] = (...) «const»
+    -__HASH_PATTERN : str = "^[0-9a-f]{64}$" «const»
+    -__breaks : list[int] = []
+    -__events : list[AuditEvent] = []
+    -__mismatches : list[int] = []
+    -__rows : list[dict] = []
+    -__unreadable : list[int] = []
+    -__key : str = ""
+    --
+    -__check() : None
+    +__init__(rows : list[dict] | None = None, key : str = "")
+    +breaks() : list[int]
+    +events() : list[AuditEvent]
+    +intact() : bool
+    +summary() : str
+    +unreadable_count() : int
+    -__broken_ids : list[str] = []
+    +broken_ids() : list[str]
   }
   class Benchmark {
     -__config : Config = Config(...)
@@ -960,6 +1072,19 @@ package "Logic Manager (app/logic)" {
     +__init__(career_savings : CareerSavings | None = None, policy : dict | None = None)
     +calibrate(case : dict, forecast : dict, documented_pay : list[dict]) : tuple[dict, list[dict]]
   }
+  class RecordDiff {
+    +IGNORED : tuple[str, ...] = (...) «const»
+    -__after : dict = {}
+    -__before : dict = {}
+    -__is_new : bool = True
+    --
+    {static} -__flatten(value : object, path : str = "") : dict
+    +__init__(before : dict | None = None, after : dict | None = None)
+    {static} -__natural(field : str) : list
+    {static} -__same(before : object, after : object) : bool
+    +changes() : list[dict]
+    +touches(fields : list[str]) : bool
+  }
   class RelatedPartyTransaction {
     +NAME : str = "related_party_transaction" «const»
     -__KEYWORDS : list[str] = [...] «const»
@@ -1023,6 +1148,127 @@ package "Logic Manager (app/logic)" {
 }
 
 package "Domain Model (app/model)" {
+  class Account {
+    +ADMIN : str = "admin" «const»
+    +MAX_NAME : int = 40 «const»
+    +MIN_NAME : int = 2 «const»
+    +OFFICER : str = "officer" «const»
+    +ROLES : tuple[str, ...] = (ADMIN, OFFICER) «const»
+    -__EMAIL_PATTERN : str = "^[a-z0-9._-]+@[a-z0-9.-]+\\.[a-z]+$" «const»
+    -__NAME_PATTERN : str = "^[A-Za-z][A-Za-z .'-]*$" «const»
+    -__email : str = "" {get}
+    -__name : str = "" {get}
+    -__role : str = "officer" {get}
+    +HASH_METHODS : tuple[str, ...] = ("scrypt", "pbkdf2") «const»
+    +RESERVED_NAMES : tuple[str, ...] = ("terminal", "unknown") «const»
+    -__password_hash : str = ""
+    +has_password : bool «property»
+    --
+    +__init__(email : str = "", name : str = "", role : str = "officer", password_hash : str = "")
+    {static} +from_dict(data : dict) : Account
+    +is_admin() : bool
+    +to_dict() : dict
+    +check_password(password : str) : bool
+  }
+  class AuditEvent {
+    +ACTIONS : tuple[str, ...] = tuple(...) «const»
+    +GENESIS : str = "0" * 64 «const»
+    +GROUPS : dict[str, tuple[str, ...]] = {...} «const»
+    +LABELS : dict[str, str] = {...} «const»
+    +MAX_ACTOR : int = 80 «const»
+    +MAX_CLIENT_REF : int = 40 «const»
+    +MAX_EVENT_ID : int = 64 «const»
+    +RESULTS : tuple[str, ...] = ("ok", "failed") «const»
+    +TERMINAL : str = "terminal" «const»
+    +TIME_FORMAT : str = "%Y-%m-%dT%H:%M:%SZ" «const»
+    -__HASH_PATTERN : str = "^[0-9a-f]{64}$" «const»
+    -__TIME_PATTERN : str = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:... «const»
+    -__action : str = "" {get}
+    -__actor : str = "terminal" {get}
+    -__at : str = datetime.now(...) {get}
+    -__client_ref : str = "" {get}
+    -__details : dict = {} {get}
+    -__event_id : str = str(uuid.uuid4()) {get}
+    -__hash : str = "" {get}
+    -__previous_hash : str = "" {get}
+    -__result : str = "ok" {get}
+    -__sequence : int = 0 {get}
+    +group : str «property»
+    +label : str «property»
+    +UNKNOWN : str = "unknown" «const»
+    --
+    {static} -__count(value : object, noun : str) : str
+    {static} -__good_time(text : str) : bool
+    +__init__(event_id : str = "", sequence : int = 0, at : str = "", actor : str = "terminal", action : str = "", client_ref : str = "", result : str = "ok", details : dict | None = None, previous_hash : str = "", hash : str = "")
+    {static} -__plain(value : object) : str
+    {static} -__short(value : object) : str
+    {static} -__words(*parts : str) : str
+    +compute_hash(key : str) : str
+    {static} +from_dict(data : dict) : AuditEvent
+    +hash_matches(key : str) : bool
+    +is_sealed() : bool
+    +seal(sequence : int, previous_hash : str, key : str) : None
+    +summary() : str
+    +to_dict() : dict
+  }
+  class AuditFilter {
+    +MAX_ACTOR : int = AuditEvent.MAX_ACTOR «const»
+    +MAX_CLIENT_REF : int = AuditEvent.MAX_CLIENT_REF «const»
+    +PAGE_SIZE : int = 25 «const»
+    +RESULT_CHOICES : tuple[str, ...] = ("all", "ok", "failed") «const»
+    -__actor : str = "" {get}
+    -__client_ref : str = "" {get}
+    -__page : int = 1 {get}
+    -__problems : list[str] = []
+    -__result : str = "all" {get}
+    +DATE_FORMAT : str = "%Y-%m-%d" «const»
+    +DEFAULT_PRESET : str = "7" «const»
+    +MAX_QUERY : int = 80 «const»
+    +PRESETS : tuple[str, ...] = ("1", "7", "30", "90", "custom") «const»
+    +PROBLEM_BOTH_DATES : str = "Pick both a start a... «const»
+    +PROBLEM_DATE_FORMAT : str = "The dates must look... «const»
+    +PROBLEM_DATE_ORDER : str = "The start date must... «const»
+    +PROBLEM_FUTURE : str = "The dates cannot be... «const»
+    +SINGAPORE : timezone = timezone(timedelta(hours=8)) «const»
+    +SORT_CHOICES : tuple[str, ...] = ("desc", "asc") «const»
+    -__date_from : str = "" {get}
+    -__date_to : str = "" {get}
+    -__dates_ignored : bool = False
+    -__groups : tuple[str, ...] = tuple(AuditEvent.GROUPS) if groups is... {get}
+    -__preset : str = "7" {get}
+    -__query : str = "" {get}
+    -__sort : str = "desc" {get}
+    --
+    +__init__(preset : str = "7", date_from : str = "", date_to : str = "", groups : Iterable[str] | None = None, result : str = "all", actor : str = "", client_ref : str = "", query : str = "", sort : str = "desc", page : int = 1)
+    +chips() : list[tuple[str, str]]
+    {static} +from_query(args : Mapping, now : datetime | None = None) : AuditFilter
+    +matches(event : AuditEvent, now : datetime) : bool
+    +page_count(total : int) : int
+    +page_for(total : int) : int
+    +page_of(events : list[AuditEvent]) : list[AuditEvent]
+    +problems() : list[str]
+    +to_query() : dict[str, str | list[str]]
+    {static} -__check_day(text : str, which : str) : date | None
+    {static} -__check_groups(groups : Iterable[str]) : tuple[str, ...]
+    {static} -__searchable(event : AuditEvent) : str
+    +all_groups() : bool
+    +day_range(now : datetime) : tuple[date, date] | None
+    {static} +event_day(event : AuditEvent) : date
+    {static} +parse_day(text : str) : date | None
+    +period_text(now : datetime) : str
+    +range_text(now : datetime) : str
+    {static} +singapore_day(moment : datetime) : date
+  }
+  class AuditPage {
+    -__events : list[AuditEvent] = [] {get}
+    -__everything : int = 0 {get}
+    -__failed : int = 0 {get}
+    -__officers : int = 0 {get}
+    -__total : int = 0 {get}
+    -__unreadable : int = 0 {get}
+    --
+    +__init__(events : list[AuditEvent] | None = None, total : int = 0, unreadable : int = 0, everything : int = 0, officers : int = 0, failed : int = 0)
+  }
   class Band {
     -__cautious : float = 0.0 {get}
     -__typical : float = 0.0 {get}
@@ -1191,11 +1437,13 @@ package "Domain Model (app/model)" {
   class Config {
     -__policy : dict = {} {get}
     -__vocabulary : dict = {} {get}
+    -__accounts : list[Account] = [] {get}
     --
-    +__init__(policy : dict | None = None, vocabulary : dict | None = None)
+    +__init__(policy : dict | None = None, vocabulary : dict | None = None, accounts : list[Account] | None = None)
     +category_name(code : str) : str
     +same_country(name : str) : str
     +asset_category(asset_type : str) : str
+    +account(email : str) : Account | None
   }
   class Declaration {
     -__sources : list[ClaimedSource] = []
@@ -1288,6 +1536,25 @@ package "Domain Model (app/model)" {
     +update(outcome : str, routing : str, next_review_date : str, assessed_on : str, case : dict) : None
     +to_dict() : dict
   }
+  class TrailFilter {
+    +SHOW : dict[str, tuple[str, ...]] = {...} «const»
+    +SHOW_LABELS : dict[str, str] = {...} «const»
+    +WHEN : tuple[str, ...] = ("all", "7", "30", "90", "custom") «const»
+    +WHEN_LABELS : dict[str, str] = {...} «const»
+    -__date_from : str = "" {get}
+    -__date_to : str = "" {get}
+    -__dates_ignored : bool = False
+    -__problems : list[str] = []
+    -__show : str = "all" {get}
+    -__when : str = "all" {get}
+    --
+    +__init__(show : str = "all", when : str = "all", date_from : str = "", date_to : str = "")
+    +day_range(now : datetime) : tuple[date, date] | None
+    {static} +from_query(args : Mapping, now : datetime | None = None) : TrailFilter
+    +matches(event : AuditEvent, now : datetime) : bool
+    +problems() : list[str]
+    +to_query() : dict[str, str]
+  }
   class Typology {
     -__typology_id : str = "" {get}
     -__name : str = "" {get}
@@ -1343,6 +1610,7 @@ package "Domain Model (app/model)" {
 
 AIService -- ResponseCache : caches in
 App *-- "1" AssessmentRunner
+App *-- "1" AuditRepository
 App *-- "1" CaseBuilder
 App *-- "1" CaseFiles
 App *-- "1" ClientForm
@@ -1357,11 +1625,17 @@ App *-- "1" ResponseCache
 App *-- "2" CloudSync
 App *-- "2" Repository
 App ..> AIService : creates
+App ..> Account : uses
+App ..> AuditChain : uses
+App ..> AuditEvent : uses
+App ..> AuditFilter : uses
+App ..> AuditPage : uses
 App ..> CaseReader : creates
 App ..> ClientRecord : uses
 App ..> Declaration : uses
 App ..> DocumentRecordBuilder : creates
 App ..> MongoRepository : creates
+App ..> RecordDiff : uses
 App ..> Verdict : uses
 App ..> WebApp : creates
 AssessmentRepository --|> JsonRepository
@@ -1376,6 +1650,11 @@ AssessmentRunner o-- "1..*" AIService
 AssetPath -- MarketModel : grows with
 AssetPath ..> Band : uses
 AssetPath ..> CaseTimeline : creates
+AuditChain *-- "0..*" AuditEvent
+AuditFilter ..> AuditEvent : uses
+AuditPage *-- "0..*" AuditEvent
+AuditRepository --|> JsonRepository
+AuditRepository ..> AuditEvent : uses
 Benchmark -- Config : reads names
 Benchmark --|> RiskAnalysis
 Benchmark ..> CaseTimeline : creates
@@ -1402,6 +1681,8 @@ ClientRecord ..> Verdict : uses
 ClientRepository --|> JsonRepository
 CloudSync -- DatabaseRepository : remote
 CloudSync -- Repository : local
+Config o-- "0..*" Account
+ConfigReader ..> Account : uses
 CounterpartyUnnamed --|> Indicator
 CrimeScan *-- "5" Indicator
 CrimeScan --|> RiskAnalysis
@@ -1470,6 +1751,8 @@ RiskAnalysis ..> Check : creates
 SourceContradictsOccupation --|> Indicator
 SourceContradictsOccupation ..> ClaimedSource : checks
 TextReader --|> DocumentReader
+TrailFilter ..> AuditEvent : uses
+TrailFilter ..> AuditFilter : uses
 Typology -- "1..*" ResearchReport : cites
 TypologyAI --|> AIService
 UnvaluedSource --|> Indicator
@@ -1486,7 +1769,13 @@ VerdictEngine ..> Verdict : creates
 VerdictEngine o-- "1..*" RiskAnalysis
 WebApp -- App : calls
 WebApp -- RateLimiter : checks with
+WebApp ..> Account : uses
+WebApp ..> AuditChain : uses
+WebApp ..> AuditEvent : uses
+WebApp ..> AuditFilter : uses
+WebApp ..> AuditPage : uses
 WebApp ..> ClientRecord : uses
+WebApp ..> TrailFilter : uses
 WebApp ..> Typology : uses
 WordReader --|> DocumentReader
 

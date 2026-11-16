@@ -14,6 +14,7 @@ from app.interface.web_app import WebApp
 from app.model.client_record import ClientRecord
 from tests import fake_ai, fake_services
 from tests.logic_fixtures import sample_case
+from tests.web_session import sign_in
 
 MARCUS = os.path.join(os.path.dirname(__file__), "documents", "marcus_lim")
 
@@ -40,6 +41,7 @@ def _save_replies(application: App, record: dict) -> None:
 def _assess_on_the_web(application: App, client_ref: str) -> tuple[dict, str]:
     """Press Run Assessment, wait for the background job, and return (the saved assessment, the page)."""
     browser = WebApp(application).flask().test_client()
+    sign_in(browser, application)
     reply = browser.post(f"/client/{client_ref}/assess")
     assert reply.status_code == 302 and "/assess/loading/" in reply.headers["Location"]
     job_id = reply.headers["Location"].rstrip("/").split("/")[-1]
@@ -89,7 +91,9 @@ def test_the_web_page_shows_a_saved_assessment(tmp_path, monkeypatch):
     case, _ = application.read_case(ClientRecord.from_dict(record))
     result = application.assess(case, show_failures=False)
     assessment_id = application.save_assessment(result, ClientRecord.from_dict(record))
-    page = WebApp(application).flask().test_client().get(f"/assessment/{assessment_id}").get_data(as_text=True)
+    browser = WebApp(application).flask().test_client()
+    sign_in(browser, application)
+    page = browser.get(f"/assessment/{assessment_id}").get_data(as_text=True)
     assert result["verdict"].report["header"]["summary"] in html.unescape(page)
 
 

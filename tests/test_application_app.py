@@ -7,10 +7,14 @@ import pytest
 
 from app.application.app import App
 from app.application.assessment_runner import AssessmentRunner
+from app.model.account import Account
+from app.model.audit_event import AuditEvent
+from app.model.audit_filter import AuditFilter
 from app.model.client_record import ClientRecord
 from app.model.match_result import MatchResult
 from app.model.verdict import Verdict
 from tests import fake_ai, fake_services
+from tests.audit_files import break_audit, fix_audit
 from tests.logic_fixtures import sample_case
 
 
@@ -840,3 +844,718 @@ def test_the_menu_can_list_archived_assessments_too_and_marks_them(app, monkeypa
     app.list_assessments()
     out = capsys.readouterr().out
     assert out.count("(archived)") == 1 and out.count("(archive state unreadable)") == 1 and "C-3" in out
+
+
+@pytest.mark.parametrize("damage", ["missing", "damaged", "bad_entry", "not_a_list"])
+def test_a_bad_accounts_file_stops_the_app_like_a_bad_policy_file(tmp_path, monkeypatch, capsys, damage):
+    import shutil
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    root = tmp_path / "root"
+    shutil.copytree("config", root / "config")
+    accounts = root / "config" / "accounts.json"
+    if damage == "missing":
+        accounts.unlink()
+    else:
+        accounts.write_text({"damaged": "{broken", "bad_entry": '{"accounts": [{"email": "x"}]}',
+                             "not_a_list": '{"accounts": 5}'}[damage])
+    application = App(ai_caller=None, root=str(root), data_folder=str(tmp_path / "data"))   # no crash
+    assert application.start([]) == 1
+    out = capsys.readouterr().out
+    assert App.SETTINGS_UNAVAILABLE in out and "Traceback" not in out and "accounts.json" not in out
+
+
+# ----- the audit log ------------------------------------------------------------------------
+
+def _events(app, **filters) -> list[AuditEvent]:
+    """Every audit event that matches, oldest first (the whole log unless filters narrow it)."""
+    first = app.audit_log(AuditFilter("custom", sort="asc", **filters))      # a custom range with no dates is all dates
+    events, page = first.events, 1
+    while len(events) < first.total:
+        page += 1
+        events += app.audit_log(AuditFilter("custom", sort="asc", page=page, **filters)).events
+    return events
+
+
+def _actions(app) -> list[str]:
+    return [event.action for event in _events(app)]
+
+
+def _assessed(app, actor=App.TERMINAL):
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record, actor)
+    case, _ = app.read_case(record)
+    fake_services.save_forecast_replies(app.response_cache(), case)
+    return record, app.assess(case, actor=actor)
+
+
+def test_a_new_client_is_recorded_as_created_by_the_actor(app):
+    record = ClientRecord.from_dict(sample_case())
+    assert app.save_client(record, "Shareen") is True
+    [event] = _events(app)
+    assert (event.action, event.actor, event.client_ref, event.result) == (
+        "client_created", "Shareen", record.client_ref, "ok")
+    assert event.is_sealed()
+
+
+def test_the_terminal_is_the_default_actor(app):
+    app.save_client(ClientRecord.from_dict(sample_case()))
+    assert _events(app)[0].actor == App.TERMINAL == AuditEvent.TERMINAL
+
+
+def test_an_edit_is_recorded_with_what_changed(app):
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record, "Shareen")
+    edited = ClientRecord.from_dict({**record.to_dict(), "name": "Someone Else"})
+    assert app.save_client(edited, "Adrian") is True
+    created, event = _events(app)
+    assert event.action == "client_edited" and event.actor == "Adrian"
+    assert event.details["changes"] == [{"field": "name", "before": sample_case()["name"], "after": "Someone Else"}]
+    assert created.action == "client_created"
+
+
+def test_saving_a_client_that_did_not_change_writes_nothing(app):
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record)
+    assert app.save_client(ClientRecord.from_dict(record.to_dict())) is True
+    assert _actions(app) == ["client_created"]
+
+
+def test_a_client_that_could_not_be_saved_is_recorded_as_failed(app, monkeypatch):
+    monkeypatch.setattr(app.clients(), "save", lambda data: False)
+    assert app.save_client(ClientRecord.from_dict(sample_case()), "Shareen") is False
+    [event] = _events(app)
+    assert (event.action, event.result) == ("client_created", "failed")
+
+
+def test_a_client_file_that_cannot_be_read_is_not_overwritten_and_is_recorded_as_failed(app, tmp_path):
+    path = _damage(tmp_path, "sow_cases.json")
+    assert app.save_client(ClientRecord.from_dict(sample_case()), "Shareen") is False
+    assert path.read_bytes() == b"[{broken"
+    [event] = _events(app)
+    assert (event.action, event.result, event.details) == ("client_edited", "failed", {"changes": []})
+
+
+def test_an_assessment_is_recorded_with_its_outcome_and_the_review_save_is_not_an_edit(app):
+    record, result = _assessed(app, "Shareen")
+    assessment_id = app.save_assessment(result, record, actor="Shareen")
+    assert _actions(app) == ["client_created", "assessment_run"]       # no client_edited for the outcome
+    event = _events(app)[1]
+    verdict = result["verdict"]
+    assert (event.actor, event.client_ref, event.result) == ("Shareen", record.client_ref, "ok")
+    assert event.details["assessment_id"] == assessment_id == verdict.assessment_id
+    assert event.details["outcome"] == verdict.outcome
+    assert event.details["previous_outcome"] == ""
+    assert event.details["not_run"] and set(event.details["not_run"]) == set(verdict.not_run)
+    assert "Assessment saved for" in event.summary()
+
+
+def test_a_second_assessment_records_the_previous_outcome(app):
+    record, result = _assessed(app)
+    app.save_assessment(result, record)
+    first_outcome = record.review_status.outcome
+    case, _ = app.read_case(record)
+    app.save_assessment(app.assess(case), record)
+    assert _events(app)[-1].details["previous_outcome"] == first_outcome != ""
+
+
+def test_the_steps_that_did_not_run_are_listed_by_name_only(app):
+    record, result = _assessed(app)          # no AI: research, typologies and benchmark did not run
+    app.save_assessment(result, record)
+    not_run = _events(app)[-1].details["not_run"]
+    assert "The peer benchmark" in not_run and all(isinstance(name, str) for name in not_run)
+
+
+def test_an_assessment_that_could_not_be_saved_is_recorded_as_failed(app, tmp_path):
+    record, result = _assessed(app, "Shareen")
+    _damage(tmp_path, "ai_assessments.json")
+    assert app.save_assessment(result, record, actor="Shareen") is None
+    event = _events(app)[-1]
+    assert (event.action, event.result, event.actor) == ("assessment_failed", "failed", "Shareen")
+    assert event.details["step"] == "Saving the assessment"
+    assert "assessment_run" not in _actions(app)
+
+
+def test_an_assessment_stopped_on_a_critical_step_is_recorded_as_failed_with_the_step_name(app):
+    case = sample_case()
+    assert app.assess(case, on_failure=lambda step, reason: False, show_failures=False, actor="Adrian") is None
+    [event] = _events(app)
+    assert (event.action, event.result, event.actor, event.client_ref) == (
+        "assessment_failed", "failed", "Adrian", case["client_ref"])
+    assert event.details["step"] == AssessmentRunner.RESEARCH_STEP       # the first step that failed (no AI)
+    assert "could not be completed" in event.summary()
+
+
+def test_an_assessment_that_carries_on_without_a_step_writes_no_failure_line(app):
+    case = sample_case()
+    fake_services.save_forecast_replies(app.response_cache(), case)
+    assert app.assess(case) is not None
+    assert _actions(app) == []
+
+
+def test_archive_and_restore_are_recorded_with_who_why_and_which_assessment(app):
+    _two_saved(app)
+    assert app.archive_assessment("A1", "  duplicate ", "Shareen") == App.ARCHIVE_CHANGED
+    assert app.restore_assessment("A1", "Adrian") == App.ARCHIVE_CHANGED
+    archived, restored = _events(app)
+    assert (archived.action, archived.actor, archived.client_ref) == ("assessment_archived", "Shareen", "C-1")
+    assert archived.details == {"assessment_id": "A1", "outcome": "PASSED", "reason": "duplicate"}
+    assert (restored.action, restored.actor) == ("assessment_restored", "Adrian")
+    assert restored.details == {"assessment_id": "A1", "outcome": "PASSED"}
+    log = app.find_assessment("A1")["archive_log"]
+    assert [entry["by"] for entry in log] == ["Shareen", "Adrian"]
+
+
+def test_archive_and_restore_that_change_nothing_write_no_line(app):
+    _two_saved(app)
+    app.restore_assessment("A1")                           # not archived
+    app.archive_assessment("nope")                         # not found
+    app.archive_assessment("A1", "two\nlines")             # bad reason
+    app.archive_assessment("A1")
+    app.archive_assessment("A1")                           # already archived
+    assert _actions(app) == ["assessment_archived"]
+
+
+def test_an_archive_that_could_not_be_saved_is_recorded_as_failed(app, monkeypatch):
+    _two_saved(app)
+    monkeypatch.setattr(app.assessments(), "_write_all", lambda records: False)
+    assert app.archive_assessment("A1", "", "Shareen") == App.ARCHIVE_NOT_SAVED
+    [event] = _events(app)
+    assert (event.action, event.result) == ("assessment_archived", "failed")
+
+
+def test_reading_documents_is_recorded_with_counts_only(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    monkeypatch.setattr("app.interface.client_form.tk", None)
+    folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documents", "marcus_lim")
+    with open(folder + "_expected_extract.json", encoding="utf-8") as handle:
+        reading = json.load(handle)
+    app = App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))
+    names = sorted(os.listdir(folder))
+    documents = [app.read_document_for_extraction(os.path.join(folder, name), name) for name in names]
+    extracted, _ = app.read_documents(documents, "Shareen")
+    assert extracted is not None
+    [event] = _events(app)
+    assert (event.action, event.actor, event.result) == ("autofill_used", "Shareen", "ok")
+    assert event.details["documents"] == len(names) and event.details["fields"] > 5
+    assert set(event.details) == {"documents", "fields"}
+
+
+def test_reading_documents_that_gave_nothing_is_recorded_as_failed_and_reading_none_writes_nothing(app):
+    assert app.read_documents([]) == (None, [])
+    assert _actions(app) == []
+    app.read_documents([{"kind": "error", "error": "scan.pdf could not be opened."}], "Shareen")
+    [event] = _events(app)
+    assert (event.action, event.result, event.details) == ("autofill_used", "failed", {"documents": 1, "fields": 0})
+
+
+def test_upload_and_download_are_recorded_with_the_file_id_only(app, tmp_path):
+    source = tmp_path / "payslip.txt"
+    source.write_text("salary 5000", encoding="utf-8")
+    file_id = app.upload_document(str(source), "Shareen", "C-9")
+    assert app.download_document(file_id, str(tmp_path / "out" / "payslip.txt"), "Adrian", "C-9") is True
+    uploaded, downloaded = _events(app)
+    assert (uploaded.action, uploaded.actor, uploaded.client_ref, uploaded.details) == (
+        "document_uploaded", "Shareen", "C-9", {"file_id": file_id})
+    assert (downloaded.action, downloaded.actor, downloaded.details) == (
+        "document_downloaded", "Adrian", {"file_id": file_id})
+    assert [event.action for event in app.audit_trail("c-9")[0]] == ["document_downloaded", "document_uploaded"]
+
+
+def test_a_document_that_could_not_be_kept_or_copied_is_recorded_as_failed(app, tmp_path):
+    assert app.upload_document(str(tmp_path / "missing.pdf")) is None
+    assert app.download_document("data/documents/nothing.pdf", str(tmp_path / "out.pdf")) is False
+    assert [(event.action, event.result) for event in _events(app)] == [
+        ("document_uploaded", "failed"), ("document_downloaded", "failed")]
+
+
+def test_a_cloud_sync_is_recorded_with_counts_and_never_the_error_text(app):
+    app.clients().save(sample_case())
+    stats = app.sync_to_cloud("Shareen")
+    assert stats["errors"]
+    [event] = _events(app)
+    assert (event.action, event.actor, event.result) == ("cloud_sync", "Shareen", "failed")
+    assert event.details == {"synced": 0, "skipped": stats["skipped"], "errors": len(stats["errors"])}
+    assert stats["errors"][0] not in json.dumps(event.to_dict())
+
+
+def test_signing_in_and_out_are_recorded_under_the_account_name(app):
+    account, problem = app.sign_in("  shareen ", "officer123", App.OFFICER_PORTAL)
+    assert account is not None and account.name == "Shareen" and problem == ""
+    app.sign_out(account)
+    assert [(event.action, event.actor) for event in _events(app)] == [
+        ("signed_in", "Shareen"), ("signed_out", "Shareen")]
+
+
+def test_the_name_is_matched_ignoring_case_and_extra_spaces(app):
+    assert app.sign_in("WEI   yu", "officer123", App.OFFICER_PORTAL)[0].name == "Wei Yu"
+    assert app.sign_in(" orbit  admin", "admin123", App.ADMIN_PORTAL)[0].name == "Orbit Admin"
+
+
+def test_nothing_typed_is_refused_and_writes_nothing(app):
+    for name, password in (("", "officer123"), ("Shareen", ""), ("  ", " "), (None, None)):
+        assert app.sign_in(name, password, App.OFFICER_PORTAL) == (None, App.SIGN_IN_EMPTY)
+    assert _actions(app) == []
+
+
+def test_a_wrong_password_is_recorded_under_the_account_without_the_password(app):
+    assert app.sign_in("Shareen", "wrong-password-XYZ", App.OFFICER_PORTAL) == (None, App.SIGN_IN_WRONG)
+    [event] = _events(app)
+    assert (event.action, event.actor, event.result, event.details) == (
+        "sign_in_failed", "Shareen", "failed", {"portal": "officer"})
+    assert "wrong-password-XYZ" not in json.dumps(event.to_dict())
+
+
+def test_an_unknown_name_is_recorded_as_the_unknown_actor_and_gets_the_same_message(app):
+    assert app.sign_in("Nobody Here", "officer123", App.ADMIN_PORTAL) == (None, App.SIGN_IN_WRONG)
+    [event] = _events(app)
+    assert (event.actor, event.result, event.details) == ("unknown", "failed", {"portal": "admin"})
+    assert app.sign_in("x" * 500, "y" * 500, App.OFFICER_PORTAL) == (None, App.SIGN_IN_WRONG)
+
+
+def test_an_unknown_name_still_checks_a_password_so_the_reply_time_gives_nothing_away(app, monkeypatch):
+    checked = []
+    real = Account.check_password
+    monkeypatch.setattr(Account, "check_password", lambda self, password: checked.append(password) or real(self, password))
+    assert app.sign_in("Nobody Here", "officer123", App.OFFICER_PORTAL) == (None, App.SIGN_IN_WRONG)
+    assert checked == ["officer123"]
+
+
+def test_the_right_password_at_the_wrong_portal_says_where_to_sign_in_and_is_recorded(app):
+    assert app.sign_in("Shareen", "officer123", App.ADMIN_PORTAL) == (None, App.SIGN_IN_OFFICER_AT_ADMIN)
+    assert app.sign_in("Orbit Admin", "admin123", App.OFFICER_PORTAL) == (None, App.SIGN_IN_ADMIN_AT_OFFICER)
+    assert [(event.actor, event.result, event.details["portal"]) for event in _events(app)] == [
+        ("Shareen", "failed", "admin"), ("Orbit Admin", "failed", "officer")]
+    # a wrong password never reveals which portal the account belongs to
+    assert app.sign_in("Shareen", "nope", App.ADMIN_PORTAL)[1] == App.SIGN_IN_WRONG
+
+
+def test_an_unknown_portal_is_refused(app):
+    with pytest.raises(ValueError, match="portal"):
+        app.sign_in("Shareen", "officer123", "staff")
+
+
+def test_the_last_activity_of_each_client_comes_from_one_read_of_the_log(app):
+    assert app.last_activity() == {}
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record, "Shareen")
+    app.sign_in("Adrian", "officer123", App.OFFICER_PORTAL)         # no client: not counted
+    changed = ClientRecord.from_dict({**sample_case(), "name": "Somebody Else"})
+    app.save_client(changed, "Adrian")
+    latest = app.last_activity()
+    assert list(latest) == [record.client_ref.casefold()]
+    assert (latest[record.client_ref.casefold()].actor, latest[record.client_ref.casefold()].action) == ("Adrian", "client_edited")
+
+
+def test_the_last_activity_says_when_the_log_cannot_be_read(app, tmp_path):
+    break_audit(tmp_path)
+    with pytest.raises(ValueError, match="audit log"):
+        app.last_activity()
+
+
+def test_sign_out_needs_an_account(app):
+    with pytest.raises(ValueError):
+        app.sign_out("Shareen")
+
+
+def test_a_refusal_is_recorded_and_its_text_is_checked(app):
+    app.refused("Shareen", "  opening the audit log ")
+    [event] = _events(app)
+    assert (event.action, event.actor, event.details) == ("access_refused", "Shareen", {"what": "opening the audit log"})
+    for bad in ("", "  ", "two\nlines", "x" * (App.MAX_REFUSED_TEXT + 1), None):
+        with pytest.raises(ValueError):
+            app.refused("Shareen", bad)
+    assert len(_events(app)) == 1
+
+
+def test_an_unknown_actor_is_a_programming_error_and_nothing_happens(app, tmp_path):
+    record = ClientRecord.from_dict(sample_case())
+    source = tmp_path / "a.txt"
+    source.write_text("x", encoding="utf-8")
+    calls = [lambda actor: app.save_client(record, actor),
+             lambda actor: app.assess(sample_case(), actor=actor),
+             lambda actor: app.save_assessment({}, record, actor=actor),
+             lambda actor: app.archive_assessment("A1", "", actor),
+             lambda actor: app.restore_assessment("A1", actor),
+             lambda actor: app.read_documents([], actor),
+             lambda actor: app.upload_document(str(source), actor),
+             lambda actor: app.download_document("x", str(tmp_path / "o"), actor),
+             lambda actor: app.sync_to_cloud(actor),
+             lambda actor: app.refused(actor, "x"),
+             lambda actor: app.verify_audit_log(actor)]
+    for call in calls:
+        for bad in ("", "Mallory", "shareen", None, 5):
+            with pytest.raises(ValueError):
+                call(bad)
+    assert app.clients().load() == [] and _events(app) == []
+
+
+def test_an_audit_line_that_cannot_be_written_leaves_the_action_standing_and_is_flagged(app, tmp_path, caplog):
+    break_audit(tmp_path)
+    assert app.audit_write_failed() is False
+    assert app.save_client(ClientRecord.from_dict(sample_case()), "Shareen") is True
+    assert app.audit_write_failed() is True
+    assert len(app.clients().load()) == 1
+    assert "was not written" in caplog.text
+
+
+def test_the_terminal_is_told_when_the_audit_line_was_not_written_but_the_web_is_not_printed_to(
+        app, tmp_path, capsys):
+    break_audit(tmp_path)
+    app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    assert capsys.readouterr().out == ""
+    app.sync_to_cloud()                                  # the terminal: nothing was saved
+    assert App.AUDIT_LINE_NOT_WRITTEN in capsys.readouterr().out
+
+
+def test_the_audit_failure_flag_is_reset_by_the_next_action(app, tmp_path):
+    break_audit(tmp_path)
+    app.sync_to_cloud("Shareen")
+    assert app.audit_write_failed() is True
+    fix_audit(tmp_path)
+    app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    assert app.audit_write_failed() is False
+    app.archive_assessment("nope", "", "Shareen")        # writes no line, so nothing can have failed
+    assert app.audit_write_failed() is False
+
+
+def test_an_audit_file_that_is_a_folder_does_not_stop_the_action(app, tmp_path, caplog):
+    (tmp_path / "local database").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "local database" / "audit_log.json").mkdir()
+    assert app.save_client(ClientRecord.from_dict(sample_case()), "Shareen") is True
+    assert app.audit_write_failed() is True
+    assert "audit" in caplog.text.lower()
+
+
+def test_the_audit_flag_belongs_to_one_thread(app, tmp_path):
+    import threading
+    break_audit(tmp_path)
+    app.sync_to_cloud("Shareen")
+    seen = []
+    thread = threading.Thread(target=lambda: seen.append(app.audit_write_failed()))
+    thread.start()
+    thread.join()
+    assert seen == [False] and app.audit_write_failed() is True
+
+
+def test_the_log_is_written_to_audit_log_json_next_to_the_other_stores(app, tmp_path):
+    app.sync_to_cloud()
+    assert (tmp_path / "local database" / "audit_log.json").exists()
+
+
+def test_accounts_come_from_the_config(app):
+    assert [account.name for account in app.accounts()][:2] == ["Orbit Admin", "Shareen"]
+    assert app.account("Adrian@Orbit.local").name == "Adrian"
+    assert app.account("nobody@example.com") is None
+    app.accounts().clear()
+    assert len(app.accounts()) == 6                      # a copy: the config is not changed
+
+
+def test_the_log_gives_newest_first_with_the_total_and_applies_the_filter(app):
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record, "Shareen")
+    app.sign_in("Adrian", "officer123", App.OFFICER_PORTAL)
+    app.sync_to_cloud("Shareen")
+    log = app.audit_log(AuditFilter())
+    assert log.total == 3 and [event.action for event in log.events] == ["cloud_sync", "signed_in", "client_created"]
+    assert (log.officers, log.failed, log.everything) == (2, 1, 3)           # the sync failed: there is no cloud here
+    log = app.audit_log(AuditFilter(actor="shareen"))
+    assert log.total == 2 and {event.actor for event in log.events} == {"Shareen"} and log.officers == 1
+    log = app.audit_log(AuditFilter(groups=["Sign-in"]))
+    assert [event.action for event in log.events] == ["signed_in"] and log.total == 1
+    assert app.audit_log(AuditFilter(client_ref=record.client_ref.lower())).total == 1
+    assert app.audit_log(AuditFilter(result="failed")).total == 1 and app.audit_log(AuditFilter(query="nothing like this")).total == 0
+    assert app.audit_log(AuditFilter(query="cloud")).total == 1
+
+
+def test_the_log_can_be_oldest_first(app):
+    app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    app.sync_to_cloud("Shareen")
+    assert [e.action for e in app.audit_log(AuditFilter(sort="asc")).events] == ["client_created", "cloud_sync"]
+
+
+def test_a_filter_that_matches_nothing_still_says_how_much_the_whole_log_holds_from_the_same_read(app):
+    app.sync_to_cloud("Shareen")
+    app.sync_to_cloud("Shareen")
+    log = app.audit_log(AuditFilter(client_ref="nobody"))
+    assert (log.events, log.total, log.everything) == ([], 0, 2)
+
+
+def test_the_log_uses_the_time_it_is_given_for_the_period(app):
+    from datetime import datetime, timedelta, timezone
+    app.sync_to_cloud()
+    now = datetime.now(timezone.utc)
+    assert app.audit_log(AuditFilter("1"), now).total == 1
+    assert app.audit_log(AuditFilter("1"), now + timedelta(days=3)).total == 0
+    assert app.audit_log(AuditFilter("custom"), now + timedelta(days=3)).total == 1
+
+
+def test_the_log_is_paged_and_the_total_counts_every_match(app):
+    for number in range(AuditFilter.PAGE_SIZE + 3):
+        app.refused("Shareen", f"opening page {number}")
+    log = app.audit_log(AuditFilter(page=1))
+    assert len(log.events) == AuditFilter.PAGE_SIZE and log.total == AuditFilter.PAGE_SIZE + 3
+    assert len(app.audit_log(AuditFilter(page=2)).events) == 3
+
+
+def test_an_empty_log_is_an_empty_page_not_an_error(app):
+    log = app.audit_log(AuditFilter())
+    assert (log.events, log.total, log.unreadable, log.everything) == ([], 0, 0, 0)
+    assert app.audit_trail("C-1") == ([], 0)
+
+
+def test_the_log_needs_a_filter(app):
+    with pytest.raises(ValueError):
+        app.audit_log({"preset": "7"})
+
+
+def test_an_unreadable_audit_log_gives_the_safe_message_and_is_logged(app, tmp_path, caplog):
+    _damage(tmp_path, "audit_log.json")
+    for action in (lambda: app.audit_log(AuditFilter()), lambda: app.audit_trail("C-1"),
+                   lambda: app.verify_audit_log("Orbit Admin")):
+        with pytest.raises(ValueError) as error:
+            action()
+        assert str(error.value) == App.AUDIT_UNAVAILABLE
+    assert "the audit log cannot be read" in caplog.text
+
+
+def test_a_row_that_cannot_be_read_is_not_listed_but_is_logged(app, tmp_path, caplog):
+    app.sync_to_cloud()
+    path = tmp_path / "local database" / "audit_log.json"
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    path.write_text(json.dumps(rows + [{"action": "bogus"}]), encoding="utf-8")
+    assert app.audit_log(AuditFilter()).total == 1
+    assert "cannot be read and are not listed" in caplog.text
+
+
+def test_the_trail_of_one_client_is_newest_first(app):
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record, "Shareen")
+    app.save_client(ClientRecord.from_dict({**record.to_dict(), "name": "Someone Else"}), "Adrian")
+    app.sync_to_cloud()
+    assert [event.action for event in app.audit_trail(record.client_ref)[0]] == ["client_edited", "client_created"]
+
+
+def test_verifying_an_untouched_log_passes_and_is_recorded(app):
+    app.sync_to_cloud()
+    app.sync_to_cloud()
+    chain = app.verify_audit_log("Orbit Admin")
+    assert chain.intact() and chain.summary() == "No changes found in the 2 entries."
+    event = _events(app)[-1]
+    assert (event.action, event.actor, event.result) == ("audit_verified", "Orbit Admin", "ok")
+    assert event.details == {"entries": 2, "intact": True, "breaks": 0}
+
+
+def test_verifying_a_changed_log_reports_the_break_and_records_it_as_failed(app, tmp_path):
+    app.sync_to_cloud()
+    app.sync_to_cloud()
+    path = tmp_path / "local database" / "audit_log.json"
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    rows[0]["actor"] = "Someone Else"
+    path.write_text(json.dumps(rows), encoding="utf-8")
+    chain = app.verify_audit_log("Orbit Admin")
+    assert not chain.intact() and "entry 1 does not match" in chain.summary()
+    event = _events(app)[-1]
+    assert (event.action, event.result, event.details["intact"]) == ("audit_verified", "failed", False)
+
+
+def test_the_menu_flow_that_reads_documents_records_every_step(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    monkeypatch.setattr("app.interface.client_form.tk", None)
+    folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documents", "marcus_lim")
+    with open(folder + "_expected_extract.json", encoding="utf-8") as handle:
+        reading = json.load(handle)
+    app = App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))
+    _answers(monkeypatch, "2", folder, "0", "1", "3", "8")
+    app.run_menu()
+    actions = _actions(app)
+    assert actions[0] == "autofill_used" and actions[-1] == "client_created"
+    assert actions.count("document_uploaded") == len(os.listdir(folder))
+    assert {event.actor for event in _events(app)} == {App.TERMINAL}
+    assert App.AUDIT_NOT_WRITTEN not in capsys.readouterr().out
+
+
+def test_a_hand_added_row_without_a_time_or_id_is_not_listed_but_verify_reports_it(app, tmp_path, caplog):
+    app.sync_to_cloud("Shareen")
+    path = tmp_path / "local database" / "audit_log.json"
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    rows.append({"action": "cloud_sync", "actor": "Shareen"})                       # unsealed: no at, no id
+    rows.append({"action": "cloud_sync", "actor": "Shareen", "sequence": 3, "hash": "a" * 64,
+                 "previous_hash": rows[0]["hash"]})                                  # sealed-looking, no at or id
+    path.write_text(json.dumps(rows), encoding="utf-8")
+    log = app.audit_log(AuditFilter())
+    events, total = log.events, log.total
+    assert total == 1 and [event.actor for event in events] == ["Shareen"]
+    assert app.audit_trail("") == ([], 2)        # no client matches, but two rows are unreadable
+    assert "2 audit row(s) cannot be read and are not listed" in caplog.text
+    chain = app.verify_audit_log("Orbit Admin")
+    assert not chain.intact() and len(chain.breaks()) >= 2
+
+
+def test_a_run_that_raises_writes_a_failure_line_without_the_error_text_and_raises_again(app):
+    with pytest.raises(Exception):
+        app.assess({"client_ref": "C-1"}, show_failures=False, actor="Shareen")     # not a case the runner can read
+    [event] = _events(app)
+    assert (event.action, event.result, event.actor, event.client_ref) == (
+        "assessment_failed", "failed", "Shareen", "C-1")
+    assert event.details == {"step": App.UNEXPECTED_ERROR_STEP}
+
+
+def test_a_save_that_raises_writes_a_failure_line_and_raises_again(app):
+    record, result = _assessed(app, "Shareen")
+    del result["research"]                                  # the saved layout needs it: the save raises KeyError
+    with pytest.raises(KeyError):
+        app.save_assessment(result, record, actor="Shareen")
+    event = _events(app)[-1]
+    assert (event.action, event.result, event.client_ref) == ("assessment_failed", "failed", record.client_ref)
+    assert event.details == {"step": App.UNEXPECTED_ERROR_STEP}
+    assert app.assessments().load() == []
+
+
+def test_a_save_of_something_that_is_not_a_result_raises_and_is_recorded_without_a_client(app):
+    with pytest.raises(KeyError):
+        app.save_assessment({}, None, actor="Adrian")
+    [event] = _events(app)
+    assert (event.action, event.client_ref, event.actor) == ("assessment_failed", "", "Adrian")
+
+
+def test_reading_documents_for_a_client_ties_the_line_to_that_client(app):
+    app.read_documents([{"kind": "error", "error": "scan.pdf could not be opened."}], "Shareen", "C-7")
+    [event] = _events(app)
+    assert event.client_ref == "C-7"
+    assert [e.action for e in app.audit_trail("C-7")[0]] == ["autofill_used"]
+
+
+def test_a_new_client_that_could_not_be_saved_because_the_file_is_unreadable_is_recorded_as_created(app, tmp_path):
+    _damage(tmp_path, "sow_cases.json")
+    record = ClientRecord.from_dict(sample_case())
+    assert app.save_client(record, "Shareen", new_client=True) is False
+    assert app.save_client(record, "Shareen") is False
+    first, second = _events(app)
+    assert (first.action, first.result) == ("client_created", "failed")
+    assert (second.action, second.result) == ("client_edited", "failed")
+
+
+def test_an_assessment_saved_but_not_its_outcome_is_recorded_ok_with_record_saved_false(app, tmp_path, caplog):
+    record, result = _assessed(app, "Shareen")
+    _damage(tmp_path, "sow_cases.json")                     # the client record can no longer be written
+    assessment_id = app.save_assessment(result, record, actor="Shareen")
+    assert assessment_id is not None and app.client_outcome_failed() is True
+    event = _events(app)[-1]
+    assert (event.action, event.result) == ("assessment_run", "ok")
+    assert event.details["record_saved"] is False and event.details["assessment_id"] == assessment_id
+    assert "could not save the client record" in caplog.text
+    app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")       # the next action forgets it
+    assert app.client_outcome_failed() is False
+
+
+def test_an_assessment_with_its_outcome_saved_says_record_saved_true_and_one_with_no_record_says_nothing(app):
+    record, result = _assessed(app)
+    app.save_assessment(result, record)
+    assert _events(app)[-1].details["record_saved"] is True and app.client_outcome_failed() is False
+    case, _ = app.read_case(record)
+    app.save_assessment(app.assess(case), None)
+    assert "record_saved" not in _events(app)[-1].details
+
+
+def test_the_terminal_is_told_when_the_outcome_could_not_be_written(app, tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda question="": "n")        # the report asks about evidence
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record)
+    case, _ = app.read_case(record)
+    fake_services.save_forecast_replies(app.response_cache(), case)
+    _damage(tmp_path, "sow_cases.json")
+    assert app.assess_client_record(record) is not None
+    out = capsys.readouterr().out
+    assert "Assessment saved." in out and App.OUTCOME_NOT_UPDATED in out
+
+
+def test_the_terminal_message_says_saved_only_when_something_was_saved(app, tmp_path, capsys):
+    break_audit(tmp_path)
+    app.save_client(ClientRecord.from_dict(sample_case()))                    # saved: "Saved, but ..."
+    out = capsys.readouterr().out
+    assert App.AUDIT_NOT_WRITTEN in out
+    app.refused("Shareen", "opening the audit log")                           # nothing saved
+    app.sync_to_cloud()
+    app.upload_document(str(tmp_path / "missing.pdf"))                         # not kept
+    out = capsys.readouterr().out
+    assert App.AUDIT_NOT_WRITTEN not in out and out.count(App.AUDIT_LINE_NOT_WRITTEN) == 2
+    source = tmp_path / "a.txt"
+    source.write_text("x", encoding="utf-8")
+    assert app.upload_document(str(source)) is not None                       # kept
+    assert App.AUDIT_NOT_WRITTEN in capsys.readouterr().out
+
+
+def test_an_archive_that_changed_something_says_saved_and_one_that_changed_nothing_writes_no_line(app, tmp_path, capsys):
+    _two_saved(app)
+    break_audit(tmp_path)
+    app.archive_assessment("A1")
+    assert app.audit_write_failed() is True and App.AUDIT_NOT_WRITTEN in capsys.readouterr().out
+    app.archive_assessment("A1")                                               # already archived: no line, no message
+    assert app.audit_write_failed() is False and capsys.readouterr().out == ""
+
+
+def test_without_an_audit_key_app_is_built_but_start_and_start_web_stop_with_a_message(tmp_path, monkeypatch, capsys,
+                                                                                       caplog):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    monkeypatch.delenv("AUDIT_KEY", raising=False)
+    import shutil
+    shutil.copytree("config", tmp_path / "root" / "config")      # a root with no .env, so no key is read from it
+    application = App(ai_caller=None, root=str(tmp_path / "root"), data_folder=str(tmp_path / "data"))
+    assert not application.audit_key_ok()
+    for run in (lambda: application.start([]), lambda: application.start(["--web"]), application.start_web):
+        assert run() == 1
+        out = capsys.readouterr().out
+        assert App.AUDIT_KEY_MISSING in out and "AUDIT_KEY" not in out
+    assert "AUDIT_KEY" in caplog.text                         # the real reason is logged
+    with pytest.raises(ValueError, match="key is missing"):
+        application.verify_audit_log("Orbit Admin")
+
+
+def test_an_audit_key_shorter_than_32_characters_counts_as_not_set(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    monkeypatch.setenv("AUDIT_KEY", "short-secret")
+    application = App(ai_caller=None, data_folder=str(tmp_path / "data"))
+    assert not application.audit_key_ok() and application.start_web() == 1
+    assert App.AUDIT_KEY_MISSING in capsys.readouterr().out
+
+
+def test_verify_with_a_different_key_than_the_log_was_written_with_reports_changes(app, tmp_path, monkeypatch):
+    app.sync_to_cloud()
+    app.sync_to_cloud()
+    monkeypatch.setenv("AUDIT_KEY", "f" * 64)
+    other = App(ai_caller=None, data_folder=str(tmp_path))
+    chain = other.verify_audit_log("Orbit Admin")
+    assert not chain.intact() and "entries 1, 2 do not match" in chain.summary()
+
+
+def _add_unreadable_rows(tmp_path, count):
+    """Append rows the app cannot show (unsealed, no time, no id) to the audit file."""
+    path = tmp_path / "local database" / "audit_log.json"
+    rows = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    rows += [{"action": "cloud_sync", "actor": "Shareen"} for _ in range(count)]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(rows), encoding="utf-8")
+
+
+def test_the_log_and_the_trail_count_the_unreadable_rows_of_the_whole_log(app, tmp_path):
+    ref = _assessed(app)[0].client_ref
+    assert app.audit_log(AuditFilter("custom")).unreadable == 0 and app.audit_trail(ref)[1] == 0
+    _add_unreadable_rows(tmp_path, 3)
+    log = app.audit_log(AuditFilter("custom"))
+    assert log.total == len(log.events) and log.unreadable == 3
+    trail, trail_unreadable = app.audit_trail(ref)
+    assert trail and trail_unreadable == 3                    # counted for the whole log, not just this client
+    nobody = app.audit_log(AuditFilter("custom", client_ref="nobody"))
+    assert (nobody.total, nobody.unreadable) == (0, 3)        # a filter never hides them
+
+
+def test_a_log_where_every_row_is_unreadable_gives_no_events_and_the_count(app, tmp_path):
+    _add_unreadable_rows(tmp_path, 2)
+    log = app.audit_log(AuditFilter("custom"))
+    assert (log.events, log.total, log.unreadable, log.everything) == ([], 0, 2, 0)
+    assert app.audit_trail("C-1") == ([], 2)
