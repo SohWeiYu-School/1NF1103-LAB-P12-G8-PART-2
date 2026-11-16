@@ -768,6 +768,18 @@ def test_the_archive_form_has_an_optional_reason_that_is_saved_and_shown(web):
     assert page.count('name="reason"') == 1                      # only the active row asks for a reason
 
 
+def test_a_reason_with_html_is_shown_as_text_and_restore_ignores_a_reason(web):
+    application, _, client = web
+    _two_assessments(application)
+    client.post("/assessment/A1/archive", data={"reason": "<script>alert(1)</script>"})
+    page = client.get("/assessment/A1").get_data(as_text=True)
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page and "<script>alert(1)</script>" not in page
+    _flashes(client)
+    client.post("/assessment/A1/restore", data={"reason": "should not be saved"})
+    assert "Assessment restored." in _flashes(client)
+    assert "reason" not in application.find_assessment("A1")["archive_log"][-1]
+
+
 def test_a_bad_reason_archives_nothing_and_says_why(web):
     application, _, client = web
     ref = _two_assessments(application)
