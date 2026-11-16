@@ -485,3 +485,14 @@ one line to an assessment's `archive_log`, and the last line decides whether it 
   "can't load the saved assessments". The web page has an optional reason box next to Archive. layout_check 0.
 - Layout: WebApp and AssessmentRepository grew, so RateLimiter, CaseBuilder, ClientForm, DocumentReaderFactory and
   CaseFiles moved down; every line was re-routed. layout_check 0.
+
+## CSRF protection on every POST (2026-11-16): code changed, the diagram follows it
+
+Follow-up #60. Marcus chose Flask-WTF's `CSRFProtect` (a new dependency, `flask-wtf==1.3.0`) over a hand-written token.
+Every POST form now carries a hidden `csrf_token`, and a POST without the right one is refused before any route runs,
+so another web site cannot make an officer's browser archive, restore, assess, save, upload or sync.
+- `WebApp` (**T**): added `FORM_EXPIRED` (the plain message a refused form shows) and `handle_csrf_error()` (shows it with
+  status 400; the real reason, such as "The CSRF token is missing.", goes to the log only, CLAUDE.md §9).
+- Not a diagram change: `CSRFProtect(flask)` is called in `__init__` and not kept as an attribute; the error page takes an
+  optional title and message.
+- Layout: WebApp grew two lines, so the boxes below it moved down; every line was re-routed. layout_check 0.

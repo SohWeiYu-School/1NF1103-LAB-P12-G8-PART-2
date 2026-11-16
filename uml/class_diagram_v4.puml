@@ -395,6 +395,8 @@ package "IO Manager (app/interface)" {
     -__change_archive(assessment_id : str, archive : bool) : Response
     +archive_assessment(assessment_id : str) : Response
     +restore_assessment(assessment_id : str) : Response
+    +FORM_EXPIRED : str = "This form has expired, so nothing was... «const»
+    +handle_csrf_error(e : CSRFError) : tuple[str, int]
   }
 }
 
