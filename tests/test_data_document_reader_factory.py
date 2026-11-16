@@ -35,3 +35,11 @@ def test_supported_types_lists_every_type_a_reader_exists_for():
     types = DocumentReaderFactory().supported_types()
     assert ".pdf" in types and ".docx" in types and ".xlsx" in types and ".png" in types and ".txt" in types
     assert ".exe" not in types
+
+
+def test_reader_types_maps_every_supported_file_type_to_its_reader_class():
+    assert DocumentReaderFactory.READER_TYPES[".pdf"] is PdfReader
+    assert DocumentReaderFactory.READER_TYPES[".xlsm"] is ExcelReader
+    assert DocumentReaderFactory.READER_TYPES[".png"] is ImageReader
+    assert DocumentReaderFactory.READER_TYPES[".csv"] is TextReader
+    assert DocumentReaderFactory().supported_types() == sorted(DocumentReaderFactory.READER_TYPES)

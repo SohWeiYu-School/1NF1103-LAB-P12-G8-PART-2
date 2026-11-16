@@ -1,0 +1,1495 @@
+@startuml class_diagram_v4
+' Generated from uml/class_diagram_v4.drawio (OOP class diagram v4).
+' Do not edit by hand: regenerate from the draw.io file.
+skinparam classAttributeIconSize 0
+hide empty members
+
+package "Data Manager (app/data)" {
+  class AssessmentRepository {
+    +ACTIVE : str = "active" «const»
+    +ARCHIVED : str = "archived" «const»
+    +CHANGED : str = "changed" «const»
+    +MAX_REASON_LENGTH : int = 200 «const»
+    +NOT_FOUND : str = "not_found" «const»
+    +NOT_SAVED : str = "not_saved" «const»
+    +NO_CHANGE : str = "no_change" «const»
+    +UNREADABLE : str = "unreadable" «const»
+    -__ACTIONS : tuple[str, ...] = ("archived", "restored") «const»
+    -__lock : threading.Lock = threading.Lock()
+    --
+    +__init__(path : str = ".../ai_assessments.json", key_field : str = "assessment_id")
+    +save(record : dict) : bool
+    +for_client(client_ref : str, include_archived : bool = False) : list[dict]
+    +query(outcome : str, include_archived : bool = False) : list[dict]
+    {static} -__old_outcome(record : dict) : str | None
+    -__record_action(assessment_id : str, action : str, reason : str) : str
+    {static} -__visible(records : list[dict], include_archived : bool) : list[dict]
+    +archive(assessment_id : str, reason : str = "") : str
+    {static} +archive_state(record : dict) : str
+    {static} +is_archived(record : dict) : bool
+    +restore(assessment_id : str) : str
+    {static} -__good_entry(entry : object) : bool
+  }
+  class CaseFiles {
+    -__folder : str = ".../data/sample"
+    --
+    +__init__(folder : str = os.path.join(ROOT_DIR, "data", "sample"))
+    +list_samples() : list[str]
+    +load(path : str, default : object = None) : object
+    +is_forecasting_case(case : object) : bool
+  }
+  class ClientRepository {
+    +OLD_ASSET_KEYS : dict = {...} «const»
+    --
+    +__init__(path : str = ".../sow_cases.json", key_field : str = "client_ref")
+    +save(record : dict) : bool
+    -__standardise(record : dict) : dict
+    +load() : list[dict]
+  }
+  class CloudSync {
+    -__local : Repository | None = None
+    -__remote : DatabaseRepository | None = None
+    -__state_path : str = ".../sync_state.json"
+    --
+    +__init__(local : Repository | None = None, remote : DatabaseRepository | None = None, state_path : str = os.path.join(JsonRepository.DATA_DIR, "sync_state.json"))
+    +sync() : dict
+    +is_online() : bool
+    -__load_state() : dict
+    -__save_state(state : dict) : None
+    {static} -__fingerprint(record : dict) : str
+  }
+  class ConfigReader {
+    -__folder : str = ".../config"
+    -__files : dict[str, dict] = {}
+    +FILE_NAMES : tuple[str, ...] = ("policy", "vocabulary") «const»
+    +REQUIRED : dict[str, tuple[str, ...]] = {...} «const»
+    --
+    +__init__(folder : str = os.path.join(ROOT_DIR, "config"))
+    +read(name : str) : dict
+    +problems() : list[str]
+  }
+  abstract class DatabaseRepository {
+    #_collection_name : str
+    #_key_field : str {get}
+    #_uri : str = ""
+    +name : str «property»
+    --
+    +__init__(collection_name : str, key_field : str, uri : str = "")
+    +save(record : dict) : bool
+    +load() : list[dict]
+    +find(ref : str) : dict | None
+    +is_online() : bool
+    +upload_local_documents(record : dict) : int
+    {abstract} #_connect() : bool
+    {abstract} #_upsert(key : str, record : dict) : bool
+    {abstract} #_fetch(query : dict) : list[dict]
+    {abstract} #_store_file(path : str, name : str) : str
+    -__require_connection() : None
+  }
+  abstract class DocumentReader {
+    #_max_chars : int = 40_000
+    --
+    +__init__(max_chars : int = 40_000)
+    {abstract} +read(file_path : str, file_name : str) : dict
+    #_base64_file(file_path : str) : str
+    #_text_result(file_name : str, text : str) : dict
+  }
+  class DocumentReaderFactory {
+    -__max_chars : int = 40_000
+    +READER_TYPES : dict[str, type[DocumentReader]] = {".pdf": PdfReader, ...} «const»
+    --
+    +__init__(max_chars : int = 40_000)
+    +create(file_name : str) : DocumentReader | None
+    +supported_types() : list[str]
+  }
+  class DocumentStore {
+    -__folder : str = ".../data/documents"
+    -__reader_factory : DocumentReaderFactory = DocumentReaderFactory()
+    -__root : str = ROOT_DIR
+    --
+    +__init__(folder : str = "data/documents", root : str = ROOT_DIR)
+    +upload(file_path : str) : str | None
+    +download(file_id : str, output_path : str) : bool
+    +read_all(entries : list[dict]) : list[dict]
+    +read_for_extraction(file_path : str, file_name : str | None = None) : dict
+    +list_folder(folder : str) : list[str] | None
+    +owns(file_id : str) : bool
+  }
+  class ExcelReader {
+    --
+    +__init__(max_chars : int = 40_000)
+    +read(file_path : str, file_name : str) : dict
+    -__xlsx_text(file_path : str) : str
+  }
+  class ImageReader {
+    +IMAGE_TYPES : dict = {...} «const»
+    --
+    +__init__(max_chars : int = 40_000)
+    +read(file_path : str, file_name : str) : dict
+  }
+  abstract class JsonRepository {
+    #_path : str = ""
+    #_key_field : str = ""
+    +DATA_DIR : str = ".../data/local database" «const»
+    --
+    +__init__(path : str, key_field : str)
+    {abstract} +save(record : dict) : bool
+    +load() : list[dict]
+    +find(ref : str) : dict | None
+    #_write_all(records : list[dict]) : bool
+  }
+  class MongoRepository {
+    -__client : MongoClient | None = None
+    +DB_NAME : str = "sow_risk_db" «const»
+    +TIMEOUT_MS : int = 2000 «const»
+    --
+    +__init__(collection_name : str, key_field : str, uri : str = "")
+    #_connect() : bool
+    #_upsert(key : str, record : dict) : bool
+    #_fetch(query : dict) : list[dict]
+    #_store_file(path : str, name : str) : str
+    -__collection() : Collection
+  }
+  class PdfReader {
+    +MIN_TEXT_CHARS : int = 80 «const»
+    --
+    +__init__(max_chars : int = 40_000)
+    +read(file_path : str, file_name : str) : dict
+    -__pdf_text(file_path : str) : str
+  }
+  interface Repository {
+    --
+    +save(record : dict) : bool
+    +load() : list[dict]
+    +find(ref : str) : dict | None
+    +__init__()
+  }
+  class TextReader {
+    +TEXT_TYPES : tuple[str, ...] = (".txt", ".csv", ".md", ".json") «const»
+    --
+    +__init__(max_chars : int = 40_000)
+    +read(file_path : str, file_name : str) : dict
+  }
+  class WordReader {
+    --
+    +__init__(max_chars : int = 40_000)
+    +read(file_path : str, file_name : str) : dict
+    -__docx_text(file_path : str) : str
+  }
+}
+
+package "IO Manager (app/interface)" {
+  class CaseBuilder {
+    -__ui : ConsoleUI = ConsoleUI()
+    -__case_schema : dict = {}
+    --
+    +__init__(ui : ConsoleUI | None = None, case_schema : dict | None = None)
+    +build(record : ClientRecord) : dict | None
+    +show_case_problems(where : str, problems : list[str]) : None
+    -__jobs_from_record(record : ClientRecord, this_year : int) : list[dict]
+    -__assets_from_record(record : ClientRecord, first_year : int, this_year : int) : list[dict]
+    -__number_or_ask(value : object, question : str, allow_zero : bool = True) : float
+    -__year_or_ask(value : object, question : str, minimum : int | None = None, maximum : int | None = None) : int
+    -__composition_from_record(record : ClientRecord) : dict
+    -__first_filled(*values : object) : object
+    -__payment_method(text : object) : str | None
+    -__text_or_ask(value : object, question : str) : str
+    +validate_case(case : object) : list[str]
+  }
+  class ClientForm {
+    -__ui : ConsoleUI = ConsoleUI()
+    -__report_view : ReportView = ReportView(...)
+    +PAYMENT_METHODS : list[str] = [...] «const»
+    +PEP_OPTIONS : list[str] = [...] «const»
+    +MAX_ID_TRIES : int = 10 «const»
+    --
+    +__init__(ui : ConsoleUI | None = None, report_view : ReportView | None = None)
+    +create_new_client(save_fn : Callable[[ClientRecord], bool] | None = None, upload_fn : Callable[[str], str | None] | None = None, is_taken_fn : Callable[[str], bool] | None = None) : ClientRecord | None
+    +edit_existing_client(record : ClientRecord, upload_fn : Callable[[str], str | None] | None = None) : ClientRecord
+    +pick_client(find_fn : Callable[[str], ClientRecord | None]) : ClientRecord | None
+    +generate_client_id(is_taken_fn : Callable[[str], bool] | None = None) : str
+    +ask_document_folder() : str | None
+    -__ask_job(previous : bool = False) : dict
+    -__ask_asset() : dict
+    -__get_claims() : dict
+    -__edit_career_record(record : dict) : None
+    -__edit_asset_record(record : dict) : None
+    -__edit_sow_declaration(record : dict) : None
+    +add_asset_record(record : dict) : None
+    +add_career_record(record : dict) : None
+    +add_supporting_documents(record : dict, upload_fn : Callable[[str], str | None] | None = None) : None
+    +ask_after_save(record : ClientRecord) : bool
+    +ask_missing_field(field : dict) : str | int | float | list[str] | dict[str, float]
+    +edit_asset_composition(record : dict) : None
+    +edit_client_declarations(record : dict) : None
+    +edit_client_profile(record : dict) : None
+    +find_existing_client(find_fn : Callable[[str], ClientRecord | None], save_fn : Callable[[ClientRecord], bool] | None = None, download_fn : Callable[[str, str], bool] | None = None, upload_fn : Callable[[str], str | None] | None = None) : None
+    +get_career_history() : list
+    +get_client_profile() : dict
+    +get_investments() : list
+    +get_sow_declaration() : str
+    +get_supporting_documents(upload_fn : Callable[[str], str | None] | None = None) : list[dict[str, str]]
+    +ask_optional_field(field : dict) : int | float | list[str] | None
+  }
+  class ConsoleUI {
+    -__read : Callable[[str], str] = lambda question: input(...)
+    -__write : Callable[[str], None] = lambda text: print(...)
+    -__width : int = 72
+    +LINE : str = "-" * 72 «const»
+    +LETTERS : str = " '.-" «const»
+    +MAX_EMPLOYEES : int = 10_000_000 «const»
+    +LABEL : str = " '.-&/,()%#0123456789" «const»
+    --
+    +__init__(read : Callable[[str], str] | None = None, write : Callable[[str], None] | None = None)
+    +show(text : str = "") : None
+    +show_message(text : str) : None
+    +show_error(text : str) : None
+    +show_app_menu() : str
+    +show_step(number : int, total : int, label : str) : None
+    +show_ai_unavailable(feature : str = "Assessment") : None
+    +show_rate_limit_error(seconds_left : int) : None
+    +show_sync_result(stats : dict) : None
+    +read_answer(question : str) : str
+    +ask_text(question : str, min_length : int = 1) : str
+    +ask_int(question : str, minimum : int | None = None, maximum : int | None = None, allow_blank : bool = False) : int | None
+    +ask_money(question : str, allow_zero : bool = False, allow_blank : bool = False) : float | None
+    +ask_year(question : str, minimum : int = 1940, maximum : int | None = None, allow_blank : bool = False) : int | None
+    +ask_choice(question : str, options : list[str], allow_back : bool = False) : int | None
+    +ask_yes_no(question : str) : bool
+    +ask_client_ref() : str | None
+    +keep_text(label : str, current : str, min_length : int = 2) : str
+    +keep_money(label : str, current : float | None, allow_zero : bool = True) : float | None
+    +money(value : float | None) : str
+    +money_range(values : dict) : str
+    -__only(text : str, allowed : str) : bool
+    -__parse_count(text : str) : int | None
+    +keep_countries(label : str, current : list[str]) : list[str]
+    -__words_error(allowed : str) : str
+    +ask_composition(current : dict | None = None) : dict
+    +ask_count(question : str) : int
+    +ask_countries(question : str, allow_blank : bool = False) : list
+    +ask_currency() : str
+    +ask_document_record_action() : str
+    +ask_words(question : str, allowed : str = LETTERS, min_length : int = 2) : str
+    +keep_count(label : str, current : int | str | None) : int | str | None
+    +keep_int(label : str, current : int | str | None, minimum : int, maximum : int) : int | str | None
+    +keep_words(label : str, current : str, allowed : str = LETTERS, min_length : int = 2) : str
+    +read_number(text : object) : float | None
+    +read_year(text : object) : int | None
+    +show_documents_found(paths : list[str]) : None
+    +show_missing_intro(count : int) : None
+    +show_unexpected_error() : None
+    +show_dropped_fields(messages : list[str]) : None
+    +show_optional_intro(count : int) : None
+  }
+  class RateLimiter {
+    -__cooldown_seconds : int = 60
+    -__last_run : dict[str, float] = {}
+    -__enabled : bool = True
+    +DEFAULT_COOLDOWN_SECONDS : int = 60 «const»
+    --
+    +__init__(cooldown_seconds : int = DEFAULT_COOLDOWN_SECONDS, enabled : bool = True)
+    +check(user_key : str) : tuple[bool, int]
+    +record(user_key : str) : None
+    +reset() : None
+  }
+  class ReportView {
+    -__ui : ConsoleUI = ConsoleUI()
+    -__width : int = 96
+    +FIELD_NAMES : dict[str, str] = {...} «const»
+    +OUTCOME_LABELS : dict[str, str] = {...} «const»
+    +MIN_WIDTH : int = 20 «const»
+    +SOURCE_TAGS : dict[str, str] = {...} «const»
+    +REPORT_WIDTH : int = 96 «const»
+    #_CRIME_CATEGORY_LABEL : dict[str, str] = {...} «const»
+    #_CRIME_INDICATOR_LABEL : dict[str, str] = {...} «const»
+    #_CRIME_SECTION_TITLE : str = "Crime - known patterns for his indus... «const»
+    +ARCHIVE_MARKS : dict[str, str] = {...} «const»
+    --
+    +__init__(ui : ConsoleUI | None = None, width : int = REPORT_WIDTH)
+    +show_verdict_report(verdict : Verdict, ask_for_evidence : bool = True, crime_result : dict | None = None, typologies : list[Typology] | None = None) : None
+    +show_onboarding(assessment : dict) : None
+    +show_assessment_list(records : list[dict], states : list[str] | None = None) : None
+    +show_client_list(records : list[dict]) : None
+    +display_client_record(record : ClientRecord) : None
+    +format_evidence(verdict : Verdict) : str
+    -__format_crime_section(crime : dict, typologies : list[Typology]) : list[str]
+    -__display_section(title : str) : None
+    #_field_name(key : str) : str
+    #_field_value(key : str, value : Any) : str
+    #_summary_value(row : dict) : str
+    +format_assessment_list(records : list[dict], states : list[str] | None = None) : str
+    +format_onboarding(assessment : dict) : str
+    +format_verdict_report(verdict : Verdict, crime_result : dict | None = None, typologies : list[Typology] | None = None) : str
+    +show_document_summary(rows : list[dict], files : list[str], notes : list[str], checks : list[str]) : None
+  }
+  class WebApp {
+    -__app : App | None = None
+    -__limiter : RateLimiter | None = None
+    -__flask : Flask = Flask(...)
+    -__jobs : dict[str, dict] = {}
+    +ASSESSMENT_NOT_SAVED : str = "This assessment was NOT saved, so it... «const»
+    +ASSET_FIELDS : list[tuple[str, str, str]] = [...] «const»
+    +CLAIM_FIELDS : list[tuple[str, str, str]] = [...] «const»
+    +CLIENT_FIELDS : list[tuple[str, str, str]] = [...] «const»
+    +COMPOSITION_FIELDS : list[tuple[str, str, str]] = [...] «const»
+    +JOB_FIELDS : list[tuple[str, str, str]] = [...] «const»
+    +MAX_UPLOAD_BYTES : int = 40 * 1024 * 1024 «const»
+    +SECTIONS : list[tuple[str, str, list[tuple[str, str, str]], str]] = [...] «const»
+    +SOW_FIELDS : list[tuple[str, str, str]] = [...] «const»
+    +ASSESSMENT_FAILED : str = "The assessment could not be complete... «const»
+    +ASSESSMENT_STOPPED : str = "The assessment was stopped because a... «const»
+    --
+    +__init__(app : App | None = None, limiter : RateLimiter | None = None)
+    +start(host : str = "127.0.0.1", port : int = 5000, debug : bool = False) : None
+    +home() : str
+    +find() : Response
+    +new_client() : str | Response
+    +new_client_autofill() : str
+    +view_client(client_ref : str) : str | Response
+    +edit_client(client_ref : str) : str | Response
+    +edit_client_autofill(client_ref : str) : str | Response
+    +upload_documents(client_ref : str) : Response
+    +download_document(client_ref : str, file_id : str) : Response
+    +assess_client(client_ref : str) : Response
+    +assess_loading(job_id : str) : str
+    +assess_poll(job_id : str) : dict
+    +assess_result(job_id : str) : str | Response
+    +view_assessment(assessment_id : str) : str | Response
+    +list_assessments_view() : str
+    +sync_to_cloud() : Response
+    -__run_in_background(job_id : str, record : ClientRecord, case : dict) : None
+    {static} -__crime_result_layout(crime_result : dict | None) : dict | None
+    {static} -__typology_layout(typologies : list[Typology] | None) : list[dict] | None
+    #_documents_on_save(form : MultiDict, files : list[FileStorage]) : list[dict]
+    #_is_stored_document(file_id : str) : bool
+    #_same_entry(prefix : str, a : dict, b : dict) : bool
+    #_steps() : list[str]
+    +autofill_form(heading : str, form : MultiDict, files : list[FileStorage]) : str
+    +build_record(values : dict, client_ref : str, old : dict | None = None) : tuple[dict, list[str], dict[str, str]]
+    +check_record(record : dict) : list
+    +extracted_to_values(extracted : dict, current_date : str = "") : dict
+    +fill_blanks(values : dict, found : dict) : tuple[dict, list[str]]
+    +flash_ai_unavailable(feature : str = "Assessment") : None
+    +flash_rate_limit_error(seconds_left : int) : None
+    +flash_unexpected_error() : None
+    +flask() : Flask
+    +get_record(client_ref : str) : ClientRecord | None
+    +handle_404(e : HTTPException) : tuple[str, int]
+    +handle_exception(e : Exception) : tuple[str, int]
+    +page_record(client_ref : str) : dict
+    +pending_documents(form : MultiDict) : list[dict]
+    +read_amount(text : str, label : str, problems : list[str], allow_zero : bool = True, blank_zero : bool = False) : float
+    +read_year(text : str, label : str, problems : list[str], blank_ok : bool = False) : int | None
+    +save_form_record(record : dict) : list[str]
+    +show_form(heading : str, values : dict, problems : list, field_errors : dict | None = None, documents : list | None = None, autofilled : list | None = None, notes : list | None = None, notes_title : str = "") : str
+    +show_report(record : dict, report : dict | None, assessed_at : str = "", assessment_id : str | None = None, crime_result : dict | None = None, typologies : list[dict] | None = None, benchmark : dict | None = None, archive : dict | None = None, archive_state : str | None = None) : str
+    +store_uploads(files : list[FileStorage]) : tuple[list[dict], list[dict]]
+    +to_text(kind : str, value : Any) : str
+    +today() : str
+    +trim(number : Any) : str
+    +values_from_form(form : MultiDict) : dict
+    +values_from_record(record : dict) : dict
+    +values_from_reading(record : ClientRecord, extracted : dict) : dict
+    -__change_archive(assessment_id : str, archive : bool) : Response
+    +archive_assessment(assessment_id : str) : Response
+    +restore_assessment(assessment_id : str) : Response
+  }
+}
+
+package "AI Manager (app/ai)" {
+  abstract class AIService {
+    #_provider : str = ""
+    #_model : str = ""
+    #_temperature : float = 0.0
+    #_ai_caller : Callable[[str, dict, dict], str | None] | None = None
+    #_response_cache : ResponseCache | None = None
+    #_warnings : list[str] = []
+    +PROMPT_NAME : str = "" «const»
+    +SCHEMA_NAME : str = "" «const»
+    +ATTEMPTS : int = 2 «const»
+    --
+    +__init__(provider : str = "", ai_caller : Callable[[str, dict, dict], str | None] | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None)
+    +run(source : dict) : dict | None
+    {abstract} #_payload(source : dict) : dict
+    #_post_process(data : dict, options : dict | None = None) : dict
+    #_complete(prompt : str, schema : dict, options : dict | None = None) : dict | None
+    #_build_prompt(instructions : str, user_text : str, schema : dict | None = None) : str
+    #_redact_names(text : str, names : list[str], honorifics : list[str] | None = None) : str
+    -__parse_reply(raw : str | None) : dict | None
+    -__validate_reply(data : dict, schema : dict) : bool
+    #_cache_payload(source : dict, payload : dict) : dict
+    #_cached(cache_payload : dict, version : str) : dict | None
+    #_fill_prompt(template : str, source : dict, payload : dict) : str
+    #_load_prompt(name : str) : str
+    #_load_schema(name : str) : dict
+    #_options(source : dict) : dict
+    #_prepare(data : dict) : dict
+    #_prompt_version(prompt_text : str) : str
+    #_save(cache_payload : dict, version : str, data : dict) : None
+    #_schema(source : dict) : dict
+    #_without_notes(template : str) : str
+    +warnings() : list[str]
+  }
+  class BenchmarkAI {
+    +ALLOWED_FIELDS : list[str] = [...] «const»
+    +PROMPT_NAME : str = "benchmark" «const»
+    +SCHEMA_NAME : str = "benchmark" «const»
+    --
+    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None)
+    #_payload(source : dict) : dict
+    #_cache_payload(source : dict, payload : dict) : dict
+    #_fill_prompt(template : str, source : dict, payload : dict) : str
+  }
+  class DocumentAI {
+    -__max_chars : int = 40_000
+    +PROMPT_NAME : str = "document_extract" «const»
+    +SCHEMA_NAME : str = "document_extract" «const»
+    +MAX_DOCUMENTS : int = 10 «const»
+    +READABLE_KINDS : tuple[str, ...] = ("text", "image", "pdf") «const»
+    --
+    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None, max_chars : int = 40_000)
+    #_payload(source : dict) : dict
+    #_cache_payload(source : dict, payload : dict) : dict
+    #_fill_prompt(template : str, source : dict, payload : dict) : str
+    #_options(source : dict) : dict
+    +run(source : dict) : dict | None
+  }
+  class ForecastAI {
+    -__forecast_years : int = 4
+    -__schemas : dict = {}
+    -__settings : dict = {}
+    -__vocabulary : dict = {}
+    +BASELINE_TYPE : str = "T1" «const»
+    +RANGE_KEYS : tuple[str, ...] = ("low", "typical", "high") «const»
+    +REPORTING_CURRENCY : str = "SGD" «const»
+    +SCENARIOS : tuple[str, ...] = ("steady", "boom", "downturn") «const»
+    +STAGES : tuple[str, ...] = (...) «const»
+    --
+    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None, forecast_years : int = 4, settings : dict | None = None, vocabulary : dict | None = None)
+    +run(source : dict) : dict | None
+    +read_declaration(record : dict) : Declaration | None
+    #_payload(source : dict) : dict
+    #_post_process(data : dict, options : dict | None = None) : dict
+    -__forecast_markets(record : dict, declaration : Declaration, cache : dict, results : dict) : dict | None
+    -__forecast_earnings(record : dict, markets : dict, cache : dict, results : dict) : dict | None
+    -__forecast_types(record : dict, declaration : Declaration, markets : dict, earnings : dict, cache : dict, results : dict, typologies : list[dict] | None = None) : dict | None
+    -__forecast_events(record : dict, markets : dict, types : dict, cache : dict, results : dict) : dict | None
+    -__check_declaration(data : dict, job_count : int, asset_count : int) : list[str]
+    -__check_markets(data : dict, forecast_years : list[int]) : list[str]
+    -__check_pay(data : dict, forecast_years : list[int]) : list[str]
+    -__check_asset_model(data : dict, index : int, years : list[int], market_ids : set) : list[str]
+    -__check_person_types(data : dict, record : dict, source_records : list[ClaimedSource]) : list[str]
+    -__check_events(data : dict, forecast_years : list[int], market_ids : set) : list[str]
+    -__check_market_series(data : dict, market_id : str, history_years : list[int], forecast_years : list[int]) : list[str]
+    -__check_position_pay(data : dict, index : int, years : list[int]) : list[str]
+    #_add_vocabulary(node : Any) : Any
+    #_ask(call_name : str, prompt_name : str, values : dict, user_data : dict, schema_name : str, check : Callable[[dict], list[str]] | None = None, cached_raw : str | None = None, web_search : bool = False) : dict
+    #_build_instructions(prompt_name : str, values : dict, web_search : bool = False) : tuple[str, str]
+    #_can_ask() : bool
+    #_career_positions(record : dict) : list[dict]
+    #_career_years(record : dict) : tuple[int, int]
+    #_check_type_behaviour(data : dict, type_id : str, start : int, end : int, forecast_years : list[int], market_ids : set, open_years : tuple[int, int] | None = None) : list[str]
+    #_check_type_reactions(data : dict, type_id : str, event_ids : list[str]) : list[str]
+    #_client_facts(record : dict, include_declaration : bool = False) : dict
+    #_crime_categories() : list[dict]
+    #_current_year(record : dict) : int
+    #_empty_result(call_name : str, prompt_version : str) : dict
+    #_extract_json(text : str) : str
+    #_fallback_asset_model(index : int, bought : int, end : int) : dict
+    #_fill_placeholders(text : str, values : dict) : str
+    #_follows_schema(data : dict, schema : dict) : tuple[bool, str | None]
+    #_future_years(record : dict) : list[int]
+    #_link_typologies(data : dict, researched : list[dict]) : dict
+    #_load_forecast_prompt(name : str) : tuple[str, str]
+    #_load_forecast_schema(name : str) : dict
+    #_looks_like_schema(data : object) : bool
+    #_market_changes(markets : dict, first : int, last : int) : dict
+    #_market_outlooks(markets : dict) : dict
+    #_markets_brief(markets : dict) : list[dict]
+    #_parse_reply(raw : str | None) : tuple[dict | None, str | None]
+    #_position_end(position : dict, this_year : int) : int
+    #_range_errors(value : Any, where : str = "") : list[str]
+    #_read_declaration(record : dict, cache : dict, results : dict) : Declaration | None
+    #_repair_asset_model(data : dict, market_ids : set) : dict
+    #_repair_person_types(data : dict, record : dict, source_records : list[ClaimedSource]) : dict
+    #_repair_type_behaviour(data : dict, type_id : str, end : int, forecast_years : list[int], open_years : tuple[int, int] | None, market_ids : set) : dict
+    #_repair_type_reactions(data : dict, type_id : str, event_ids : list[str]) : dict
+    #_run_forecast(record : dict, cache : dict | None = None, typologies : list[dict] | None = None, on_step : Callable[[str], None] | None = None) : dict
+    #_settings() : dict
+    #_sort_ranges(value : Any) : Any
+    #_stopped(run : dict, stage : str) : dict
+    #_strip_keys(value : Any, keys : set) : Any
+    #_top_level_keys(schema : dict) : list[str]
+    #_types_brief(types : dict) : list[dict]
+    #_typologies_brief(typologies : list[dict] | None) : list[dict]
+    #_unknown_ids(label : str, used : list, known : set) : list[str]
+    #_validate_reply(raw : str | None, schema : dict, check : Callable[[dict], list[str]] | None = None) : tuple[dict | None, list[str]]
+    #_vocabulary() : dict
+    #_wrap_free_text(text : str, open_tag : str, close_tag : str) : str
+    #_years_errors(label : str, found : list[int], expected : list[int]) : list[str]
+    #_years_text(years : list[int]) : str
+  }
+  class ResearchAI {
+    -__max_reports : int = 8
+    -__max_excerpts : int = 5
+    +PROMPT_NAME : str = "research" «const»
+    +SCHEMA_NAME : str = "research_response" «const»
+    +ALLOWED_FIELDS : list[str] = ["industry", "country"] «const»
+    +ATTEMPTS : int = 1 «const»
+    --
+    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None, max_reports : int = 8, max_excerpts : int = 5)
+    #_payload(source : dict) : dict
+    #_post_process(data : dict, options : dict | None = None) : dict
+    -__trim_reports(data : dict) : dict
+    -__add_report_ids(data : dict) : dict
+    -__api_sources(response : object) : list[dict]
+    -__strip_excerpts(data : dict) : dict
+    #_fill_prompt(template : str, source : dict, payload : dict) : str
+    #_options(source : dict) : dict
+    #_prepare(data : dict) : dict
+  }
+  class ResponseCache {
+    -__folder : str = ".../data/cache"
+    +RAW_KIND : str = "forecasting" «const»
+    --
+    +__init__(folder : str = "data/cache")
+    +get(kind : str, payload : dict, model : str, prompt_version : str = "") : dict | None
+    +put(kind : str, key : str, data : dict) : None
+    +load_raw_replies(ref : str) : dict
+    +save_raw_replies(ref : str, replies : dict) : int
+    -__key(kind : str, payload : dict, model : str, prompt_version : str = "") : str
+    -__path(kind : str, name : str) : str
+    -__read(path : str) : object
+    +key(kind : str, payload : dict, model : str, prompt_version : str = "") : str
+    +path_for(kind : str, key : str) : str
+  }
+  class TypologyAI {
+    -__max_patterns : int = 5
+    +PROMPT_NAME : str = "typology" «const»
+    +SCHEMA_NAME : str = "typology_response" «const»
+    +ALLOWED_FIELDS : list[str] = [...] «const»
+    +REPORT_FIELDS : list[str] = [...] «const»
+    --
+    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None, max_patterns : int = 5)
+    #_payload(source : dict) : dict
+    #_post_process(data : dict, options : dict | None = None) : dict
+    -__build_typology_reports(research : dict) : list
+    #_fill_prompt(template : str, source : dict, payload : dict) : str
+    #_prepare(data : dict) : dict
+    #_schema(source : dict) : dict
+  }
+}
+
+package "Application (app/application)" {
+  class App {
+    -__ai_caller : Callable | None = None
+    -__config : Config = Config(...) {get}
+    -__ui : ConsoleUI = ConsoleUI()
+    -__report_view : ReportView = ReportView(...)
+    -__client_form : ClientForm = ClientForm(...)
+    -__case_builder : CaseBuilder = CaseBuilder(...)
+    -__case_files : CaseFiles = CaseFiles(...)
+    -__limiter : RateLimiter = RateLimiter(...)
+    -__clients : Repository = ClientRepository(...)
+    -__assessments : AssessmentRepository = AssessmentRepository(...)
+    -__runner : AssessmentRunner = AssessmentRunner(...)
+    -__documents : DocumentStore = DocumentStore(...)
+    -__document_ai : DocumentAI = DocumentAI(...)
+    -__response_cache : ResponseCache = ResponseCache(...)
+    -__syncs : list[CloudSync] = [CloudSync(...), CloudSync(...)]
+    -__config_reader : ConfigReader = ConfigReader(...)
+    -__root : str = ROOT_DIR
+    -__settings_ok : bool = True
+    +CRITICAL_STEPS : tuple[str, ...] = ("Deciding the verdict",) «const»
+    +ASSESSMENTS_UNAVAILABLE : str = "We can't load the saved assessments ... «const»
+    +ASSESSMENT_COLLECTION : str = "ai_assessments" «const»
+    +CLIENTS_UNAVAILABLE : str = "We can't load the client database ri... «const»
+    +CLIENT_COLLECTION : str = "client_cases" «const»
+    +LOG_HANDLER_NAME : str = "app_log_file" «const»
+    +NOISY_LOGGERS : tuple[str, ...] = (...) «const»
+    +SETTINGS_UNAVAILABLE : str = "The app's settings could not be load... «const»
+    +ARCHIVE_ACTIVE : str = AssessmentRepository.ACTIVE «const»
+    +ARCHIVE_ARCHIVED : str = AssessmentRepository.ARCHIVED «const»
+    +ARCHIVE_CHANGED : str = AssessmentRepository.CHANGED «const»
+    +ARCHIVE_NOT_FOUND : str = AssessmentRepository.NOT_FOUND «const»
+    +ARCHIVE_NOT_SAVED : str = AssessmentRepository.NOT_SAVED «const»
+    +ARCHIVE_NO_CHANGE : str = AssessmentRepository.NO_CHANGE «const»
+    +ARCHIVE_UNREADABLE : str = AssessmentRepository.UNREADABLE «const»
+    --
+    +__init__(ai_caller : Callable[[str, dict, dict], str | None] | None = None, root : str = ROOT_DIR, data_folder : str = "data")
+    +start(arguments : list[str]) : int
+    +run_menu() : None
+    +run_case_file(path : str) : bool
+    +assess_client_record(record : ClientRecord) : Verdict | None
+    +find_client(client_ref : str) : ClientRecord | None
+    +save_client(record : ClientRecord) : bool
+    +client_assessments(client_ref : str, include_archived : bool = False) : list[dict]
+    +find_assessment(assessment_id : str) : dict | None
+    +list_assessments() : None
+    +upload_document(file_path : str) : str | None
+    +download_document(file_id : str, output_path : str) : bool
+    +sync_to_cloud() : dict
+    {static} +today() : str
+    -__new_client_from_documents() : ClientRecord | None
+    -__maybe_assess(record : ClientRecord) : None
+    -__prepare_case(record : ClientRecord) : dict | None
+    -__handle_failure(step : str, error : str) : bool
+    -__ai_model() : str
+    -__configure_logging() : None
+    -__create_document_ai() : DocumentAI
+    -__create_runner(policy : dict) : AssessmentRunner
+    {static} -__crime_declaration_layout(declaration : Declaration | None) : dict | None
+    {static} -__crime_result_layout(crime_result : dict | None) : dict | None
+    -__fill_field(builder : DocumentRecordBuilder, record : ClientRecord, field : dict, optional : bool = False) : ClientRecord
+    -__handle_failure_quietly(step : str, error : str) : bool
+    -__require_settings() : None
+    -__saved_verdict(saved : dict) : Verdict | None
+    -__show_step(number : int, label : str) : None
+    +ai_available() : bool
+    +assess(case : dict, supporting_documents : list[dict] | None = None, on_step : Callable[[int, str], None] | None = None, on_failure : Callable[[str, str], bool] | None = None, show_failures : bool = True) : dict | None
+    +assessments() : AssessmentRepository
+    +clients() : Repository
+    +documents() : DocumentStore
+    +forecast_settings() : dict
+    +new_client_ref() : str
+    +rate_limiter() : RateLimiter
+    +read_amount(text : object) : float | None
+    +read_case(record : ClientRecord) : tuple[dict | None, list[str]]
+    +read_documents(documents : list[dict]) : tuple[dict | None, list[str]]
+    +record_builder(date : str = "") : DocumentRecordBuilder
+    +response_cache() : ResponseCache
+    +runner() : AssessmentRunner
+    +save_assessment(result : dict, record : ClientRecord | None = None, on_step : Callable[[int, str], None] | None = None) : str | None
+    +settings_ok() : bool
+    +start_web(host : str = "", port : int = 0) : int
+    +steps() : list[str]
+    +validate_case(case : object) : list[str]
+    +client_ref_taken(client_ref : str) : bool
+    {static} +typologies_checked(report : dict | None) : bool
+    +all_assessments(include_archived : bool = False) : list[dict]
+    +all_clients() : list[dict]
+    +owns_document(file_id : str) : bool
+    +read_document_for_extraction(path : str, name : str) : dict
+    +reading_problems(record : ClientRecord, today : str = "") : list[str]
+    +record_from_reading(extracted : dict, today : str = "") : tuple[ClientRecord, list[dict]]
+    -__ai_search_model() : str
+    +archive_assessment(assessment_id : str) : str
+    {static} +archive_state(saved : dict) : str
+    +restore_assessment(assessment_id : str) : str
+  }
+  class AssessmentRunner {
+    -__verdict_engine : VerdictEngine = VerdictEngine(...)
+    -__config : Config = Config()
+    -__benchmark : Benchmark = Benchmark(policy, self.__config)
+    -__benchmark_ai : BenchmarkAI | None = None
+    -__case_reader : CaseReader = CaseReader()
+    -__crime_scan : CrimeScan = CrimeScan(policy)
+    -__crime_scan_lock : threading.Lock = threading.Lock()
+    -__document_ai : DocumentAI | None = None
+    -__document_store : DocumentStore | None = None
+    -__documents : DocumentEvidence = DocumentEvidence(policy)
+    -__forecast : Forecast = Forecast(policy, self.__config)
+    -__forecast_ai : ForecastAI | None = None
+    -__forecast_lock : threading.Lock = threading.Lock()
+    -__research_ai : ResearchAI | None = None
+    -__response_cache : ResponseCache | None = None
+    -__typology_ai : TypologyAI | None = None
+    +STEPS : tuple[str, ...] = (...) «const»
+    +FORECAST_STEP : dict[str, int] = {...} «const»
+    +RESEARCH_STEP : str = "The crime scan's research..." «const»
+    --
+    +__init__(config : Config | None = None, research_ai : ResearchAI | None = None, typology_ai : TypologyAI | None = None, benchmark_ai : BenchmarkAI | None = None, document_ai : DocumentAI | None = None, forecast_ai : ForecastAI | None = None, document_store : DocumentStore | None = None, response_cache : ResponseCache | None = None)
+    +run(case : dict, files : list[dict] | None = None, on_step : Callable[[int, str], None] | None = None, on_failure : Callable[[str, str], bool] | None = None) : dict | None
+    -__crime_categories() : dict
+    +engine() : VerdictEngine
+    {static} -__plain_reason(error : str) : str
+  }
+}
+
+package "Logic Manager (app/logic)" {
+  class AssetPath {
+    -__market_model : MarketModel = MarketModel()
+    -__paths : list[dict] = []
+    -__asset_models : list[dict] = []
+    --
+    +__init__(market_model : MarketModel | None = None, asset_models : list[dict] | None = None)
+    +build(record : dict, last_year : int, scenario : str = "steady", shocks : dict | None = None) : list[dict]
+    +income_up_to(path : dict, year : int) : dict
+    -__one_path(asset : dict, model : dict, end_year : int, last_year : int, scenario : str, shocks : dict | None) : dict
+  }
+  class Benchmark {
+    -__config : Config = Config(...)
+    +BENCHMARK_LABELS : dict[str, str] = {...} «const»
+    +COMPOSITION_RULES : dict[str, str] = {...} «const»
+    +FORECAST_DERIVED : tuple[str, ...] = (...) «const»
+    +LIMITS : dict[str, int] = {...} «const»
+    +NAME : str = "benchmark" «const»
+    #_COMPOSITION_PARTS : list[tuple[str, str, str, str]] = [...] «const»
+    --
+    +__init__(policy : dict | None = None, config : Config | None = None)
+    +run(case : dict, ai_data : dict) : dict
+    +checks(context : dict) : list[Check]
+    -__is_pep(case : dict) : bool
+    -__total_wealth(client_data : dict, ai_data : dict) : float
+    -__liquidity(client_data : dict, ai_data : dict) : float
+    -__composition(client_data : dict, ai_data : dict) : list[dict]
+    -__velocity(client_data : dict, ai_data : dict) : tuple[float | None, float | None]
+    -__counterparties(declared : list[str], expected : list[str]) : list[str]
+    -__jurisdiction(declared : list[str], expected : list[str]) : list[str]
+    #_benchmark_checks(case : dict, bench_input : dict | None, ai_data : dict | None, findings : list[dict] | None, honest : dict | None, assessment : dict | None, declaration : Declaration | None, markets : dict | None, types : list[dict]) : list[Check]
+    #_best_market_stretch(markets : dict | None, years : int, start : int, end : int) : tuple[float, int, int] | None
+    #_clean_country(country : str) : str
+    #_market_growth(history : dict, market_id : str, first : int, last : int) : float
+    #_market_history(forecast : dict) : dict
+    #_run_rules(client_data : dict, ai_data : dict) : dict | None
+  }
+  class CareerSavings {
+    -__pay : dict = {}
+    -__rows : list[dict] = []
+    --
+    +__init__(pay : dict | None = None)
+    +rows(start : int, end : int) : list[dict]
+    +pay_total(pay : dict, level : str) : float
+  }
+  class CaseReader {
+    -__today : str = ""
+    -__PRESENT_WORDS : tuple[str, ...] = (...) «const»
+    +COMPOSITION_KEYS : list[str] = [...] «const»
+    --
+    +__init__(today : str = "")
+    +forecasting_case(record : dict) : tuple[dict | None, list[str]]
+    {static} +read_amount(text : str | int | float | None) : float | None
+    {static} +read_year(text : str | int | float | None) : int | None
+    #_read_payment(text : str | None) : str | None
+    #_whole_number(value : object) : int | None
+    #_whole_percent(value : int | float | None) : int | None
+    +benchmark_input(record : dict, case_input : dict) : tuple[dict, list[str]]
+    +crime_scan_input(record : dict) : dict
+    {static} +is_iso_date(text : str) : bool
+  }
+  class CaseTimeline {
+    -__record : dict = {}
+    -__forecast_years : int = 4
+    +FORECAST_YEARS : int = 4 «const»
+    --
+    +__init__(record : dict | None = None, forecast_years : int = FORECAST_YEARS)
+    +positions() : list[dict]
+    +current_year() : int
+    +career_years() : tuple[int, int]
+    +position_end(position : dict) : int
+    +future_years() : list[int]
+  }
+  class CounterpartyUnnamed {
+    +NAME : str = "counterparty_unnamed" «const»
+    --
+    +__init__(policy : dict | None = None)
+    +fires(declaration : Declaration) : bool
+  }
+  class CrimeScan {
+    -__indicators : list[Indicator] = [GiftOrInheritanceUnnamed(...), ...]
+    -__warnings : list[str] = []
+    -__COUNTRY_TO_ISO : dict[str, str] = {...} «const»
+    +MATCH_LABELS : dict[str, str] = {...} «const»
+    +FULL_MATCH : tuple[str, ...] = ("critical", "high", "medium") «const»
+    +NAME : str = "crime" «const»
+    +SIGN_LABELS : dict[str, str] = {...} «const»
+    +SIGN_THEMES : dict[str, str] = {...} «const»
+    +WEAK_MATCH : tuple[str, ...] = ("partial", "weak_signal") «const»
+    --
+    +__init__(policy : dict | None = None)
+    +run(case : dict, ai_data : dict) : dict
+    +checks(context : dict) : list[Check]
+    +flags(declaration : Declaration) : list[str]
+    +verify_research(research : dict) : list[ResearchReport]
+    +verify_typology_sources(typologies : list[dict], reports : list[ResearchReport]) : list[Typology]
+    +match_typologies(declaration : Declaration, typologies : list[Typology]) : list[MatchResult]
+    -__categorise_match(core_fired : list[str], core : list[str], supporting_fired : list[str]) : str
+    -__domain_is_trusted(url : str, trusted_domains : list[str]) : bool
+    -__read_typology(data : dict, typ_id : str) : Typology | None
+    #_assess(typologies : list[Typology] | None, declaration : Declaration | dict | None) : dict
+    #_crime_checks(crime_result : dict | None, reports : list[ResearchReport] | None, typologies : list[Typology] | None, types : list[dict], forecast_ran : bool) : list[Check]
+    #_split_org_names(org_string : str) : set[str]
+    +crime_declaration(declaration : Declaration | None) : tuple[Declaration | None, list[str]]
+    +normalise_jurisdictions(declaration : Declaration) : tuple[Declaration, list[str]]
+    +read_typologies(typologies : list[dict]) : list[Typology]
+    +warnings() : list[str]
+  }
+  class DocumentEvidence {
+    -__reader : CaseReader = CaseReader()
+    +NAME : str = "documents" «const»
+    --
+    +__init__(policy : dict | None = None)
+    +run(case : dict, ai_data : dict) : dict
+    +checks(context : dict) : list[Check]
+    #_document_checks(evidence : dict | None, types : list[dict]) : list[Check]
+    #_read(extracted : dict | None, files : list[str] | None = None) : dict
+  }
+  class DocumentRecordBuilder {
+    -__today : str = ""
+    -__policy : dict = {}
+    -__config : Config = Config(...)
+    +SUMMARY_SECTIONS : dict[str, str] = {...} «const»
+    --
+    +__init__(config : Config | None = None, today : str = "")
+    +build(extracted : dict, client_ref : str) : tuple[ClientRecord, list[str], list[dict]]
+    +missing_fields(record : ClientRecord) : list[dict]
+    +summarise(client : ClientRecord, doc_client : ClientRecord) : list[dict]
+    -__age_from_birth(date_of_birth : str | None) : int | None
+    -__finish_layout(record : dict) : dict
+    {static} -__is_number(value : object) : bool
+    #_asset_group(i : int, asset : dict) : str
+    #_blank(value : Any) : bool
+    #_field(path : list, short : str, kind : str, group : str = "", label : str = "") : dict
+    #_job_group(i : int, job : dict) : str
+    #_missing(record : dict, field : dict) : bool
+    #_optional_fields(record : dict) : list[dict]
+    #_required_fields(record : dict) : list[dict]
+    #_split_against_assets(record : dict) : list[str]
+    +check(client : ClientRecord) : list[str]
+    +finish(record : ClientRecord) : ClientRecord
+    +get_path(record : dict, path : list[str | int]) : Any
+    +set_path(record : ClientRecord, path : list[str | int], value : Any) : ClientRecord
+    -__leaf_paths(record : dict) : list[list[str | int]]
+    {static} -__set(record : dict, path : list[str | int], value : Any) : None
+    -__without_impossible_fields(record : dict) : tuple[dict, list[dict]]
+  }
+  class Forecast {
+    -__forecast : dict = {}
+    -__market_model : MarketModel = MarketModel()
+    -__future_paths : FuturePaths = FuturePaths(...)
+    -__assessor : OnboardingAssessor = OnboardingAssessor(...)
+    -__pay_calibrator : PayCalibrator = PayCalibrator(...)
+    -__config : Config = Config(...)
+    +NAME : str = "forecast" «const»
+    --
+    +__init__(policy : dict | None = None, config : Config | None = None)
+    +run(case : dict, ai_data : dict) : dict
+    +checks(context : dict) : list[Check]
+    +economy_brief(markets : dict | None) : dict | None
+    +document_request(failures : list[dict], candidates : list[str]) : list[dict]
+    -__honest_numbers(case : dict, assessment : dict) : dict
+    -__rank_documents(candidates : list[str]) : list[dict]
+    -__data_quality() : dict
+    -__use(forecast : dict) : None
+    #_assess(record : dict) : dict
+    #_enabled_by_text(person_type : dict, record : dict) : str
+    #_forecast_checks(case : dict, assessment : dict | None, honest : dict | None, types : list[dict], failed_step : str | None, unmodelled : list[dict] | None = None) : list[Check]
+    +calibrate_pay(case : dict, forecast : dict, documented_pay : list[dict]) : tuple[dict, list[dict]]
+    +honest_numbers(case : dict, forecast : dict, assessment : dict) : dict
+  }
+  class Formatter <<utility>> {
+    --
+    +__init__()
+    {static} +sgd(value : float) : str
+    {static} +add_months(date_text : str, months : int) : str
+  }
+  class FuturePaths {
+    -__career_savings : CareerSavings = CareerSavings(...)
+    -__asset_path : AssetPath = AssetPath(...)
+    -__paths : dict = {}
+    -__forecast : dict = {}
+    -__market_model : MarketModel = MarketModel()
+    -__policy : dict = {}
+    +BASELINE_TYPE : str = "T1" «const»
+    --
+    +__init__(market_model : MarketModel | None = None, forecast : dict | None = None, policy : dict | None = None)
+    +career_savings() : CareerSavings
+    +expected_paths(record : dict, savings_rows : list[dict]) : dict
+    +event_impacts(record : dict, savings_rows : list[dict]) : list[dict]
+    +divergence_years(paths : dict) : list[dict]
+    +honest_wealth(record : dict, savings_rows : list[dict], paths : list[dict], year : int) : dict
+    +monitoring_ranges(year : int) : dict
+    +asset_path() : AssetPath
+    +extra_money_up_to(behaviour : dict, year : int) : dict
+    +forward_paths(record : dict, savings_rows : list[dict], scenario : str, shocks : dict | None = None, event_changes : dict | None = None) : dict
+    +type_wealth_now(record : dict, savings_rows : list[dict], paths : list[dict]) : dict
+  }
+  class GiftOrInheritanceUnnamed {
+    +NAME : str = "gift_or_inheritance_unnamed" «const»
+    --
+    +__init__(policy : dict | None = None)
+    +fires(declaration : Declaration) : bool
+  }
+  abstract class Indicator {
+    #_policy : dict = {}
+    +NAME : str = "indicator" «const»
+    --
+    +__init__(policy : dict | None = None)
+    {abstract} +fires(declaration : Declaration) : bool
+  }
+  class MarketModel {
+    -__history : dict = {}
+    -__outlook : dict = {}
+    -__scenario_chances : dict = {}
+    +RANGE_KEYS : tuple[str, ...] = ("low", "typical", "high") «const»
+    +SCENARIOS : tuple[str, ...] = ("steady", "boom", "downturn") «const»
+    --
+    +__init__(forecast : dict | None = None)
+    +history() : dict
+    +outlook() : dict
+    +scenario_chances() : dict
+    +change(market_id : str, year : int, scenario : str, level : str = "typical", shocks : dict | None = None) : float
+    {static} -__check_row(row : object, what : str, keys : tuple[str, ...]) : None
+    -__read_rows(market_id : str, one : object, part : str, keys : tuple[str, ...]) : dict
+  }
+  class OnboardingAssessor {
+    -__future_paths : FuturePaths = FuturePaths()
+    -__policy : dict = {}
+    -__config : Config = Config()
+    --
+    +__init__(future_paths : FuturePaths | None = None, policy : dict | None = None, config : Config | None = None)
+    +evaluate(record : dict, forecast : dict, savings_rows : list[dict], paths : list[dict], scale : float = 1.0) : dict
+    +stable_outcome(outcome : str, outcomes_when_shifted : dict) : tuple[str, bool]
+    -__check_asset_values(record : dict, forecast : dict, paths : list[dict], end : int, scale : float = 1.0) : list[dict]
+    -__check_affordability(record : dict, savings_rows : list[dict], paths : list[dict], behaviour : dict, scale : float = 1.0) : list[dict]
+    -__check_jurisdictions(record : dict, forecast : dict) : dict
+    -__decide_onboarding(fits : dict, t1_affordability_breach : bool, other_failures : list[str]) : str
+    #_check_asset_income(record : dict, paths : list[dict], end : int, scale : float = 1.0) : list[dict]
+    #_check_declared_sources(forecast : dict) : list[dict]
+    #_fit_for_type(type_id : str, wealth_now : dict, affordability : list[dict], asset_checks : list[dict], declared : float, scale : float = 1.0) : dict
+  }
+  class PayCalibrator {
+    -__career_savings : CareerSavings = CareerSavings()
+    -__policy : dict = {}
+    --
+    +__init__(career_savings : CareerSavings | None = None, policy : dict | None = None)
+    +calibrate(case : dict, forecast : dict, documented_pay : list[dict]) : tuple[dict, list[dict]]
+  }
+  class RelatedPartyTransaction {
+    +NAME : str = "related_party_transaction" «const»
+    -__KEYWORDS : list[str] = [...] «const»
+    --
+    +__init__(policy : dict | None = None)
+    +fires(declaration : Declaration) : bool
+  }
+  abstract class RiskAnalysis {
+    #_policy : dict = {}
+    #_results : dict = {}
+    +NAME : str = "feature" «const»
+    --
+    +__init__(policy : dict | None = None)
+    {abstract} +run(case : dict, ai_data : dict) : dict
+    {abstract} +checks(context : dict) : list[Check]
+    #_check(check : str, label : str, theme : str, status : str, detail : str, explanation : str = "", group : str = "", sources : list[str] | None = None, supports : list[str] | None = None) : Check
+    #_jump_years(case : dict) : tuple[float | None, int | None]
+    #_best_honest_jump(honest : dict, years : int) : tuple[float, int, int]
+  }
+  class SourceContradictsOccupation {
+    +NAME : str = "source_contradicts_occupation" «const»
+    --
+    +__init__(policy : dict | None = None)
+    +fires(declaration : Declaration) : bool
+  }
+  class UnvaluedSource {
+    +NAME : str = "unvalued_source_present" «const»
+    --
+    +__init__(policy : dict | None = None)
+    +fires(declaration : Declaration) : bool
+  }
+  class VerdictEngine {
+    -__features : list[RiskAnalysis] = []
+    -__config : Config = Config()
+    -__policy : dict = {}
+    +VERDICT_LABELS : dict[str, str] = {...} «const»
+    +THEMES : dict[str, str] = {...} «const»
+    +MARKS : dict[str, str] = {...} «const»
+    +REPORT_LEGEND : list[dict[str, str]] = [...] «const»
+    +ORIGINAL_BENCHMARK : list[str] = [...] «const»
+    #_ROUTINE_NOTES : tuple[str, ...] = (...) «const»
+    --
+    +__init__(features : list[RiskAnalysis] | None = None, config : Config | None = None)
+    +combine(case : dict, results : dict) : Verdict
+    +describe_piece(case : dict, piece : str | None) : str
+    -__build_context(case : dict, results : dict) : dict
+    -__collect_checks(context : dict) : dict[str, list[Check]]
+    -__report(verdict : Verdict) : dict
+    -__agreement(checks : list[Check]) : list[dict]
+    -__type_patterns(forecast : dict | None, assessment : dict | None, crime_result : dict | None, typologies : list[Typology] | None) : list[dict]
+    -__evidence(case : dict, results : dict, assessment : dict | None, honest : dict | None) : list[dict]
+    #_benchmark_items(checks : list[dict]) : list[dict]
+    -__check(feature : str, check : str, label : str, theme : str, status : str, detail : str, explanation : str = "", group : str = "") : Check
+    #_documents(assessment : dict | None, bench : list[Check], crime : list[Check], typologies : list[Typology] | None, case : dict, docs : list[Check] | None = None) : list[dict]
+    -__feature(name : str) : RiskAnalysis | None
+    -__feature_checks(name : str, context : dict) : list[Check]
+    -__is_pep(case : dict) : bool
+    #_items(checks : list[dict], statuses : tuple) : list[dict]
+    +features() : list[RiskAnalysis]
+  }
+}
+
+package "Domain Model (app/model)" {
+  class Band {
+    -__cautious : float = 0.0 {get}
+    -__typical : float = 0.0 {get}
+    -__optimistic : float = 0.0 {get}
+    +LEVELS : tuple[str, ...] = ("cautious", "typical", "optimistic") «const»
+    +MONEY_IN : dict[str, str] = {...} «const»
+    +MONEY_OUT : dict[str, str] = {...} «const»
+    --
+    +__init__(cautious : float = 0.0, typical : float = 0.0, optimistic : float = 0.0)
+    +__add__(other : Band) : Band
+    +__mul__(factor : float) : Band
+    {static} +from_values(values : list[float]) : Band
+    {static} +from_range(ai_range : dict) : Band
+    +to_dict() : dict
+    {static} +from_dict(data : dict) : Band
+    +__eq__(other : object) : bool
+    +__repr__() : str
+    {static} +add(first : dict, second : dict) : dict
+    {static} +as_dict(cautious : float, typical : float, optimistic : float) : dict
+    {static} +from_ai(ai_range : dict) : dict
+    {static} +ordered(values : list[float]) : dict
+    {static} +scale(values : dict, factor : float) : dict
+    {static} +zero() : dict
+  }
+  class Check {
+    -__feature : str = "" {get}
+    -__check : str = "" {get}
+    -__label : str = "" {get}
+    -__theme : str = "" {get}
+    -__status : str = "passed" {get, set}
+    -__detail : str = "" {get}
+    -__explanation : str = "" {get}
+    -__group : str = "" {get}
+    -__sources : list[str] = [] {get}
+    -__supports : list[str] = [] {get}
+    -__empty_lists : list[str] = []
+    -__extra : dict = {}
+    +STATUSES : tuple[str, ...] = ("passed", "failed", "weak", "explained", "skipped", "info") «const»
+    +FIELDS : tuple[str, ...] = (...) «const»
+    --
+    +__init__(feature : str = "", check : str = "", label : str = "", theme : str = "", status : str = "passed", detail : str = "", explanation : str = "", group : str = "", sources : list[str] | None = None, supports : list[str] | None = None, extra : dict | None = None)
+    +failed() : bool
+    +to_dict() : dict
+    -__check_status(status : str) : None
+    +extra(name : str, default : object = None) : object
+    {static} +from_dict(data : dict) : Check
+    +set_extra(name : str, value : object) : None
+  }
+  class ClaimedSource {
+    -__source_type : str = "" {get}
+    -__counterparty : str | None = None {get}
+    -__amount : float | None = None {get, set}
+    -__occupation_mismatch : bool = False {get}
+    -__amount_explained : bool = False {get}
+    -__country : str | None = None {get}
+    -__description : str = "" {get}
+    -__end_year : int | None = None {get}
+    -__layout : tuple[str, ...] = READING_KEYS
+    -__linked_asset_index : int | None = None {get}
+    -__linked_position_index : int | None = None {get}
+    -__quote : str = "" {get}
+    -__source_id : str | None = None {get}
+    -__start_year : int | None = None {get}
+    +GIFT_TYPES : tuple[str, ...] = ("inheritance", "gift") «const»
+    +READING_KEYS : tuple[str, ...] = (...) «const»
+    -__SCAN_NAMES : dict = {...} «const»
+    --
+    +__init__(source_type : str = "", counterparty : str | None = None, amount : float | None = None, occupation_mismatch : bool = False, amount_explained : bool = False, source_id : str | None = None, description : str = "", start_year : int | None = None, end_year : int | None = None, country : str | None = None, quote : str = "", linked_position_index : int | None = None, linked_asset_index : int | None = None, layout : tuple[str, ...] = READING_KEYS)
+    +is_gift_or_inheritance() : bool
+    +has_named_counterparty() : bool
+    +is_valued() : bool
+    -__check_amount(amount : float | None) : None
+    -__check_index(index : int | None, label : str) : None
+    -__check_layout(layout : tuple[str, ...]) : None
+    -__check_year(year : int | None, label : str) : None
+    -__is_whole(value : object) : bool
+    +counterparty_read() : bool
+    {static} +from_dict(details : dict) : ClaimedSource
+    +to_dict() : dict
+    +to_scan_dict() : dict
+    -__check_text(value : object, label : str, or_none : bool) : None
+  }
+  class Claims {
+    -__declared_net_worth : float | None = None {get, set}
+    -__expected_aum : float | None = None {get, set}
+    -__pep_status : str = "" {get, set}
+    -__asset_composition : dict = {} {get, set}
+    -__wealth_countries : list[str] = [] {get, set}
+    -__declared_counterparties : list[str] = [] {get}
+    -__biggest_wealth_jump : float | None = None {get, set}
+    -__wealth_jump_years : int | None = None {get, set}
+    -__extra : dict = {}
+    +LIQUID_PARTS : tuple[str, ...] = ("listed_equities", "cash") «const»
+    +NO_PEP_VALUES : tuple[str, ...] = ("none", "no", "not a pep", "n/a", "na") «const»
+    --
+    +__init__(declared_net_worth : float | None = None, expected_aum : float | None = None, pep_status : str = "", asset_composition : dict | None = None, wealth_countries : list[str] | None = None, declared_counterparties : list[str] | None = None, biggest_wealth_jump : float | None = None, wealth_jump_years : int | None = None, extra : dict | None = None)
+    +is_pep() : bool
+    +liquid_share() : float
+    +problems() : list[str]
+    +warnings() : list[str]
+    -__check_positive(value : float | None) : None
+    -__check_shares(composition : dict) : None
+    +to_dict() : dict
+    -__check_net_worth(value : float | None) : None
+  }
+  class ClientProfile {
+    -__name : str = "" {get, set}
+    -__nationality : str = "" {get, set}
+    -__country_of_residence : str = "" {get, set}
+    -__age : int | None = None {get, set}
+    +MAX_AGE : int = 120 «const»
+    +MIN_AGE : int = 18 «const»
+    --
+    +__init__(name : str = "", nationality : str = "", country_of_residence : str = "", age : int | None = None)
+    +to_dict() : dict
+    -__check_age(age : int | None) : None
+    -__text(value : str, label : str) : str
+  }
+  class ClientRecord {
+    -__client_ref : str = "" {get}
+    -__profile : ClientProfile = ClientProfile(...) {get}
+    -__current_date : str = "" {get}
+    -__sow_declaration : str = "" {get, set}
+    -__career_history : list[Job] = []
+    -__investments : list[Investment] = []
+    -__claims : Claims | None = None {get}
+    -__declaration : Declaration = Declaration() {get}
+    -__supporting_documents : list[dict] = []
+    -__review_status : ReviewStatus = ReviewStatus() {get}
+    -__career_extra : dict = {}
+    -__extra : dict = {}
+    +CAREER_JOB_KEYS : tuple[str, ...] = (...) «const»
+    +MIN_WORKING_AGE : int = 14 «const»
+    +REQUIRED : tuple[str, ...] = (...) «const»
+    -__OWN_KEYS : tuple[str, ...] = (...) «const»
+    --
+    +__init__(client_ref : str = "", name : str = "", nationality : str = "", current_date : str = "", country_of_residence : str = "", age : int | None = None)
+    +jobs() : list[Job]
+    +add_job(details : dict) : Job
+    +add_investment(details : dict) : Investment
+    +set_claims(details : dict) : Claims
+    +current_job() : Job | None
+    +documents() : list[dict]
+    +add_document(entry : dict) : None
+    +record_assessment(verdict : Verdict, case : dict) : None
+    +problems() : list[str]
+    +warnings(policy : dict) : list[str]
+    +crime_scan_input() : dict
+    +benchmark_input() : dict
+    +to_dict() : dict
+    {static} +from_dict(data : dict) : ClientRecord
+    -__check_job_order() : list[str]
+    -__check_one_current_job() : list[str]
+    -__check_asset_years() : list[str]
+    -__check_schema() : list[str]
+    -__check_start_age() : list[str]
+    -__check_assets_vs_worth() : list[str]
+    -__check_split_against_assets(policy : dict) : list[str]
+    -__this_year() : int | None
+    {static} -__whole(value : object) : int | None
+    {static} -__whole_percent(value : object) : int | None
+    +career_start_year() : int | None
+    +investments() : list[Investment]
+    {static} +why_unreadable(error : Exception) : str
+  }
+  class Config {
+    -__policy : dict = {} {get}
+    -__vocabulary : dict = {} {get}
+    --
+    +__init__(policy : dict | None = None, vocabulary : dict | None = None)
+    +category_name(code : str) : str
+    +same_country(name : str) : str
+    +asset_category(asset_type : str) : str
+  }
+  class Declaration {
+    -__sources : list[ClaimedSource] = []
+    --
+    +__init__(sources : list[dict] | None = None)
+    +sources() : list[ClaimedSource]
+    +add_source(details : dict) : ClaimedSource
+    +unnamed_count() : int
+    {static} +from_dict(data : dict) : Declaration
+    +to_dict() : dict
+    +to_scan_dict() : dict
+  }
+  class Investment {
+    -__asset_type : str = "" {get}
+    -__country : str = "" {get}
+    -__year_acquired : int | None = None {get, set}
+    -__price_paid : float | None = None {get, set}
+    -__current_declared_value : float | None = None {get, set}
+    -__income_produced : float | None = None {get, set}
+    -__payment_method : str | None = None {get}
+    -__extra : dict = {}
+    --
+    +__init__(asset_type : str = "", country : str = "", year_acquired : int | None = None, price_paid : float | None = None, current_declared_value : float | None = None, payment_method : str | None = None, income_produced : float | None = None, extra : dict | None = None)
+    +category(policy : dict) : str
+    +to_dict() : dict
+    -__check_amount(value : float | None, allow_zero : bool) : None
+    -__check_payment_method(method : str | None) : None
+    -__check_year(year : int | None) : None
+  }
+  class Job {
+    -__start_year : int | None = None {get, set}
+    -__end_year : int | None = None {get, set}
+    -__occupation : str = "" {get}
+    -__seniority : str = "" {get}
+    -__industry : str = "" {get}
+    -__employer_name : str = "" {get}
+    -__employer_size : str = "" {get}
+    -__country : str = "" {get}
+    -__extra : dict = {}
+    +KEYS : tuple[str, ...] = (...) «const»
+    --
+    +__init__(start_year : int | None = None, end_year : int | None = None, occupation : str = "", seniority : str = "", industry : str = "", employer_name : str = "", employer_size : str = "", country : str = "", extra : dict | None = None)
+    +is_current() : bool
+    +end_or(this_year : int) : int
+    +problems() : list[str]
+    +to_dict() : dict
+    -__check_years(start_year : int | None, end_year : int | None) : None
+  }
+  class MatchResult {
+    -__typology : Typology = Typology() {get}
+    -__core_fired : list[str] = [] {get}
+    -__category : str = "no_match" {get}
+    -__supporting_fired : list[str] = [] {get}
+    +CATEGORIES : tuple[str, ...] = (...) «const»
+    --
+    +__init__(typology : Typology | None = None, core_fired : list[str] | None = None, supporting_fired : list[str] | None = None, category : str = "no_match")
+    +breached : bool «property»
+    {static} -__signs(weight : str, fired : list[str] | None, allowed : list[str]) : list[str]
+    +fired() : list[str]
+    +to_dict() : dict
+  }
+  class ResearchReport {
+    -__report_id : str = "" {get}
+    -__url : str = "" {get}
+    -__excerpts : list[str] = [] {get}
+    -__organisation : str = "" {get}
+    -__retrieved_at : str = "" {get}
+    -__summary : list[str] = [] {get}
+    -__title : str = "" {get}
+    -__year : int | None = None {get}
+    --
+    +__init__(report_id : str = "", url : str = "", excerpts : list[str] | None = None, organisation : str = "", title : str = "", year : int | None = None, summary : list[str] | None = None, retrieved_at : str = "")
+    +domain() : str
+    +contains_quote(quote : str) : bool
+    {static} -__list(field : str, value : object) : list
+    {static} -__normalise(text : str) : str
+    {static} -__text(field : str, value : object) : str
+    {static} +from_dict(data : dict, retrieved_at : str = "") : ResearchReport
+    +retrieved_year() : int
+    +to_dict() : dict
+  }
+  class ReviewStatus {
+    -__outcome : str = "" {get}
+    -__routing : str = "" {get}
+    -__next_review_date : str = "" {get}
+    -__last_assessed_on : str = "" {get}
+    -__forecasting_case : dict = {} {get}
+    --
+    +__init__()
+    +update(outcome : str, routing : str, next_review_date : str, assessed_on : str, case : dict) : None
+    +to_dict() : dict
+  }
+  class Typology {
+    -__typology_id : str = "" {get}
+    -__name : str = "" {get}
+    -__indicators : list[dict] = [] {get}
+    -__corroborated : bool = False {get}
+    -__crime_category : str = "" {get}
+    -__description : str = "" {get}
+    -__outdated_source_ids : list[str] = [] {get}
+    -__source_ids : list[str] = []
+    -__source_quotes : list[dict] = [] {get}
+    -__typical_documents : list[str] = [] {get}
+    -__verified : bool = False {get}
+    +WEIGHTS : tuple[str, ...] = ("core", "supporting") «const»
+    --
+    +__init__(typology_id : str = "", name : str = "", indicators : list[dict] | None = None, source_ids : list[str] | None = None, crime_category : str = "", description : str = "", source_quotes : list[dict] | None = None, typical_documents : list[str] | None = None)
+    +core_indicators() : list[str]
+    +cited_report_ids() : list[str]
+    -__by_weight(weight : str) : list[str]
+    {static} -__indicator(indicator : object) : dict
+    {static} -__list(field : str, value : object) : list
+    {static} -__quote(quote : object) : dict
+    {static} -__text(field : str, value : object) : str
+    {static} +from_dict(data : dict) : Typology
+    +supporting_indicators() : list[str]
+    +to_dict() : dict
+    +with_verified_sources(source_ids : list[str], source_quotes : list[dict], corroborated : bool, outdated_source_ids : list[str] | None) : Typology
+  }
+  class Verdict {
+    -__assessment_id : str = "" {get}
+    -__client_ref : str = "" {get}
+    -__assessed_at : str = "" {get}
+    -__outcome : str = "MANUAL_REVIEW" {get}
+    -__next_step : str = "" {get}
+    -__next_review_date : str = "" {get}
+    -__checks : list[Check] = []
+    -__notes : list[str] = [] {get}
+    -__not_run : list[str] = [] {get}
+    -__report : dict = {} {get, set}
+    -__explanation : dict = {} {get, set}
+    +OUTCOMES : tuple[str, ...] = ("PASSED", "MANUAL_REVIEW", "RISKY", "SERIOUS_RISK") «const»
+    +CHECK_GROUPS : dict[str, str] = {...} «const»
+    +EXPLANATION_KEYS : tuple[str, ...] = (...) «const»
+    +SEVERITY : dict[str, int] = {...} «const»
+    --
+    +__init__(assessment_id : str = "", client_ref : str = "", assessed_at : str = "", outcome : str = "MANUAL_REVIEW", next_step : str = "", next_review_date : str = "", notes : list[str] | None = None, not_run : list[str] | None = None)
+    +add_check(check : Check) : None
+    +checks() : list[Check]
+    +to_dict() : dict
+    -__check_outcome(outcome : str) : None
+    +details() : dict
+  }
+}
+
+AIService -- ResponseCache : caches in
+App *-- "1" AssessmentRunner
+App *-- "1" CaseBuilder
+App *-- "1" CaseFiles
+App *-- "1" ClientForm
+App *-- "1" Config
+App *-- "1" ConfigReader
+App *-- "1" ConsoleUI
+App *-- "1" DocumentAI
+App *-- "1" DocumentStore
+App *-- "1" RateLimiter
+App *-- "1" ReportView
+App *-- "1" ResponseCache
+App *-- "2" CloudSync
+App *-- "2" Repository
+App ..> AIService : creates
+App ..> CaseReader : creates
+App ..> ClientRecord : uses
+App ..> Declaration : uses
+App ..> DocumentRecordBuilder : creates
+App ..> MongoRepository : creates
+App ..> Verdict : uses
+App ..> WebApp : creates
+AssessmentRepository --|> JsonRepository
+AssessmentRunner *-- "1" CaseReader
+AssessmentRunner *-- "1" VerdictEngine
+AssessmentRunner *-- "4" RiskAnalysis
+AssessmentRunner -- Config : reads policy
+AssessmentRunner ..> Typology : uses
+AssessmentRunner o-- "0..1" DocumentStore : reads documents from
+AssessmentRunner o-- "0..1" ResponseCache : caches in
+AssessmentRunner o-- "1..*" AIService
+AssetPath -- MarketModel : grows with
+AssetPath ..> Band : uses
+AssetPath ..> CaseTimeline : creates
+Benchmark -- Config : reads names
+Benchmark --|> RiskAnalysis
+Benchmark ..> CaseTimeline : creates
+Benchmark ..> ClaimedSource : uses
+Benchmark ..> Declaration : uses
+Benchmark ..> Formatter : uses
+Benchmark ..> MarketModel : uses
+BenchmarkAI --|> AIService
+CareerSavings ..> Band : uses
+CaseBuilder -- ConsoleUI : asks via
+CaseBuilder ..> ClientRecord : uses
+CaseBuilder ..> Investment : uses
+CaseBuilder ..> Job : uses
+ClientForm -- ConsoleUI : prints via
+ClientForm -- ReportView : shows via
+ClientForm ..> ClientRecord : creates
+ClientRecord *-- "0..*" Investment
+ClientRecord *-- "0..*" Job
+ClientRecord *-- "0..1" Claims
+ClientRecord *-- "1" ClientProfile
+ClientRecord *-- "1" Declaration
+ClientRecord *-- "1" ReviewStatus
+ClientRecord ..> Verdict : uses
+ClientRepository --|> JsonRepository
+CloudSync -- DatabaseRepository : remote
+CloudSync -- Repository : local
+CounterpartyUnnamed --|> Indicator
+CrimeScan *-- "5" Indicator
+CrimeScan --|> RiskAnalysis
+CrimeScan ..> ClaimedSource : uses
+CrimeScan ..> Declaration : creates
+CrimeScan ..> MatchResult : creates
+CrimeScan ..> ResearchReport : creates
+CrimeScan ..> Typology : creates
+DatabaseRepository ..|> Repository
+Declaration *-- "0..*" ClaimedSource
+DocumentAI --|> AIService
+DocumentEvidence *-- "1" CaseReader
+DocumentEvidence --|> RiskAnalysis
+DocumentReaderFactory ..> DocumentReader : creates
+DocumentRecordBuilder -- Config : reads policy
+DocumentRecordBuilder ..> CaseReader : uses
+DocumentRecordBuilder ..> ClientRecord : creates
+DocumentStore *-- "1" DocumentReaderFactory
+DocumentStore ..> DocumentReader : uses
+ExcelReader --|> DocumentReader
+Forecast *-- "1" FuturePaths
+Forecast *-- "1" MarketModel
+Forecast *-- "1" OnboardingAssessor
+Forecast *-- "1" PayCalibrator
+Forecast -- Config : reads names
+Forecast --|> RiskAnalysis
+Forecast ..> AssetPath : uses
+Forecast ..> Band : uses
+Forecast ..> CareerSavings : uses
+Forecast ..> CaseTimeline : creates
+Forecast ..> Formatter : uses
+ForecastAI --|> AIService
+ForecastAI ..> ClaimedSource : checks
+ForecastAI ..> Declaration : creates
+FuturePaths *-- "1" AssetPath
+FuturePaths *-- "1" CareerSavings
+FuturePaths -- MarketModel : projects with
+FuturePaths ..> Band : uses
+FuturePaths ..> CaseTimeline : creates
+GiftOrInheritanceUnnamed --|> Indicator
+GiftOrInheritanceUnnamed ..> ClaimedSource : checks
+ImageReader --|> DocumentReader
+Indicator ..> Declaration : reads
+JsonRepository ..|> Repository
+MatchResult -- Typology : matches
+MongoRepository --|> DatabaseRepository
+OnboardingAssessor -- Config : reads names
+OnboardingAssessor -- FuturePaths : tests against
+OnboardingAssessor ..> AssetPath : uses
+OnboardingAssessor ..> Band : uses
+OnboardingAssessor ..> CaseTimeline : creates
+OnboardingAssessor ..> ClaimedSource : uses
+PayCalibrator -- CareerSavings : adjusts
+PayCalibrator ..> CaseTimeline : creates
+PdfReader --|> DocumentReader
+RelatedPartyTransaction --|> Indicator
+RelatedPartyTransaction ..> ClaimedSource : checks
+ReportView -- ConsoleUI : prints via
+ReportView ..> ClientRecord : uses
+ReportView ..> Investment : uses
+ReportView ..> Job : uses
+ReportView ..> Typology : uses
+ReportView ..> Verdict : uses
+ResearchAI --|> AIService
+RiskAnalysis ..> Check : creates
+SourceContradictsOccupation --|> Indicator
+SourceContradictsOccupation ..> ClaimedSource : checks
+TextReader --|> DocumentReader
+Typology -- "1..*" ResearchReport : cites
+TypologyAI --|> AIService
+UnvaluedSource --|> Indicator
+UnvaluedSource ..> ClaimedSource : checks
+Verdict o-- "0..*" Check
+VerdictEngine -- Config : reads policy
+VerdictEngine ..> CaseTimeline : creates
+VerdictEngine ..> Check : uses
+VerdictEngine ..> Forecast : calls
+VerdictEngine ..> Formatter : uses
+VerdictEngine ..> MatchResult : uses
+VerdictEngine ..> Typology : uses
+VerdictEngine ..> Verdict : creates
+VerdictEngine o-- "1..*" RiskAnalysis
+WebApp -- App : calls
+WebApp -- RateLimiter : checks with
+WebApp ..> ClientRecord : uses
+WebApp ..> Typology : uses
+WordReader --|> DocumentReader
+
+note top of App
+  main.py (project root) — only starts App (the AI brand is chosen here)
+  sys.exit(App(with_fallback(openai_caller(), gemini_caller()))
+  .start(sys.argv[1:]))   # App creates every other object
+end note
+
+@enduml

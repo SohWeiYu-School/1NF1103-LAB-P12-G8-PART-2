@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.logic.forecast import Forecast
 from app.model.check import Check
 from tests.logic_fixtures import CONFIG, POLICY, sample_case, sample_forecast
@@ -19,7 +19,7 @@ def ran():
 
 
 def test_forecast_is_a_feature():
-    assert isinstance(Forecast(POLICY, CONFIG), Feature)
+    assert isinstance(Forecast(POLICY, CONFIG), RiskAnalysis)
     assert Forecast.NAME == "forecast"
 
 
@@ -54,6 +54,17 @@ def test_checks_are_check_objects_in_the_shared_shape(ran):
     assert "NET_WORTH_FIT" in [check.check for check in checks]
 
 
+def test_forecast_checks_keep_their_groups_and_carry_no_extra_details(ran):
+    case, _, feature, assessment, honest = ran
+    types = [{"type_id": "T2", "name": "Trade mis-invoicing", "fits": True, "fit_score": 0.8, "route_years": ""}]
+    checks = feature.checks({"case": case, "assessment": assessment, "honest": honest, "types": types})
+    story = next(check for check in checks if check.check == "CRIME_STORY")
+    assert (story.label, story.status, story.group) == ("T2 Trade mis-invoicing", "info", "Crime stories")
+    assert story.detail == "Fits his money (fit 0.80)"
+    assert next(check for check in checks if check.check == "NET_WORTH_FIT").group == "Honest story (T1)"
+    assert all(list(check.to_dict()) == list(Check.FIELDS[:8]) for check in checks)
+
+
 def test_a_forecast_that_stopped_gives_one_skipped_check():
     checks = Forecast(POLICY, CONFIG).checks({"case": sample_case(), "assessment": None, "honest": None,
                                               "failed_step": "the list of person types"})
@@ -75,3 +86,10 @@ def test_the_economy_brief_holds_market_changes_but_nothing_about_the_client(ran
     assert "Container shipping" in text
     assert "16500000" not in text and "Daniel" not in text
     assert feature.economy_brief(None) is None
+
+
+def test_the_forecast_rejects_a_config_that_is_not_a_config_and_a_policy_that_is_not_a_dict():
+    with pytest.raises(ValueError, match="config must be a Config"):
+        Forecast(POLICY, {"policy": POLICY})
+    with pytest.raises(ValueError, match="policy must be a dict"):
+        Forecast(["policy"])

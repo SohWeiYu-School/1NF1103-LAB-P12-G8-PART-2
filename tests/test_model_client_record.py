@@ -79,6 +79,20 @@ def test_career_in_the_saved_layout_is_the_current_job_plus_the_profile():
                       "career_start_year": 1998, "country_of_residence": "Singapore", "age": 51}
 
 
+def test_a_current_job_kept_only_in_career_survives_a_round_trip():
+    """The command line's New Client form keeps the current job in "career" and lists only the
+    earlier, ended jobs in career_history. Loading and saving must not replace it with the last old job."""
+    career = {"occupation": "COO", "seniority": "C-suite", "industry": "Shipping",
+              "employer_name": "Straits Harbour", "employer_size": "2500", "country_of_residence": "Singapore",
+              "age": 51, "career_start_year": 1996}
+    saved = {"client_ref": "CL-1", "name": "Daniel Tan", "nationality": "Malaysian", "current_date": "2026-09-24",
+             "career": career,
+             "career_history": [{"start_year": 1998, "end_year": 2016, "occupation": "Planner",
+                                 "seniority": "Junior", "industry": "Shipping", "employer_name": "Pacific Crest",
+                                 "employer_size": "5000", "country": "Singapore"}]}
+    assert ClientRecord.from_dict(saved).to_dict()["career"] == career
+
+
 def test_a_clean_record_has_no_problems_or_warnings():
     record = _record()
     assert record.problems() == []
@@ -107,6 +121,22 @@ def test_an_asset_bought_before_the_career_started_is_a_problem():
                            "price_paid": 1, "current_declared_value": 1, "payment_method": "cash",
                            "income_produced": 0})
     assert any("Asset 2 was bought in 1990" in problem for problem in record.problems())
+
+
+def test_the_claims_problems_are_the_records_problems():
+    record = _record()
+    record.set_claims({"declared_net_worth": None, "pep_status": "  "})
+    problems = record.problems()
+    assert "Declared net worth is missing: enter an amount greater than 0." in problems
+    assert any("The PEP question is not answered" in problem for problem in problems)
+
+
+def test_a_complete_record_has_no_claims_problems():
+    assert not any("PEP" in problem or "net worth" in problem for problem in _record().problems())
+
+
+def test_a_record_with_no_claims_has_only_its_own_problems():
+    assert ClientRecord("SOW-1", "Daniel Tan", "Malaysian", "2026-09-24").problems() == []
 
 
 def test_a_missing_name_is_a_problem():
@@ -165,3 +195,44 @@ def test_documents_are_kept_in_the_order_they_were_added():
     assert record.documents() == [{"file_id": "f1", "file_name": "tax.pdf"}]
     with pytest.raises(ValueError):
         record.add_document("tax.pdf")
+
+
+def test_a_current_job_kept_only_in_career_is_the_current_job():
+    saved = {"client_ref": "CL-1", "name": "Daniel Tan", "nationality": "Malaysian", "current_date": "2026-09-24",
+             "career": {"occupation": "COO", "seniority": "C-suite", "industry": "Shipping",
+                        "employer_name": "Straits Harbour", "employer_size": "2500",
+                        "country_of_residence": "Singapore", "age": 51, "career_start_year": 1996},
+             "career_history": [{"start_year": 1998, "end_year": 2016, "occupation": "Planner",
+                                "seniority": "Junior", "industry": "Shipping", "employer_name": "Pacific Crest",
+                                "employer_size": "5000", "country": "Singapore"}]}
+    job = ClientRecord.from_dict(saved).current_job()
+    assert job.occupation == "COO"
+    assert job.is_current()
+
+
+def test_an_open_listed_job_beats_the_career_block_and_ended_jobs_are_the_last_resort():
+    assert _record().current_job().occupation == "COO"
+    ended = {"client_ref": "CL-1", "name": "Daniel Tan", "nationality": "Malaysian", "current_date": "2026-09-24",
+             "career": {"country_of_residence": "Singapore", "age": 51},
+             "career_history": [{"start_year": 1998, "end_year": 2016, "occupation": "Planner"}]}
+    assert ClientRecord.from_dict(ended).current_job().occupation == "Planner"
+    empty = ClientRecord.from_dict({"client_ref": "CL-1", "name": "D", "nationality": "M", "current_date": "2026-09-24"})
+    assert empty.current_job() is None
+
+
+def test_why_unreadable_shows_a_value_errors_reason_but_hides_other_errors():
+    assert ClientRecord.why_unreadable(ValueError("age must be between 18 and 120")) == "age must be between 18 and 120"
+    hidden = ClientRecord.why_unreadable(AttributeError("'int' object has no attribute 'get'"))
+    assert hidden == "some of the details are not in the expected layout"
+
+
+def test_a_retired_clients_ended_last_job_copied_into_career_stays_ended():
+    # the web form copies the last listed job into "career" even when it has ended
+    saved = {"client_ref": "CL-1", "name": "Daniel Tan", "nationality": "Malaysian", "current_date": "2026-09-24",
+             "career": {"occupation": "Planner", "employer_name": "Pacific Crest", "country_of_residence": "Singapore"},
+             "career_history": [{"start_year": 1998, "end_year": 2016, "occupation": "Planner",
+                                "employer_name": "Pacific Crest", "country": "Singapore"}]}
+    record = ClientRecord.from_dict(saved)
+    job = record.current_job()
+    assert job is record.jobs()[-1]
+    assert not job.is_current()

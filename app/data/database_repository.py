@@ -14,8 +14,16 @@ class DatabaseRepository(Repository):
     """A repository backed by a database. It knows what to store and when; its children
     know how to talk to one kind of database (connect, write, read, store a file)."""
 
-    def __init__(self, collection_name: str = "", key_field: str = "", uri: str = "") -> None:
+    def __init__(self, collection_name: str, key_field: str, uri: str = "") -> None:
+        """collection_name and key_field must be given and cannot be empty (ValueError): a
+        repository with no key cannot tell one record from another. An empty uri is allowed;
+        the database is then simply offline."""
         super().__init__()
+        if not isinstance(collection_name, str) or not collection_name.strip():
+            raise ValueError("A database repository needs a collection name (it cannot be empty).")
+        if not isinstance(key_field, str) or not key_field.strip():
+            raise ValueError("A database repository needs a key field, the field that tells one record "
+                             "from another (it cannot be empty).")
         self._collection_name: str = collection_name
         self._key_field: str = key_field
         self._uri: str = uri or ""
@@ -37,11 +45,17 @@ class DatabaseRepository(Repository):
         return self._upsert(str(record.get(self._key_field) or ""), record)
 
     def load(self) -> list[dict]:
-        return self._fetch({}) if self._connect() else []
+        """Every record. [] means the collection is empty. Raises ConnectionError (an OSError)
+        if the database cannot be reached or the read fails; the details are logged."""
+        self.__require_connection()
+        return self._fetch({})
 
     def find(self, ref: str) -> dict | None:
-        if not ref or not self._connect():
+        """The record with this key, or None if there is none (or ref is empty). Raises
+        ConnectionError if the database cannot be reached or the read fails."""
+        if not ref:
             return None
+        self.__require_connection()
         matches = self._fetch({self._key_field: ref})
         return matches[0] if matches else None
 
@@ -68,6 +82,11 @@ class DatabaseRepository(Repository):
                 uploaded += 1
         return uploaded
 
+    def __require_connection(self) -> None:
+        if not self._connect():
+            logger.error("DatabaseRepository: the %s database cannot be reached", self._collection_name)
+            raise ConnectionError(f"The {self._collection_name} database cannot be reached.")
+
     @abstractmethod
     def _connect(self) -> bool:
         """Open the connection if it is not open. Returns False if the database cannot be reached."""
@@ -78,7 +97,8 @@ class DatabaseRepository(Repository):
 
     @abstractmethod
     def _fetch(self, query: dict) -> list[dict]:
-        """The records that match the query."""
+        """The records that match the query. An empty list means nothing matches. Raises
+        ConnectionError if the read fails."""
 
     @abstractmethod
     def _store_file(self, path: str, name: str) -> str:

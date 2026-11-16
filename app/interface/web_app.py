@@ -1,22 +1,29 @@
 """WebApp: the browser front end. It only calls App."""
 
-import datetime
 import io
 import logging
 import os
+import secrets
 import shutil
 import tempfile
 import threading
 import uuid
+from typing import Any
 
-from flask import (Flask, abort, flash, jsonify, redirect, render_template,
+from flask import (Flask, abort, flash, redirect, render_template,
                    request, send_file, url_for)
 from jinja2 import DictLoader
+from werkzeug.datastructures import FileStorage, MultiDict
+from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
+from werkzeug.wrappers import Response
 
 from app.application.app import App
 from app.interface.client_form import ClientForm
+from app.interface.rate_limiter import RateLimiter
 from app.interface.web_templates import TEMPLATES
+from app.model.client_record import ClientRecord
+from app.model.typology import Typology
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +37,13 @@ class WebApp:
     Assessments run in a background thread; the loading page polls for the step reached.
     """
 
-    PAYMENT_OPTIONS = ["cash", "loan", "asset_sale"]
-    CLIENT_FIELDS = [
+    CLIENT_FIELDS: list[tuple[str, str, str]] = [
         ("name", "Full name", "text"),
         ("nationality", "Nationality", "text"),
         ("country_of_residence", "Country of residence", "text"),
         ("age", "Age", "int"),
     ]
-    JOB_FIELDS = [
+    JOB_FIELDS: list[tuple[str, str, str]] = [
         ("start_year", "Start year", "int"),
         ("end_year", "End year (blank for the current job)", "int"),
         ("occupation", "Job title", "text"),
@@ -47,7 +53,7 @@ class WebApp:
         ("employer_size", "Employer size (e.g. 10000)", "text"),
         ("country", "Country of the job", "text"),
     ]
-    ASSET_FIELDS = [
+    ASSET_FIELDS: list[tuple[str, str, str]] = [
         ("asset_type", "Asset (e.g. Property - Condo)", "text"),
         ("country", "Country", "text"),
         ("year_acquired", "Year bought", "int"),
@@ -56,13 +62,13 @@ class WebApp:
         ("payment_method", "How it was paid for", "payment"),
         ("income_produced", "Income it produces per year (SGD, 0 if none)", "money"),
     ]
-    COMPOSITION_FIELDS = [
+    COMPOSITION_FIELDS: list[tuple[str, str, str]] = [
         ("property", "Property (%)", "percent"),
         ("listed_equities", "Listed equities (%)", "percent"),
         ("private_business", "Private business (%)", "percent"),
         ("cash", "Cash (%)", "percent"),
     ]
-    CLAIM_FIELDS = [
+    CLAIM_FIELDS: list[tuple[str, str, str]] = [
         ("declared_net_worth", "Declared net worth (SGD)", "money"),
         ("expected_aum", "Expected assets to be managed by the bank (SGD)", "money"),
         ("pep_status", "PEP status", "pep"),
@@ -71,10 +77,10 @@ class WebApp:
         ("wealth_jump_years", "Over how many years did this increase occur (leave blank if unknown)", "text"),
         ("declared_counterparties", "Known counterparties — banks, brokers, firms (comma separated, leave blank if none)", "text"),
     ]
-    SOW_FIELDS = [
+    SOW_FIELDS: list[tuple[str, str, str]] = [
         ("sow_declaration", "Declaration (at least 50 characters)", "textarea"),
     ]
-    SECTIONS = [
+    SECTIONS: list[tuple[str, str, list[tuple[str, str, str]], str]] = [
         ("client", "Client", CLIENT_FIELDS, "dict"),
         ("jobs", "Career history (include the current job and leave its end year blank)",
          JOB_FIELDS, "list"),
@@ -86,15 +92,28 @@ class WebApp:
     ]
 
     MAX_UPLOAD_BYTES: int = 40 * 1024 * 1024     # uploads for auto-fill: 40 MB per request
+    ASSESSMENT_STOPPED: str = ("The assessment was stopped because a step it cannot do without failed. "
+                               "Please try again later.")
+    ASSESSMENT_FAILED: str = "The assessment could not be completed. Please try again later."
+    ASSESSMENT_NOT_SAVED: str = ("This assessment was NOT saved, so it is not in the client's history and the "
+                                 "client's outcome was not changed. Please try again later.")
 
-    def __init__(self, app: App | None = None) -> None:
+    def __init__(self, app: App | None = None, limiter: RateLimiter | None = None) -> None:
+        """limiter decides how often one browser may start an assessment. Without one, the App's
+        own limiter (made from the policy) is used."""
+        if app is not None and not app.settings_ok():
+            raise RuntimeError(App.SETTINGS_UNAVAILABLE)
         self.__app: App | None = app
+        self.__limiter: RateLimiter | None = limiter if limiter is not None else \
+            (app.rate_limiter() if app is not None else None)
         self.__jobs: dict[str, dict] = {}        # job_id -> {status, step_num, step, result, error, client_ref}
         flask = Flask(__name__)
-        flask.secret_key = os.getenv("SECRET_KEY", "dev-only-change-me")
+        # Signs the cookie that carries flash messages. Without SECRET_KEY in .env a random key is made
+        # at each start (never a fixed one written in the code, which anyone could use to forge it).
+        flask.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
         flask.config["MAX_CONTENT_LENGTH"] = WebApp.MAX_UPLOAD_BYTES
         flask.jinja_env.loader = DictLoader(TEMPLATES)
-        flask.jinja_env.globals.update(PEP_OPTIONS=ClientForm.PEP_OPTIONS, PAYMENT_OPTIONS=WebApp.PAYMENT_OPTIONS)
+        flask.jinja_env.globals.update(PEP_OPTIONS=ClientForm.PEP_OPTIONS, PAYMENT_OPTIONS=ClientForm.PAYMENT_METHODS)
         flask.add_url_rule('/', endpoint='home', view_func=self.home)
         flask.add_url_rule('/find', endpoint='find', view_func=self.find)
         flask.add_url_rule('/client/new', endpoint='new_client', view_func=self.new_client, methods=['GET', 'POST'])
@@ -109,8 +128,10 @@ class WebApp:
         flask.add_url_rule('/assess/loading/<job_id>', endpoint='assess_loading', view_func=self.assess_loading)
         flask.add_url_rule('/assess/poll/<job_id>', endpoint='assess_poll', view_func=self.assess_poll)
         flask.add_url_rule('/assess/result/<job_id>', endpoint='assess_result', view_func=self.assess_result)
-        flask.add_url_rule('/assessment/<assessment_id>/archive', endpoint='archive_assessment', view_func=self.archive_assessment, methods=['POST'])
-        flask.add_url_rule('/assessment/<assessment_id>/restore', endpoint='restore_assessment', view_func=self.restore_assessment, methods=['POST'])
+        flask.add_url_rule('/assessment/<assessment_id>/archive', endpoint='archive_assessment',
+                           view_func=self.archive_assessment, methods=['POST'])
+        flask.add_url_rule('/assessment/<assessment_id>/restore', endpoint='restore_assessment',
+                           view_func=self.restore_assessment, methods=['POST'])
         flask.add_url_rule('/assessments', endpoint='list_assessments_view', view_func=self.list_assessments_view)
         flask.add_url_rule('/sync', endpoint='sync_to_cloud', view_func=self.sync_to_cloud, methods=['POST'])
         flask.register_error_handler(404, self.handle_404)
@@ -122,14 +143,14 @@ class WebApp:
         """The Flask application (tests use its test client)."""
         return self.__flask
 
-    def run(self, host: str = "127.0.0.1", port: int = 5000, debug: bool = False) -> None:
+    def start(self, host: str = "127.0.0.1", port: int = 5000, debug: bool = False) -> None:
         """Serve the web app until it is stopped."""
         self.__flask.run(host=host, port=port, debug=debug, use_reloader=False)
 
     def today(self) -> str:
         return self.__app.today()
 
-    def trim(self, number) -> str:
+    def trim(self, number: Any) -> str:
         """60000.0 -> '60000', 7.5 -> '7.5'. Anything that isn't a number is shown as it is."""
         try:
             number = round(float(number), 2)
@@ -137,7 +158,7 @@ class WebApp:
             return str(number)
         return str(int(number)) if number == int(number) else str(number)
 
-    def to_text(self, kind: str, value) -> str:
+    def to_text(self, kind: str, value: Any) -> str:
         """How one stored value is shown in a box."""
         if value is None:
             return ""
@@ -177,7 +198,7 @@ class WebApp:
                                   for item in raw[prefix]]
         return values
 
-    def values_from_form(self, form) -> dict:
+    def values_from_form(self, form: MultiDict) -> dict:
         """The text for every box, taken from the submitted form."""
         values = {}
         for prefix, title, fields, kind in WebApp.SECTIONS:
@@ -195,7 +216,7 @@ class WebApp:
                 values[prefix] = rows
         return values
 
-    def read_year(self, text, label, problems, blank_ok=False):
+    def read_year(self, text: str, label: str, problems: list[str], blank_ok: bool = False) -> int | None:
         if text == "" and blank_ok:
             return None
         if text.isdigit() and 1900 <= int(text) <= 2100:
@@ -203,7 +224,8 @@ class WebApp:
         problems.append(f"{label} must be a year such as 2015.")
         return 0
 
-    def read_amount(self, text, label, problems, allow_zero=True, blank_zero=False):
+    def read_amount(self, text: str, label: str, problems: list[str], allow_zero: bool = True,
+                    blank_zero: bool = False) -> float:
         if text == "" and blank_zero:
             return 0.0
         number = self.__app.read_amount(text)
@@ -213,7 +235,7 @@ class WebApp:
             return 0.0
         return number
 
-    def build_record(self, values: dict, client_ref: str, old: dict | None = None):
+    def build_record(self, values: dict, client_ref: str, old: dict | None = None) -> tuple[dict, list[str], dict[str, str]]:
         """Turn the form text into a record. Returns (record, problems, field_errors).
 
         field_errors maps HTML input name -> short inline message for the form UI.
@@ -300,7 +322,7 @@ class WebApp:
             for key, text in [("asset_type", "name"), ("country", "country")]:
                 if not row[key]:
                     _p(f"{label}: {text} is required.", f"assets.{i}.{key}", "Required.")
-            if row["payment_method"] not in WebApp.PAYMENT_OPTIONS:
+            if row["payment_method"] not in ClientForm.PAYMENT_METHODS:
                 _p(f"{label}: choose how it was paid for.", f"assets.{i}.payment_method", "Choose one.")
             n = len(problems)
             yr  = self.read_year(row["year_acquired"], f"{label}: year bought", problems)
@@ -397,11 +419,18 @@ class WebApp:
 
         The AI reply is turned into a client record by DocumentRecordBuilder - the very
         function the command line's "New Client from Documents" uses - so both give the same values
-        (field names, age from the date of birth, wealth split as fractions, oldest job first)."""
-        record, _ = self.__app.record_builder(current_date or self.today()).build(extracted, "")
+        (field names, age from the date of birth, wealth split as fractions, oldest job first).
+        A value no client record can have is left out (autofill_form says which). Raises ValueError
+        only if the reading as a whole cannot be a record."""
+        record, _ = self.__app.record_from_reading(extracted, current_date or self.today())
+        return self.values_from_reading(record, extracted)
+
+    def values_from_reading(self, record: ClientRecord, extracted: dict) -> dict:
+        """The record DocumentRecordBuilder made from a reading, as form text."""
+        data = record.to_dict()
         if not extracted.get("jobs"):
-            record["career_history"] = []      # the command line's empty "current job" is only there to be asked for
-        values = self.values_from_record(record)
+            data["career_history"] = []        # the command line's empty "current job" is only there to be asked for
+        values = self.values_from_record(data)
         for prefix, title, fields, kind in WebApp.SECTIONS:
             if kind == "list":
                 values[prefix] = [row for row in values[prefix] if any(row.values())]
@@ -460,15 +489,15 @@ class WebApp:
 
     def _is_stored_document(self, file_id: str) -> bool:
         """Only accept document references this app made (the DocumentStore decides)."""
-        return self.__app.documents().owns(file_id)
+        return self.__app.owns_document(file_id)
 
-    def pending_documents(self, form) -> list[dict]:
+    def pending_documents(self, form: MultiDict) -> list[dict]:
         """Documents uploaded during auto-fill, carried in hidden boxes until the client is saved."""
         names, ids = form.getlist("doc.file_name"), form.getlist("doc.file_id")
         return [{"file_name": secure_filename(name) or "document", "file_id": file_id}
                 for name, file_id in zip(names, ids) if self._is_stored_document(file_id)]
 
-    def store_uploads(self, files) -> tuple[list[dict], list[dict]]:
+    def store_uploads(self, files: list[FileStorage]) -> tuple[list[dict], list[dict]]:
         """Keep each uploaded file as a supporting document and read it for the AI.
         Returns (supporting document entries, documents read for extraction)."""
         stored, read = [], []
@@ -480,15 +509,15 @@ class WebApp:
             try:
                 path = os.path.join(folder, name)
                 uploaded.save(path)
-                read.append(self.__app.documents().read_for_extraction(path, name))
-                file_id = self.__app.documents().upload(path)
+                read.append(self.__app.read_document_for_extraction(path, name))
+                file_id = self.__app.upload_document(path)
                 if file_id is not None:
                     stored.append({"file_name": name, "file_id": file_id})
             finally:
                 shutil.rmtree(folder, ignore_errors=True)
         return stored, read
 
-    def autofill_form(self, heading: str, form, files):
+    def autofill_form(self, heading: str, form: MultiDict, files: list[FileStorage]) -> str:
         """Read the uploaded documents and show the form again with the blanks filled in."""
         values = self.values_from_form(form)
         documents = self.pending_documents(form)
@@ -502,13 +531,21 @@ class WebApp:
             flash("Document reading is not available right now — please try again later.")
         filled, notes = [], list(warnings)
         if extracted is not None:
-            found = self.extracted_to_values(extracted, self.today())
-            values, filled = self.fill_blanks(values, found)
+            try:
+                record, dropped = self.__app.record_from_reading(extracted, self.today())
+            except ValueError as error:
+                logger.error("WebApp.autofill_form: the AI's reading is not a possible record: %r", error)
+                flash(f"The documents were read, but the details cannot be used because {error}. "
+                      "Nothing was filled in.")
+                return self.show_form(heading, values, [], documents=documents, notes=notes)
+            dropped_messages = [entry["message"] for entry in dropped]
+            if dropped_messages:
+                logger.warning("WebApp.autofill_form: left out of the AI's reading: %s", " | ".join(dropped_messages))
+            values, filled = self.fill_blanks(values, self.values_from_reading(record, extracted))
+            notes += dropped_messages
             notes += extracted.get("notes") or []
             # the same second-look checks the command line shows after reading documents
-            date = self.today()
-            record, _ = self.__app.record_builder(date).build(extracted, "")
-            notes += self.__app.record_builder(date).check(self.__app.record_builder(date).finish(record))
+            notes += self.__app.reading_problems(record, self.today())
         if extracted is not None and filled:
             flash(f"Read {len(read)} document(s) and filled {len(filled)} box(es), highlighted in yellow. "
                   "Check every highlighted value before saving.")
@@ -516,12 +553,32 @@ class WebApp:
             flash("The documents were read, but nothing new was found to fill in.")
         return self.show_form(heading, values, [], documents=documents, autofilled=filled, notes=notes)
 
-    def get_record(self, client_ref: str):
-        """Find one client record by reference. Returns None if not found."""
-        for record in self.__app.clients().load():
-            if record.get("client_ref") == client_ref:
-                return record
-        return None
+    def get_record(self, client_ref: str) -> ClientRecord | None:
+        """Find one client record by reference. Returns None if not found; raises ValueError,
+        saying what is wrong, if the saved record cannot be read."""
+        return self.__app.find_client(client_ref)
+
+    def page_record(self, client_ref: str) -> dict:
+        """The client as a page header shows it (saved layout). If the record is missing or
+        cannot be read, the reference stands in for the name."""
+        try:
+            record = self.get_record(client_ref)
+        except ValueError as error:
+            flash(str(error))
+            record = None
+        return record.to_dict() if record is not None else {"client_ref": client_ref, "name": client_ref}
+
+    def save_form_record(self, record: dict) -> list[str]:
+        """Save a record built from the form. Returns the problems ([] = saved)."""
+        try:
+            client = ClientRecord.from_dict(record)
+        except (ValueError, TypeError, AttributeError) as error:
+            logger.error("WebApp: the form for %s did not make a valid record: %r", record.get("client_ref"), error)
+            return [f"The client could not be saved because {ClientRecord.why_unreadable(error)}."]
+        if not self.__app.save_client(client):
+            return ["The client was not saved because the client database cannot be read or written right now. "
+                    "Please try again later."]
+        return []
 
     def flash_ai_unavailable(self, feature: str = "Assessment") -> None:
         flash(f"{feature} is not available right now — please try again later.")
@@ -532,15 +589,15 @@ class WebApp:
     def flash_unexpected_error(self) -> None:
         flash("An unexpected error occurred — please try again or contact support.")
 
-    def show_form(self, heading: str, values: dict, problems: list, field_errors: dict = None,
+    def show_form(self, heading: str, values: dict, problems: list, field_errors: dict | None = None,
                   documents: list | None = None, autofilled: list | None = None,
-                  notes: list | None = None):
+                  notes: list | None = None, notes_title: str = "") -> str:
         return render_template("client_form.html", heading=heading, values=values,
                                problems=problems, SECTIONS=WebApp.SECTIONS,
                                field_errors=field_errors or {}, documents=documents or [],
-                               autofilled=autofilled or [], notes=notes or [])
+                               autofilled=autofilled or [], notes=notes or [], notes_title=notes_title)
 
-    def _run_assessment_job(self, job_id, record, case):
+    def __run_in_background(self, job_id: str, record: ClientRecord, case: dict) -> None:
         """The assessment, in the background: App.assess, the very method the command
         line runs, then the same save."""
         job = self.__jobs[job_id]
@@ -550,9 +607,12 @@ class WebApp:
             job["step"] = label
 
         try:
-            result = self.__app.assess(case, record.get("supporting_documents"), on_step=step, show_failures=False)
+            result = self.__app.assess(case, record.documents(), on_step=step, show_failures=False)
             if result is None:
-                raise RuntimeError("The assessment was stopped because a critical step failed.")
+                logger.error("WebApp: the assessment of %s stopped at a critical step", record.client_ref)
+                job["status"] = "error"
+                job["error"] = WebApp.ASSESSMENT_STOPPED
+                return
             assessment_id = self.__app.save_assessment(result, record, on_step=step)
 
             # Per-feature failure flags — feature names passed to flash_ai_unavailable in assess_result
@@ -565,133 +625,205 @@ class WebApp:
                 ai_warnings.append("Forecasting")
 
             job["result"] = {
-                "record":        record,
-                "report":        result["report"],
+                "record":        record.to_dict(),       # the page template reads the saved layout
+                "report":        result["verdict"].report,
                 "assessment_id": assessment_id,
-                "assessed_at":   datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "saved":         assessment_id is not None,
+                "assessed_at":   result["verdict"].assessed_at,   # the same time App saved
                 "ai_warnings":   ai_warnings,
-                "crime_result":  result.get("crime_result"),
-                "typologies":    result.get("typologies"),
+                "crime_result":  WebApp.__crime_result_layout(result.get("crime_result")),
+                "typologies":    WebApp.__typology_layout(result.get("typologies")),
                 "benchmark":     result.get("benchmark"),
             }
             job["status"] = "done"
-        except Exception as exc:
-            logging.getLogger(__name__).error("_run_assessment_job %s failed: %s", job_id, repr(exc))
-            logging.exception("Assessment of %s failed", record.get("client_ref"))
+        except Exception:
+            # The real error goes to the log; the browser is told only that it failed (CLAUDE.md §9).
+            logger.exception("WebApp: the assessment of %s (job %s) failed", record.client_ref, job_id)
             job["status"] = "error"
-            job["error"] = str(exc)
+            job["error"] = WebApp.ASSESSMENT_FAILED
+
+    @staticmethod
+    def __crime_result_layout(crime_result: dict | None) -> dict | None:
+        """The crime scan's result as the page template reads it (each MatchResult's to_dict())."""
+        if crime_result is None:
+            return None
+        return {**crime_result, "match_results": [match.to_dict() for match in crime_result["match_results"]]}
+
+    @staticmethod
+    def __typology_layout(typologies: list[Typology] | None) -> list[dict] | None:
+        """The typologies as the page template reads them (the typology reply's layout)."""
+        return None if typologies is None else [typology.to_dict() for typology in typologies]
 
     def show_report(self, record: dict, report: dict | None, assessed_at: str = "", assessment_id: str | None = None,
-                    crime_result=None, typologies=None, benchmark=None, archive: dict | None = None):
-        """The assessment page: the same report the command line prints (VerdictEngine.report)."""
+                    crime_result: dict | None = None, typologies: list[dict] | None = None,
+                    benchmark: dict | None = None, archive: dict | None = None,
+                    archive_state: str | None = None) -> str:
+        """The assessment page: the same report the command line prints (VerdictEngine.report).
+        archive is the last line of an archived assessment's log; archive_state is App.ARCHIVE_UNREADABLE
+        when its archive record is damaged (the page then says so and offers no button)."""
         symbols = {entry["mark"]: entry["symbol"] for entry in (report or {}).get("legend", [])}
         typologies_by_id = {t.get("typology_id"): t for t in (typologies or [])}
         return render_template("assess_result.html", record=record, report=report, symbols=symbols,
                                assessed_at=assessed_at, assessment_id=assessment_id,
                                crime_result=crime_result, typologies_by_id=typologies_by_id, benchmark=benchmark,
-                               archive=archive)
+                               typologies_checked=App.typologies_checked(report),
+                               archive=archive, archive_state=archive_state)
 
-    def home(self):
-        return render_template("home.html", clients=self.__app.clients().load())
+    def home(self) -> str:
+        """The client list. If the saved clients cannot be read the page says so and shows no list
+        (it never shows "No clients yet" for a read failure)."""
+        try:
+            clients = self.__app.all_clients()
+        except ValueError as error:
+            flash(str(error))
+            clients = None
+        return render_template("home.html", clients=clients)
 
-    def find(self):
+    def find(self) -> Response:
         client_ref = request.args.get("ref", "").strip().upper()
-        if client_ref and self.get_record(client_ref):
+        try:
+            found = bool(client_ref) and self.get_record(client_ref) is not None
+        except ValueError as error:
+            flash(str(error))
+            return redirect(url_for("home"))
+        if found:
             return redirect(url_for("view_client", client_ref=client_ref))
         flash(f"No client found with reference '{client_ref}'.")
         return redirect(url_for("home"))
 
-    def _documents_on_save(self, form, files) -> list[dict]:
+    def _documents_on_save(self, form: MultiDict, files: list[FileStorage]) -> list[dict]:
         """Documents to attach when the form is saved: ones kept from auto-fill, plus any
         files chosen in the upload box without pressing "Read documents"."""
         stored, _ = self.store_uploads(files)
         return self.pending_documents(form) + stored
 
-    def new_client(self):
+    def new_client(self) -> str | Response:
         if request.method == "POST":
             values = self.values_from_form(request.form)
             documents = self._documents_on_save(request.form, request.files.getlist("autofill_files"))
-            record, problems, field_errors = self.build_record(values, self.__app.new_client_ref())
+            try:
+                new_ref = self.__app.new_client_ref()
+            except ValueError as error:          # the saved clients can't be checked, so no reference is made
+                return self.show_form("New client", values, [str(error)], {}, documents=documents)
+            record, problems, field_errors = self.build_record(values, new_ref)
             if not problems:
                 problems = self.check_record(record)
                 field_errors = {}
             if not problems:
                 record["supporting_documents"] = documents
-                if self.__app.clients().save(record):
+                problems = self.save_form_record(record)
+                if not problems:
                     flash("Client saved.")
                     return redirect(url_for("view_client", client_ref=record["client_ref"]))
-                problems = ["The client could not be saved. Check the database connection."]
             return self.show_form("New client", values, problems, field_errors, documents=documents)
  
         return self.show_form("New client", self.values_from_record({"current_date": self.today()}), [])
 
-    def new_client_autofill(self):
+    def new_client_autofill(self) -> str:
         return self.autofill_form("New client", request.form, request.files.getlist("autofill_files"))
 
-    def view_client(self, client_ref):
-        record = self.get_record(client_ref)
+    def view_client(self, client_ref: str) -> str | Response:
+        try:
+            record = self.get_record(client_ref)
+        except ValueError as error:
+            flash(str(error))
+            return redirect(url_for("home"))
         if record is None:
             abort(404)
+        saved = record.to_dict()                 # the page template reads the saved layout
         show_archived = request.args.get("archived") == "1"
-        repository = self.__app.assessments()
-        everything = repository.for_client(client_ref, include_archived=True)
-        archived_ids = {a.get("assessment_id") for a in everything if repository.is_archived(a)}
-        assessments = everything if show_archived else [a for a in everything if a.get("assessment_id") not in archived_ids]
-        return render_template("client_view.html", record=record,
-                               values=self.values_from_record(record), SECTIONS=WebApp.SECTIONS,
-                               assessments=assessments, show_archived=show_archived,
-                               archived_count=len(archived_ids), archived_ids=archived_ids)
+        archive_states: list[str] = []           # one state per shown assessment, in the same order
+        archived_count = 0
+        try:
+            everything = self.__app.client_assessments(client_ref, include_archived=True)
+            # The state is worked out per record, not per id: old records may share a missing id.
+            rows = [(a, App.archive_state(a)) for a in everything]
+            archived_count = sum(1 for _, state in rows if state != App.ARCHIVE_ACTIVE)
+            if not show_archived:
+                rows = [(a, state) for a, state in rows if state == App.ARCHIVE_ACTIVE]
+            assessments = [a for a, _ in rows]
+            archive_states = [state for _, state in rows]
+        except (OSError, ValueError) as error:
+            logger.error("WebApp.view_client: the saved assessments cannot be read: %r", error)
+            flash(App.ASSESSMENTS_UNAVAILABLE)
+            assessments = None
+        return render_template("client_view.html", record=saved,
+                               values=self.values_from_record(saved), SECTIONS=WebApp.SECTIONS,
+                               assessments=assessments, problems=record.problems(),
+                               show_archived=show_archived, archived_count=archived_count,
+                               archive_states=archive_states)
 
-    def archive_assessment(self, assessment_id):
-        repository = self.__app.assessments()
-        saved = repository.find(assessment_id)
-        if saved is None:
-            abort(404)
-        if repository.is_archived(saved):
-            flash("This assessment is already archived.")
-        elif repository.archive(saved["assessment_id"]):
-            flash("Assessment archived. It is hidden from the lists, not deleted.")
-        else:
-            flash("This assessment could not be archived. Please try again later.")
-        return redirect(url_for("view_client", client_ref=saved["client_ref"]))
+    def archive_assessment(self, assessment_id: str) -> Response:
+        """Hide one assessment from the lists (nothing is deleted), then go back to its client."""
+        return self.__change_archive(assessment_id, archive=True)
 
-    def restore_assessment(self, assessment_id):
-        repository = self.__app.assessments()
-        saved = repository.find(assessment_id)
-        if saved is None:
-            abort(404)
-        if not repository.is_archived(saved):
-            flash("This assessment is not archived.")
-        elif repository.restore(saved["assessment_id"]):
-            flash("Assessment restored.")
-        else:
-            flash("This assessment could not be restored. Please try again later.")
+    def restore_assessment(self, assessment_id: str) -> Response:
+        """Bring an archived assessment back into the lists, then go back to its client."""
+        return self.__change_archive(assessment_id, archive=False)
+
+    def __change_archive(self, assessment_id: str, archive: bool) -> Response:
+        """Archive or restore, tell the officer what happened, and go to the client page."""
+        try:
+            saved = self.__app.find_assessment(assessment_id)
+            if saved is None:
+                abort(404)
+            result = (self.__app.archive_assessment if archive else self.__app.restore_assessment)(saved["assessment_id"])
+        except (OSError, ValueError) as error:
+            logger.error("WebApp.__change_archive: the saved assessments cannot be read: %r", error)
+            flash(App.ASSESSMENTS_UNAVAILABLE)
+            return redirect(url_for("home"))
         client_ref = saved["client_ref"]
-        everything = repository.for_client(client_ref, include_archived=True)
-        still_archived = any(repository.is_archived(a) for a in everything)
-        return redirect(url_for("view_client", client_ref=client_ref, **({"archived": "1"} if still_archived else {})))
+        keep_archived = False
+        if result == App.ARCHIVE_CHANGED and not archive:
+            # Only chooses which view to go back to; if it cannot be read, the restore still happened.
+            try:
+                keep_archived = any(App.archive_state(a) != App.ARCHIVE_ACTIVE
+                                    for a in self.__app.client_assessments(client_ref, include_archived=True))
+            except (OSError, ValueError) as error:
+                logger.error("WebApp.__change_archive: restored, but the client's list cannot be read: %r", error)
+        done, nothing_to_do = (("Assessment archived. It is hidden from the lists, not deleted.",
+                                "This assessment is already archived.") if archive else
+                               ("Assessment restored.", "This assessment is not archived."))
+        word = "archived" if archive else "restored"
+        messages = {App.ARCHIVE_CHANGED: done, App.ARCHIVE_NO_CHANGE: nothing_to_do,
+                    App.ARCHIVE_UNREADABLE: "This assessment's archive record is damaged, so it cannot be changed.",
+                    App.ARCHIVE_NOT_SAVED: f"The assessment was not {word} because saving failed. Please try again later."}
+        if result == App.ARCHIVE_NOT_FOUND:
+            abort(404)
+        flash(messages.get(result, App.ASSESSMENTS_UNAVAILABLE))
+        return redirect(url_for("view_client", client_ref=client_ref, **({"archived": "1"} if keep_archived else {})))
 
-    def view_assessment(self, assessment_id):
-        saved = self.__app.assessments().find(assessment_id)
+    def view_assessment(self, assessment_id: str) -> str | Response:
+        try:
+            saved = self.__app.find_assessment(assessment_id)
+        except (OSError, ValueError) as error:
+            logger.error("WebApp.view_assessment: the saved assessments cannot be read: %r", error)
+            flash(App.ASSESSMENTS_UNAVAILABLE)
+            return redirect(url_for("home"))
         if saved is None:
             abort(404)
-        live = self.get_record(saved["client_ref"]) or {"client_ref": saved["client_ref"], "name": saved["client_ref"]}
-        snapshot = saved.get("case") if isinstance(saved.get("case"), dict) else {}
-        
-        # show the client as they were when this assessment ran; older assessments have no snapshot
-        record = {**live, "name": snapshot.get("name") or live.get("name", "")}
+        record = self.page_record(saved["client_ref"])
+        snapshot = saved.get("case")
+        if isinstance(snapshot, dict) and snapshot.get("name"):
+            record = {**record, "name": snapshot["name"]}      # the client as they were when this ran
+        state = App.archive_state(saved)
+        log = saved.get("archive_log")
+        archive = log[-1] if state == App.ARCHIVE_ARCHIVED else None
         typologies = (saved.get("crime_scan") or {}).get("typologies", {})
         typology_list = typologies.get("sector_typologies") if isinstance(typologies, dict) else None
-        archive_log = saved.get("archive_log") or []
-        archive = archive_log[-1] if self.__app.assessments().is_archived(saved) else None
         return self.show_report(record, saved.get("report"), saved.get("assessed_at", ""), assessment_id,
                            crime_result=saved.get("crime_result"), typologies=typology_list,
-                           benchmark=saved.get("benchmark"), archive=archive)
+                           benchmark=saved.get("benchmark"), archive=archive, archive_state=state)
 
-    def edit_client(self, client_ref):
-        old = self.get_record(client_ref)
-        if old is None:
+    def edit_client(self, client_ref: str) -> str | Response:
+        try:
+            client = self.get_record(client_ref)
+        except ValueError as error:
+            flash(str(error))
+            return redirect(url_for("home"))
+        if client is None:
             abort(404)
+        old = client.to_dict()                   # the form is filled from, and saved in, the saved layout
  
         if request.method == "POST":
             values = self.values_from_form(request.form)
@@ -704,21 +836,32 @@ class WebApp:
                 known = {d.get("file_id") for d in record.get("supporting_documents", [])}
                 record["supporting_documents"] = list(record.get("supporting_documents", [])) + [
                     d for d in documents if d["file_id"] not in known]
-                if self.__app.clients().save(record):
+                problems = self.save_form_record(record)
+                if not problems:
                     flash("Changes saved.")
                     return redirect(url_for("view_client", client_ref=client_ref))
-                problems = ["The changes could not be saved. Check the database connection."]
             return self.show_form(f"Edit {client_ref}", values, problems, field_errors, documents=documents)
  
-        return self.show_form(f"Edit {client_ref}", self.values_from_record(old), [])
+        # Shown as things to fix; they never stop the officer saving (POST checks again)
+        return self.show_form(f"Edit {client_ref}", self.values_from_record(old), [],
+                              notes=client.problems(), notes_title="To complete or check")
 
-    def edit_client_autofill(self, client_ref):
-        if self.get_record(client_ref) is None:
+    def edit_client_autofill(self, client_ref: str) -> str | Response:
+        try:
+            found = self.get_record(client_ref) is not None
+        except ValueError as error:
+            flash(str(error))
+            return redirect(url_for("home"))
+        if not found:
             abort(404)
         return self.autofill_form(f"Edit {client_ref}", request.form, request.files.getlist("autofill_files"))
 
-    def upload_documents(self, client_ref):
-        record = self.get_record(client_ref)
+    def upload_documents(self, client_ref: str) -> Response:
+        try:
+            record = self.get_record(client_ref)
+        except ValueError as error:
+            flash(str(error))
+            return redirect(url_for("home"))
         if record is None:
             abort(404)
  
@@ -734,18 +877,17 @@ class WebApp:
             folder = tempfile.mkdtemp()
             path = os.path.join(folder, name)
             uploaded.save(path)
-            file_id = self.__app.documents().upload(path)
+            file_id = self.__app.upload_document(path)
             shutil.rmtree(folder, ignore_errors=True)
  
             if file_id is None:
                 flash(f"Could not upload {name}.")
                 continue
-            record.setdefault("supporting_documents", []).append(
-                {"file_name": name, "file_id": file_id})
+            record.add_document({"file_name": name, "file_id": file_id})
             added += 1
  
         if added:
-            if self.__app.clients().save(record):
+            if self.__app.save_client(record):
                 flash(f"{added} document(s) uploaded.")
             else:
                 flash("Documents uploaded, but the record could not be saved.")
@@ -753,13 +895,17 @@ class WebApp:
             flash("Choose at least one file first.")
         return redirect(url_for("view_client", client_ref=client_ref))
 
-    def download_document(self, client_ref, file_id):
-        record = self.get_record(client_ref)
+    def download_document(self, client_ref: str, file_id: str) -> Response:
+        try:
+            record = self.get_record(client_ref)
+        except ValueError as error:
+            flash(str(error))
+            return redirect(url_for("home"))
         if record is None:
             abort(404)
  
         document = None
-        for item in record.get("supporting_documents", []):
+        for item in record.documents():
             if item.get("file_id") == file_id:
                 document = item
         if document is None:
@@ -768,7 +914,7 @@ class WebApp:
         name = secure_filename(document.get("file_name", "")) or "document"
         folder = tempfile.mkdtemp()
         path = os.path.join(folder, name)
-        ok = self.__app.documents().download(document.get("file_path") or file_id, path)   # local copy
+        ok = self.__app.download_document(document.get("file_path") or file_id, path)   # local copy
         data = b""
         if ok:
             with open(path, "rb") as handle:
@@ -780,8 +926,12 @@ class WebApp:
             return redirect(url_for("view_client", client_ref=client_ref))
         return send_file(io.BytesIO(data), as_attachment=True, download_name=name)
 
-    def assess_client(self, client_ref):
-        record = self.get_record(client_ref)
+    def assess_client(self, client_ref: str) -> Response:
+        try:
+            record = self.get_record(client_ref)
+        except ValueError as error:
+            flash(str(error))
+            return redirect(url_for("home"))
         if record is None:
             abort(404)
         if not self.__app.ai_available():
@@ -790,18 +940,21 @@ class WebApp:
             return redirect(url_for("view_client", client_ref=client_ref))
 
         user_key = request.remote_addr or "unknown"
-        allowed, seconds_left = self.__app.rate_limiter().check(user_key)
+        allowed, seconds_left = self.__limiter.check(user_key)
         if not allowed:
             self.flash_rate_limit_error(seconds_left)
             return redirect(url_for("view_client", client_ref=client_ref))
 
-        self.__app.rate_limiter().record(user_key)
+        self.__limiter.record(user_key)
         # The same case the command line assesses, dated today (CaseReader).
         # The command line asks for anything missing; here the officer completes the record first.
         case, missing = self.__app.read_case(record)
         problems = self.__app.validate_case(case) if case is not None else []
         if case is None or problems:
-            flash("Complete the client record before assessing (Edit): " + "; ".join(missing or problems))
+            if missing and record.problems():       # the client page lists these in full under "To complete or check"
+                flash("Complete the client record before assessing: see the list below.")
+            else:
+                flash("Complete the client record before assessing (Edit): " + "; ".join(missing or problems))
             return redirect(url_for("view_client", client_ref=client_ref))
         job_id = uuid.uuid4().hex
         self.__jobs[job_id] = {
@@ -813,30 +966,30 @@ class WebApp:
             "client_ref": client_ref,
         }
         threading.Thread(
-            target=self._run_assessment_job, args=(job_id, record, case), daemon=True
+            target=self.__run_in_background, args=(job_id, record, case), daemon=True
         ).start()
         return redirect(url_for("assess_loading", job_id=job_id))
 
-    def assess_loading(self, job_id):
+    def assess_loading(self, job_id: str) -> str:
         if job_id not in self.__jobs:
             abort(404)
-        client_ref = self.__jobs[job_id]["client_ref"]
-        record = self.get_record(client_ref) or {"client_ref": client_ref, "name": client_ref}
+        record = self.page_record(self.__jobs[job_id]["client_ref"])
         return render_template("assess_loading.html", job_id=job_id, record=record,
                                ASSESS_STEPS=self._steps())
 
-    def assess_poll(self, job_id):
+    def assess_poll(self, job_id: str) -> dict:
+        """The job's progress. Flask sends a returned dict to the browser as JSON."""
         if job_id not in self.__jobs:
-            return jsonify({"status": "error", "error": "Job not found."})
+            return {"status": "error", "error": "Job not found."}
         job = self.__jobs[job_id]
-        return jsonify({
+        return {
             "status":   job["status"],
             "step_num": job["step_num"],
             "step":     job["step"],
             "error":    job.get("error"),
-        })
+        }
 
-    def assess_result(self, job_id):
+    def assess_result(self, job_id: str) -> str | Response:
         if job_id not in self.__jobs:
             abort(404)
         job = self.__jobs[job_id]
@@ -848,17 +1001,24 @@ class WebApp:
         for feature in job["result"].get("ai_warnings", []):
             self.flash_ai_unavailable(feature)
         r = job["result"]
+        if not r.get("saved", True):
+            flash(WebApp.ASSESSMENT_NOT_SAVED)
         return self.show_report(r["record"], r["report"], r.get("assessed_at", ""), r.get("assessment_id"),
                            crime_result=r.get("crime_result"), typologies=r.get("typologies"),
                            benchmark=r.get("benchmark"))
 
-    def list_assessments_view(self):
-        repository = self.__app.assessments()
-        shown = repository.query("")
-        return render_template("assessments.html", assessments=shown,
-                               archived_count=len(repository.load()) - len(shown))
+    def list_assessments_view(self) -> str:
+        try:
+            assessments = self.__app.all_assessments()
+            archived_count = sum(1 for a in self.__app.all_assessments(include_archived=True)
+                                 if App.archive_state(a) != App.ARCHIVE_ACTIVE)
+        except ValueError as error:
+            flash(str(error))
+            assessments = None
+            archived_count = 0
+        return render_template("assessments.html", assessments=assessments, archived_count=archived_count)
 
-    def sync_to_cloud(self):
+    def sync_to_cloud(self) -> Response:
         stats = self.__app.sync_to_cloud()
         cases = stats["cases_synced"]
         assessments = stats["assessments_synced"]
@@ -880,10 +1040,10 @@ class WebApp:
             flash("Sync unsuccessful — please try again later or contact your administrator.")
         return redirect(url_for("home"))
 
-    def handle_404(self, e):
+    def handle_404(self, e: HTTPException) -> tuple[str, int]:
         return render_template("error.html", error_detail=None), 404
 
-    def handle_exception(self, e):
+    def handle_exception(self, e: Exception) -> tuple[str, int]:
         import logging
         import traceback
         logging.error("Unhandled exception: %s", traceback.format_exc())

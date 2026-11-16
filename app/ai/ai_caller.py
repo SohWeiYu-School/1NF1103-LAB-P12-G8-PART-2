@@ -33,9 +33,11 @@ DEFAULT_GEMINI_SEARCH_MODEL = "gemini-3.8-flash"
 GEMINI_UNSUPPORTED_SCHEMA_KEYS = ("$schema", "$id", "title", "additionalProperties")
 
 
-def openai_caller(client: object = None, model: str = "") -> AICaller:
+def openai_caller(client: object = None, model: str = "", search_model: str = "") -> AICaller:
     """An AI caller that asks OpenAI. client is an OpenAI() object; if none is given, one is
-    created from OPENAI_API_KEY the first time a question is asked."""
+    created from OPENAI_API_KEY the first time a question is asked.
+    A web search uses search_model (or OPENAI_RESEARCH_MODEL), so research can use a model that
+    supports limiting a search to given sites; with neither set it uses the normal model."""
     state = {"client": client}
 
     def connect() -> object:
@@ -58,6 +60,8 @@ def openai_caller(client: object = None, model: str = "") -> AICaller:
     def call(prompt: str, schema: dict | None = None, options: dict | None = None) -> str | None:
         options = options if options is not None else {}
         use_model = options.get("model") or model or os.getenv("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL
+        if options.get("web_search"):
+            use_model = search_model or os.getenv("OPENAI_RESEARCH_MODEL") or use_model
         name = options.get("schema_name") or "response"
         try:
             api = connect()
@@ -93,6 +97,7 @@ def openai_caller(client: object = None, model: str = "") -> AICaller:
     call.available = lambda: state["client"] is not None or bool(
         os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_AI_API_KEY"))
     call.model_name = lambda: model or os.getenv("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL
+    call.search_model_name = lambda: search_model or os.getenv("OPENAI_RESEARCH_MODEL") or call.model_name()
     return call
 
 
@@ -165,6 +170,7 @@ def gemini_caller(client: object = None, model: str = "", search_model: str = ""
 
     call.available = lambda: state["client"] is not None or bool(os.getenv("GEMINI_API_KEY"))
     call.model_name = lambda: model or os.getenv("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
+    call.search_model_name = lambda: search_model or os.getenv("GEMINI_SEARCH_MODEL") or DEFAULT_GEMINI_SEARCH_MODEL
     return call
 
 
@@ -185,4 +191,6 @@ def with_fallback(*callers: AICaller) -> AICaller:
     # model name saved answers are filed under.
     call.available = lambda: bool(callers) and getattr(callers[0], "available", lambda: True)()
     call.model_name = lambda: getattr(callers[0], "model_name", lambda: "")() if callers else ""
+    call.search_model_name = lambda: (getattr(callers[0], "search_model_name", call.model_name)()
+                                      if callers else "")
     return call

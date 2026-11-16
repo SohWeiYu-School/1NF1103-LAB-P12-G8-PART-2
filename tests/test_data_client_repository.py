@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from app.data.client_repository import ClientRepository
 
 
@@ -70,3 +72,42 @@ def test_old_command_line_records_are_upgraded_when_loaded(tmp_path):
 
     assert asset == {"asset_type": "Property - Condo", "price_paid": 900000,
                      "current_declared_value": 1500000, "income_produced": 36000}
+
+
+def test_a_damaged_file_is_not_overwritten_by_a_save(tmp_path):
+    path = tmp_path / "sow_cases.json"
+    path.write_bytes(b'[{"client_ref": "SOW-1", broken')
+    before = path.read_bytes()
+    assert _repository(tmp_path).save({"client_ref": "SOW-2"}) is False
+    assert path.read_bytes() == before
+
+
+def test_load_and_find_raise_when_the_file_is_damaged(tmp_path):
+    (tmp_path / "sow_cases.json").write_text("not json", encoding="utf-8")
+    repository = _repository(tmp_path)
+    with pytest.raises(ValueError):
+        repository.load()
+    with pytest.raises(ValueError):
+        repository.find("SOW-1")
+
+
+def test_a_file_that_cannot_be_read_stops_load_and_save(tmp_path):
+    (tmp_path / "sow_cases.json").mkdir()                    # a folder where the file should be
+    repository = _repository(tmp_path)
+    with pytest.raises(OSError):
+        repository.load()
+    assert repository.save({"client_ref": "SOW-1"}) is False
+
+
+def test_a_record_with_the_wrong_shape_is_reported_as_a_damaged_file(tmp_path):
+    path = tmp_path / "sow_cases.json"
+    path.write_text('[{"client_ref": "CL-1", "investments": 5}]', encoding="utf-8")
+    with pytest.raises(ValueError, match="damaged"):
+        _repository(tmp_path).load()
+
+
+def test_a_client_repository_rejects_an_empty_path_or_key(tmp_path):
+    with pytest.raises(ValueError):
+        ClientRepository(str(tmp_path / "x.json"), "")
+    with pytest.raises(ValueError):
+        ClientRepository("")

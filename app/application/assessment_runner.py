@@ -1,6 +1,9 @@
 """AssessmentRunner: runs one assessment, step by step."""
 
 import logging
+import threading
+import uuid
+from datetime import datetime, timezone
 from typing import Callable
 
 from app.ai.benchmark_ai import BenchmarkAI
@@ -34,6 +37,8 @@ class AssessmentRunner:
     caller through on_failure(step, reason), and carries on only if the caller says so.
     """
 
+    # The research step's name when it fails: App reads it to tell whether the typologies were checked.
+    RESEARCH_STEP: str = "The crime scan's research (sources to check the typologies)"
     # The steps the command line and the web app's loading page both show, in order.
     STEPS: tuple[str, ...] = (
         "Reading the submitted documents",
@@ -69,26 +74,37 @@ class AssessmentRunner:
         policy = self.__config.policy
         self.__case_reader: CaseReader = CaseReader()
         self.__crime_scan: CrimeScan = CrimeScan(policy)
+        # The web app runs assessments in parallel threads on this one runner. CrimeScan keeps the
+        # warnings of its last check, so a check and the reading of its warnings must not interleave.
+        self.__crime_scan_lock: threading.Lock = threading.Lock()
+        # Forecast keeps the forecast it is working on (its market model, paths and assessor) while
+        # run() or honest_numbers() works, so two runs must not use it at the same time.
+        self.__forecast_lock: threading.Lock = threading.Lock()
         self.__documents: DocumentEvidence = DocumentEvidence(policy)
         self.__benchmark: Benchmark = Benchmark(policy, self.__config)
         self.__forecast: Forecast = Forecast(policy, self.__config)
-        self.__engine: VerdictEngine = VerdictEngine(
+        self.__verdict_engine: VerdictEngine = VerdictEngine(
             [self.__crime_scan, self.__documents, self.__benchmark, self.__forecast], self.__config)
 
     def engine(self) -> VerdictEngine:
-        return self.__engine
+        return self.__verdict_engine
 
-    def run(self, case: dict, supporting_documents: list[dict] | None = None,
+    def run(self, case: dict, files: list[dict] | None = None,
             on_step: Callable[[int, str], None] | None = None,
             on_failure: Callable[[str, str], bool] | None = None) -> dict | None:
         """Assess one case. Nothing is printed and nothing is saved here.
 
-        supporting_documents  the client record's saved documents; every one is read.
+        files  the client record's saved documents (supporting_documents); every one is read.
         on_step(number, label)  is told each step in STEPS as it starts.
         on_failure(step, reason)  is told each step that could not be completed and answers
                                   True to carry on without it or False to stop.
-        Returns the result (case, verdict, report and the evidence behind them), or None if
-        on_failure stopped the assessment.
+        Returns the result: the Verdict (under "verdict", with its report) and the evidence
+        behind it (case, research, typologies, crime result, benchmark, forecast ...), which
+        App saves and the web page shows. None if on_failure stopped the assessment.
+        "typologies" is a list of Typology objects (None if the typology step failed); the web
+        page gets their to_dict() layout. The typology reply itself is saved as it came.
+        The Verdict is given a new assessment id and the time it was made here, because the
+        VerdictEngine makes no ids and reads no clock.
         """
         def step(number: int) -> None:
             if on_step is not None:
@@ -109,24 +125,27 @@ class AssessmentRunner:
 
         # 1. Documents: what every submitted document shows (compared later with what he declared)
         step(1)
-        files = [str(document.get("file_name") or "document") for document in supporting_documents or []]
+        file_names = [str(document.get("file_name") or "document") for document in files or []]
         extracted = None
-        if files:
-            extracted = self.__document_ai.run({"documents": self.__document_store.read_all(supporting_documents)})
+        if file_names:
+            extracted = self.__document_ai.run({"documents": self.__document_store.read_all(files)})
             notes += self.__document_ai.warnings()
             if extracted is None and not failed("Reading the submitted documents", "the AI gave no usable reading"):
                 return None
-        evidence = self.__documents.run(case, {"extracted": extracted, "files": files})
+        evidence = self.__documents.run(case, {"extracted": extracted, "files": file_names})
 
         # 2-5. Crime scan context: what published reports say about his industry
         step(2)
         research = self.__research_ai.run({"case": crime_input, "domains": policy.get("trusted_sources", [])})
         notes += self.__research_ai.warnings()
+        if research is None and not failed(AssessmentRunner.RESEARCH_STEP, "the AI gave no usable research"):
+            return None
         step(3)
-        clean_research = None
+        reports = None
         if research is not None:
-            clean_research, warnings = self.__crime_scan.verify_research(research)
-            notes += warnings
+            with self.__crime_scan_lock:
+                reports = self.__crime_scan.verify_research(research)
+                notes += self.__crime_scan.warnings()
         step(4)
         typology_response = self.__typology_ai.run({"case": crime_input, "research": research,
                                                     "categories": self.__crime_categories()})
@@ -137,22 +156,28 @@ class AssessmentRunner:
             if not failed("The crime scan (sector typologies)", "the AI gave no usable typologies"):
                 return None
         else:
-            typologies = typology_response.get("sector_typologies", [])
-            if clean_research is not None:
-                typologies, warnings = self.__crime_scan.verify_typology_sources(typologies, clean_research)
-                notes += warnings
+            found = typology_response.get("sector_typologies", [])
+            with self.__crime_scan_lock:
+                if reports is not None:
+                    typologies = self.__crime_scan.verify_typology_sources(found, reports)
+                else:                               # research failed: taken as they are, shown as not checked
+                    typologies = self.__crime_scan.read_typologies(found)
+                notes += self.__crime_scan.warnings()
 
         # 6-10. Forecast: the declaration is read once here, and the crime types are built from the typologies
         run = self.__forecast_ai.run({
-            "record": case, "cache": self.__response_cache.load_raw_replies(ref), "typologies": typologies,
+            "record": case, "cache": self.__response_cache.load_raw_replies(ref),
+            "typologies": None if typologies is None else [typology.to_dict() for typology in typologies],
             "on_step": lambda stage: step(AssessmentRunner.FORECAST_STEP[stage])})
         self.__response_cache.save_raw_replies(ref, run["results"])
         partial = run["partial"]
         forecast = run["forecast"] if run["ok"] else None
         stopped_at = None
         if forecast is None:
-            stopped_at = (f"{self.__engine.describe_piece(case, run.get('failed_piece'))} "
-                          f"({run.get('failed_error') or 'unknown error'})")
+            raw_error = run.get("failed_error") or "unknown error"
+            stopped_at = (f"{self.__verdict_engine.describe_piece(case, run.get('failed_piece'))} "
+                          f"({self.__plain_reason(raw_error)})")
+            logger.error("AssessmentRunner: the forecast stopped at %s: %s", run.get("failed_piece"), raw_error)
             notes.append(f"The forecast stopped at {stopped_at}. Finished AI replies are saved, "
                          "so running again carries on from there.")
             if not failed("The forecast", stopped_at):
@@ -178,14 +203,18 @@ class AssessmentRunner:
                     findings = self.__benchmark.run(case, {"benchmark_input": bench_input,
                                                            "benchmark_ai": bench_ai})["findings"]
                 except (ZeroDivisionError, KeyError, TypeError) as error:
-                    reason = f"the AI's reply could not be worked out ({error!r})"
-                    notes.append(f"Peer benchmark couldn't be worked out from the AI's reply ({error!r}).")
+                    logger.error("AssessmentRunner: the benchmark reply could not be worked out: %r", error)
+                    reason = "the AI's reply could not be used, so this step did not run"
+                    notes.append("Peer benchmark couldn't be worked out from the AI's reply, so it did not run.")
         if findings is None and not failed("The peer benchmark", reason):
             return None
 
         # 12. Test every story
         step(12)
-        forecast_assessment = self.__forecast.run(case, {"forecast": forecast}) if forecast else None
+        forecast_assessment = None
+        if forecast:
+            with self.__forecast_lock:
+                forecast_assessment = self.__forecast.run(case, {"forecast": forecast})
         declaration = partial.get("declaration")
         crime_declaration, warnings = self.__crime_scan.crime_declaration(declaration)
         notes += warnings
@@ -194,7 +223,7 @@ class AssessmentRunner:
             crime_declaration, warnings = self.__crime_scan.normalise_jurisdictions(crime_declaration)
             notes += warnings
             crime_result = self.__crime_scan.run(crime_input, {
-                "typology_response": {"sector_typologies": typologies}, "declaration": crime_declaration})
+                "typologies": typologies, "declaration": crime_declaration})
         elif typologies is not None:
             if not failed("The crime scan's warning signs (the declaration couldn't be read)",
                           "the declaration could not be read"):
@@ -203,18 +232,19 @@ class AssessmentRunner:
         # 13. One verdict, and the report both front ends show
         step(13)
         try:
-            verdict = self.__engine.decide(case, {
-                "research": clean_research if clean_research is not None else research,
-                "typologies": typologies, "crime_result": crime_result, "declaration": declaration,
-                "benchmark_input": bench_input, "benchmark_ai": bench_ai, "benchmark_findings": findings,
-                "forecast": forecast, "forecast_assessment": forecast_assessment,
-                "markets": partial.get("markets"), "evidence": evidence, "pay_adjustments": pay_adjustments,
-                "failed_step": stopped_at, "not_run": not_run, "notes": notes,
-            })
-            report = self.__engine.report(verdict)
+            with self.__forecast_lock:        # combine() calls Forecast.honest_numbers
+                verdict = self.__verdict_engine.combine(case, {
+                    "reports": reports,
+                    "typologies": typologies, "crime_result": crime_result, "declaration": declaration,
+                    "benchmark_input": bench_input, "benchmark_ai": bench_ai, "benchmark_findings": findings,
+                    "forecast": forecast, "forecast_assessment": forecast_assessment,
+                    "markets": partial.get("markets"), "evidence": evidence, "pay_adjustments": pay_adjustments,
+                    "failed_step": stopped_at, "not_run": not_run, "notes": notes,
+                    "assessment_id": str(uuid.uuid4()), "assessed_at": datetime.now(timezone.utc).isoformat(),
+                })
         except (KeyError, TypeError, ValueError, ZeroDivisionError) as error:
             logger.exception("AssessmentRunner: the verdict could not be worked out")
-            failed("Deciding the verdict", repr(error))
+            failed("Deciding the verdict", "the verdict could not be worked out")      # details are in the log
             return None
         return {
             "case": case,
@@ -229,8 +259,21 @@ class AssessmentRunner:
             "forecast_assessment": forecast_assessment,
             "evidence": evidence,
             "verdict": verdict,
-            "report": report,
         }
+
+    @staticmethod
+    def __plain_reason(error: str) -> str:
+        """A forecast error as a short phrase a client can read, with no full stop of its own because it
+        is placed inside a sentence: "stopped at X (the AI service is not available ...)". The real text
+        goes to the log, not the screen."""
+        text = str(error)
+        if text.startswith("reply failed checks"):
+            return "the AI's reply could not be used, so this step did not run"
+        if text.startswith("no AI service") or text.startswith("the AI request failed"):
+            return "the AI service is not available right now"
+        if text.startswith("could not prepare the request"):
+            return "a file this step needs could not be read, so this step did not run"
+        return "this step could not be completed"
 
     def __crime_categories(self) -> dict:
         """{code: description} of the crime categories a typology may belong to (every one but the honest one)."""

@@ -11,6 +11,7 @@ import pytest
 
 from app.application.app import App
 from app.interface.web_app import WebApp
+from app.model.client_record import ClientRecord
 from tests import fake_ai, fake_services
 from tests.logic_fixtures import sample_case
 
@@ -31,7 +32,7 @@ def _client_record() -> dict:
 
 
 def _save_replies(application: App, record: dict) -> None:
-    case, missing = application.read_case(record)
+    case, missing = application.read_case(ClientRecord.from_dict(record))
     assert missing == []
     fake_services.save_forecast_replies(application.response_cache(), case)
 
@@ -60,24 +61,24 @@ def test_cli_and_web_app_give_the_same_report(tmp_path, monkeypatch, capsys):
 
     # the command line (menu option 4)
     with patch("builtins.input", return_value="y") as answer:
-        cli = application.assess_client_record(copy.deepcopy(record))
+        cli = application.assess_client_record(ClientRecord.from_dict(record))
     printed = capsys.readouterr().out
-    assert "COMBINED ASSESSMENT" in printed and cli["report"]["header"]["verdict_label"] in printed
+    assert "COMBINED ASSESSMENT" in printed and cli.report["header"]["verdict_label"] in printed
     assert "Show the full evidence?" in answer.call_args.args[0]       # asked before the evidence
     assert printed.index("FULL EVIDENCE  ") > printed.index("WHAT CAME BACK CLEAN")
 
     # the web app (Run Assessment button), on the same App
     web, page = _assess_on_the_web(application, record["client_ref"])
 
-    assert web["report"] == cli["report"]                     # the same verdict, reasons and evidence
+    assert web["report"] == cli.report                     # the same verdict, reasons and evidence
     saved = [a for a in application.assessments().load() if a.get("report")]
     assert len(saved) == 2 and saved[0]["report"] == saved[1]["report"]
-    for part in cli["report"]["sections"]:                     # and the page shows every line of it
+    for part in cli.report["sections"]:                     # and the page shows every line of it
         if "Crime" in part["title"]:
             continue                                           # the crime section renders as cards
         for item in part["items"]:
             assert item["text"] in page, item["text"]
-    assert cli["report"]["header"]["verdict_label"] in page
+    assert cli.report["header"]["verdict_label"] in page
 
 
 def test_the_web_page_shows_a_saved_assessment(tmp_path, monkeypatch):
@@ -85,11 +86,11 @@ def test_the_web_page_shows_a_saved_assessment(tmp_path, monkeypatch):
     record = _client_record()
     _save_replies(application, record)
     application.clients().save(copy.deepcopy(record))
-    case, _ = application.read_case(record)
+    case, _ = application.read_case(ClientRecord.from_dict(record))
     result = application.assess(case, show_failures=False)
-    assessment_id = application.save_assessment(result, copy.deepcopy(record))
+    assessment_id = application.save_assessment(result, ClientRecord.from_dict(record))
     page = WebApp(application).flask().test_client().get(f"/assessment/{assessment_id}").get_data(as_text=True)
-    assert result["report"]["header"]["summary"] in html.unescape(page)
+    assert result["verdict"].report["header"]["summary"] in html.unescape(page)
 
 
 @pytest.fixture
@@ -103,8 +104,8 @@ def marcus(tmp_path):
     with open(MARCUS + "_expected_extract.json", encoding="utf-8") as handle:
         reading = json.load(handle)
     builder = DocumentRecordBuilder(CONFIG, App(None, data_folder=str(tmp_path / "x")).today())
-    record, _ = builder.build(reading, "CL-MARCUS")
-    record = builder.finish(builder.set_path(record, ["investments", 2, "income_produced"], 0))
+    record, _, _ = builder.build(reading, "CL-MARCUS")
+    record = builder.finish(builder.set_path(record, ["investments", 2, "income_produced"], 0)).to_dict()
     record["supporting_documents"] = [{"file_name": os.path.basename(path), "file_path": path}
                                       for path in DocumentStore().list_folder(MARCUS)]
     return record, reading
@@ -116,8 +117,8 @@ def test_cli_and_web_app_read_the_documents_the_same_way(tmp_path, monkeypatch, 
     _save_replies(application, record)
     application.clients().save(copy.deepcopy(record))
     with patch("builtins.input", return_value="n"):
-        cli = application.assess_client_record(copy.deepcopy(record))
+        cli = application.assess_client_record(ClientRecord.from_dict(record))
     application.rate_limiter().reset()
     web, page = _assess_on_the_web(application, record["client_ref"])
-    assert web["report"] == cli["report"]
+    assert web["report"] == cli.report
     assert "Documents - what his papers show" in page and "Arcadia Holdings Ltd" in page

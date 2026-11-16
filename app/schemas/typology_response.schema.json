@@ -88,6 +88,7 @@
                 },
                 "quote": {
                   "type": "string",
+                  "minLength": 1,
                   "description": "Verbatim passage from that report's excerpts."
                 }
               }

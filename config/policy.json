@@ -103,14 +103,6 @@
       "BRIBERY_CORRUPTION",
       "PROCEEDS_OF_PEP"
     ],
-    "no_pep_values": [
-      "",
-      "none",
-      "no",
-      "not a pep",
-      "n/a",
-      "na"
-    ],
     "aum_tolerance": 0.1,
     "composition_tolerance": 0.15,
     "booming_market_pct": 5.0,

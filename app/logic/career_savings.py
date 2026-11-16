@@ -16,6 +16,14 @@ class CareerSavings:
     """
 
     def __init__(self, pay: dict | None = None) -> None:
+        if pay is not None and not isinstance(pay, dict):
+            raise ValueError(f"the pay forecast must be a dict (or None), not {type(pay).__name__}")
+        positions = (pay or {}).get("positions", [])
+        if not isinstance(positions, list) or not all(
+                isinstance(job, dict) and "position_index" in job and isinstance(job.get("yearly"), list)
+                for job in positions):
+            raise ValueError("the pay forecast's positions must be a list of jobs, each with a position_index "
+                             "and a list of yearly pay rows")
         self.__pay: dict = pay or {}
         self.__rows: list[dict] = []
 

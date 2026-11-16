@@ -16,8 +16,12 @@ class Repository(ABC):
 
     @abstractmethod
     def load(self) -> list[dict]:
-        """Every record. Returns [] if there are none or they cannot be read."""
+        """Every record. Returns [] only when there are none yet. If the records cannot be read,
+        the real details are logged and an error is raised, so an unreadable store is never
+        mistaken for an empty one: OSError (file cannot be read), ValueError (content is damaged),
+        ConnectionError (database unreachable or failed; ConnectionError is an OSError)."""
 
     @abstractmethod
     def find(self, ref: str) -> dict | None:
-        """The record with this reference, or None."""
+        """The record with this reference, or None if there is none. Raises the same errors as
+        load() when the store cannot be read."""

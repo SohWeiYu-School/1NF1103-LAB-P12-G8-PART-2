@@ -70,3 +70,31 @@ def test_benchmark_input_gives_the_asset_split_in_whole_percents():
     assert missing == []
     assert (data["property"], data["listed_equities"], data["private_business"], data["cash"]) == (28, 11, 41, 20)
     assert data["declared_net_worth"] == 16500000
+
+
+def test_read_year_accepts_a_number_or_text_as_the_records_hold_both():
+    """Saved records and form answers hold years as text or as numbers, so read_year takes either."""
+    reader = CaseReader()
+    assert reader.read_year("2017") == 2017
+    assert reader.read_year(2017) == 2017
+    assert reader.read_year(None) is None
+
+
+@pytest.mark.parametrize("today", ["banana", "2026-13-01", "2026-02-30", "20261014", "2026-1-5", 20261014, None])
+def test_today_must_be_empty_or_a_real_iso_date(today):
+    with pytest.raises(ValueError, match="today must be empty or a real date"):
+        CaseReader(today)
+
+
+def test_an_empty_or_real_date_is_accepted():
+    assert CaseReader() is not None and CaseReader("") is not None and CaseReader("2026-10-14") is not None
+
+
+def test_a_reader_with_no_date_cannot_make_a_case_and_says_so():
+    with pytest.raises(ValueError, match="today's date is needed"):
+        CaseReader().forecasting_case(sample_case())
+
+
+def test_is_iso_date_only_accepts_year_month_day():
+    assert CaseReader.is_iso_date("2026-10-14")
+    assert not CaseReader.is_iso_date("2026-W42-1") and not CaseReader.is_iso_date("20261014")

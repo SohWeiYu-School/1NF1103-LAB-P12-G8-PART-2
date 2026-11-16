@@ -1,8 +1,11 @@
 """ClientRepository: the client records, one per client."""
 
+import logging
 import os
 
 from app.data.json_repository import JsonRepository
+
+logger = logging.getLogger(__name__)
 
 
 class ClientRepository(JsonRepository):
@@ -16,11 +19,17 @@ class ClientRepository(JsonRepository):
         super().__init__(path, key_field)
 
     def save(self, record: dict) -> bool:
-        """Add the client, or replace the saved record with the same reference."""
+        """Add the client, or replace the saved record with the same reference. Returns False
+        (and leaves the file untouched) if the saved clients cannot be read, so records that
+        could not be read are never overwritten."""
         if not isinstance(record, dict) or self._key_field not in record:
             return False
         record = self.__standardise(record)
-        records = super().load()
+        try:
+            records = super().load()
+        except (OSError, ValueError) as error:
+            logger.error("ClientRepository.save: not saved, the existing records cannot be read: %r", error)
+            return False
         for position, existing in enumerate(records):
             if existing.get(self._key_field) == record[self._key_field]:
                 records[position] = record
@@ -30,8 +39,14 @@ class ClientRepository(JsonRepository):
         return self._write_all(records)
 
     def load(self) -> list[dict]:
-        """Every client, in the current layout."""
-        return [self.__standardise(record) for record in super().load()]
+        """Every client, in the current layout. Raises OSError or ValueError if the file cannot be read,
+        or if a record in it has the wrong shape (e.g. "investments" is not a list)."""
+        records = super().load()
+        try:
+            return [self.__standardise(record) for record in records]
+        except (TypeError, AttributeError) as error:
+            logger.error("ClientRepository.load: a record in %s has the wrong shape: %r", self._path, error)
+            raise ValueError(f"The file {self._path} is damaged: a client record has the wrong shape.") from error
 
     def __standardise(self, record: dict) -> dict:
         """Bring a record saved in an older layout up to the one layout every screen uses:

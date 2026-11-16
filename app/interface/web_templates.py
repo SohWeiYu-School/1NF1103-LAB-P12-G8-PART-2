@@ -64,7 +64,7 @@ BASE = """<!doctype html>
   </nav>
 </header>
 <main>
-  {% for message in get_flashed_messages() %}<div class="msg">{{ message }}</div>{% endfor %}
+  {% for message in get_flashed_messages()|unique(case_sensitive=True) %}<div class="msg">{{ message }}</div>{% endfor %}
   {% block content %}{% endblock %}
 </main>
 </body>
@@ -83,7 +83,9 @@ HOME = """{% extends "base.html" %}
 </div>
 
 <div class="panel" style="padding:0; overflow:hidden">
-  {% if not clients %}
+  {% if clients is none %}
+    <p class="muted" style="padding:20px 22px; margin:0">The list of clients cannot be shown because the client database could not be read.</p>
+  {% elif not clients %}
     <p class="muted" style="padding:20px 22px; margin:0">No clients yet — click <strong>+ New client</strong> in the top right to add the first one.</p>
   {% else %}
   <table>
@@ -202,7 +204,7 @@ FORM = """{% extends "base.html" %}
     {% endif %}
     {% if notes %}
     <div class="notes">
-      <strong>Notes from reading the documents</strong>
+      <strong>{{ notes_title or 'Notes from reading the documents' }}</strong>
       <ul>{% for n in notes %}<li>{{ n }}</li>{% endfor %}</ul>
     </div>
     {% endif %}
@@ -317,17 +319,29 @@ VIEW = """{% extends "base.html" %}
   <a class="button secondary" href="{{ url_for('home') }}" style="color:var(--muted); border-color:var(--line)">← Back</a>
 </div>
 
-{% if assessments or archived_count %}
+{% if problems %}
+<div class="notes" style="margin-bottom:20px">
+  <strong>To complete or check (use Edit)</strong>
+  <ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if assessments is none %}
+<div class="panel" style="margin-bottom:20px">
+  <h2>Assessment History</h2>
+  <p class="muted">The assessment history cannot be shown because the saved assessments could not be read.</p>
+</div>
+{% elif assessments or archived_count %}
 <div class="panel" style="margin-bottom:20px">
   <h2>Assessment History</h2>
   <table style="table-layout:fixed">
     <colgroup><col style="width:17%"><col style="width:15%"><col style="width:34%"><col style="width:12%"><col style="width:22%"></colgroup>
     {% for a in assessments %}
-    {% set is_archived = a.get('assessment_id') in archived_ids %}
-    <tr{% if is_archived %} style="opacity:.55"{% endif %}>
+    {% set state = archive_states[loop.index0] if loop.index0 < archive_states|length else 'active' %}
+    <tr{% if state != 'active' %} style="opacity:.55"{% endif %}>
       <td>{{ a.get('assessed_at', '')[:10] }}</td>
       <td>{{ a.get('assessed_at', '')[11:16] }} UTC</td>
-      <td>{{ (a.get('outcome') or (a.get('assessment') or {}).get('outcome') or '—').replace('_', ' ') }}{% if is_archived %} (archived){% endif %}</td>
+      <td>{{ (a.get('outcome') or (a.get('assessment') or {}).get('outcome') or '—').replace('_', ' ') }}{% if state == 'archived' %} (archived){% elif state == 'unreadable' %} (archive state unreadable){% endif %}</td>
       <td>
         {% if a.get('assessment_id') %}
         <a href="{{ url_for('view_assessment', assessment_id=a.get('assessment_id')) }}">View</a>
@@ -336,9 +350,9 @@ VIEW = """{% extends "base.html" %}
         {% endif %}
       </td>
       <td>
-        {% if a.get('assessment_id') %}
-        <form method="post" action="{{ url_for('restore_assessment' if is_archived else 'archive_assessment', assessment_id=a.get('assessment_id')) }}" style="margin:0">
-          <button type="submit" class="secondary">{{ 'Restore' if is_archived else 'Archive' }}</button>
+        {% if a.get('assessment_id') and state != 'unreadable' %}
+        <form method="post" action="{{ url_for('restore_assessment' if state == 'archived' else 'archive_assessment', assessment_id=a.get('assessment_id')) }}" style="margin:0">
+          <button type="submit" class="secondary">{{ 'Restore' if state == 'archived' else 'Archive' }}</button>
         </form>
         {% endif %}
       </td>
@@ -426,9 +440,11 @@ ASSESS_RESULT = """{% extends "base.html" %}
   <a class="button secondary" href="{{ url_for('view_client', client_ref=record.get('client_ref', '')) }}">Back to client</a>
 </div>
 
-{% if archive %}
+{% if archive_state == 'unreadable' %}
+<div class="msg">This assessment's archive record is damaged, so it cannot be archived or restored.</div>
+{% elif archive %}
 <div class="msg" style="display:flex; justify-content:space-between; align-items:center; gap:12px">
-  <span>This assessment is archived{% if archive.get('at') %} (since {{ archive['at'][:10] }}){% endif %}{% if archive.get('reason') %}: {{ archive['reason'] }}{% endif %}. It is hidden from the lists but kept as a record.</span>
+  <span>This assessment is archived{% if archive.get('at') %} (since {{ archive['at'][:10] }}){% endif %}{% if archive.get('reason') %}: {{ archive['reason'] }}{% endif %}. It is hidden from the lists but kept as a record. The client's current outcome is not changed.</span>
   <form method="post" action="{{ url_for('restore_assessment', assessment_id=assessment_id) }}" style="margin:0">
     <button type="submit" class="secondary">Restore</button>
   </form>
@@ -470,7 +486,7 @@ ASSESS_RESULT = """{% extends "base.html" %}
 <div class="panel">
   <h2>{{ section['title'] }}</h2>
   <div style="display:flex; gap:16px; margin-bottom:18px; font-size:.85rem; border-bottom:1px solid var(--line); padding-bottom:12px">
-    <span style="color:var(--muted)">{{ crime_result.get('match_results', []) | length }} typologies checked</span>
+    <span style="color:var(--muted)">{{ crime_result.get('match_results', []) | length }} typologies scanned</span>
     <span style="color:#b91c1c; font-weight:600">{{ crime_result.get('match_count', 0) }} matched</span>
     <span style="color:var(--muted)">{{ (crime_result.get('match_results', []) | length) - crime_result.get('match_count', 0) }} no match</span>
   </div>
@@ -484,6 +500,9 @@ ASSESS_RESULT = """{% extends "base.html" %}
       <span style="font-size:.7rem; font-weight:700; letter-spacing:.06em; padding:2px 8px; border-radius:3px;
                    background:{{ CAT_BORDER.get(cat,'#9ca3af') }}; color:#fff">{{ CAT_LABEL.get(cat, cat.upper()) }}</span>
       <strong style="font-size:.97rem; color:#111">{{ m.get('name', m.get('typology_id')) }}</strong>
+      {% if not typologies_checked %}
+      <span style="font-size:.76rem; color:#92400e; background:#fef3c7; padding:1px 7px; border-radius:3px; border:1px solid #fcd34d">not checked against research</span>
+      {% endif %}
       {% if typo.get('crime_category') %}
       <span style="font-size:.76rem; color:#6b7280; background:#f3f4f6; padding:1px 7px; border-radius:3px; border:1px solid #e5e7eb">{{ typo['crime_category'].replace('_', ' ') }}</span>
       {% endif %}
@@ -568,7 +587,9 @@ ASSESSMENTS = """{% extends "base.html" %}
   <a class="button secondary" href="{{ url_for('home') }}">Back to clients</a>
 </div>
 <div class="panel">
-  {% if not assessments and archived_count %}
+  {% if assessments is none %}
+    <p class="muted">The saved assessments cannot be shown because they could not be read.</p>
+  {% elif not assessments and archived_count %}
     <p class="muted">All {{ archived_count }} assessment(s) are archived. Open a client and click Show archived to see them.</p>
   {% elif not assessments %}
     <p class="muted">No assessments saved yet. Open a client and click Run Assessment.</p>

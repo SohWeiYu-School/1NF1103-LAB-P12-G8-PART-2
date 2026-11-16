@@ -37,10 +37,15 @@ def test_documented_pay_moves_the_estimate_to_the_documented_figure():
     assert adjusted[0]["source_file"] == "tax_2025.pdf"
 
 
+def _layout(forecast):
+    """The forecast with its Declaration written out, so two forecasts can be compared."""
+    return {**forecast, "declaration": forecast["declaration"].to_dict()}
+
+
 def test_the_original_forecast_is_not_changed():
     before = copy.deepcopy(FORECAST)
     _calibrate([{"year": 2025, "amount": _typical_pay(FORECAST, 2025) * 1.5}])
-    assert FORECAST == before
+    assert _layout(FORECAST) == _layout(before)
 
 
 def test_the_current_jobs_future_pay_is_scaled_too():
@@ -66,3 +71,12 @@ def test_applying_the_same_documents_twice_changes_nothing_more():
     once, _ = _calibrate(documented)
     _, again = _calibrate(documented, once)
     assert again == []
+
+
+@pytest.mark.parametrize("args, message", [
+    (({"positions": []},), "career savings must be a CareerSavings"),
+    ((None, "policy"), "policy must be a dict"),
+])
+def test_the_pay_calibrator_rejects_wrong_typed_inputs(args, message):
+    with pytest.raises(ValueError, match=message):
+        PayCalibrator(*args)

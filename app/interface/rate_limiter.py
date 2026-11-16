@@ -7,22 +7,27 @@ class RateLimiter:
     """Stops one user starting assessments faster than the policy allows, because every
     assessment costs AI calls. It remembers when each user last started one.
 
-    policy is the policy's "assessment_rate_limit" block: {"enabled", "cooldown_seconds"}.
+    App hands in the policy's "assessment_rate_limit" settings: cooldown_seconds, and enabled
+    (False lets every assessment start).
     """
 
     DEFAULT_COOLDOWN_SECONDS: int = 60
 
-    def __init__(self, policy: dict | None = None) -> None:
-        settings = policy or {}
-        self.__enabled: bool = bool(settings.get("enabled", True))
-        self.__cooldown_seconds: int = int(settings.get("cooldown_seconds", RateLimiter.DEFAULT_COOLDOWN_SECONDS))
-        self.__last_started: dict[str, float] = {}     # user key -> when their last assessment started
+    def __init__(self, cooldown_seconds: int = DEFAULT_COOLDOWN_SECONDS, enabled: bool = True) -> None:
+        if isinstance(cooldown_seconds, bool) or not isinstance(cooldown_seconds, int) or cooldown_seconds < 0:
+            raise ValueError("the assessment cooldown must be a whole number of seconds, 0 or more "
+                             f"(got {cooldown_seconds!r})")
+        if not isinstance(enabled, bool):
+            raise ValueError(f"the rate limit's enabled setting must be true or false (got {enabled!r})")
+        self.__enabled: bool = enabled
+        self.__cooldown_seconds: int = cooldown_seconds
+        self.__last_run: dict[str, float] = {}     # user key -> when their last assessment started
 
     def check(self, user_key: str) -> tuple[bool, int]:
         """(True, 0) if this user may start an assessment now, otherwise (False, seconds left to wait)."""
         if not self.__enabled:
             return True, 0
-        last = self.__last_started.get(user_key)
+        last = self.__last_run.get(user_key)
         if last is None:
             return True, 0
         elapsed = time.time() - last
@@ -32,8 +37,8 @@ class RateLimiter:
 
     def record(self, user_key: str) -> None:
         """Note that this user has just started an assessment. The cooldown starts now."""
-        self.__last_started[user_key] = time.time()
+        self.__last_run[user_key] = time.time()
 
     def reset(self) -> None:
         """Forget every user (used when the settings change and in tests)."""
-        self.__last_started.clear()
+        self.__last_run.clear()

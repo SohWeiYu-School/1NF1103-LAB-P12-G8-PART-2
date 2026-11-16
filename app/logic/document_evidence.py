@@ -1,11 +1,11 @@
 """DocumentEvidence: what the client's own documents show."""
 
 from app.logic.case_reader import CaseReader
-from app.logic.feature import Feature
+from app.logic.risk_analysis import RiskAnalysis
 from app.model.check import Check
 
 
-class DocumentEvidence(Feature):
+class DocumentEvidence(RiskAnalysis):
     """The documents feature. It cleans the AI's reading of the submitted documents into
     documented pay (which later corrects the forecast) and findings (income, payments and
     names the documents show), and turns the findings into Checks.
@@ -21,13 +21,14 @@ class DocumentEvidence(Feature):
 
     def run(self, case: dict, ai_data: dict) -> dict:
         """The cleaned evidence. ai_data is {"extracted": the AI's reading or None, "files": [names]}."""
-        self._results = self._read(ai_data.get("extracted"), ai_data.get("files"))
-        return self._results
+        results = self._read(ai_data.get("extracted"), ai_data.get("files"))
+        self._results = results
+        return results          # the local value: another run may replace self._results meanwhile
 
     def checks(self, context: dict) -> list[Check]:
         """The documents' findings. context holds evidence (default: the last run) and types."""
         evidence = context.get("evidence", self._results or None)
-        return self._as_checks(self._document_checks(evidence, context.get("types") or []))
+        return self._document_checks(evidence, context.get("types") or [])
 
     def _read(self, extracted: dict | None, files: list[str] | None = None) -> dict:
         """The AI's reading of every submitted document, cleaned into the documents layer:
@@ -56,30 +57,28 @@ class DocumentEvidence(Feature):
                 "documented_pay": sorted(pay, key=lambda p: p["year"]), "findings": findings,
                 "notes": [str(n) for n in (extracted or {}).get("notes") or []]}
 
-    def _document_checks(self, evidence: dict | None, types: list[dict]) -> list[dict]:
+    def _document_checks(self, evidence: dict | None, types: list[dict]) -> list[Check]:
         """The documents layer as findings in the shared shape: each fact the declaration leaves out
         or contradicts, and which crime stories it supports."""
         policy = self._policy
         if not evidence or not evidence.get("files"):
-            return [self._row("documents", "NO_DOCUMENTS", "Supporting documents", "pattern", "info",
-                           "No supporting documents were submitted, so nothing was checked against them.")]
+            return [self._check("NO_DOCUMENTS", "Supporting documents", "pattern", "info",
+                                "No supporting documents were submitted, so nothing was checked against them.")]
         if not evidence.get("read"):
-            return [self._row("documents", "DOCUMENTS_UNREAD", "Supporting documents", "pattern", "skipped",
-                           f"{len(evidence['files'])} document(s) couldn't be read.")]
+            return [self._check("DOCUMENTS_UNREAD", "Supporting documents", "pattern", "skipped",
+                                f"{len(evidence['files'])} document(s) couldn't be read.")]
         kinds = policy["verdict"]["document_evidence"]
         checks = []
         for finding in evidence["findings"]:
             setting = kinds[finding["kind"]]
             stories = [t for t in types if t["category"] in setting["supports"]]
-            check = self._row("documents", finding["kind"].upper(), setting["label"], setting["theme"],
-                           "failed" if setting["serious"] else "weak", finding["summary"],
-                           ("Supports " + "; ".join(f"{t['type_id']} {t['name']}" for t in stories) + ".") if stories else "",
-                           group="Documents")
-            check["sources"] = finding["source_files"]
-            check["supports"] = setting["supports"]
-            checks.append(check)
+            checks.append(self._check(
+                finding["kind"].upper(), setting["label"], setting["theme"],
+                "failed" if setting["serious"] else "weak", finding["summary"],
+                ("Supports " + "; ".join(f"{t['type_id']} {t['name']}" for t in stories) + ".") if stories else "",
+                group="Documents", sources=finding["source_files"], supports=setting["supports"]))
         if not checks:
-            checks.append(self._row("documents", "DOCUMENTS_AGREE", "Supporting documents", "pattern", "passed",
-                                 f"The {len(evidence['files'])} document(s) agree with his declaration.",
-                                 group="Documents"))
+            checks.append(self._check("DOCUMENTS_AGREE", "Supporting documents", "pattern", "passed",
+                                      f"The {len(evidence['files'])} document(s) agree with his declaration.",
+                                      group="Documents"))
         return checks

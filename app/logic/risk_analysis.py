@@ -1,11 +1,11 @@
-"""Feature: one part of the assessment that produces checks for the verdict."""
+"""RiskAnalysis: one part of the assessment that produces checks for the verdict."""
 
 from abc import ABC, abstractmethod
 
 from app.model.check import Check
 
 
-class Feature(ABC):
+class RiskAnalysis(ABC):
     """The parent of the four parts of an assessment: the crime scan, the document evidence,
     the benchmark and the forecast.
 
@@ -18,6 +18,8 @@ class Feature(ABC):
     NAME: str = "feature"
 
     def __init__(self, policy: dict | None = None) -> None:
+        if policy is not None and not isinstance(policy, dict):
+            raise ValueError(f"a feature's policy must be a dict (or None), not {type(policy).__name__}")
         self._policy: dict = policy or {}
         self._results: dict = {}
 
@@ -32,7 +34,8 @@ class Feature(ABC):
     def _check(self, check: str, label: str, theme: str, status: str, detail: str,
                explanation: str = "", group: str = "",
                sources: list[str] | None = None, supports: list[str] | None = None) -> Check:
-        """One finding of this feature."""
+        """One finding of this feature, stamped with its NAME. Details beyond the shared fields
+        are attached with Check.set_extra."""
         return Check(self.NAME, check, label, theme, status, detail, explanation, group, sources, supports)
 
     def _jump_years(self, case: dict) -> tuple[float | None, int | None]:
@@ -43,15 +46,6 @@ class Feature(ABC):
         if not isinstance(jump, (int, float)) or jump <= 0 or not isinstance(years, (int, float)) or years <= 0:
             return None, None
         return float(jump), max(1, round(years))
-
-    def _row(self, feature: str, check: str, label: str, theme: str, status: str, detail: str,
-             explanation: str = "", group: str = "") -> dict:
-        """One finding in its saved layout (a dict), which the report and the verdict rules read."""
-        return Check(feature, check, label, theme, status, detail, explanation, group).to_dict()
-
-    def _as_checks(self, rows: list[dict]) -> list[Check]:
-        """Findings in their saved layout as Check objects."""
-        return [Check.from_dict(row) for row in rows]
 
     def _best_honest_jump(self, honest: dict, years: int) -> tuple[float, int, int]:
         """The most the honest story's wealth rose over any `years`-long stretch: (gain, first, last)."""

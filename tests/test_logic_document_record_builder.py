@@ -3,7 +3,10 @@
 import json
 import os
 
+import pytest
+
 from app.logic.document_record_builder import DocumentRecordBuilder
+from app.model.client_record import ClientRecord
 from tests.logic_fixtures import CONFIG
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -15,49 +18,113 @@ def _builder():
     return DocumentRecordBuilder(CONFIG, "2026-10-14")
 
 
+# A possible answer for each kind of field the officer is asked for.
+ANSWERS = {"words": "Singapore", "label": "Director", "text": "1,000 employees", "age": 45, "year": 2020,
+           "money_positive": 100000, "money": 0, "payment": "cash", "pep": "None", "countries": ["Singapore"],
+           "composition": {"property": 0.5, "listed_equities": 0.2, "private_business": 0.1, "cash": 0.2},
+           "sow": "Salary and bonuses saved over twenty years in banking, and one property sale."}
+
+
 def test_build_fills_the_record_and_lists_what_the_documents_did_not_say():
-    record, missing = _builder().build(READING, "SOW-DOC-1")
-    assert record["client_ref"] == "SOW-DOC-1"
-    assert record["current_date"] == "2026-10-14"
-    assert record["career_history"]
-    assert isinstance(missing, list)
+    record, found, _ = _builder().build(READING, "SOW-DOC-1")
+    assert isinstance(record, ClientRecord)
+    assert record.client_ref == "SOW-DOC-1"
+    assert record.current_date == "2026-10-14"
+    assert record.jobs()
+    assert isinstance(found, list) and "name" in found
 
 
 def test_filling_the_gaps_leaves_nothing_missing():
     builder = _builder()
-    record, _ = builder.build(READING, "SOW-DOC-1")
+    record, _, _ = builder.build({"client": {"name": "A B"}}, "SOW-DOC-1")       # almost nothing was read
     for field in builder.missing_fields(record):
-        record = builder.set_path(record, field["path"], 0.25 if field["kind"] == "percent" else
-                                  2020 if field["kind"] == "year" else 1 if field["kind"] == "number" else "filled")
+        record = builder.set_path(record, field["path"], ANSWERS[field["kind"]])
     assert builder.missing_fields(record) == []
 
 
-def test_get_and_set_path_reach_into_lists_and_dicts():
+def test_get_path_reaches_into_lists_and_dicts():
     builder = _builder()
     record = {"career_history": [{"occupation": "Planner"}], "claims": {}}
     assert builder.get_path(record, ["career_history", 0, "occupation"]) == "Planner"
-    changed = builder.set_path(record, ["claims", "declared_net_worth"], 5)
-    assert changed["claims"]["declared_net_worth"] == 5
-    assert record["claims"] == {}                       # the original is left alone
     assert builder.get_path(record, ["career_history", 3, "occupation"]) is None
+
+
+def test_set_path_gives_a_changed_copy_and_leaves_the_original_alone():
+    builder = _builder()
+    record, _, _ = builder.build(READING, "SOW-DOC-1")
+    changed = builder.set_path(record, ["claims", "declared_net_worth"], 5)
+    assert changed.claims.declared_net_worth == 5
+    assert record.claims.declared_net_worth == READING["claims"]["declared_net_worth_sgd"]
+
+
+def test_set_path_rejects_a_value_no_record_can_have():
+    builder = _builder()
+    record, _, _ = builder.build(READING, "SOW-DOC-1")
+    with pytest.raises(ValueError, match="age must be between 18 and 120"):
+        builder.set_path(record, ["career", "age"], 12)
+
+
+def test_an_impossible_value_is_left_empty_and_named_while_every_good_field_is_kept():
+    reading = {**READING, "client": {**READING["client"], "age": 12, "date_of_birth": None}}
+    builder = _builder()
+    record, found, dropped = builder.build(reading, "SOW-DOC-1")
+    assert record.profile.age is None
+    assert record.profile.name == READING["client"]["name"]
+    assert len(dropped) == 1 and dropped[0]["path"] == ["career", "age"]
+    assert dropped[0]["optional_field"] is None                      # a required field is asked with the missing ones
+    message = dropped[0]["message"]
+    assert message.startswith("Age: the value read from the documents (12) is not possible (age must be between 18 and 120)")
+    assert message.endswith("so it was left empty. Please enter it.")
+    assert "career.age" not in found
+    assert ["career", "age"] in [field["path"] for field in builder.missing_fields(record)]
+
+
+def test_several_impossible_values_in_jobs_assets_and_claims_are_each_dropped_on_their_own():
+    reading = {**READING, "jobs": [{**READING["jobs"][0], "start_year": 1800}],
+               "assets": [{**READING["assets"][0], "price_paid_sgd": -5}],
+               "claims": {**READING["claims"], "declared_net_worth_sgd": 0}}
+    record, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    saved = record.to_dict()
+    assert saved["career_history"][0]["start_year"] is None
+    assert saved["career_history"][0]["occupation"] == READING["jobs"][0]["occupation"]
+    assert saved["investments"][0]["price_paid"] is None
+    assert saved["investments"][0]["country"] == READING["assets"][0]["country"]
+    assert saved["claims"]["declared_net_worth"] is None
+    assert saved["claims"]["expected_aum"] == READING["claims"]["expected_aum_sgd"]
+    assert len(dropped) == 3
+    assert any("price paid" in entry["message"] and "(-5)" in entry["message"] for entry in dropped)
+
+
+def test_a_reading_with_nothing_impossible_drops_nothing():
+    _, _, dropped = _builder().build(READING, "SOW-DOC-1")
+    assert dropped == []
+
+
+def test_a_split_read_only_in_part_is_kept_as_fractions_and_asked_for():
+    builder = _builder()
+    record, _, _ = builder.build({"composition": {"property": 60, "cash": None}}, "SOW-DOC-1")
+    assert record.claims.asset_composition["property"] == 0.6
+    assert ["claims", "asset_composition"] in [field["path"] for field in builder.missing_fields(record)]
 
 
 def test_check_warns_about_a_job_that_ends_before_it_starts():
     builder = _builder()
-    record, _ = builder.build(READING, "SOW-DOC-1")
-    record["career_history"][0]["start_year"], record["career_history"][0]["end_year"] = 2015, 2010
+    record, _, _ = builder.build(READING, "SOW-DOC-1")
+    record = builder.set_path(record, ["career_history", 0, "start_year"], 2015)
+    record = builder.set_path(record, ["career_history", 0, "end_year"], 2010)
     assert "Job 1 ends (2010) before it starts (2015)." in builder.check(record)
 
 
-def test_finish_makes_the_current_job_the_career_block():
-    builder = _builder()
-    record, _ = builder.build(READING, "SOW-DOC-1")
-    finished = builder.finish(record)
-    assert finished["career"]["occupation"] == finished["career_history"][-1]["occupation"]
+def test_the_current_job_is_the_career_block():
+    record, _, _ = _builder().build(READING, "SOW-DOC-1")
+    saved = record.to_dict()
+    assert saved["career"]["occupation"] == saved["career_history"][-1]["occupation"]
 
 
 def test_the_same_reading_always_builds_the_same_record():
-    assert _builder().build(READING, "SOW-DOC-1") == _builder().build(READING, "SOW-DOC-1")
+    first, found, _ = _builder().build(READING, "SOW-DOC-1")
+    second, found_again, _ = _builder().build(READING, "SOW-DOC-1")
+    assert first.to_dict() == second.to_dict() and found == found_again
 
 
 # ---------------------------------------------------------------------------
@@ -94,17 +161,18 @@ def _doc_builder():
 
 
 def doc_record():
-    record, found = _doc_builder().build(AI_REPLY, "CL-TEST")
+    record, found, _ = _doc_builder().build(AI_REPLY, "CL-TEST")
     return record, found
 
 
 def test_record_from_documents_uses_the_new_client_form_layout():
     record, found = doc_record()
 
-    assert record["career"]["age"] == 46                                  # from the date of birth
-    assert record["claims"]["asset_composition"]["property"] == 0.5       # stored as fractions
-    assert record["investments"][0]["current_declared_value"] == 2400000    # same name as the web form
-    assert record["investments"][0]["income_produced"] == 60000
+    saved = record.to_dict()
+    assert saved["career"]["age"] == 46                                  # from the date of birth
+    assert saved["claims"]["asset_composition"]["property"] == 0.5       # stored as fractions
+    assert saved["investments"][0]["current_declared_value"] == 2400000    # same name as the web form
+    assert saved["investments"][0]["income_produced"] == 60000
     assert "name" in found and "claims.declared_net_worth" in found
 
 
@@ -117,19 +185,19 @@ def test_only_missing_required_fields_are_asked_for():
 
 
 def test_no_jobs_in_documents_still_asks_for_the_current_job():
-    record, _ = _doc_builder().build({"client": {"name": "A B"}}, "CL-X")
+    record, _, _ = _doc_builder().build({"client": {"name": "A B"}}, "CL-X")
     missing = {".".join(map(str, f["path"])) for f in _doc_builder().missing_fields(record)}
 
     assert "career_history.0.occupation" in missing
     assert "claims.asset_composition" in missing
 
 
-def test_finish_copies_the_current_job_into_career():
+def test_the_current_job_is_copied_into_career():
     record, _ = doc_record()
-    record = _doc_builder().finish(record)
+    career = _doc_builder().finish(record).to_dict()["career"]
 
-    assert record["career"]["employer_name"] == "Temasek"
-    assert record["career"]["career_start_year"] == 2004
+    assert career["employer_name"] == "Temasek"
+    assert career["career_start_year"] == 2004
 
 
 def test_summary_marks_where_each_value_came_from():
@@ -145,19 +213,72 @@ def test_summary_marks_where_each_value_came_from():
     assert rows["sow_declaration"] == "blank"
 
 
-def test_profile_edit_reaches_the_current_job():
-    before, _ = doc_record()
-    before = _doc_builder().finish(before)
-    after = _doc_builder().set_path(before, ["career", "employer_name"], "Temasek Holdings")
+def test_finish_after_an_edit_copies_the_last_job_when_every_job_has_ended():
+    """When the documents list no open job, the last job is the one shown in "career"; after the
+    officer edits that job, finish shows the edited job there again."""
+    reply = {**AI_REPLY, "jobs": [dict(AI_REPLY["jobs"][0]), {**AI_REPLY["jobs"][1], "end_year": 2025}]}
+    record, _, _ = _doc_builder().build(reply, "CL-TEST")
+    saved = record.to_dict()
+    saved["career_history"][1]["employer_name"] = "Temasek Holdings"           # as the edit screen would
+    finished = _doc_builder().finish(ClientRecord.from_dict(saved)).to_dict()
 
-    synced = _doc_builder().sync_after_edit(before, after)
-
-    assert synced["career_history"][1]["employer_name"] == "Temasek Holdings"
+    assert finished["career"]["employer_name"] == "Temasek Holdings"
 
 
 def test_checks_flag_impossible_dates():
     record, _ = doc_record()
     record = _doc_builder().set_path(record, ["career_history", 0, "end_year"], 2001)
-    record = _doc_builder().finish(record)
 
     assert any("ends (2001) before it starts (2004)" in w for w in _doc_builder().check(record))
+
+
+@pytest.mark.parametrize("today", ["banana", "2026-13-01", "20261014", 2026, None])
+def test_the_builder_rejects_a_date_that_is_not_yyyy_mm_dd(today):
+    with pytest.raises(ValueError, match="today must be empty or a real date"):
+        DocumentRecordBuilder(CONFIG, today)
+
+
+def test_the_builder_rejects_a_config_that_is_not_a_config():
+    with pytest.raises(ValueError, match="config must be a Config"):
+        DocumentRecordBuilder({"policy": {}}, "2026-10-14")
+    assert DocumentRecordBuilder(None, "") is not None
+
+
+def test_the_builder_rejects_the_iso_week_form_of_a_date():
+    with pytest.raises(ValueError, match="today must be empty or a real date"):
+        DocumentRecordBuilder(CONFIG, "2026-W42-1")
+
+
+def test_a_builder_with_no_date_cannot_check_a_record_and_says_so():
+    record, _, _ = DocumentRecordBuilder(CONFIG, "2026-10-14").build(READING, "SOW-DOC-1")
+    with pytest.raises(ValueError, match="today's date is needed"):
+        DocumentRecordBuilder(CONFIG).check(record)
+
+
+def test_a_dropped_optional_end_year_is_named_without_the_bad_value_and_marked_to_be_asked():
+    reading = {**READING, "jobs": [{**READING["jobs"][0], "start_year": 2001, "end_year": 2200}]}
+    record, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    assert record.to_dict()["career_history"][0]["end_year"] is None
+    assert len(dropped) == 1
+    entry = dropped[0]
+    assert entry["optional_field"]["path"] == ["career_history", 0, "end_year"]
+    assert "blank = current job" in entry["optional_field"]["label"]
+    assert "(2001-present)" in entry["message"] and "2200" in entry["message"]        # the label shows no bad value
+    assert "(blank" not in entry["message"] and "(2001-2200)" not in entry["message"]
+    assert "end year: the value read from the documents (2200) is not possible" in entry["message"]
+    assert entry["message"].endswith("You can enter it, or leave it empty.")   # an optional detail may stay empty
+
+
+def test_a_dropped_wealth_jump_years_says_what_the_years_are_for():
+    reading = {**READING, "claims": {**READING["claims"], "wealth_jump_years": -2}}
+    _, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    assert len(dropped) == 1
+    assert dropped[0]["optional_field"]["label"] == "Biggest wealth increase: over how many years"
+    assert dropped[0]["message"].endswith("You can enter it, or leave it empty.")
+
+
+def test_a_dropped_composition_share_is_labelled_and_shown_as_a_percent():
+    reading = {**READING, "composition": {**READING["composition"], "property": 150}}
+    _, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    assert len(dropped) == 1
+    assert dropped[0]["message"].startswith("Asset composition: property: the value read from the documents (150%) is not possible")

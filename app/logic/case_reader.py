@@ -1,5 +1,8 @@
 """CaseReader: turns a saved client record into the case the features read."""
 
+import datetime
+import re
+
 
 class CaseReader:
     """Reads a client record, whichever layout it was saved in, into one forecasting case:
@@ -9,14 +12,27 @@ class CaseReader:
     today is the assessment date used when the record has none.
     """
 
-    _PRESENT_WORDS = ("", "present", "now", "current", "-", "none")
-    COMPOSITION_KEYS = ["property", "listed_equities", "private_business", "cash"]
+    __PRESENT_WORDS: tuple[str, ...] = ("", "present", "now", "current", "-", "none")
+    COMPOSITION_KEYS: list[str] = ["property", "listed_equities", "private_business", "cash"]
 
     def __init__(self, today: str = "") -> None:
+        if not isinstance(today, str) or (today and not CaseReader.is_iso_date(today)):
+            raise ValueError(f"today must be empty or a real date written YYYY-MM-DD, not {today!r}")
         self.__today: str = today
 
     @staticmethod
-    def read_amount(text) -> float | None:
+    def is_iso_date(text: str) -> bool:
+        """True for a real calendar date written YYYY-MM-DD."""
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+            return False
+        try:
+            datetime.date.fromisoformat(text)
+        except ValueError:
+            return False
+        return True
+
+    @staticmethod
+    def read_amount(text: str | int | float | None) -> float | None:
         """'1,650,000', 'S$1.65m', '410k', 30 -> a number; None if it can't be read."""
         if isinstance(text, bool):
             return None
@@ -35,11 +51,12 @@ class CaseReader:
         except ValueError:
             return None
 
-    def read_year(self, text) -> int | None:
+    @staticmethod
+    def read_year(text: str | int | float | None) -> int | None:
         value = CaseReader.read_amount(text)
         return int(value) if value is not None and 1900 <= value <= 2100 else None
 
-    def _read_payment(self, text) -> str | None:
+    def _read_payment(self, text: str | None) -> str | None:
         """'Cash', 'mortgage', 'bank loan', 'sold my flat' -> cash / loan / asset_sale."""
         words = str(text or "").lower()
         if any(w in words for w in ("loan", "mortgage", "financ", "borrow")):
@@ -55,13 +72,15 @@ class CaseReader:
         auto-fill) into the case every part of the assessment uses, dated today.
 
         Returns (case, []) when everything can be read, otherwise (None, what's missing).
-        The command line then asks the officer for what's missing (io_manager.case_from_client_record);
+        The command line then asks the officer for what's missing (CaseBuilder.build);
         the web app asks the officer to complete the record. Both assess the same case.
         """
         today = self.__today
         missing: list[str] = []
         career = record.get("career") or {}
         claims = record.get("claims") or {}
+        if not today:
+            raise ValueError("today's date is needed to turn a record into a case: make the CaseReader with it")
         this_year = int(today[:4])
 
         def text(value, label: str) -> str:
@@ -81,8 +100,8 @@ class CaseReader:
             if start is None or start > this_year:
                 missing.append(f"{label} start year")
             end_text = "" if entry.get("end_year") is None else str(entry.get("end_year")).strip().lower()
-            end = None if end_text in CaseReader._PRESENT_WORDS else self.read_year(entry.get("end_year"))
-            if end_text not in CaseReader._PRESENT_WORDS and (end is None or end > this_year or (start and end < start)):
+            end = None if end_text in CaseReader.__PRESENT_WORDS else self.read_year(entry.get("end_year"))
+            if end_text not in CaseReader.__PRESENT_WORDS and (end is None or end > this_year or (start and end < start)):
                 missing.append(f"{label} end year")
             jobs.append({
                 "start_year": start, "end_year": end,
@@ -206,7 +225,7 @@ class CaseReader:
             "declaration_text":     sow if isinstance(sow, str) else (sow or {}).get("declaration_text", ""),
         }
 
-    def _whole_percent(self, value) -> int | None:
+    def _whole_percent(self, value: int | float | None) -> int | None:
         """A share of wealth as a whole-number percent: 0.45 (stored fraction) or 45 -> 45."""
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return None
