@@ -772,6 +772,7 @@ class WebApp:
                 return
             assessment_id = self.__app.save_assessment(result, record, on_step=step, actor=actor)
             audit_failed = self.__app.audit_write_failed()
+            outcome_failed = self.__app.client_outcome_failed()
 
             # Per-feature failure flags — feature names passed to flash_ai_unavailable in assess_result
             ai_warnings = []
@@ -788,6 +789,7 @@ class WebApp:
                 "assessment_id": assessment_id,
                 "saved":         assessment_id is not None,
                 "audit_failed":  audit_failed,
+                "outcome_failed": outcome_failed,
                 "assessed_at":   result["verdict"].assessed_at,   # the same time App saved
                 "ai_warnings":   ai_warnings,
                 "crime_result":  WebApp.__crime_result_layout(result.get("crime_result")),
@@ -1181,6 +1183,8 @@ class WebApp:
         for feature in job["result"].get("ai_warnings", []):
             self.flash_ai_unavailable(feature)
         r = job["result"]
+        if r.get("outcome_failed"):
+            flash(App.OUTCOME_NOT_UPDATED)
         if r.get("audit_failed"):
             flash(App.AUDIT_NOT_WRITTEN)
         if not r.get("saved", True):

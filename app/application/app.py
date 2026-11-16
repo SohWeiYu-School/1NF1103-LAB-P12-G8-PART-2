@@ -82,6 +82,8 @@ class App:
     AUDIT_NOT_WRITTEN: str = "Saved, but this change could not be written to the audit log."
     AUDIT_UNAVAILABLE: str = "We can't load the audit log right now. Please try again later."
     MAX_REFUSED_TEXT: int = 200
+    # Shown when an assessment was saved but the client's outcome could not be written onto the client record.
+    OUTCOME_NOT_UPDATED: str = "The assessment was saved, but the client's outcome could not be updated."
     UNEXPECTED_ERROR_STEP: str = "Unexpected error"      # the "step" the audit log gets when a run or save raises
 
     # The archive states and results of an assessment, so the web app can ask App without
@@ -414,6 +416,8 @@ class App:
                                                typologies=result.get("typologies"))
         if saved:
             self.__ui.show_message("Assessment saved.")
+            if self.client_outcome_failed():
+                self.__ui.show_error(App.OUTCOME_NOT_UPDATED)
         else:
             self.__ui.show_error("Could not save the assessment.")
         return verdict
@@ -478,7 +482,10 @@ class App:
             # (assessed_at), so ClientRecord.record_assessment is not used here.
             record.review_status.update(verdict.outcome, verdict.next_step, verdict.next_review_date,
                                         details["assessed_on"] or self.today(), case)
-            if not self.__save_record(record):
+            run_details["record_saved"] = self.__save_record(record)
+            if not run_details["record_saved"]:
+                # The assessment itself was saved, so the audit line stays "ok"; record_saved says what is missing.
+                self.__audit_note.outcome_failed = True
                 logger.error("App.save_assessment: could not save the client record for %s", verdict.client_ref)
         self.__record("assessment_run", actor, verdict.client_ref, "ok", run_details)
         return verdict.assessment_id
@@ -1007,6 +1014,11 @@ class App:
             logger.warning("App.%s: %d audit row(s) cannot be read and are not listed", caller, unreadable)
         return events
 
+    def client_outcome_failed(self) -> bool:
+        """True if the last save_assessment in this thread saved the assessment but could not write its
+        outcome onto the client record (the audit line then says "record_saved": False)."""
+        return bool(getattr(self.__audit_note, "outcome_failed", False))
+
     def audit_write_failed(self) -> bool:
         """True if the last action in this thread was done but its audit line could not be written."""
         return bool(getattr(self.__audit_note, "failed", False))
@@ -1015,6 +1027,7 @@ class App:
         """Begin an action: forget the last audit failure of this thread and check who is acting.
         Raises ValueError (a programming error) if actor is neither TERMINAL nor a configured account name."""
         self.__audit_note.failed = False
+        self.__audit_note.outcome_failed = False
         known = isinstance(actor, str) and (actor == App.TERMINAL
                                             or any(account.name == actor for account in self.__config.accounts))
         if not known:

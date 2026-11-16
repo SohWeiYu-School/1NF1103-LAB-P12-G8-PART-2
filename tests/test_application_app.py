@@ -1354,3 +1354,37 @@ def test_a_new_client_that_could_not_be_saved_because_the_file_is_unreadable_is_
     first, second = _events(app)
     assert (first.action, first.result) == ("client_created", "failed")
     assert (second.action, second.result) == ("client_edited", "failed")
+
+
+def test_an_assessment_saved_but_not_its_outcome_is_recorded_ok_with_record_saved_false(app, tmp_path, caplog):
+    record, result = _assessed(app, "Shareen")
+    _damage(tmp_path, "sow_cases.json")                     # the client record can no longer be written
+    assessment_id = app.save_assessment(result, record, actor="Shareen")
+    assert assessment_id is not None and app.client_outcome_failed() is True
+    event = _events(app)[-1]
+    assert (event.action, event.result) == ("assessment_run", "ok")
+    assert event.details["record_saved"] is False and event.details["assessment_id"] == assessment_id
+    assert "could not save the client record" in caplog.text
+    app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")       # the next action forgets it
+    assert app.client_outcome_failed() is False
+
+
+def test_an_assessment_with_its_outcome_saved_says_record_saved_true_and_one_with_no_record_says_nothing(app):
+    record, result = _assessed(app)
+    app.save_assessment(result, record)
+    assert _events(app)[-1].details["record_saved"] is True and app.client_outcome_failed() is False
+    case, _ = app.read_case(record)
+    app.save_assessment(app.assess(case), None)
+    assert "record_saved" not in _events(app)[-1].details
+
+
+def test_the_terminal_is_told_when_the_outcome_could_not_be_written(app, tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda question="": "n")        # the report asks about evidence
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record)
+    case, _ = app.read_case(record)
+    fake_services.save_forecast_replies(app.response_cache(), case)
+    _damage(tmp_path, "sow_cases.json")
+    assert app.assess_client_record(record) is not None
+    out = capsys.readouterr().out
+    assert "Assessment saved." in out and App.OUTCOME_NOT_UPDATED in out

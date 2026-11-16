@@ -1569,3 +1569,21 @@ def test_auto_filling_an_existing_client_shows_in_that_clients_history(tmp_path,
     assert {event.action for event in application.audit_trail(ref)} == {"document_uploaded", "autofill_used"}
     page = client.get(f"/client/{ref}").get_data(as_text=True)
     assert "Used document auto-fill" in page
+
+
+def test_the_result_page_says_when_the_outcome_could_not_be_written_to_the_client(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    application = App(fake_ai.caller(), data_folder=str(tmp_path))
+    client = WebApp(application).flask().test_client()
+    sign_in(client, application)
+    record = sample_case()
+    application.clients().save(record)
+    case, _ = application.read_case(ClientRecord.from_dict(record))
+    fake_services.save_forecast_replies(application.response_cache(), case)
+    monkeypatch.setattr(application.clients(), "save", lambda data: False)      # only the outcome write uses it here
+    job_id = client.post(f"/client/{record['client_ref']}/assess").headers["Location"].rsplit("/", 1)[-1]
+    assert _wait_for(client, job_id)["status"] == "done"
+    page = html.unescape(client.get(f"/assess/result/{job_id}").get_data(as_text=True))
+    assert App.OUTCOME_NOT_UPDATED in page and "NOT saved" not in page
+    assert len(application.assessments().load()) == 1
