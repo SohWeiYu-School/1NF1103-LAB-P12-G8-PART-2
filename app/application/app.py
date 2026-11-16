@@ -1,6 +1,7 @@
 """App: creates every object of the system and coordinates them."""
 
 import copy
+import functools
 import logging
 import os
 import threading
@@ -295,7 +296,7 @@ class App:
         while True:
             choice = self.__ui.show_app_menu()
             if choice == "1":
-                record = self.__client_form.create_new_client(save_fn=self.save_client,
+                record = self.__client_form.create_new_client(save_fn=functools.partial(self.save_client, new_client=True),
                                                              upload_fn=self.upload_document,
                                                              is_taken_fn=self.client_ref_taken)
                 if record is not None:
@@ -547,18 +548,22 @@ class App:
             raise ValueError(f"Client {client_ref} could not be loaded because the saved record is "
                              f"not valid: {ClientRecord.why_unreadable(error)}.") from error
 
-    def save_client(self, record: ClientRecord, actor: str = TERMINAL) -> bool:
+    def save_client(self, record: ClientRecord, actor: str = TERMINAL, new_client: bool = False) -> bool:
         """Save the client (replacing the saved record with the same reference). False if not saved.
         The saved record is read first, so the audit log can say "created" or "edited" and which fields
         changed; if it cannot be read nothing is saved. Saving a record that changed nothing writes
-        no audit line."""
+        no audit line. new_client says this is a new client: it is only used when the saved records cannot be
+        read, to record a failed creation as "created" and not "edited" (otherwise the saved record tells)."""
         self.__start(actor)
         client_ref = record.client_ref
         try:
             old = self.__clients.find(client_ref)
         except (OSError, ValueError) as error:
             logger.error("App.save_client: not saved, the saved client records cannot be read: %r", error)
-            self.__record("client_edited", actor, client_ref, "failed", {"changes": []})
+            if new_client:
+                self.__record("client_created", actor, client_ref, "failed")
+            else:
+                self.__record("client_edited", actor, client_ref, "failed", {"changes": []})
             return False
         new = record.to_dict()
         changes = RecordDiff(old, new).changes()
@@ -660,7 +665,7 @@ class App:
                 self.__ui.show_error(f"Could not keep a copy of {os.path.basename(path)}.")
             else:
                 record.add_document({"file_name": os.path.basename(path), "file_path": stored})
-        if not self.save_client(record):
+        if not self.save_client(record, new_client=True):
             self.__ui.show_error("The client could not be saved.")
             return None
         self.__ui.show_message(f"\nClient saved. Reference: {record.client_ref} "

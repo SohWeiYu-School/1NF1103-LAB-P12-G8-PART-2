@@ -720,14 +720,15 @@ class WebApp:
             record = None
         return record.to_dict() if record is not None else {"client_ref": client_ref, "name": client_ref}
 
-    def save_form_record(self, record: dict) -> list[str]:
-        """Save a record built from the form. Returns the problems ([] = saved)."""
+    def save_form_record(self, record: dict, new_client: bool = False) -> list[str]:
+        """Save a record built from the form. Returns the problems ([] = saved). new_client is True for
+        the new-client page."""
         try:
             client = ClientRecord.from_dict(record)
         except (ValueError, TypeError, AttributeError) as error:
             logger.error("WebApp: the form for %s did not make a valid record: %r", record.get("client_ref"), error)
             return [f"The client could not be saved because {ClientRecord.why_unreadable(error)}."]
-        saved = self.__app.save_client(client, self.__actor())
+        saved = self.__app.save_client(client, self.__actor(), new_client)
         self.__flash_audit_failure()
         if not saved:
             return ["The client was not saved because the client database cannot be read or written right now. "
@@ -869,7 +870,7 @@ class WebApp:
                 field_errors = {}
             if not problems:
                 record["supporting_documents"] = documents
-                problems = self.save_form_record(record)
+                problems = self.save_form_record(record, new_client=True)
                 if not problems:
                     flash("Client saved.")
                     return redirect(url_for("view_client", client_ref=record["client_ref"]))

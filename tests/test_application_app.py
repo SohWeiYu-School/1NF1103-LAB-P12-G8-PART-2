@@ -1344,3 +1344,13 @@ def test_reading_documents_for_a_client_ties_the_line_to_that_client(app):
     [event] = _events(app)
     assert event.client_ref == "C-7"
     assert [e.action for e in app.audit_trail("C-7")] == ["autofill_used"]
+
+
+def test_a_new_client_that_could_not_be_saved_because_the_file_is_unreadable_is_recorded_as_created(app, tmp_path):
+    _damage(tmp_path, "sow_cases.json")
+    record = ClientRecord.from_dict(sample_case())
+    assert app.save_client(record, "Shareen", new_client=True) is False
+    assert app.save_client(record, "Shareen") is False
+    first, second = _events(app)
+    assert (first.action, first.result) == ("client_created", "failed")
+    assert (second.action, second.result) == ("client_edited", "failed")
