@@ -485,3 +485,47 @@ one line to an assessment's `archive_log`, and the last line decides whether it 
   "can't load the saved assessments". The web page has an optional reason box next to Archive. layout_check 0.
 - Layout: WebApp and AssessmentRepository grew, so RateLimiter, CaseBuilder, ClientForm, DocumentReaderFactory and
   CaseFiles moved down; every line was re-routed. layout_check 0.
+
+## Audit trail, Phase 1 (2026-11-16): code changed, the diagram follows it
+
+The boxes were drawn from the built code at the end of the phase, not first. Reason: the members settled while the
+feature was being built, and the checker compares the diagram with the code. (The usual order, UML first, applies to
+Phase 2.)
+
+**6 classes added** (the checker's stage 1; their members came from the scan's stage 5):
+- `Account` (app/model): one officer or admin sign-in (email, name, role), validated in its own setter.
+- `AuditEvent` (app/model): one line of the audit log, sealed with a hash of the line before it.
+- `AuditFilter` (app/model): the audit-log page's filters and paging, checked by itself (`problems()`).
+- `AuditRepository` (app/data, child of `JsonRepository`): stores the audit lines; adds only `save()` and `for_client()`.
+- `RecordDiff` (app/logic): the fields that changed between a client record before and after a save.
+- `AuditChain` (app/logic): walks the saved lines and reports whether the hash chain is intact.
+
+**Members changed on existing classes**
+- `App`: new `__audit`, `__audit_note` and the `AUDIT_*` / `OUTCOME_NOT_UPDATED` / `MAX_REFUSED_TEXT` / `TERMINAL` /
+  `UNEXPECTED_ERROR_STEP` constants; new methods `account()`, `accounts()`, `sign_in()`, `sign_out()`, `refused()`,
+  `audit_log()`, `audit_trail()`, `verify_audit_log()`, `audit_write_failed()`, `client_outcome_failed()` and the private
+  helpers. Eight methods gained an `actor` parameter (and `client_ref` / `new_client` where a record or document is
+  involved): `save_client`, `upload_document`, `download_document`, `sync_to_cloud`, `assess`, `read_documents`,
+  `save_assessment`, `archive_assessment`, `restore_assessment`.
+- `WebApp`: new sign-in/sign-out, `gate()`, `audit_log_view()`, `audit_verify()`, `singapore_time()` and helpers, plus
+  the audit constants; the upload, autofill, save and background methods gained `actor`, `client_ref` or `new_client`.
+- `Config`: new `__accounts`, `accounts` property and `account()`; `__init__` takes `accounts`.
+- `ConfigReader`: `FILE_NAMES` now includes `"accounts"`; new `-__account_problems()`.
+- `AssessmentRepository`: `MAX_BY_LENGTH`, `-__checked_by()`; `archive()`, `restore()` and `-__record_action()` take `by`.
+
+**Arrows added** (16; all confirmed by the checker): `AuditRepository --|> JsonRepository`; `App *-- "1" AuditRepository`;
+`Config o-- "0..*" Account`; `AuditChain *-- "0..*" AuditEvent`; and `uses` arrows `App` to `Account`, `AuditChain`,
+`AuditEvent`, `AuditFilter`, `RecordDiff`; `AuditFilter`, `AuditRepository` to `AuditEvent`; `ConfigReader` to `Account`;
+`WebApp` to `Account`, `AuditChain`, `AuditEvent`, `AuditFilter`.
+- The checker disagreed with two first drafts, and the diagram follows it: `AuditChain ..> AuditEvent` became a
+  composition (the chain stores the events it builds from the rows), and `AuditRepository` to `JsonRepository` is
+  inheritance, not a plain line. The checker also wants `WebApp` linked to `Account`, `AuditChain` and `AuditEvent`,
+  not only `AuditFilter` (it gets them from `App`), so those three were added.
+- Starting values that change on every run are written as the call (`datetime.now(...)`, `str(uuid.uuid4())`).
+
+**Layout:** the new boxes sit in their manager's folder; `App` and `WebApp` grew, so the Logic and Domain Model areas
+moved down 330 px, the IO column (WebApp, RateLimiter, CaseBuilder, ClientForm) was re-stacked, and every line was
+re-routed. Scan 77 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.
+
+**Process note:** commit `ace48ab` changed `app/application/app.py` without changing `tests/test_application_app.py` in
+the same commit (CLAUDE.md section 7). Later commits added the tests. The history was not rewritten.
