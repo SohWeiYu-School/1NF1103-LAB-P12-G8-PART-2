@@ -470,7 +470,7 @@ class App:
         except (ValueError, TypeError, AttributeError) as error:
             logger.error("App.find_client: the saved record %s cannot be read: %r", client_ref, error)
             raise ValueError(f"Client {client_ref} could not be loaded because the saved record is "
-                             f"not valid: {error}.") from error
+                             f"not valid: {ClientRecord.why_unreadable(error)}.") from error
 
     def save_client(self, record: ClientRecord) -> bool:
         """Save the client (replacing the saved record with the same reference). False if not saved."""

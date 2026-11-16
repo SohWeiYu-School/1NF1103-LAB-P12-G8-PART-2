@@ -727,3 +727,12 @@ def test_a_rate_limit_setting_that_is_not_an_object_is_logged_with_its_value(tmp
     application = App(ai_caller=None, root=str(root), data_folder=str(tmp_path / "data"))
     assert "'30 seconds'" in caplog.text and "assessment_rate_limit" in caplog.text
     assert application.rate_limiter() is not None
+
+
+def test_find_client_hides_the_technical_text_of_a_badly_laid_out_record(app, caplog):
+    assert app.clients().save({"client_ref": "CL-1", "claims": 5})
+    with pytest.raises(ValueError) as error:
+        app.find_client("CL-1")
+    assert "not in the expected layout" in str(error.value)
+    assert "attribute" not in str(error.value)                  # the technical details stay in the log
+    assert "App.find_client" in caplog.text
