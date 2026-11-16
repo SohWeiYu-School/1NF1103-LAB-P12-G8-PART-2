@@ -200,6 +200,13 @@ class App:
             --web                   start the web app instead of the menu
         """
         self.__configure_logging()
+        allowed = ("--web", "--case", "--all-samples")
+        unknown = [argument for position, argument in enumerate(arguments)
+                   if argument not in allowed and not (position > 0 and arguments[position - 1] == "--case")]
+        if unknown:
+            self.__ui.show_error(f"Unknown option {unknown[0]}. Allowed: --web, --case FILE, --all-samples "
+                                 "(or nothing, for the menu).")
+            return 1
         if not self.__settings_ok:
             self.__ui.show_error(App.SETTINGS_UNAVAILABLE)
             return 1

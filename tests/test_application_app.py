@@ -1,4 +1,4 @@
-"""App: the whole system put together. The AI is a made-up caller or the recorded replies; no network."""
+"""App: the whole system put together. The AI is a made-up caller or saved sample replies; no network."""
 
 import json
 import os
@@ -117,6 +117,13 @@ def test_a_damaged_case_file_is_reported_not_crashed(app, tmp_path, capsys):
     path = tmp_path / "broken.json"
     path.write_text("{not json", encoding="utf-8")
     assert app.start(["--case", str(path)]) == 1
+
+
+def test_an_unknown_option_is_refused_with_the_allowed_ones(app, capsys):
+    assert app.start(["--all-samples", "--demo"]) == 1
+    out = capsys.readouterr().out
+    assert "Unknown option --demo" in out and "--case FILE" in out
+    assert app.assessments().load() == []                   # nothing was run
 
 
 def test_case_needs_a_file_path(app, capsys):
