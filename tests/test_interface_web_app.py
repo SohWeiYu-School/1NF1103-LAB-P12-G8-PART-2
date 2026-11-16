@@ -15,6 +15,7 @@ from app.interface.web_app import WebApp
 from app.model.client_record import ClientRecord
 from tests import fake_ai, fake_services
 from tests.logic_fixtures import sample_case
+from tests.web_browser import browser
 
 
 def _no_answer(prompt, schema, options):
@@ -29,7 +30,7 @@ def web(tmp_path, monkeypatch):
     application = App(_no_answer, data_folder=str(tmp_path))
     site = WebApp(application)
     site.flask().config["TESTING"] = True
-    return application, site, site.flask().test_client()
+    return application, site, browser(site.flask())
 
 
 def _form_fields(site, record: dict) -> dict:
@@ -71,7 +72,7 @@ def test_a_handed_in_rate_limiter_decides_when_an_assessment_may_start(tmp_path,
     ref = sample_case()["client_ref"]
     limiter = RateLimiter(60)
     limiter.record("127.0.0.1")                       # this browser has just started one
-    client = WebApp(application, limiter).flask().test_client()
+    client = browser(WebApp(application, limiter).flask())
     page = client.post(f"/client/{ref}/assess", follow_redirects=True).get_data(as_text=True)
     assert "Rate limit: please wait" in page
     assert application.rate_limiter().check("127.0.0.1") == (True, 0)   # the App's limiter was not used
@@ -234,7 +235,7 @@ def test_with_no_api_key_the_assessment_is_refused_with_a_message(tmp_path, monk
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     application = App(None, data_folder=str(tmp_path))
     application.clients().save(sample_case())
-    client = WebApp(application).flask().test_client()
+    client = browser(WebApp(application).flask())
     page = client.post(f"/client/{sample_case()['client_ref']}/assess", follow_redirects=True)
     assert page.status_code == 200
     assert application.assessments().load() == []
@@ -266,7 +267,7 @@ def test_the_result_page_shows_the_crime_cards_from_the_typologies(tmp_path, mon
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MONGODB_URI", "")
     application = App(fake_ai.caller(), data_folder=str(tmp_path))
-    client = WebApp(application).flask().test_client()
+    client = browser(WebApp(application).flask())
     record = sample_case()
     application.clients().save(record)
     case, _ = application.read_case(ClientRecord.from_dict(record))
@@ -294,7 +295,7 @@ def test_when_the_research_fails_the_page_says_the_typologies_were_not_checked(t
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MONGODB_URI", "")
     application = App(fake_ai.caller(research_reply=None), data_folder=str(tmp_path))
-    client = WebApp(application).flask().test_client()
+    client = browser(WebApp(application).flask())
     record = sample_case()
     application.clients().save(record)
     case, _ = application.read_case(ClientRecord.from_dict(record))
@@ -387,7 +388,7 @@ def reading_web(tmp_path, monkeypatch):
     application = App(fake_ai.caller(documents_reply=AI_READING), data_folder=str(tmp_path))
     site = WebApp(application)
     site.flask().config["TESTING"] = True
-    return application, site, site.flask().test_client()
+    return application, site, browser(site.flask())
 
 
 def _empty_values(site):
@@ -462,7 +463,7 @@ def test_a_reading_with_an_impossible_value_keeps_the_good_fields_and_says_which
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MONGODB_URI", "")
     reading = {**AI_READING, "client": {**AI_READING["client"], "age": 200, "date_of_birth": None}}
-    client = WebApp(App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))).flask().test_client()
+    client = browser(WebApp(App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))).flask())
     response = client.post("/client/new/autofill", content_type="multipart/form-data", data={
         "autofill_files": (io.BytesIO(b"Daniel Tan, Portfolio Manager at Temasek since 2012"), "cv.txt"),
     })
@@ -487,7 +488,7 @@ def test_a_reading_that_cannot_be_a_record_fills_nothing_and_says_why(tmp_path, 
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MONGODB_URI", "")
     application = _UnusableReadingApp(fake_ai.caller(documents_reply=AI_READING), data_folder=str(tmp_path))
-    client = WebApp(application).flask().test_client()
+    client = browser(WebApp(application).flask())
     response = client.post("/client/new/autofill", content_type="multipart/form-data", data={
         "autofill_files": (io.BytesIO(b"Daniel Tan, Portfolio Manager at Temasek since 2012"), "cv.txt"),
     })
@@ -676,7 +677,7 @@ def test_the_result_page_gets_the_time_the_assessment_was_saved_with(tmp_path, m
     monkeypatch.setenv("MONGODB_URI", "")
     application = App(fake_ai.caller(), data_folder=str(tmp_path))
     site = _CapturingWebApp(application)
-    client = site.flask().test_client()
+    client = browser(site.flask())
     record = sample_case()
     application.clients().save(record)
     case, _ = application.read_case(ClientRecord.from_dict(record))
@@ -707,7 +708,7 @@ def test_a_failed_web_assessment_shows_a_plain_message_and_logs_the_real_error(t
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MONGODB_URI", "")
     application = _BrokenAssessApp(fake_ai.caller(), data_folder=str(tmp_path), stop=stop)
-    client = WebApp(application).flask().test_client()
+    client = browser(WebApp(application).flask())
     record = sample_case()
     application.clients().save(record)
     job_id = client.post(f"/client/{record['client_ref']}/assess").headers["Location"].rsplit("/", 1)[-1]
@@ -974,3 +975,59 @@ def test_the_assessments_page_hides_archived_ones_and_says_when_all_are_archived
     client.post("/assessment/A2/archive")
     page = client.get("/assessments").get_data(as_text=True)
     assert "All 2 assessment(s) are archived." in page and "No assessments saved yet" not in page
+
+
+# ----- CSRF: every POST must carry its form's token ----------------------------------------------
+
+def test_every_post_form_on_every_page_carries_a_csrf_token(web):
+    application, _, client = web
+    ref = _two_assessments(application)
+    application.archive_assessment("A2", "")
+    for page in ["/", f"/client/{ref}", f"/client/{ref}?archived=1", "/client/new", f"/client/{ref}/edit",
+                 "/assessment/A2"]:
+        html = client.get(page).get_data(as_text=True)
+        forms = re.findall(r'<form method="post".*?</form>', html, flags=re.S)
+        assert forms, page
+        assert all('name="csrf_token"' in form for form in forms), page
+
+
+def test_an_archive_post_without_a_token_is_refused_and_changes_nothing(web, caplog):
+    application, site, _ = web
+    _two_assessments(application)
+    other_site = site.flask().test_client()           # a page on another site posting with no token
+    reply = other_site.post("/assessment/A1/archive", data={"reason": "forged"})
+    page = reply.get_data(as_text=True)
+    assert reply.status_code == 400
+    assert "This form has expired" in page and WebApp.FORM_EXPIRED in page
+    assert "CSRF" not in page and "Traceback" not in page          # the technical reason stays in the log
+    assert "The CSRF token is missing." in caplog.text
+    assert "archive_log" not in application.find_assessment("A1")
+    assert len(application.all_assessments()) == 2
+
+
+def test_a_post_with_a_wrong_token_is_refused_and_saves_nothing(web):
+    application, site, _ = web
+    client = site.flask().test_client()
+    client.get("/client/new")                          # the officer's own session, but a made-up token
+    reply = client.post("/client/new", data={**_form_fields(site, sample_case()), "csrf_token": "made-up"})
+    assert reply.status_code == 400 and WebApp.FORM_EXPIRED in reply.get_data(as_text=True)
+    assert application.all_clients() == []
+
+
+def test_a_post_with_the_token_from_its_form_works(web):
+    application, site, _ = web
+    ref = _two_assessments(application)
+    client = site.flask().test_client()
+    form = client.get(f"/client/{ref}").get_data(as_text=True)
+    token = re.search(r'name="csrf_token" value="([^"]+)"', form).group(1)
+    reply = client.post("/assessment/A1/archive", data={"csrf_token": token, "reason": "duplicate"})
+    assert reply.status_code == 302 and reply.headers["Location"].endswith(f"/client/{ref}")
+    assert application.find_assessment("A1")["archive_log"][-1]["reason"] == "duplicate"
+
+
+def test_pages_that_only_show_things_need_no_token(web):
+    application, site, _ = web
+    ref = _two_assessments(application)
+    client = site.flask().test_client()
+    for page in ["/", "/assessments", f"/client/{ref}", "/assessment/A1"]:
+        assert client.get(page).status_code == 200, page

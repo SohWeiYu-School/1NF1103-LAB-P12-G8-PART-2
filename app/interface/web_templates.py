@@ -58,6 +58,7 @@ BASE = """<!doctype html>
   <nav>
     <a class="nav-link" href="{{ url_for('list_assessments_view') }}">Assessments</a>
     <form method="post" action="{{ url_for('sync_to_cloud') }}" style="margin:0">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="nav-link" type="submit" style="cursor:pointer">Sync to Cloud</button>
     </form>
     <a class="nav-cta" href="{{ url_for('new_client') }}">+ New client</a>
@@ -174,6 +175,7 @@ FORM = """{% extends "base.html" %}
 {% endif %}
 
 <form method="post" action="{{ save_url }}" enctype="multipart/form-data" id="client-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <fieldset class="autofill">
     <legend>Fill in from documents</legend>
     <p class="muted" style="margin:0 0 10px">
@@ -313,6 +315,7 @@ VIEW = """{% extends "base.html" %}
 <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--line)">
   <a class="button secondary" href="{{ url_for('edit_client', client_ref=record.get('client_ref', '')) }}">Edit</a>
   <form method="post" action="{{ url_for('assess_client', client_ref=record.get('client_ref', '')) }}" style="margin:0">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit">Run Assessment</button>
   </form>
   <span style="flex:1"></span>
@@ -352,6 +355,7 @@ VIEW = """{% extends "base.html" %}
       <td>
         {% if a.get('assessment_id') and state != 'unreadable' %}
         <form method="post" action="{{ url_for('restore_assessment' if state == 'archived' else 'archive_assessment', assessment_id=a.get('assessment_id')) }}" style="margin:0; display:flex; gap:8px; align-items:center">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           {% if state != 'archived' %}
           <input type="text" name="reason" maxlength="{{ max_reason }}" placeholder="Reason (optional)" aria-label="Reason for archiving (optional)" style="flex:1; min-width:0; margin:0">
           {% endif %}
@@ -409,6 +413,7 @@ VIEW = """{% extends "base.html" %}
  
   <form method="post" action="{{ url_for('upload_documents', client_ref=record.get('client_ref', '')) }}"
         enctype="multipart/form-data" style="margin-top:14px">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Add documents
       <input type="file" name="files" multiple>
     </label>
@@ -449,6 +454,7 @@ ASSESS_RESULT = """{% extends "base.html" %}
 <div class="msg" style="display:flex; justify-content:space-between; align-items:center; gap:12px">
   <span>This assessment is archived{% if archive.get('at') %} (since {{ archive['at'][:10] }}){% endif %}{% if archive.get('reason') %}: {{ archive['reason'] }}{% endif %}. It is hidden from the lists but kept as a record. The client's current outcome is not changed.</span>
   <form method="post" action="{{ url_for('restore_assessment', assessment_id=assessment_id) }}" style="margin:0">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" class="secondary">Restore</button>
   </form>
 </div>
@@ -717,10 +723,12 @@ ERROR = """{% extends "base.html" %}
 {% block content %}
 <div class="panel" style="text-align:center; padding:40px 22px">
   <div style="font-size:2.5rem; margin-bottom:12px; color:var(--bad)">&#9888;</div>
-  <h1 style="color:var(--bad); margin-bottom:10px">Something went wrong</h1>
+  <h1 style="color:var(--bad); margin-bottom:10px">{{ error_title or "Something went wrong" }}</h1>
   <p style="color:var(--muted); max-width:440px; margin:0 auto 24px">
+    {% if error_message %}{{ error_message }}{% else %}
     An unexpected error occurred. Please go back and try again.
     If the problem persists, contact your system administrator.
+    {% endif %}
   </p>
   {% if error_detail %}
   <p style="font-size:.8rem; color:var(--muted); font-family:monospace; max-width:600px; margin:0 auto 24px; word-break:break-all">{{ error_detail }}</p>

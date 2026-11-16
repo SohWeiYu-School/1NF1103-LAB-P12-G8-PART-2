@@ -12,6 +12,7 @@ from typing import Any
 
 from flask import (Flask, abort, flash, redirect, render_template,
                    request, send_file, url_for)
+from flask_wtf.csrf import CSRFError, CSRFProtect
 from jinja2 import DictLoader
 from werkzeug.datastructures import FileStorage, MultiDict
 from werkzeug.exceptions import HTTPException
@@ -97,6 +98,8 @@ class WebApp:
     ASSESSMENT_FAILED: str = "The assessment could not be completed. Please try again later."
     ASSESSMENT_NOT_SAVED: str = ("This assessment was NOT saved, so it is not in the client's history and the "
                                  "client's outcome was not changed. Please try again later.")
+    FORM_EXPIRED: str = ("This form has expired, so nothing was changed. "
+                         "Please go back, reload the page and try again.")
 
     def __init__(self, app: App | None = None, limiter: RateLimiter | None = None) -> None:
         """limiter decides how often one browser may start an assessment. Without one, the App's
@@ -112,6 +115,9 @@ class WebApp:
         # at each start (never a fixed one written in the code, which anyone could use to forge it).
         flask.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
         flask.config["MAX_CONTENT_LENGTH"] = WebApp.MAX_UPLOAD_BYTES
+        # Every POST must carry the token its form was given (csrf_token() in the templates), so another
+        # web site cannot make an officer's browser archive, assess, save, upload or sync.
+        CSRFProtect(flask)
         flask.jinja_env.loader = DictLoader(TEMPLATES)
         flask.jinja_env.globals.update(PEP_OPTIONS=ClientForm.PEP_OPTIONS, PAYMENT_OPTIONS=ClientForm.PAYMENT_METHODS)
         flask.add_url_rule('/', endpoint='home', view_func=self.home)
@@ -135,6 +141,7 @@ class WebApp:
         flask.add_url_rule('/assessments', endpoint='list_assessments_view', view_func=self.list_assessments_view)
         flask.add_url_rule('/sync', endpoint='sync_to_cloud', view_func=self.sync_to_cloud, methods=['POST'])
         flask.register_error_handler(404, self.handle_404)
+        flask.register_error_handler(CSRFError, self.handle_csrf_error)
         flask.register_error_handler(Exception, self.handle_exception)
         self.__flask: Flask = flask
         logging.getLogger("werkzeug").setLevel(logging.WARNING)   # no per-request access logs
@@ -1048,6 +1055,13 @@ class WebApp:
 
     def handle_404(self, e: HTTPException) -> tuple[str, int]:
         return render_template("error.html", error_detail=None), 404
+
+    def handle_csrf_error(self, e: CSRFError) -> tuple[str, int]:
+        """A POST whose form token is missing, wrong or too old: nothing was done. The officer is told
+        in plain words; the real reason (e.g. "The CSRF token has expired.") goes to the log."""
+        logger.warning("WebApp: a %s to %s was refused: %s", request.method, request.path, e.description)
+        return render_template("error.html", error_title="This form has expired",
+                               error_message=WebApp.FORM_EXPIRED), 400
 
     def handle_exception(self, e: Exception) -> tuple[str, int]:
         import logging
