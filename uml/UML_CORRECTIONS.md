@@ -460,3 +460,28 @@ quietly used the live AI. Removed `App.+use_recorded_replies() : int`. `run.sh` 
 - Not a diagram change: `AssessmentRunner` reports a failed verdict as "the verdict could not be worked out"; the Flask
   secret key comes from `SECRET_KEY` in `.env`, or is random at each start (no hard-coded key).
 - Layout: WebApp grew two lines, so RateLimiter, CaseBuilder and ClientForm moved down; every line was re-routed. layout_check 0.
+
+## Assessment snapshot and archive/restore (2026-11-16): code changed, the diagram follows it
+
+Adrian's PR #19, rebuilt on the new `main` so WebApp only talks to App. Nothing is deleted: archive and restore each add
+one line to an assessment's `archive_log`, and the last line decides whether it is hidden.
+- `AssessmentRepository` (**T**): added the states `ACTIVE` / `ARCHIVED` / `UNREADABLE`, the results `CHANGED` / `NOT_FOUND` /
+  `NO_CHANGE` / `NOT_SAVED`, `MAX_REASON_LENGTH`, `-__ACTIONS`, `-__lock` (shared by `save()` and archive/restore, so
+  neither overwrites the other's change), `archive()`, `restore()`, `archive_state()`, `is_archived()`, `-__visible()`,
+  `-__record_action()`; `for_client()` and `query()` gained `include_archived`.
+- `App` (**T**): added the `ARCHIVE_*` constants (the repository's values, so WebApp need not import app/data),
+  `archive_assessment()`, `restore_assessment()`, `archive_state()`; `client_assessments()` and `all_assessments()` gained
+  `include_archived`. Not a diagram change: `save_assessment` saves a copy of the case under `"case"`.
+- `WebApp` (**T**): added `archive_assessment()`, `restore_assessment()`, `-__change_archive()`; `show_report()` gained
+  `archive` and `archive_state`.
+- `ReportView` (**T**): added `ARCHIVE_MARKS`; `format_assessment_list()` and `show_assessment_list()` gained `states`
+  (`list[str] | None`, one state per record in the same order: old records may share a missing id, so a dict keyed by
+  id would mark the wrong rows; Opus review).
+- `AssessmentRepository` (**B**): added `-__good_entry()` (Opus review: an archive line whose time or reason is not text
+  now counts as damaged, instead of breaking the assessment page).
+- Optional archive reason (Marcus, PR #19 review point 5): `AssessmentRepository.+reason_problem()` (**T**, the plain
+  reason a reason is refused); `App.archive_assessment()` gained `reason`, and App gained `ARCHIVE_BAD_REASON`,
+  `MAX_ARCHIVE_REASON` and `archive_reason_problem()` (**T**), so a bad reason is reported as such, never as
+  "can't load the saved assessments". The web page has an optional reason box next to Archive. layout_check 0.
+- Layout: WebApp and AssessmentRepository grew, so RateLimiter, CaseBuilder, ClientForm, DocumentReaderFactory and
+  CaseFiles moved down; every line was re-routed. layout_check 0.

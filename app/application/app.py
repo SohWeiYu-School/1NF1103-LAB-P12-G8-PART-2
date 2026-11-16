@@ -1,5 +1,6 @@
 """App: creates every object of the system and coordinates them."""
 
+import copy
 import logging
 import os
 from datetime import datetime
@@ -67,6 +68,18 @@ class App:
     # What the user is told when saved records cannot be read (the real error goes to the log).
     CLIENTS_UNAVAILABLE: str = "We can't load the client database right now. Please try again later."
     ASSESSMENTS_UNAVAILABLE: str = "We can't load the saved assessments right now. Please try again later."
+
+    # The archive states and results of an assessment, so the web app can ask App without
+    # reaching into the data manager.
+    ARCHIVE_ACTIVE: str = AssessmentRepository.ACTIVE
+    ARCHIVE_ARCHIVED: str = AssessmentRepository.ARCHIVED
+    ARCHIVE_UNREADABLE: str = AssessmentRepository.UNREADABLE
+    ARCHIVE_CHANGED: str = AssessmentRepository.CHANGED
+    ARCHIVE_NOT_FOUND: str = AssessmentRepository.NOT_FOUND
+    ARCHIVE_NO_CHANGE: str = AssessmentRepository.NO_CHANGE
+    ARCHIVE_NOT_SAVED: str = AssessmentRepository.NOT_SAVED
+    ARCHIVE_BAD_REASON: str = "bad_reason"
+    MAX_ARCHIVE_REASON: int = AssessmentRepository.MAX_REASON_LENGTH
 
     def __init__(self, ai_caller: Callable[[str, dict, dict], str | None] | None = None,
                  root: str = ROOT_DIR, data_folder: str = "data") -> None:
@@ -377,6 +390,7 @@ class App:
             "kind": "onboarding",
             "assessed_at": verdict.assessed_at,
             "outcome": verdict.outcome,
+            "case": copy.deepcopy(case),            # the client as they were when this was assessed
             "verdict": details,
             "report": verdict.report,
             "crime_scan": {"research": result["research"], "typologies": result["typology_response"],
@@ -589,20 +603,25 @@ class App:
 
     def list_assessments(self) -> None:
         """List saved assessments (filtered by outcome) and optionally open one."""
-        outcomes = ["(all)", *Verdict.OUTCOMES]
+        outcomes = ["(all)", *Verdict.OUTCOMES, "(include archived)"]
         choice = self.__ui.ask_choice("Show which outcome?", outcomes, allow_back=True)
         if choice is None:
             return          # 0 = back to the main menu
         picked = outcomes[choice]
+        with_archived = picked == "(include archived)"      # every outcome, archived ones too
         try:
-            matches = self.__assessments.query("" if picked == "(all)" else picked)
+            matches = self.__assessments.query("" if picked == "(all)" or with_archived else picked,
+                                               include_archived=with_archived)
         except (OSError, ValueError) as error:
             logger.error("App.list_assessments: the saved assessments cannot be read: %r", error)
             self.__ui.show_error(App.ASSESSMENTS_UNAVAILABLE)
             return
-        self.__report_view.show_assessment_list(matches)
+        # One state per record (not per id: old records may share a missing id).
+        states = [App.archive_state(match) for match in matches] if with_archived else None
+        self.__report_view.show_assessment_list(matches, states)
         if matches and self.__ui.ask_yes_no("Open one in full?"):
-            labels = [f"{match['client_ref']}  {match['kind']}" for match in matches]
+            marks = [ReportView.ARCHIVE_MARKS.get(state, "") for state in states] if states else [""] * len(matches)
+            labels = [f"{match['client_ref']}  {match['kind']}{mark}" for match, mark in zip(matches, marks)]
             chosen = matches[self.__ui.ask_choice("Which one?", labels)]
             if chosen.get("report"):                                         # the combined assessment
                 verdict = self.__saved_verdict(chosen)
@@ -614,11 +633,12 @@ class App:
             else:
                 self.__report_view.show_onboarding(chosen["assessment"])     # saved before the combined verdict
 
-    def client_assessments(self, client_ref: str) -> list[dict]:
-        """Every saved assessment of one client, newest first. Nothing is hidden or caught here:
+    def client_assessments(self, client_ref: str, include_archived: bool = False) -> list[dict]:
+        """Every saved assessment of one client, newest first; archived ones only if include_archived.
+        Nothing is hidden or caught here:
         whatever the AssessmentRepository reports (a list, or an OSError or ValueError it raises when
         the saved assessments cannot be read) comes straight back. The caller shows ASSESSMENTS_UNAVAILABLE."""
-        return self.__assessments.for_client(client_ref)
+        return self.__assessments.for_client(client_ref, include_archived)
 
     def find_assessment(self, assessment_id: str) -> dict | None:
         """The saved assessment with this id, or None if there is none. Raises OSError or ValueError
@@ -665,14 +685,47 @@ class App:
             logger.error("App.all_clients: the client records cannot be read: %r", error)
             raise ValueError(App.CLIENTS_UNAVAILABLE) from error
 
-    def all_assessments(self) -> list[dict]:
-        """Every saved assessment; [] only when there are none yet. Raises
-        ValueError(ASSESSMENTS_UNAVAILABLE) if the saved assessments cannot be read."""
+    def all_assessments(self, include_archived: bool = False) -> list[dict]:
+        """Every saved assessment (archived ones only if include_archived); [] only when there are
+        none yet. Raises ValueError(ASSESSMENTS_UNAVAILABLE) if the saved assessments cannot be read."""
         try:
-            return self.__assessments.load()
+            return self.__assessments.query("", include_archived)
         except (OSError, ValueError) as error:
             logger.error("App.all_assessments: the saved assessments cannot be read: %r", error)
             raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
+
+    def archive_assessment(self, assessment_id: str, reason: str = "") -> str:
+        """Hide one assessment from the lists (nothing is deleted), with an optional reason. Returns
+        ARCHIVE_CHANGED, ARCHIVE_NOT_FOUND, ARCHIVE_NO_CHANGE (already archived), ARCHIVE_UNREADABLE (its
+        archive log is damaged), ARCHIVE_NOT_SAVED, or ARCHIVE_BAD_REASON (nothing archived; reason_problem
+        says why). Raises ValueError(ASSESSMENTS_UNAVAILABLE) if the saved assessments cannot be read.
+        The client record is not touched."""
+        if AssessmentRepository.reason_problem(reason):
+            return App.ARCHIVE_BAD_REASON          # checked first, so it is never taken for a read error
+        try:
+            return self.__assessments.archive(assessment_id, reason)
+        except (OSError, ValueError) as error:
+            logger.error("App.archive_assessment: the saved assessments cannot be read: %r", error)
+            raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
+
+    def restore_assessment(self, assessment_id: str) -> str:
+        """Bring an archived assessment back into the lists. Same results and error as archive_assessment
+        (ARCHIVE_NO_CHANGE means it was not archived)."""
+        try:
+            return self.__assessments.restore(assessment_id)
+        except (OSError, ValueError) as error:
+            logger.error("App.restore_assessment: the saved assessments cannot be read: %r", error)
+            raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
+
+    @staticmethod
+    def archive_reason_problem(reason: object) -> str:
+        """What is wrong with an archive reason, in plain words; "" if it is fine."""
+        return AssessmentRepository.reason_problem(reason)
+
+    @staticmethod
+    def archive_state(saved: dict) -> str:
+        """ARCHIVE_ACTIVE, ARCHIVE_ARCHIVED or ARCHIVE_UNREADABLE for one saved assessment."""
+        return AssessmentRepository.archive_state(saved)
 
     def record_from_reading(self, extracted: dict, today: str = "") -> tuple[ClientRecord, list[dict]]:
         """The client record made from the AI's reading of documents, and one entry for each field

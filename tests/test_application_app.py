@@ -9,6 +9,7 @@ from app.application.app import App
 from app.application.assessment_runner import AssessmentRunner
 from app.model.client_record import ClientRecord
 from app.model.match_result import MatchResult
+from app.model.verdict import Verdict
 from tests import fake_ai, fake_services
 from tests.logic_fixtures import sample_case
 
@@ -199,7 +200,7 @@ def test_the_saved_assessment_keeps_its_layout(app):
     assessment_id = app.save_assessment(result, record)
     saved = app.assessments().find(assessment_id)
     assert assessment_id == verdict.assessment_id
-    assert list(saved) == ["assessment_id", "client_ref", "kind", "assessed_at", "outcome", "verdict", "report",
+    assert list(saved) == ["assessment_id", "client_ref", "kind", "assessed_at", "outcome", "case", "verdict", "report",
                            "crime_scan", "crime_result", "benchmark", "document_evidence", "forecast", "assessment"]
     assert (saved["client_ref"], saved["kind"], saved["assessed_at"], saved["outcome"]) == (
         verdict.client_ref, "onboarding", verdict.assessed_at, verdict.outcome)
@@ -467,7 +468,7 @@ def test_client_assessments_gives_one_clients_assessments_newest_first(app):
 
 
 def test_client_assessments_passes_on_an_error_from_the_repository(app, monkeypatch):
-    def broken(client_ref):
+    def broken(client_ref, include_archived=False):
         raise OSError("disk problem")
     monkeypatch.setattr(app.assessments(), "for_client", broken)
     with pytest.raises(OSError):
@@ -750,3 +751,92 @@ def test_the_research_asks_with_the_callers_research_model(tmp_path, monkeypatch
     assert models["reports"] == "research-model"                       # the web search
     assert models["sector_typologies"] == "fake-model"                 # everything else
     assert models["expected_wealth"] == "fake-model"
+
+
+# ----- the client snapshot, archive and restore ---------------------------------------------
+
+def test_the_saved_assessment_keeps_a_copy_of_the_client_as_assessed(app):
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record)
+    case, _ = app.read_case(record)
+    fake_services.save_forecast_replies(app.response_cache(), case)
+    result = app.assess(case)
+    saved = app.assessments().find(app.save_assessment(result, record))
+    assert saved["case"] == json.loads(json.dumps(result["case"]))
+
+
+def _two_saved(app):
+    for number in (1, 2):
+        assert app.assessments().save({"assessment_id": f"A{number}", "client_ref": "C-1", "kind": "onboarding",
+                                       "assessed_at": f"2025-0{number}-01T00:00:00+00:00", "outcome": "PASSED"})
+
+
+def test_archive_and_restore_hide_and_show_an_assessment_in_the_lists(app):
+    _two_saved(app)
+    assert app.archive_assessment("A1") == App.ARCHIVE_CHANGED
+    assert [a["assessment_id"] for a in app.client_assessments("C-1")] == ["A2"]
+    assert [a["assessment_id"] for a in app.client_assessments("C-1", include_archived=True)] == ["A2", "A1"]
+    assert [a["assessment_id"] for a in app.all_assessments()] == ["A2"]
+    assert len(app.all_assessments(include_archived=True)) == 2
+    assert App.archive_state(app.find_assessment("A1")) == App.ARCHIVE_ARCHIVED
+    assert app.restore_assessment("A1") == App.ARCHIVE_CHANGED
+    assert App.archive_state(app.find_assessment("A1")) == App.ARCHIVE_ACTIVE
+    assert len(app.all_assessments()) == 2
+
+
+def test_archive_saves_the_reason_and_refuses_a_bad_one_without_archiving(app):
+    _two_saved(app)
+    assert app.archive_assessment("A1", "x" * (App.MAX_ARCHIVE_REASON + 1)) == App.ARCHIVE_BAD_REASON
+    assert app.archive_assessment("A1", "two\nlines") == App.ARCHIVE_BAD_REASON
+    assert "archive_log" not in app.find_assessment("A1")
+    assert "at most 200 characters" in App.archive_reason_problem("x" * 201)
+    assert App.archive_reason_problem("typed the wrong net worth") == ""
+    assert app.archive_assessment("A1", "  typed the wrong net worth  ") == App.ARCHIVE_CHANGED
+    assert app.find_assessment("A1")["archive_log"][-1]["reason"] == "typed the wrong net worth"
+
+
+def test_archive_and_restore_report_every_other_result(app):
+    _two_saved(app)
+    assert app.restore_assessment("A1") == App.ARCHIVE_NO_CHANGE
+    assert app.archive_assessment("nope") == App.ARCHIVE_NOT_FOUND
+    app.archive_assessment("A1")
+    assert app.archive_assessment("A1") == App.ARCHIVE_NO_CHANGE
+
+
+def test_archive_state_tells_a_damaged_log_apart():
+    assert App.archive_state({"archive_log": "text"}) == App.ARCHIVE_UNREADABLE
+    assert App.archive_state({}) == App.ARCHIVE_ACTIVE
+
+
+def test_archiving_does_not_touch_the_client_record(app):
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record)
+    before = app.clients().find(record.client_ref)
+    assert app.assessments().save({"assessment_id": "A1", "client_ref": record.client_ref})
+    app.archive_assessment("A1")
+    assert app.clients().find(record.client_ref) == before
+
+
+def test_archive_and_restore_raise_the_safe_message_when_they_cannot_read(app, tmp_path, caplog):
+    _damage(tmp_path, "ai_assessments.json")
+    for action in (app.archive_assessment, app.restore_assessment):
+        with pytest.raises(ValueError) as error:
+            action("A1")
+        assert str(error.value) == App.ASSESSMENTS_UNAVAILABLE
+    assert "App.archive_assessment" in caplog.text and "App.restore_assessment" in caplog.text
+
+
+def test_the_menu_can_list_archived_assessments_too_and_marks_them(app, monkeypatch, capsys):
+    _two_saved(app)
+    app.archive_assessment("A1")
+    app.assessments().save({"assessment_id": "A3", "client_ref": "C-3", "kind": "onboarding",
+                            "archive_log": "broken", "outcome": "PASSED"})
+    capsys.readouterr()
+    _answers(monkeypatch, "1", "n")                   # every outcome: archived and damaged ones are hidden
+    app.list_assessments()
+    out = capsys.readouterr().out
+    assert "(archived)" not in out and "unreadable" not in out and "C-3" not in out
+    _answers(monkeypatch, str(len(Verdict.OUTCOMES) + 2), "n")     # the last option
+    app.list_assessments()
+    out = capsys.readouterr().out
+    assert out.count("(archived)") == 1 and out.count("(archive state unreadable)") == 1 and "C-3" in out

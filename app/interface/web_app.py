@@ -128,6 +128,10 @@ class WebApp:
         flask.add_url_rule('/assess/loading/<job_id>', endpoint='assess_loading', view_func=self.assess_loading)
         flask.add_url_rule('/assess/poll/<job_id>', endpoint='assess_poll', view_func=self.assess_poll)
         flask.add_url_rule('/assess/result/<job_id>', endpoint='assess_result', view_func=self.assess_result)
+        flask.add_url_rule('/assessment/<assessment_id>/archive', endpoint='archive_assessment',
+                           view_func=self.archive_assessment, methods=['POST'])
+        flask.add_url_rule('/assessment/<assessment_id>/restore', endpoint='restore_assessment',
+                           view_func=self.restore_assessment, methods=['POST'])
         flask.add_url_rule('/assessments', endpoint='list_assessments_view', view_func=self.list_assessments_view)
         flask.add_url_rule('/sync', endpoint='sync_to_cloud', view_func=self.sync_to_cloud, methods=['POST'])
         flask.register_error_handler(404, self.handle_404)
@@ -652,14 +656,18 @@ class WebApp:
 
     def show_report(self, record: dict, report: dict | None, assessed_at: str = "", assessment_id: str | None = None,
                     crime_result: dict | None = None, typologies: list[dict] | None = None,
-                    benchmark: dict | None = None) -> str:
-        """The assessment page: the same report the command line prints (VerdictEngine.report)."""
+                    benchmark: dict | None = None, archive: dict | None = None,
+                    archive_state: str | None = None) -> str:
+        """The assessment page: the same report the command line prints (VerdictEngine.report).
+        archive is the last line of an archived assessment's log; archive_state is App.ARCHIVE_UNREADABLE
+        when its archive record is damaged (the page then says so and offers no button)."""
         symbols = {entry["mark"]: entry["symbol"] for entry in (report or {}).get("legend", [])}
         typologies_by_id = {t.get("typology_id"): t for t in (typologies or [])}
         return render_template("assess_result.html", record=record, report=report, symbols=symbols,
                                assessed_at=assessed_at, assessment_id=assessment_id,
                                crime_result=crime_result, typologies_by_id=typologies_by_id, benchmark=benchmark,
-                               typologies_checked=App.typologies_checked(report))
+                               typologies_checked=App.typologies_checked(report),
+                               archive=archive, archive_state=archive_state)
 
     def home(self) -> str:
         """The client list. If the saved clients cannot be read the page says so and shows no list
@@ -723,15 +731,73 @@ class WebApp:
         if record is None:
             abort(404)
         saved = record.to_dict()                 # the page template reads the saved layout
+        show_archived = request.args.get("archived") == "1"
+        archive_states: list[str] = []           # one state per shown assessment, in the same order
+        archived_count = 0
         try:
-            assessments = self.__app.client_assessments(client_ref)
+            everything = self.__app.client_assessments(client_ref, include_archived=True)
+            # The state is worked out per record, not per id: old records may share a missing id.
+            rows = [(a, App.archive_state(a)) for a in everything]
+            archived_count = sum(1 for _, state in rows if state != App.ARCHIVE_ACTIVE)
+            if not show_archived:
+                rows = [(a, state) for a, state in rows if state == App.ARCHIVE_ACTIVE]
+            assessments = [a for a, _ in rows]
+            archive_states = [state for _, state in rows]
         except (OSError, ValueError) as error:
             logger.error("WebApp.view_client: the saved assessments cannot be read: %r", error)
             flash(App.ASSESSMENTS_UNAVAILABLE)
             assessments = None
         return render_template("client_view.html", record=saved,
                                values=self.values_from_record(saved), SECTIONS=WebApp.SECTIONS,
-                               assessments=assessments, problems=record.problems())
+                               assessments=assessments, problems=record.problems(),
+                               show_archived=show_archived, archived_count=archived_count,
+                               archive_states=archive_states, max_reason=App.MAX_ARCHIVE_REASON)
+
+    def archive_assessment(self, assessment_id: str) -> Response:
+        """Hide one assessment from the lists (nothing is deleted), then go back to its client."""
+        return self.__change_archive(assessment_id, archive=True)
+
+    def restore_assessment(self, assessment_id: str) -> Response:
+        """Bring an archived assessment back into the lists, then go back to its client."""
+        return self.__change_archive(assessment_id, archive=False)
+
+    def __change_archive(self, assessment_id: str, archive: bool) -> Response:
+        """Archive or restore, tell the officer what happened, and go to the client page."""
+        reason = request.form.get("reason", "") if archive else ""      # optional, archive only
+        try:
+            saved = self.__app.find_assessment(assessment_id)
+            if saved is None:
+                abort(404)
+            if archive:
+                result = self.__app.archive_assessment(saved["assessment_id"], reason)
+            else:
+                result = self.__app.restore_assessment(saved["assessment_id"])
+        except (OSError, ValueError) as error:
+            logger.error("WebApp.__change_archive: the saved assessments cannot be read: %r", error)
+            flash(App.ASSESSMENTS_UNAVAILABLE)
+            return redirect(url_for("home"))
+        client_ref = saved["client_ref"]
+        keep_archived = False
+        if result == App.ARCHIVE_CHANGED and not archive:
+            # Only chooses which view to go back to; if it cannot be read, the restore still happened.
+            try:
+                keep_archived = any(App.archive_state(a) != App.ARCHIVE_ACTIVE
+                                    for a in self.__app.client_assessments(client_ref, include_archived=True))
+            except (OSError, ValueError) as error:
+                logger.error("WebApp.__change_archive: restored, but the client's list cannot be read: %r", error)
+        done, nothing_to_do = (("Assessment archived. It is hidden from the lists, not deleted.",
+                                "This assessment is already archived.") if archive else
+                               ("Assessment restored.", "This assessment is not archived."))
+        word = "archived" if archive else "restored"
+        messages = {App.ARCHIVE_CHANGED: done, App.ARCHIVE_NO_CHANGE: nothing_to_do,
+                    App.ARCHIVE_UNREADABLE: "This assessment's archive record is damaged, so it cannot be changed.",
+                    App.ARCHIVE_NOT_SAVED: f"The assessment was not {word} because saving failed. Please try again later."}
+        if result == App.ARCHIVE_NOT_FOUND:
+            abort(404)
+        if result == App.ARCHIVE_BAD_REASON:
+            messages[result] = f"Nothing was archived. {App.archive_reason_problem(reason)}"
+        flash(messages.get(result, App.ASSESSMENTS_UNAVAILABLE))
+        return redirect(url_for("view_client", client_ref=client_ref, **({"archived": "1"} if keep_archived else {})))
 
     def view_assessment(self, assessment_id: str) -> str | Response:
         try:
@@ -743,11 +809,17 @@ class WebApp:
         if saved is None:
             abort(404)
         record = self.page_record(saved["client_ref"])
+        snapshot = saved.get("case")
+        if isinstance(snapshot, dict) and snapshot.get("name"):
+            record = {**record, "name": snapshot["name"]}      # the client as they were when this ran
+        state = App.archive_state(saved)
+        log = saved.get("archive_log")
+        archive = log[-1] if state == App.ARCHIVE_ARCHIVED else None
         typologies = (saved.get("crime_scan") or {}).get("typologies", {})
         typology_list = typologies.get("sector_typologies") if isinstance(typologies, dict) else None
         return self.show_report(record, saved.get("report"), saved.get("assessed_at", ""), assessment_id,
                            crime_result=saved.get("crime_result"), typologies=typology_list,
-                           benchmark=saved.get("benchmark"))
+                           benchmark=saved.get("benchmark"), archive=archive, archive_state=state)
 
     def edit_client(self, client_ref: str) -> str | Response:
         try:
@@ -944,10 +1016,13 @@ class WebApp:
     def list_assessments_view(self) -> str:
         try:
             assessments = self.__app.all_assessments()
+            archived_count = sum(1 for a in self.__app.all_assessments(include_archived=True)
+                                 if App.archive_state(a) != App.ARCHIVE_ACTIVE)
         except ValueError as error:
             flash(str(error))
             assessments = None
-        return render_template("assessments.html", assessments=assessments)
+            archived_count = 0
+        return render_template("assessments.html", assessments=assessments, archived_count=archived_count)
 
     def sync_to_cloud(self) -> Response:
         stats = self.__app.sync_to_cloud()
