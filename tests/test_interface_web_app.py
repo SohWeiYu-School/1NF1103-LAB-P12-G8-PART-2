@@ -716,3 +716,18 @@ def test_a_failed_web_assessment_shows_a_plain_message_and_logs_the_real_error(t
     assert "KeyError" not in state["error"] and "benchmark" not in state["error"]
     if not stop:
         assert "KeyError" in caplog.text                       # the real error is in the log
+
+
+def test_without_a_secret_key_each_start_gets_its_own_random_one(monkeypatch):
+    # No App here: App would load the developer's own .env, which may set SECRET_KEY.
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    first, second = WebApp().flask().secret_key, WebApp().flask().secret_key
+    assert first != second and len(first) == 64
+    assert "dev-only" not in first
+
+
+def test_the_secret_key_from_env_is_used(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    monkeypatch.setenv("SECRET_KEY", "a-key-for-this-test")
+    assert WebApp(App(None, data_folder=str(tmp_path))).flask().secret_key == "a-key-for-this-test"

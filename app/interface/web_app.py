@@ -3,6 +3,7 @@
 import io
 import logging
 import os
+import secrets
 import shutil
 import tempfile
 import threading
@@ -107,7 +108,9 @@ class WebApp:
             (app.rate_limiter() if app is not None else None)
         self.__jobs: dict[str, dict] = {}        # job_id -> {status, step_num, step, result, error, client_ref}
         flask = Flask(__name__)
-        flask.secret_key = os.getenv("SECRET_KEY", "dev-only-change-me")
+        # Signs the cookie that carries flash messages. Without SECRET_KEY in .env a random key is made
+        # at each start (never a fixed one written in the code, which anyone could use to forge it).
+        flask.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
         flask.config["MAX_CONTENT_LENGTH"] = WebApp.MAX_UPLOAD_BYTES
         flask.jinja_env.loader = DictLoader(TEMPLATES)
         flask.jinja_env.globals.update(PEP_OPTIONS=ClientForm.PEP_OPTIONS, PAYMENT_OPTIONS=ClientForm.PAYMENT_METHODS)
