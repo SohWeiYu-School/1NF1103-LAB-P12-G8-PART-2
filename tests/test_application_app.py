@@ -628,3 +628,82 @@ def test_typologies_checked_reads_the_could_not_run_section():
     assert App.typologies_checked(research_failed) is False
     assert App.typologies_checked(other_failed) is True
     assert App.typologies_checked({"sections": []}) is True and App.typologies_checked(None) is True
+
+
+# ----- what the web app asks App for ---------------------------------------------------------
+
+_READING_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documents", "marcus_lim_expected_extract.json")
+
+
+def _reading():
+    with open(_READING_PATH, encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def test_the_app_says_which_document_references_it_made(app, tmp_path):
+    source = tmp_path / "deed.txt"
+    source.write_text("a deed", encoding="utf-8")
+    file_id = app.upload_document(str(source))
+    assert app.owns_document(file_id) is True
+    assert app.owns_document("../../.env") is False
+    assert app.owns_document("") is False
+
+
+def test_a_document_is_read_for_extraction_and_an_unreadable_one_comes_back_as_an_error(app, tmp_path):
+    good = tmp_path / "note.txt"
+    good.write_text("Salary from DBS", encoding="utf-8")
+    read = app.read_document_for_extraction(str(good), "note.txt")
+    assert read["file_name"] == "note.txt" and read["kind"] != "error"
+    odd = tmp_path / "data.xyz"
+    odd.write_text("?", encoding="utf-8")
+    bad = app.read_document_for_extraction(str(odd), "data.xyz")
+    assert bad["kind"] == "error" and "can't be read" in bad["error"]
+
+
+def test_all_clients_is_empty_when_there_are_none_and_lists_them_when_saved(app):
+    assert app.all_clients() == []
+    app.clients().save(sample_case())
+    assert [client["client_ref"] for client in app.all_clients()] == [sample_case()["client_ref"]]
+
+
+def test_all_clients_raises_the_safe_message_when_the_database_cannot_be_read(app, tmp_path, caplog):
+    _damage(tmp_path, "sow_cases.json")
+    with pytest.raises(ValueError) as error:
+        app.all_clients()
+    assert str(error.value) == App.CLIENTS_UNAVAILABLE
+    assert "App.all_clients" in caplog.text
+
+
+def test_all_assessments_is_empty_when_there_are_none(app):
+    assert app.all_assessments() == []
+
+
+def test_all_assessments_raises_the_safe_message_when_they_cannot_be_read(app, tmp_path, caplog):
+    _damage(tmp_path, "ai_assessments.json")
+    with pytest.raises(ValueError) as error:
+        app.all_assessments()
+    assert str(error.value) == App.ASSESSMENTS_UNAVAILABLE
+    assert "App.all_assessments" in caplog.text
+
+
+def test_a_reading_becomes_a_record_and_the_fields_left_out_are_named(app):
+    record, dropped = app.record_from_reading(_reading(), "2026-10-14")
+    assert isinstance(record, ClientRecord)
+    assert record.current_date == "2026-10-14" and dropped == []
+    bad = {**_reading(), "client": {**_reading()["client"], "age": 12, "date_of_birth": None}}
+    _, dropped = app.record_from_reading(bad, "2026-10-14")
+    assert [entry["path"] for entry in dropped] == [["career", "age"]]
+
+
+def test_a_reading_dated_with_a_bad_date_raises_value_error_saying_what_is_wrong(app):
+    with pytest.raises(ValueError, match="YYYY-MM-DD"):
+        app.record_from_reading(_reading(), "14/10/2026")
+
+
+def test_reading_problems_lists_things_worth_a_second_look(app):
+    record, _ = app.record_from_reading(_reading(), "2026-10-14")
+    problems = app.reading_problems(record, "2026-10-14")
+    assert isinstance(problems, list) and all(isinstance(line, str) for line in problems)
+    early = record.to_dict()
+    early["career"]["career_start_year"] = 1900
+    assert any("before age 14" in line for line in app.reading_problems(ClientRecord.from_dict(early), "2026-10-14"))

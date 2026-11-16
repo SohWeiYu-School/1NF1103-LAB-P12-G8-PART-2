@@ -655,6 +655,46 @@ class App:
             stats["errors"] += [error for error in result["errors"] if error not in stats["errors"]]
         return stats
 
+    # ----- what the web app asks for, so it never works a manager's object itself --------------
+
+    def owns_document(self, file_id: str) -> bool:
+        """True only for a document reference this app made (the DocumentStore decides)."""
+        return self.__documents.owns(file_id)
+
+    def read_document_for_extraction(self, path: str, name: str) -> dict:
+        """One file read so the AI can pull client details out of it: {"file_name", "kind", ...}.
+        A file that cannot be read comes back with kind "error" and a message that is safe to show."""
+        return self.__documents.read_for_extraction(path, name)
+
+    def all_clients(self) -> list[dict]:
+        """Every saved client; [] only when there are none yet. Raises ValueError(CLIENTS_UNAVAILABLE)
+        if the client database cannot be read (that is never "no clients")."""
+        try:
+            return self.__clients.load()
+        except (OSError, ValueError) as error:
+            logger.error("App.all_clients: the client records cannot be read: %r", error)
+            raise ValueError(App.CLIENTS_UNAVAILABLE) from error
+
+    def all_assessments(self) -> list[dict]:
+        """Every saved assessment; [] only when there are none yet. Raises
+        ValueError(ASSESSMENTS_UNAVAILABLE) if the saved assessments cannot be read."""
+        try:
+            return self.__assessments.load()
+        except (OSError, ValueError) as error:
+            logger.error("App.all_assessments: the saved assessments cannot be read: %r", error)
+            raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
+
+    def record_from_reading(self, extracted: dict, today: str = "") -> tuple[ClientRecord, list[dict]]:
+        """The client record made from the AI's reading of documents, and one entry for each field
+        left out because no client record can have that value: {"path", "message", "optional_field"}.
+        Raises ValueError, saying what is wrong, only if the reading as a whole cannot be a record."""
+        record, _, dropped = self.record_builder(today).build(extracted, "")
+        return record, dropped
+
+    def reading_problems(self, record: ClientRecord, today: str = "") -> list[str]:
+        """Things worth a second look in a record filled from documents. [] = nothing spotted."""
+        return self.record_builder(today).check(record)
+
     # ----- the objects the web app reaches through App ---------------------------------------
 
     def clients(self) -> Repository:
