@@ -529,5 +529,16 @@ Phase 2.)
 moved down 330 px, the IO column (WebApp, RateLimiter, CaseBuilder, ClientForm) was re-stacked, and every line was
 re-routed. Scan 77 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.
 
+**Review fixes after the build (audit key, unreadable counts, `for_client` removed)**
+- `App` gained `-__audit_key`, `AUDIT_KEY_MISSING`, `MIN_AUDIT_KEY` and `audit_key_ok()`; `AuditEvent.compute_hash()`,
+  `hash_matches()` and `seal()` take a `key`; `AuditChain` and `AuditRepository` take and keep a `-__key`. Why: the hash
+  chain is now signed with a secret `AUDIT_KEY` (HMAC), so someone who edits the file cannot re-hash the log without it.
+- `App.audit_log()` now returns `tuple[list[AuditEvent], int, int]`, `audit_trail()` and `__audit_events()` return
+  `tuple[list[AuditEvent], int]`. Why: rows that cannot be read are counted and reported, not silently hidden (CLAUDE.md
+  section 9).
+- `AuditRepository.for_client()` was removed (code commit `024ca6d`): `App` no longer used it, so the diagram drops it too.
+- Layout: the Application folder grew 40 px and 8 arrows from `App` were re-routed. Scan 15 differences before, 0 after;
+  round-trip PROBLEMS: 0; layout_check 0.
+
 **Process note:** commit `ace48ab` changed `app/application/app.py` without changing `tests/test_application_app.py` in
 the same commit (CLAUDE.md section 7). Later commits added the tests. The history was not rewritten.

@@ -36,9 +36,9 @@ package "Data Manager (app/data)" {
   class AuditRepository {
     -__HASH_PATTERN : str = "^[0-9a-f]{64}$" «const»
     -__lock : threading.Lock = threading.Lock()
+    -__key : str = ""
     --
-    +__init__(path : str = ".../audit_log.json", key_field : str = "event_id")
-    +for_client(client_ref : str) : list[dict]
+    +__init__(path : str = ".../audit_log.json", key_field : str = "event_id", key : str = "")
     +save(record : dict) : bool
   }
   class CaseFiles {
@@ -658,6 +658,9 @@ package "Application (app/application)" {
     +UNEXPECTED_ERROR_STEP : str = "Unexpected error" «const»
     -__audit : AuditRepository = ".../audit_log.json"
     -__audit_note : threading.local = threading.local()
+    +AUDIT_KEY_MISSING : str = "The audit log is not set up (its key... «const»
+    +MIN_AUDIT_KEY : int = 32 «const»
+    -__audit_key : str = os.getenv("AUDIT_KEY", "").strip()
     --
     +__init__(ai_caller : Callable[[str, dict, dict], str | None] | None = None, root : str = ROOT_DIR, data_folder : str = "data")
     +start(arguments : list[str]) : int
@@ -720,7 +723,7 @@ package "Application (app/application)" {
     {static} +archive_state(saved : dict) : str
     +restore_assessment(assessment_id : str, actor : str = TERMINAL) : str
     {static} +archive_reason_problem(reason : object) : str
-    {static} -__audit_events(rows : list[dict], caller : str) : list[AuditEvent]
+    {static} -__audit_events(rows : list[dict], caller : str) : tuple[list[AuditEvent], int]
     -__audit_rows(caller : str) : list[dict]
     {static} -__count_fields(value : object, key : str = "") : int
     {static} -__not_run_steps(report : dict | None) : list[str]
@@ -732,14 +735,15 @@ package "Application (app/application)" {
     -__sync_all() : dict
     +account(email : str) : Account | None
     +accounts() : list[Account]
-    +audit_log(audit_filter : AuditFilter, now : datetime | None = None) : tuple[list[AuditEvent], int]
-    +audit_trail(client_ref : str) : list[AuditEvent]
+    +audit_log(audit_filter : AuditFilter, now : datetime | None = None) : tuple[list[AuditEvent], int, int]
+    +audit_trail(client_ref : str) : tuple[list[AuditEvent], int]
     +audit_write_failed() : bool
     +client_outcome_failed() : bool
     +refused(actor : str, what : str) : None
     +sign_in(email : str) : Account | None
     +sign_out(account : Account) : None
     +verify_audit_log(actor : str) : AuditChain
+    +audit_key_ok() : bool
   }
   class AssessmentRunner {
     -__verdict_engine : VerdictEngine = VerdictEngine(...)
@@ -790,9 +794,10 @@ package "Logic Manager (app/logic)" {
     -__mismatches : list[int] = []
     -__rows : list[dict] = []
     -__unreadable : list[int] = []
+    -__key : str = ""
     --
     -__check() : None
-    +__init__(rows : list[dict] | None = None)
+    +__init__(rows : list[dict] | None = None, key : str = "")
     +breaks() : list[int]
     +events() : list[AuditEvent]
     +intact() : bool
@@ -1165,11 +1170,11 @@ package "Domain Model (app/model)" {
     {static} -__plain(value : object) : str
     {static} -__short(value : object) : str
     {static} -__words(*parts : str) : str
-    +compute_hash() : str
+    +compute_hash(key : str) : str
     {static} +from_dict(data : dict) : AuditEvent
-    +hash_matches() : bool
+    +hash_matches(key : str) : bool
     +is_sealed() : bool
-    +seal(sequence : int, previous_hash : str) : None
+    +seal(sequence : int, previous_hash : str, key : str) : None
     +summary() : str
     +to_dict() : dict
   }
