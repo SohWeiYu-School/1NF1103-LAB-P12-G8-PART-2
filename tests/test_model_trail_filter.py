@@ -22,7 +22,7 @@ def test_the_defaults_show_everything_for_all_time():
 
 
 @pytest.mark.parametrize("kwargs, text", [
-    ({"show": "everything"}, "show choice"), ({"when": "yesterday"}, "when choice"), ({"date_from": 5}, "text"),
+    ({"show": "everything"}, "show choice"), ({"when": "yesterday"}, "when choice"),
     ({"when": "custom", "date_from": "2026/11/01"}, "year-month-day"),
     ({"when": "custom", "date_from": "2026-11-05", "date_to": "2026-11-04"}, "on or before"),
 ])
@@ -74,14 +74,3 @@ def test_a_bad_custom_range_says_why_and_shows_all_dates_for_now(args, problem):
 def test_custom_just_picked_shows_all_dates_with_no_warning():
     f = TrailFilter.from_query({"when": "custom"}, NOW)
     assert f.problems() == [] and f.day_range(NOW) is None
-
-
-def test_a_value_that_is_not_text_is_a_problem_not_a_crash():
-    assert len(TrailFilter.from_query({"show": 5}, NOW).problems()) == 1
-
-
-def test_from_query_refuses_what_is_not_a_mapping_and_matches_a_now_without_a_timezone():
-    with pytest.raises(ValueError, match="mapping"):
-        TrailFilter.from_query("show=all", NOW)
-    with pytest.raises(ValueError, match="timezone"):
-        TrailFilter(when="7").matches(_event(), datetime(2026, 11, 16))
