@@ -75,7 +75,7 @@ class VerdictEngine:
         """One finding the engine adds itself."""
         return Check(feature, check, label, theme, status, detail, explanation, group)
 
-    def _is_pep(self, case: dict) -> bool:
+    def __is_pep(self, case: dict) -> bool:
         """True if the client is a politically exposed person (anything but Claims.NO_PEP_VALUES).
         A blank answer is unknown, not "no": it counts as a PEP, the cautious side."""
         status = str(case.get("claims", {}).get("pep_status") or "").strip().lower()
@@ -359,7 +359,7 @@ class VerdictEngine:
 
         if any(c.check == "AUM_FUNDING" and c.failed() for c in bench):
             flag("RISKY", "He plans to bring more money to the bank than his cash and shares can fund.")
-        if self._is_pep(case):
+        if self.__is_pep(case):
             answered = bool(str(case["claims"].get("pep_status") or "").strip())
             who = "He is a PEP" if answered else "His PEP status is not answered, so he is treated as a PEP"
             pep_types = [t for t in fitting if t["category"] in settings["pep_crime_categories"]]
