@@ -1586,7 +1586,7 @@ def test_custom_dates_show_the_date_boxes_and_filter_by_singapore_day(web):
 def test_a_bad_custom_range_shows_the_mockups_problem_line_and_all_dates(web):
     application, _, browser = _admin_web(web)
     application.sync_to_cloud("Shareen")
-    for url, problem in (("/admin/log?preset=custom", "Pick both a start and an end date. Showing all dates for now."),
+    for url, problem in (("/admin/log?preset=custom&from=2026-11-10", "Pick both a start and an end date. Showing all dates for now."),
                          ("/admin/log?preset=custom&from=2026-11-12&to=2026-11-10",
                           "The start date must be on or before the end date. Showing all dates for now.")):
         page = browser.get(url).get_data(as_text=True)
@@ -1645,7 +1645,15 @@ def test_the_pager_links_keep_the_filters(web):
     application, _, browser = _admin_web(web)
     _put_events(application, 30)
     page = browser.get("/admin/log?actor=Shareen&sort=asc").get_data(as_text=True)
-    assert 'href="/admin/log?actor=Shareen&amp;sort=asc&amp;page=2">Older &rarr;</a>' in page
+    # oldest first: the next page holds newer events, so the words follow the sort
+    assert 'href="/admin/log?actor=Shareen&amp;sort=asc&amp;page=2">Newer &rarr;</a>' in page
+    assert 'aria-disabled="true">&larr; Older' in page
+
+
+def test_a_time_with_no_singapore_time_is_shown_as_it_is_not_a_crash(web):
+    _, site, _ = web
+    assert site.singapore_day("9999-12-31T23:30:00+00:00") == "9999-12-31T23:30:00+00:00"
+    assert site.singapore_time("9999-12-31T23:30:00-01:00") == "9999-12-31T23:30:00-01:00"
 
 
 def test_verify_log_reports_an_untouched_log_as_a_success_and_records_it(web):
@@ -1833,7 +1841,7 @@ def test_the_when_filter_of_the_timeline_and_its_problem_lines(web):
     old = shown("when=custom&from=2020-01-01&to=2020-01-02")
     assert "Nothing matches these filters. Try &ldquo;All&rdquo; or &ldquo;All time&rdquo;." in old and "0 entries" in old
     assert 'name="from"' in old and 'name="to"' in old and "No history recorded yet." not in old
-    for query, problem in (("when=custom", "Pick both a start and an end date. Showing all dates for now."),
+    for query, problem in (("when=custom&to=2026-11-10", "Pick both a start and an end date. Showing all dates for now."),
                            ("when=custom&from=2026-11-12&to=2026-11-10",
                             "The start date must be on or before the end date. Showing all dates for now.")):
         text = shown(query)

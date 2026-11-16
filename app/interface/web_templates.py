@@ -487,7 +487,7 @@ VIEW = """{% extends "base.html" %}
     {% set state = archive_states[loop.index0] if loop.index0 < archive_states|length else 'active' %}
     <tr{% if state != 'active' %} style="opacity:.55"{% endif %}>
       {% set when = a.get('assessed_at', '')|sgt %}
-      {% if ' ' in when %}<td>{{ when.rsplit(' ', 1)[0] }}</td><td>{{ when.rsplit(' ', 1)[1] }} SGT</td>
+      {% if when != a.get('assessed_at', '') and ' ' in when %}<td>{{ when.rsplit(' ', 1)[0] }}</td><td>{{ when.rsplit(' ', 1)[1] }} SGT</td>
       {% else %}<td>{{ when }}</td><td></td>{% endif %}
       <td>{{ (a.get('outcome') or (a.get('assessment') or {}).get('outcome') or '—').replace('_', ' ') }}{% if state == 'archived' %}{% set last = (a.get('archive_log') or [])[-1] %} (archived) &middot; {{ ('by ' ~ last.get('by')) if last.get('by') else 'Not recorded (before sign-in existed)' }}{% elif state == 'unreadable' %} (archive state unreadable){% endif %}</td>
       <td>
@@ -1068,9 +1068,10 @@ AUDIT = """{% extends "base.html" %}
   </table></div>
   <div class="pager"><span class="muted">Showing {{ (page - 1) * page_size + 1 if log.total else 0 }}&ndash;{{ [page * page_size, log.total]|min }} of {{ log.total }} &middot; open <b>Info</b> on a row for details</span>
     <span class="row">
-      {% if page > 1 %}<a class="btn secondary sm" href="{{ url_for('audit_log_view', **(dict(base_query, page=page - 1) if page > 2 else base_query)) }}">&larr; Newer</a>{% else %}<span class="btn secondary sm" aria-disabled="true">&larr; Newer</span>{% endif %}
+      {% set back_word, on_word = ('Older', 'Newer') if audit_filter.sort == 'asc' else ('Newer', 'Older') %}
+      {% if page > 1 %}<a class="btn secondary sm" href="{{ url_for('audit_log_view', **(dict(base_query, page=page - 1) if page > 2 else base_query)) }}">&larr; {{ back_word }}</a>{% else %}<span class="btn secondary sm" aria-disabled="true">&larr; {{ back_word }}</span>{% endif %}
       <span class="num">Page {{ page }} of {{ pages }}</span>
-      {% if page < pages %}<a class="btn secondary sm" href="{{ url_for('audit_log_view', **dict(base_query, page=page + 1)) }}">Older &rarr;</a>{% else %}<span class="btn secondary sm" aria-disabled="true">Older &rarr;</span>{% endif %}
+      {% if page < pages %}<a class="btn secondary sm" href="{{ url_for('audit_log_view', **dict(base_query, page=page + 1)) }}">{{ on_word }} &rarr;</a>{% else %}<span class="btn secondary sm" aria-disabled="true">{{ on_word }} &rarr;</span>{% endif %}
     </span></div>
   {% endif %}
 </section>

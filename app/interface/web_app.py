@@ -339,26 +339,27 @@ class WebApp:
         time is shown as it is."""
         try:
             moment = WebApp.__utc_moment(text)
-        except (TypeError, ValueError):
+            local = moment.astimezone(WebApp.SINGAPORE)
+        except (TypeError, ValueError, OverflowError):
             return str(text)
-        local = moment.astimezone(WebApp.SINGAPORE)
         return f"{local.day} {local:%b}"
 
     def singapore_clock(self, text: str) -> str:
         """An audit time (UTC) as the Singapore clock time: "14:02". Anything else is shown as it is."""
         try:
             moment = WebApp.__utc_moment(text)
-        except (TypeError, ValueError):
+            local = moment.astimezone(WebApp.SINGAPORE)
+        except (TypeError, ValueError, OverflowError):
             return str(text)
-        return f"{moment.astimezone(WebApp.SINGAPORE):%H:%M}"
+        return f"{local:%H:%M}"
 
     def singapore_long(self, text: str) -> str:
         """An audit time (UTC) as "15 November 2026, 14:02 SGT". Anything else is shown as it is."""
         try:
             moment = WebApp.__utc_moment(text)
-        except (TypeError, ValueError):
+            local = moment.astimezone(WebApp.SINGAPORE)
+        except (TypeError, ValueError, OverflowError):
             return str(text)
-        local = moment.astimezone(WebApp.SINGAPORE)
         return f"{local.day} {local:%B %Y}, {local:%H:%M} SGT"
 
     @staticmethod
@@ -392,9 +393,9 @@ class WebApp:
         that is not such a time is shown as it is."""
         try:
             moment = WebApp.__utc_moment(text)
-        except (TypeError, ValueError):
+            local = moment.astimezone(WebApp.SINGAPORE)
+        except (TypeError, ValueError, OverflowError):
             return str(text)
-        local = moment.astimezone(WebApp.SINGAPORE)
         return f"{local.day} {local:%b %Y %H:%M}"
 
     def audit_log_view(self) -> str:
