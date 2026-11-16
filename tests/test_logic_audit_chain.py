@@ -165,3 +165,27 @@ def test_breaks_are_positions_even_when_the_stored_sequences_are_forged():
     for row in rows:
         row["sequence"] = 1000
     assert AuditChain(rows).breaks()[0] == 1
+
+
+def test_broken_ids_are_the_event_ids_of_the_readable_rows_that_break():
+    rows = _chain(5)
+    rows[2]["actor"] = "Someone Else"
+    rows[4]["details"] = {"changes": []}
+    chain = AuditChain(rows)
+    assert chain.broken_ids() == ["id-3", "id-5"]
+    assert AuditChain(_chain(3)).broken_ids() == []
+    assert AuditChain([]).broken_ids() == []
+
+
+def test_an_unreadable_row_has_no_id_to_name_but_the_rows_around_it_are_still_checked():
+    rows = _chain(4)
+    rows[1] = {"action": "bogus"}
+    rows[2]["actor"] = "Someone Else"
+    chain = AuditChain(rows)
+    assert chain.unreadable_count() == 1 and chain.broken_ids() == ["id-3"]
+
+
+def test_broken_ids_is_a_copy():
+    chain = AuditChain(_chain(2))
+    chain.broken_ids().append("x")
+    assert chain.broken_ids() == []

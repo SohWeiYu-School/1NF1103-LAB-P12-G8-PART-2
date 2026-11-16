@@ -32,6 +32,7 @@ class AuditChain:
         self.__events: list[AuditEvent] = []
         self.__unreadable: list[int] = []         # 1-based row numbers
         self.__breaks: list[int] = []             # 1-based row positions
+        self.__broken_ids: list[str] = []         # event ids of the readable rows that break the chain
         self.__mismatches: list[int] = []         # the breaks that are readable rows
         self.__check()
 
@@ -63,6 +64,7 @@ class AuditChain:
             if broken:
                 self.__breaks.append(position)
                 self.__mismatches.append(position)
+                self.__broken_ids.append(event.event_id)
             expected_hash = event.hash if re.match(AuditChain.__HASH_PATTERN, event.hash) else None
             expected_sequence = event.sequence + 1
 
@@ -77,6 +79,11 @@ class AuditChain:
     def breaks(self) -> list[int]:
         """The 1-based file position of every row where the chain breaks (unreadable rows included)."""
         return list(self.__breaks)
+
+    def broken_ids(self) -> list[str]:
+        """The event ids of the readable rows where the chain breaks, so a page can mark those rows
+        (an unreadable row has no usable id and is counted by unreadable_count())."""
+        return list(self.__broken_ids)
 
     def intact(self) -> bool:
         """True if no row breaks the chain. An empty log is intact."""
