@@ -751,7 +751,7 @@ class WebApp:
                                values=self.values_from_record(saved), SECTIONS=WebApp.SECTIONS,
                                assessments=assessments, problems=record.problems(),
                                show_archived=show_archived, archived_count=archived_count,
-                               archive_states=archive_states)
+                               archive_states=archive_states, max_reason=App.MAX_ARCHIVE_REASON)
 
     def archive_assessment(self, assessment_id: str) -> Response:
         """Hide one assessment from the lists (nothing is deleted), then go back to its client."""
@@ -763,11 +763,15 @@ class WebApp:
 
     def __change_archive(self, assessment_id: str, archive: bool) -> Response:
         """Archive or restore, tell the officer what happened, and go to the client page."""
+        reason = request.form.get("reason", "") if archive else ""      # optional, archive only
         try:
             saved = self.__app.find_assessment(assessment_id)
             if saved is None:
                 abort(404)
-            result = (self.__app.archive_assessment if archive else self.__app.restore_assessment)(saved["assessment_id"])
+            if archive:
+                result = self.__app.archive_assessment(saved["assessment_id"], reason)
+            else:
+                result = self.__app.restore_assessment(saved["assessment_id"])
         except (OSError, ValueError) as error:
             logger.error("WebApp.__change_archive: the saved assessments cannot be read: %r", error)
             flash(App.ASSESSMENTS_UNAVAILABLE)
@@ -790,6 +794,8 @@ class WebApp:
                     App.ARCHIVE_NOT_SAVED: f"The assessment was not {word} because saving failed. Please try again later."}
         if result == App.ARCHIVE_NOT_FOUND:
             abort(404)
+        if result == App.ARCHIVE_BAD_REASON:
+            messages[result] = f"Nothing was archived. {App.archive_reason_problem(reason)}"
         flash(messages.get(result, App.ASSESSMENTS_UNAVAILABLE))
         return redirect(url_for("view_client", client_ref=client_ref, **({"archived": "1"} if keep_archived else {})))
 

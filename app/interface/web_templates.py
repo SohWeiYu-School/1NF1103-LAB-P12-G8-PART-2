@@ -335,7 +335,7 @@ VIEW = """{% extends "base.html" %}
 <div class="panel" style="margin-bottom:20px">
   <h2>Assessment History</h2>
   <table style="table-layout:fixed">
-    <colgroup><col style="width:17%"><col style="width:15%"><col style="width:34%"><col style="width:12%"><col style="width:22%"></colgroup>
+    <colgroup><col style="width:14%"><col style="width:11%"><col style="width:25%"><col style="width:8%"><col style="width:42%"></colgroup>
     {% for a in assessments %}
     {% set state = archive_states[loop.index0] if loop.index0 < archive_states|length else 'active' %}
     <tr{% if state != 'active' %} style="opacity:.55"{% endif %}>
@@ -351,7 +351,10 @@ VIEW = """{% extends "base.html" %}
       </td>
       <td>
         {% if a.get('assessment_id') and state != 'unreadable' %}
-        <form method="post" action="{{ url_for('restore_assessment' if state == 'archived' else 'archive_assessment', assessment_id=a.get('assessment_id')) }}" style="margin:0">
+        <form method="post" action="{{ url_for('restore_assessment' if state == 'archived' else 'archive_assessment', assessment_id=a.get('assessment_id')) }}" style="margin:0; display:flex; gap:8px; align-items:center">
+          {% if state != 'archived' %}
+          <input type="text" name="reason" maxlength="{{ max_reason }}" placeholder="Reason (optional)" aria-label="Reason for archiving (optional)" style="flex:1; min-width:0; margin:0">
+          {% endif %}
           <button type="submit" class="secondary">{{ 'Restore' if state == 'archived' else 'Archive' }}</button>
         </form>
         {% endif %}

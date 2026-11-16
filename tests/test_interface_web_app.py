@@ -755,6 +755,30 @@ def test_archive_hides_an_assessment_and_says_it_is_not_deleted(web):
     assert len(application.assessments().load()) == 2
 
 
+def test_the_archive_form_has_an_optional_reason_that_is_saved_and_shown(web):
+    application, _, client = web
+    ref = _two_assessments(application)
+    page = client.get(f"/client/{ref}").get_data(as_text=True)
+    assert 'name="reason"' in page and 'maxlength="200"' in page and "Reason (optional)" in page
+    client.post("/assessment/A1/archive", data={"reason": "  typed the wrong net worth  "})
+    assert "Assessment archived. It is hidden from the lists, not deleted." in _flashes(client)
+    assert application.find_assessment("A1")["archive_log"][-1]["reason"] == "typed the wrong net worth"
+    assert ": typed the wrong net worth." in client.get("/assessment/A1").get_data(as_text=True)
+    page = client.get(f"/client/{ref}?archived=1").get_data(as_text=True)
+    assert page.count('name="reason"') == 1                      # only the active row asks for a reason
+
+
+def test_a_bad_reason_archives_nothing_and_says_why(web):
+    application, _, client = web
+    ref = _two_assessments(application)
+    reply = client.post("/assessment/A1/archive", data={"reason": "x" * 201})
+    assert reply.headers["Location"].endswith(f"/client/{ref}")
+    flashes = _flashes(client)
+    assert any(f.startswith("Nothing was archived. The reason is too long: at most 200") for f in flashes)
+    assert App.ASSESSMENTS_UNAVAILABLE not in flashes
+    assert "archive_log" not in application.find_assessment("A1")
+
+
 def test_archive_and_restore_need_post_and_an_assessment_that_exists(web):
     application, _, client = web
     _two_assessments(application)
