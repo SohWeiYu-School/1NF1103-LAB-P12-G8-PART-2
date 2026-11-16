@@ -280,7 +280,7 @@ class ClientForm:
             logger.error("ClientForm.create_new_client: the answers for %s are not a valid record: %r",
                          client_ref, error)
             self.__ui.show_error(f"The client could not be created because "
-                                 f"{ClientForm.__why(error)}. Nothing was saved.")
+                                 f"{ClientRecord.why_unreadable(error)}. Nothing was saved.")
             self.__ui.read_answer("\nPress Enter to return to the main menu...")
             return None
 
@@ -672,17 +672,9 @@ class ClientForm:
         except (ValueError, TypeError, AttributeError) as error:
             logger.error("ClientForm.edit_existing_client: the edited record %s is not valid: %r",
                          record.client_ref, error)
-            self.__ui.show_error(f"The changes could not be kept because {ClientForm.__why(error)}. "
+            self.__ui.show_error(f"The changes could not be kept because {ClientRecord.why_unreadable(error)}. "
                                  f"The record is unchanged.")
             return record
-
-    @staticmethod
-    def __why(error: Exception) -> str:
-        """The reason to show the officer: a ValueError says what is wrong; any other error is a
-        record that is not laid out as expected (its details are in the log, not on screen)."""
-        if isinstance(error, ValueError):
-            return str(error)
-        return "some of the details are not in the expected layout"
 
     def pick_client(self, find_fn: Callable[[str], ClientRecord | None]) -> ClientRecord | None:
         """Ask for a client reference and look the client up with find_fn. Returns the ClientRecord,
