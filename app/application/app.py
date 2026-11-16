@@ -64,6 +64,8 @@ class App:
     # What the user is told when the settings files cannot be loaded (the real error goes to the log).
     SETTINGS_UNAVAILABLE: str = "The app's settings could not be loaded. Please contact your administrator."
     LOG_HANDLER_NAME: str = "app_log_file"
+    # Who did an action when nobody signed in: the command line.
+    TERMINAL: str = "terminal"
     CLIENT_COLLECTION: str = "client_cases"
     ASSESSMENT_COLLECTION: str = "ai_assessments"
     # What the user is told when saved records cannot be read (the real error goes to the log).
@@ -700,25 +702,25 @@ class App:
             logger.error("App.all_assessments: the saved assessments cannot be read: %r", error)
             raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
 
-    def archive_assessment(self, assessment_id: str, reason: str = "") -> str:
+    def archive_assessment(self, assessment_id: str, reason: str = "", actor: str = TERMINAL) -> str:
         """Hide one assessment from the lists (nothing is deleted), with an optional reason. Returns
         ARCHIVE_CHANGED, ARCHIVE_NOT_FOUND, ARCHIVE_NO_CHANGE (already archived), ARCHIVE_UNREADABLE (its
         archive log is damaged), ARCHIVE_NOT_SAVED, or ARCHIVE_BAD_REASON (nothing archived; reason_problem
-        says why). Raises ValueError(ASSESSMENTS_UNAVAILABLE) if the saved assessments cannot be read.
-        The client record is not touched."""
+        says why). actor is who did it; it is written on the archive line. Raises ValueError(ASSESSMENTS_UNAVAILABLE)
+        if the saved assessments cannot be read. The client record is not touched."""
         if AssessmentRepository.reason_problem(reason):
             return App.ARCHIVE_BAD_REASON          # checked first, so it is never taken for a read error
         try:
-            return self.__assessments.archive(assessment_id, reason)
+            return self.__assessments.archive(assessment_id, reason, actor)
         except (OSError, ValueError) as error:
             logger.error("App.archive_assessment: the saved assessments cannot be read: %r", error)
             raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
 
-    def restore_assessment(self, assessment_id: str) -> str:
+    def restore_assessment(self, assessment_id: str, actor: str = TERMINAL) -> str:
         """Bring an archived assessment back into the lists. Same results and error as archive_assessment
         (ARCHIVE_NO_CHANGE means it was not archived)."""
         try:
-            return self.__assessments.restore(assessment_id)
+            return self.__assessments.restore(assessment_id, actor)
         except (OSError, ValueError) as error:
             logger.error("App.restore_assessment: the saved assessments cannot be read: %r", error)
             raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error

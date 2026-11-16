@@ -900,7 +900,7 @@ def test_a_damaged_archive_record_is_marked_and_has_no_button(web):
 def test_an_archived_assessment_page_has_a_banner_with_the_date_and_reason(web):
     application, _, client = web
     _two_assessments(application)
-    assert application.assessments().archive("A1", "entered twice") == App.ARCHIVE_CHANGED
+    assert application.assessments().archive("A1", "entered twice", "Shareen") == App.ARCHIVE_CHANGED
     page = client.get("/assessment/A1").get_data(as_text=True)
     assert "This assessment is archived (since " in page and ": entered twice. It is hidden from the lists" in page
     assert "The client's current outcome is not changed." in page

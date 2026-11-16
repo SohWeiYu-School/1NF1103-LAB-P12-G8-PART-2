@@ -17,6 +17,7 @@ class AssessmentRepository(JsonRepository):
     Nothing is deleted: the last line of the log decides whether the assessment is hidden."""
 
     MAX_REASON_LENGTH: int = 200
+    MAX_BY_LENGTH: int = 80
     ACTIVE: str = "active"
     ARCHIVED: str = "archived"
     UNREADABLE: str = "unreadable"       # the archive log is damaged, so the state cannot be told
@@ -65,15 +66,16 @@ class AssessmentRepository(JsonRepository):
         return [record for record in records
                 if (record.get("outcome") or AssessmentRepository.__old_outcome(record)) == outcome]
 
-    def archive(self, assessment_id: str, reason: str = "") -> str:
-        """Hide one assessment from the lists. It is not deleted. Returns CHANGED, NOT_FOUND,
-        NO_CHANGE (already archived), UNREADABLE (its archive log is damaged) or NOT_SAVED (the file
-        could not be written). Raises ValueError if the reason is longer than MAX_REASON_LENGTH or not
-        printable text, and OSError or ValueError if the file cannot be read."""
+    def archive(self, assessment_id: str, reason: str = "", by: str = "") -> str:
+        """Hide one assessment from the lists. It is not deleted. by is who did it (written on the
+        line). Returns CHANGED, NOT_FOUND, NO_CHANGE (already archived), UNREADABLE (its archive log is
+        damaged) or NOT_SAVED (the file could not be written). Raises ValueError if the reason is longer
+        than MAX_REASON_LENGTH or not printable text, if by is missing or not printable text of at most
+        MAX_BY_LENGTH characters, and OSError or ValueError if the file cannot be read."""
         problem = AssessmentRepository.reason_problem(reason)
         if problem:
             raise ValueError(problem)
-        return self.__record_action(assessment_id, "archived", reason.strip())
+        return self.__record_action(assessment_id, "archived", reason.strip(), AssessmentRepository.__checked_by(by))
 
     @staticmethod
     def reason_problem(reason: object) -> str:
@@ -88,16 +90,29 @@ class AssessmentRepository(JsonRepository):
             return "The reason can only hold printable characters (no line breaks or control characters)."
         return ""
 
-    def restore(self, assessment_id: str) -> str:
-        """Bring an archived assessment back into the lists. Returns CHANGED, NOT_FOUND, NO_CHANGE
-        (not archived), UNREADABLE or NOT_SAVED. Raises OSError or ValueError if the file cannot be read."""
-        return self.__record_action(assessment_id, "restored", "")
+    def restore(self, assessment_id: str, by: str = "") -> str:
+        """Bring an archived assessment back into the lists. by is who did it (written on the line).
+        Returns CHANGED, NOT_FOUND, NO_CHANGE (not archived), UNREADABLE or NOT_SAVED. Raises ValueError
+        if by is missing or not printable text of at most MAX_BY_LENGTH characters, and OSError or
+        ValueError if the file cannot be read."""
+        return self.__record_action(assessment_id, "restored", "", AssessmentRepository.__checked_by(by))
+
+    @staticmethod
+    def __checked_by(by: object) -> str:
+        """by, trimmed. Raises ValueError, saying what is allowed, if it is not usable."""
+        if not isinstance(by, str):
+            raise ValueError("Who did it (by) must be text.")
+        by = by.strip()
+        if not by or not by.isprintable() or len(by) > AssessmentRepository.MAX_BY_LENGTH:
+            raise ValueError(f"Who did it (by) must be printable text of 1 to "
+                             f"{AssessmentRepository.MAX_BY_LENGTH} characters.")
+        return by
 
     @staticmethod
     def archive_state(record: dict) -> str:
         """ACTIVE (no archive_log, or an empty list), ARCHIVED, or UNREADABLE (the archive_log is not a
         list of entries that each have an action of "archived" or "restored" and, if given, an "at"
-        time and a reason as text). The last entry decides. Does not log: it is called for every row."""
+        time, a reason and a "by" as text). The last entry decides. Does not log: it is called for every row."""
         log = record.get("archive_log") if isinstance(record, dict) else None
         if log is None or log == []:
             return AssessmentRepository.ACTIVE
@@ -114,7 +129,8 @@ class AssessmentRepository(JsonRepository):
     def __good_entry(entry: object) -> bool:
         """True if one archive log line has the layout archive() and restore() write."""
         return (isinstance(entry, dict) and entry.get("action") in AssessmentRepository.__ACTIONS
-                and isinstance(entry.get("at", ""), str) and isinstance(entry.get("reason", ""), str))
+                and isinstance(entry.get("at", ""), str) and isinstance(entry.get("reason", ""), str)
+                and isinstance(entry.get("by", ""), str))
 
     @staticmethod
     def __visible(records: list[dict], include_archived: bool) -> list[dict]:
@@ -128,7 +144,7 @@ class AssessmentRepository(JsonRepository):
             return records
         return [record for record in records if AssessmentRepository.archive_state(record) == AssessmentRepository.ACTIVE]
 
-    def __record_action(self, assessment_id: str, action: str, reason: str) -> str:
+    def __record_action(self, assessment_id: str, action: str, reason: str, by: str) -> str:
         """Add one line to the assessment's archive log. Nothing else in the record is touched."""
         wanted = str(assessment_id or "").strip().upper()
         if not wanted:
@@ -145,7 +161,7 @@ class AssessmentRepository(JsonRepository):
                     return AssessmentRepository.UNREADABLE
                 if (state == AssessmentRepository.ARCHIVED) == (action == "archived"):
                     return AssessmentRepository.NO_CHANGE
-                entry = {"action": action, "at": datetime.now(timezone.utc).isoformat()}
+                entry = {"action": action, "at": datetime.now(timezone.utc).isoformat(), "by": by}
                 if reason:
                     entry["reason"] = reason
                 if not record.get("archive_log"):
