@@ -112,8 +112,21 @@ def test_matches_uses_the_period_ending_at_the_given_now():
     assert not AuditFilter().matches(_event(at="2026-11-09T11:59:59Z"), NOW)
 
 
-def test_matches_takes_a_now_with_no_timezone_as_utc():
-    assert AuditFilter(days=1).matches(_event(at="2026-11-16T10:00:00Z"), datetime(2026, 11, 16, 12, 0, 0))
+@pytest.mark.parametrize("days", [0, 1, 7])
+def test_matches_refuses_a_now_with_no_timezone(days):
+    with pytest.raises(ValueError, match="now must carry a timezone"):
+        AuditFilter(days=days).matches(_event(at="2026-11-16T10:00:00Z"), datetime(2026, 11, 16, 12, 0, 0))
+
+
+def test_matches_refuses_a_now_that_is_not_a_datetime():
+    with pytest.raises(ValueError, match="timezone"):
+        AuditFilter().matches(_event(), "2026-11-16")
+
+
+def test_matches_accepts_any_timezone():
+    from datetime import timedelta
+    singapore = timezone(timedelta(hours=8))
+    assert AuditFilter(days=1).matches(_event(at="2026-11-16T10:00:00Z"), datetime(2026, 11, 16, 20, 0, tzinfo=singapore))
 
 
 def test_matches_actor_and_client_ref_ignore_case_but_must_match_exactly():
@@ -167,3 +180,17 @@ def test_chips_name_each_active_filter_in_plain_words():
                          ("Client", "C-1"), ("Result", "Failed")]
     assert AuditFilter(days=1).chips() == [("Period", "Last 24 hours")]
     assert AuditFilter(days=90, result="ok").chips() == [("Period", "Last 90 days"), ("Result", "OK")]
+
+
+def test_page_for_is_the_chosen_page_clamped_to_the_last():
+    assert AuditFilter(page=2).page_for(120) == 2
+    assert AuditFilter(page=99).page_for(120) == 3
+    assert AuditFilter(page=5).page_for(0) == 1 and AuditFilter().page_for(10) == 1
+
+
+def test_page_of_shows_the_page_that_page_for_names():
+    events = [_event(ref=f"C-{n}") for n in range(120)]
+    for page in (1, 2, 3, 9):
+        f = AuditFilter(page=page)
+        start = (f.page_for(len(events)) - 1) * AuditFilter.PAGE_SIZE
+        assert f.page_of(events) == events[start:start + AuditFilter.PAGE_SIZE]

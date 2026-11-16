@@ -148,9 +148,10 @@ class AuditFilter:
 
     def matches(self, event: AuditEvent, now: datetime) -> bool:
         """True if the event passes every active filter. now (passed in, so the answer is repeatable)
-        is the end of the period; a time with no timezone is taken as UTC."""
+        is the end of the period and must carry a timezone (ValueError if it does not)."""
+        if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("now must carry a timezone")
         if self.__days:
-            now = now if now.tzinfo else now.replace(tzinfo=timezone.utc)
             happened = datetime.strptime(event.at, AuditEvent.TIME_FORMAT).replace(tzinfo=timezone.utc)
             if happened < now - timedelta(days=self.__days):
                 return False
@@ -166,10 +167,14 @@ class AuditFilter:
         """How many pages hold this many events (at least 1, so an empty log still has a page 1)."""
         return max(1, -(-max(total, 0) // AuditFilter.PAGE_SIZE))
 
+    def page_for(self, total: int) -> int:
+        """The page actually shown for this many events: the chosen page, or the last page if the
+        chosen one is past the end."""
+        return min(self.__page, self.page_count(total))
+
     def page_of(self, events: list[AuditEvent]) -> list[AuditEvent]:
-        """The events on the chosen page, in the order given (newest first). A page past the end
-        gives the last page."""
-        page = min(self.__page, self.page_count(len(events)))
+        """The events on the page page_for() gives, in the order given (newest first)."""
+        page = self.page_for(len(events))
         start = (page - 1) * AuditFilter.PAGE_SIZE
         return events[start:start + AuditFilter.PAGE_SIZE]
 
