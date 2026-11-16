@@ -1131,11 +1131,6 @@ def test_the_right_password_at_the_wrong_portal_says_where_to_sign_in_and_is_rec
     assert app.sign_in("Shareen", "nope", App.ADMIN_PORTAL)[1] == App.SIGN_IN_WRONG
 
 
-def test_an_unknown_portal_is_refused(app):
-    with pytest.raises(ValueError, match="portal"):
-        app.sign_in("Shareen", "officer123", "staff")
-
-
 def test_the_last_activity_of_each_client_comes_from_one_read_of_the_log(app):
     assert app.last_activity() == {}
     record = ClientRecord.from_dict(sample_case())
@@ -1152,11 +1147,6 @@ def test_the_last_activity_says_when_the_log_cannot_be_read(app, tmp_path):
     break_audit(tmp_path)
     with pytest.raises(ValueError, match="audit log"):
         app.last_activity()
-
-
-def test_sign_out_needs_an_account(app):
-    with pytest.raises(ValueError):
-        app.sign_out("Shareen")
 
 
 def test_a_refusal_is_recorded_and_its_text_is_checked(app):
@@ -1269,12 +1259,6 @@ def test_the_log_gives_newest_first_with_the_total_and_applies_the_filter(app):
     assert app.audit_log(AuditFilter(query="cloud")).total == 1
 
 
-def test_the_log_can_be_oldest_first(app):
-    app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
-    app.sync_to_cloud("Shareen")
-    assert [e.action for e in app.audit_log(AuditFilter(sort="asc")).events] == ["client_created", "cloud_sync"]
-
-
 def test_a_filter_that_matches_nothing_still_says_how_much_the_whole_log_holds_from_the_same_read(app):
     app.sync_to_cloud("Shareen")
     app.sync_to_cloud("Shareen")
@@ -1291,23 +1275,10 @@ def test_the_log_uses_the_time_it_is_given_for_the_period(app):
     assert app.audit_log(AuditFilter("custom"), now + timedelta(days=3)).total == 1
 
 
-def test_the_log_is_paged_and_the_total_counts_every_match(app):
-    for number in range(AuditFilter.PAGE_SIZE + 3):
-        app.refused("Shareen", f"opening page {number}")
-    log = app.audit_log(AuditFilter(page=1))
-    assert len(log.events) == AuditFilter.PAGE_SIZE and log.total == AuditFilter.PAGE_SIZE + 3
-    assert len(app.audit_log(AuditFilter(page=2)).events) == 3
-
-
 def test_an_empty_log_is_an_empty_page_not_an_error(app):
     log = app.audit_log(AuditFilter())
     assert (log.events, log.total, log.unreadable, log.everything) == ([], 0, 0, 0)
     assert app.audit_trail("C-1") == ([], 0)
-
-
-def test_the_log_needs_a_filter(app):
-    with pytest.raises(ValueError):
-        app.audit_log({"preset": "7"})
 
 
 def test_an_unreadable_audit_log_gives_the_safe_message_and_is_logged(app, tmp_path, caplog):

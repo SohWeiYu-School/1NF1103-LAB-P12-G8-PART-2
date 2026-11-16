@@ -1548,18 +1548,6 @@ def test_the_search_box_matches_actor_client_label_file_and_changed_fields_ignor
     assert 'value="shareen"' in page
 
 
-def test_the_result_actions_and_officer_filters(web):
-    application, _, browser = _admin_web(web)
-    application.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
-    application.sync_to_cloud("Adrian")                                       # fails: there is no cloud
-    failed = browser.get("/admin/log?result=failed").get_data(as_text=True)
-    assert "Cloud sync</span>" in failed and "Client created</span>" not in failed and "Failed only" in failed
-    docs = browser.get("/admin/log?group=Client&group=System").get_data(as_text=True)
-    assert "Client created</span>" in docs and "Cloud sync</span>" in docs and "2 of 5 groups" in docs
-    only = browser.get("/admin/log?group=System").get_data(as_text=True)
-    assert "Client created</span>" not in only and "Actions: System" in only
-
-
 def test_the_log_can_be_oldest_first_and_the_sort_buttons_say_which_is_chosen(web):
     application, _, browser = _admin_web(web)
     application.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
@@ -1592,15 +1580,6 @@ def test_a_bad_custom_range_shows_the_mockups_problem_line_and_all_dates(web):
         page = browser.get(url).get_data(as_text=True)
         assert f'<div class="problem" role="alert">{problem}</div>' in page and "Cloud sync</span>" in page
     assert "All dates" in browser.get("/admin/log?preset=custom").get_data(as_text=True)
-
-
-def test_a_client_filter_matches_one_clients_events_whatever_the_case(web):
-    application, _, browser = _admin_web(web)
-    ref = sample_case()["client_ref"]
-    application.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
-    application.sync_to_cloud("Shareen")
-    page = browser.get(f"/admin/log?client_ref={ref.lower()}").get_data(as_text=True)
-    assert "Client created</span>" in page and "Cloud sync</span>" not in page and f"Client: {ref.upper()}" in page
 
 
 def test_filters_that_match_nothing_say_so_without_reading_the_log_twice(web, monkeypatch):

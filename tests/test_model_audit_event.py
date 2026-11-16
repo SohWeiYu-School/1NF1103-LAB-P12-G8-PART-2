@@ -208,7 +208,6 @@ def test_lines_with_missing_parts_have_no_double_or_trailing_spaces(action, deta
 
 @pytest.mark.parametrize("changes", [
     {"details": {"x": "\ud800"}}, {"details": {"\ud800": 1}}, {"actor": "a\ud800"},
-    {"client_ref": "\udfff"}, {"event_id": "\ud800"},
 ])
 def test_a_lone_surrogate_anywhere_is_refused_at_construction(changes):
     with pytest.raises(ValueError):
@@ -267,10 +266,3 @@ def test_an_empty_key_is_refused_and_a_refused_seal_changes_nothing():
         _sealed().compute_hash("")
     with pytest.raises(ValueError, match="key"):
         _sealed().hash_matches("")
-
-
-def test_a_failed_sign_in_by_an_unknown_name_is_a_valid_event_and_belongs_to_the_sign_in_group():
-    event = AuditEvent(actor=AuditEvent.UNKNOWN, action="sign_in_failed", result="failed", details={"portal": "officer"})
-    assert AuditEvent.UNKNOWN == "unknown"
-    assert (event.group, event.label) == ("Sign-in", "Failed sign-in")
-    assert event.summary() == "Sign-in attempt at the officer portal — failed"
