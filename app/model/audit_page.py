@@ -7,16 +7,17 @@ class AuditPage:
     """The events of one page (in the order they are shown), how many events match the filter in all, how
     many rows of the log cannot be read, how many readable events the whole log holds (so a page can tell
     an empty log from a filter that matches nothing), and, over every match (not only this page), how many
-    different people did them and how many failed."""
+    different people did them and how many failed. open_flags is how many flags are still to handle (whatever the
+    filter), for the "N open flags" part of the summary line."""
 
     def __init__(self, events: list[AuditEvent] | None = None, total: int = 0, unreadable: int = 0,
-                 everything: int = 0, officers: int = 0, failed: int = 0) -> None:
+                 everything: int = 0, officers: int = 0, failed: int = 0, open_flags: int = 0) -> None:
         """Raises ValueError for events that are not AuditEvents or a count that is not a whole number, 0 or more."""
         events = [] if events is None else events
         if not isinstance(events, list) or not all(isinstance(event, AuditEvent) for event in events):
             raise ValueError("The page's events must be a list of AuditEvent objects.")
         counts = {"total": total, "unreadable": unreadable, "everything": everything,
-                  "officers": officers, "failed": failed}
+                  "officers": officers, "failed": failed, "open_flags": open_flags}
         for name, value in counts.items():
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 raise ValueError(f"The {name} count must be a whole number, 0 or more (got {value!r}).")
@@ -30,6 +31,7 @@ class AuditPage:
         self.__everything: int = everything
         self.__officers: int = officers
         self.__failed: int = failed
+        self.__open_flags: int = open_flags
 
     @property
     def events(self) -> list[AuditEvent]:
@@ -54,3 +56,7 @@ class AuditPage:
     @property
     def failed(self) -> int:
         return self.__failed
+
+    @property
+    def open_flags(self) -> int:
+        return self.__open_flags

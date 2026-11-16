@@ -13,6 +13,7 @@ def _event():
 def test_an_empty_page_has_every_count_at_zero():
     page = AuditPage()
     assert (page.events, page.total, page.unreadable, page.everything, page.officers, page.failed) == ([], 0, 0, 0, 0, 0)
+    assert page.open_flags == 0
 
 
 def test_the_values_are_kept_and_events_come_back_as_a_copy():
@@ -23,7 +24,7 @@ def test_the_values_are_kept_and_events_come_back_as_a_copy():
     assert len(page.events) == 2
 
 
-@pytest.mark.parametrize("kwargs", [{"events": ["x"]}, {"total": -1}])
+@pytest.mark.parametrize("kwargs", [{"events": ["x"]}, {"total": -1}, {"open_flags": -1}, {"open_flags": True}, {"open_flags": "2"}])
 def test_an_impossible_value_is_refused(kwargs):
     with pytest.raises(ValueError):
         AuditPage(**kwargs)
@@ -35,3 +36,7 @@ def test_an_impossible_value_is_refused(kwargs):
 def test_counts_that_do_not_fit_together_are_refused(kwargs):
     with pytest.raises(ValueError, match="do not fit"):
         AuditPage(**kwargs)
+
+
+def test_the_open_flag_count_is_kept_and_does_not_depend_on_the_filter_counts():
+    assert AuditPage([], 0, 0, 0, 0, 0, 7).open_flags == 7
