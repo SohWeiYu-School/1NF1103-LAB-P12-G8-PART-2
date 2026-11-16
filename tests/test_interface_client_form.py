@@ -268,3 +268,20 @@ def test_a_dropped_optional_detail_keeps_the_limits_of_the_new_client_form(monke
     assert form.ask_optional_field(jump) == 1_000_000
     assert form.ask_optional_field(years) == 4
     assert "above zero" in capsys.readouterr().out.lower()
+
+
+class _MalformedRecord(ClientRecord):
+    """A record whose saved layout cannot be read back (claims is not a dict)."""
+
+    def to_dict(self) -> dict:
+        return {**super().to_dict(), "claims": 5}
+
+
+def test_an_edit_of_a_malformed_record_gives_a_plain_message_and_leaves_it_unchanged(monkeypatch, capsys):
+    record = _MalformedRecord(client_ref="CL-1", name="Daniel Tan", nationality="Malaysian",
+                              current_date="2026-09-24")
+    _type(monkeypatch, "8")
+    assert _form().edit_existing_client(record) is record
+    out = capsys.readouterr().out
+    assert "could not be kept" in out and "not in the expected layout" in out
+    assert "AttributeError" not in out and "Traceback" not in out
