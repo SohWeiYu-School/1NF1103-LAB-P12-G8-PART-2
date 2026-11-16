@@ -5,6 +5,7 @@ import functools
 import logging
 import os
 import threading
+import time
 from datetime import datetime, timezone
 from typing import Callable
 
@@ -86,6 +87,7 @@ class App:
     AUDIT_LINE_NOT_WRITTEN: str = "This action could not be written to the audit log."
     AUDIT_UNAVAILABLE: str = "We can't load the audit log right now. Please try again later."
     MAX_REFUSED_TEXT: int = 200
+    REFUSAL_REPEAT_SECONDS: int = 60          # the same refusal by the same person is written once in this time
     # Shown when an assessment was saved but the client's outcome could not be written onto the client record.
     OUTCOME_NOT_UPDATED: str = "The assessment was saved, but the client's outcome could not be updated."
     UNEXPECTED_ERROR_STEP: str = "Unexpected error"      # the "step" the audit log gets when a run or save raises
@@ -146,6 +148,8 @@ class App:
                                                         key=self.__audit_key)
         # Whether the last audit line of this thread could not be written (each web request has its own thread).
         self.__audit_note: threading.local = threading.local()
+        self.__recent_refusals: dict[tuple[str, str], float] = {}     # (actor, what) -> when it was last written
+        self.__refusal_lock: threading.Lock = threading.Lock()
         # Document ids are paths from the folder that holds the data folder ("data/documents/...").
         self.__documents: DocumentStore = DocumentStore(os.path.join(data_dir, "documents"),
                                                         root=os.path.dirname(data_dir))
@@ -966,14 +970,27 @@ class App:
         self.__start(account.name)
         self.__record("signed_out", account.name)
 
-    def refused(self, actor: str, what: str) -> None:
-        """Write that actor was refused: what says what they tried ("opening the audit log"). Raises
-        ValueError if actor is not a known actor or what is not printable text of 1 to MAX_REFUSED_TEXT characters."""
+    def refused(self, actor: str, what: str, now: float | None = None) -> None:
+        """Write that actor was refused: what says what they tried ("opening the audit log"). If the same
+        actor was refused the same thing less than REFUSAL_REPEAT_SECONDS ago, nothing more is written
+        (a reloaded page would otherwise fill the log). now is a clock reading in seconds (time.monotonic()
+        if not given). Raises ValueError if actor is not a known actor or what is not printable text of
+        1 to MAX_REFUSED_TEXT characters."""
         self.__start(actor)
         text = what.strip() if isinstance(what, str) else ""
         if not text or not text.isprintable() or len(text) > App.MAX_REFUSED_TEXT:
             raise ValueError(f"What was refused must be printable text of 1 to {App.MAX_REFUSED_TEXT} characters.")
-        self.__record("access_refused", actor, "", "ok", {"what": text})
+        now = time.monotonic() if now is None else now
+        key = (actor, text)
+        with self.__refusal_lock:
+            last = self.__recent_refusals.get(key)
+            if last is not None and 0 <= now - last < App.REFUSAL_REPEAT_SECONDS:
+                return
+        if self.__record("access_refused", actor, "", "ok", {"what": text}):    # a line that failed is tried again
+            with self.__refusal_lock:
+                self.__recent_refusals = {k: t for k, t in self.__recent_refusals.items()
+                                          if 0 <= now - t < App.REFUSAL_REPEAT_SECONDS}
+                self.__recent_refusals[key] = now
 
     def audit_log(self, audit_filter: AuditFilter,
                   now: datetime | None = None) -> tuple[list[AuditEvent], int, int]:

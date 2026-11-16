@@ -1211,8 +1211,8 @@ def test_the_log_uses_the_time_it_is_given_for_the_period(app):
 
 
 def test_the_log_is_paged_and_the_total_counts_every_match(app):
-    for _ in range(AuditFilter.PAGE_SIZE + 3):
-        app.refused("Shareen", "opening the audit log")
+    for number in range(AuditFilter.PAGE_SIZE + 3):
+        app.refused("Shareen", f"opening page {number}")
     events, total, _ = app.audit_log(AuditFilter(page=1))
     assert len(events) == AuditFilter.PAGE_SIZE and total == AuditFilter.PAGE_SIZE + 3
     assert len(app.audit_log(AuditFilter(page=2))[0]) == 3
@@ -1474,3 +1474,18 @@ def test_a_log_where_every_row_is_unreadable_gives_no_events_and_the_count(app, 
     _add_unreadable_rows(tmp_path, 2)
     assert app.audit_log(AuditFilter(days=0)) == ([], 0, 2)
     assert app.audit_trail("C-1") == ([], 2)
+
+
+def test_the_same_refusal_by_the_same_person_is_written_once_a_minute(app):
+    app.refused("Shareen", "opening the audit log", now=100.0)
+    app.refused("Shareen", "opening the audit log", now=130.0)           # a reload 30 s later: not written again
+    assert len(_events(app)) == 1
+    app.refused("Shareen", "opening the audit log", now=161.0)           # more than 60 s after the written one
+    assert len(_events(app)) == 2
+
+
+def test_a_refusal_for_another_person_or_another_thing_is_always_written(app):
+    app.refused("Shareen", "opening the audit log", now=100.0)
+    app.refused("Adrian", "opening the audit log", now=101.0)
+    app.refused("Shareen", "opening an admin page", now=102.0)
+    assert len(_events(app)) == 3

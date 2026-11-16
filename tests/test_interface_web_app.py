@@ -1158,7 +1158,8 @@ def test_the_admin_is_refused_on_every_write_route_and_each_refusal_is_recorded(
         assert "The admin account can only review the audit log." in _flashes(browser), url
         browser.get("/")                                             # shows, and so clears, the message
     refused = [event for event in _events(application) if event.action == "access_refused"]
-    assert len(refused) == len(writes) and {event.actor for event in refused} == {admin.name}
+    assert len(refused) == len({event.details["what"] for event in refused}) == 9    # a repeat within a minute is not written again
+    assert {event.actor for event in refused} == {admin.name}
     assert "archiving an assessment" in {event.details["what"] for event in refused}
     assert application.clients().find(ref) == before
     assert application.find_assessment("A1").get("archive_log") is None
@@ -1275,8 +1276,8 @@ class _StopAssessApp(App):
 # ----- the audit log page ----------------------------------------------------------------------
 
 def _put_events(application, count: int, actor: str = "Shareen") -> None:
-    for _ in range(count):
-        application.refused(actor, "opening the audit log")
+    for number in range(count):          # a different text each time: the same refusal is written only once a minute
+        application.refused(actor, f"opening the audit log ({number})")
 
 
 def test_the_admin_signing_in_lands_on_the_audit_log(tmp_path, monkeypatch):
@@ -1297,7 +1298,7 @@ def test_an_officer_opening_the_audit_log_gets_a_403_page_and_the_refusal_is_rec
         assert reply.status_code == 403, url
         assert "Only the admin can open the audit log." in reply.get_data(as_text=True)
     refused = [event for event in _events(application) if event.action == "access_refused"]
-    assert len(refused) == 3 and {event.actor for event in refused} == {officer.name}
+    assert len(refused) == 1 and {event.actor for event in refused} == {officer.name}     # repeats within a minute: one line
     assert refused[0].details == {"what": "opening the audit log"}
     assert ">Audit</a>" not in browser.get("/").get_data(as_text=True)
 
