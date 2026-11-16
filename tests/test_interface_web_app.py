@@ -476,6 +476,29 @@ def test_a_reading_with_an_impossible_value_keeps_the_good_fields_and_says_which
     assert re.search(r'value="[^"/]+/documents/[0-9a-f]{8}_cv\.txt"', page)       # the upload is still kept
 
 
+class _UnusableReadingApp(App):
+    """An App whose documents are read, but whose reading cannot be made into any client record."""
+
+    def record_from_reading(self, extracted, today=""):
+        raise ValueError("the reading has no client details")
+
+
+def test_a_reading_that_cannot_be_a_record_fills_nothing_and_says_why(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    application = _UnusableReadingApp(fake_ai.caller(documents_reply=AI_READING), data_folder=str(tmp_path))
+    client = WebApp(application).flask().test_client()
+    response = client.post("/client/new/autofill", content_type="multipart/form-data", data={
+        "autofill_files": (io.BytesIO(b"Daniel Tan, Portfolio Manager at Temasek since 2012"), "cv.txt"),
+    })
+    page = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "the details cannot be used because the reading has no client details" in page
+    assert "Nothing was filled in." in page
+    assert 'value="Daniel Tan"' not in page                                       # nothing was filled in
+    assert re.search(r'value="[^"/]+/documents/[0-9a-f]{8}_cv\.txt"', page)       # the upload is still kept
+
+
 def test_saving_after_autofill_attaches_the_documents(reading_web, tmp_path):
     application, _, client = reading_web
     upload = tmp_path / "cv.txt"
