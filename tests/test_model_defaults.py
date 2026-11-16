@@ -3,6 +3,7 @@ every attribute has a type and a default)."""
 
 import pytest
 
+from app.model.account import Account
 from app.model.band import Band
 from app.model.check import Check
 from app.model.claimed_source import ClaimedSource
@@ -19,7 +20,7 @@ from app.model.review_status import ReviewStatus
 from app.model.typology import Typology
 from app.model.verdict import Verdict
 
-MODEL_CLASSES = [Band, Check, ClaimedSource, Claims, ClientProfile, ClientRecord, Config, Declaration,
+MODEL_CLASSES = [Account, Band, Check, ClaimedSource, Claims, ClientProfile, ClientRecord, Config, Declaration,
                  Investment, Job, MatchResult, ResearchReport, ReviewStatus, Typology, Verdict]
 
 
