@@ -81,6 +81,7 @@ class App:
     AUDIT_NOT_WRITTEN: str = "Saved, but this change could not be written to the audit log."
     AUDIT_UNAVAILABLE: str = "We can't load the audit log right now. Please try again later."
     MAX_REFUSED_TEXT: int = 200
+    UNEXPECTED_ERROR_STEP: str = "Unexpected error"      # the "step" the audit log gets when a run or save raises
 
     # The archive states and results of an assessment, so the web app can ask App without
     # reaching into the data manager.
@@ -381,9 +382,14 @@ class App:
                 stopped_at.append(step)
             return carry_on
 
-        result = self.__runner.run(case, supporting_documents, on_step, watch)
+        ref = str(case.get("client_ref") or "") if isinstance(case, dict) else ""
+        try:
+            result = self.__runner.run(case, supporting_documents, on_step, watch)
+        except Exception:
+            # The caller decides what the user sees; the audit log only learns that it failed (no error text).
+            self.__record("assessment_failed", actor, ref, "failed", {"step": App.UNEXPECTED_ERROR_STEP})
+            raise
         if result is None:
-            ref = str(case.get("client_ref") or "") if isinstance(case, dict) else ""
             self.__record("assessment_failed", actor, ref, "failed",
                           {"step": stopped_at[0] if stopped_at else "The assessment"})
         return result
@@ -416,8 +422,23 @@ class App:
         """Save the assessment as ONE record, then its outcome on the client record when given.
         Returns the assessment id, or None if the assessment could not be saved (the client
         record is then left as it was). The audit log gets an "assessment run" line, or an
-        "assessment failed" line when it was not saved."""
+        "assessment failed" line when it was not saved. If saving raises, that line is written too
+        and the error is raised again."""
         self.__start(actor)
+        try:
+            return self.__store_assessment(result, record, on_step, actor)
+        except Exception:
+            ref = ""
+            try:
+                ref = str(result["verdict"].client_ref)
+            except Exception:
+                pass                                    # the result itself was unusable: no client to name
+            self.__record("assessment_failed", actor, ref, "failed", {"step": App.UNEXPECTED_ERROR_STEP})
+            raise
+
+    def __store_assessment(self, result: dict, record: ClientRecord | None,
+                           on_step: Callable[[int, str], None] | None, actor: str) -> str | None:
+        """The work of save_assessment."""
         if on_step is not None:
             on_step(len(AssessmentRunner.STEPS), AssessmentRunner.STEPS[-1])
         case = result["case"]

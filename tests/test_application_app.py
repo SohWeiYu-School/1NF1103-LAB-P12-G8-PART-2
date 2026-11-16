@@ -1310,3 +1310,30 @@ def test_a_hand_added_row_without_a_time_or_id_is_not_listed_but_verify_reports_
     assert "2 audit row(s) cannot be read and are not listed" in caplog.text
     chain = app.verify_audit_log("Orbit Admin")
     assert not chain.intact() and len(chain.breaks()) >= 2
+
+
+def test_a_run_that_raises_writes_a_failure_line_without_the_error_text_and_raises_again(app):
+    with pytest.raises(Exception):
+        app.assess({"client_ref": "C-1"}, show_failures=False, actor="Shareen")     # not a case the runner can read
+    [event] = _events(app)
+    assert (event.action, event.result, event.actor, event.client_ref) == (
+        "assessment_failed", "failed", "Shareen", "C-1")
+    assert event.details == {"step": App.UNEXPECTED_ERROR_STEP}
+
+
+def test_a_save_that_raises_writes_a_failure_line_and_raises_again(app):
+    record, result = _assessed(app, "Shareen")
+    del result["research"]                                  # the saved layout needs it: the save raises KeyError
+    with pytest.raises(KeyError):
+        app.save_assessment(result, record, actor="Shareen")
+    event = _events(app)[-1]
+    assert (event.action, event.result, event.client_ref) == ("assessment_failed", "failed", record.client_ref)
+    assert event.details == {"step": App.UNEXPECTED_ERROR_STEP}
+    assert app.assessments().load() == []
+
+
+def test_a_save_of_something_that_is_not_a_result_raises_and_is_recorded_without_a_client(app):
+    with pytest.raises(KeyError):
+        app.save_assessment({}, None, actor="Adrian")
+    [event] = _events(app)
+    assert (event.action, event.client_ref, event.actor) == ("assessment_failed", "", "Adrian")
