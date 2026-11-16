@@ -439,3 +439,10 @@ fix/leave recommendation for each) and the diagram shows the new signatures.
 - Not a diagram change: `config/policy.json` no longer has `verdict.no_pep_values`; `Claims.NO_PEP_VALUES` is the one list.
   `ConfigReader` no longer applies a cooldown default; `RateLimiter.DEFAULT_COOLDOWN_SECONDS` is the one default.
 - Layout: ClientRecord grew one line; 9 lines re-routed. layout_check 0.
+
+## Separate OpenAI research model (2026-11-16): code changed, the diagram follows it
+
+Marcus asked for a separate model for web searches, as Gemini already has (`GEMINI_SEARCH_MODEL`). `OPENAI_RESEARCH_MODEL`
+was dropped in Part 1 (6dc338b, "one AI model for every call"); it is read again. The AI caller functions gained
+`search_model` / `search_model_name()`. They are module functions, not drawn in the class diagram.
+- Added `App.-__ai_search_model() : str` (**B**): the model ResearchAI is given. layout_check 0.

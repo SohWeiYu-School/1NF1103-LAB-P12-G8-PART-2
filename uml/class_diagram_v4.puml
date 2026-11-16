@@ -644,6 +644,7 @@ package "Application (app/application)" {
     +read_document_for_extraction(path : str, name : str) : dict
     +reading_problems(record : ClientRecord, today : str = "") : list[str]
     +record_from_reading(extracted : dict, today : str = "") : tuple[ClientRecord, list[dict]]
+    -__ai_search_model() : str
   }
   class AssessmentRunner {
     -__verdict_engine : VerdictEngine = VerdictEngine(...)
