@@ -1258,7 +1258,7 @@ def test_a_stopped_web_assessment_whose_audit_line_failed_says_so_in_its_message
     job_id = client.post(f"/client/{record['client_ref']}/assess").headers["Location"].rsplit("/", 1)[-1]
     state = _wait_for(client, job_id)
     assert state["status"] == "error"
-    assert state["error"] == f"{WebApp.ASSESSMENT_STOPPED} {App.AUDIT_NOT_WRITTEN}"
+    assert state["error"] == f"{WebApp.ASSESSMENT_STOPPED} {App.AUDIT_LINE_NOT_WRITTEN}"
 
 
 class _StopAssessApp(App):
@@ -1587,3 +1587,67 @@ def test_the_result_page_says_when_the_outcome_could_not_be_written_to_the_clien
     page = html.unescape(client.get(f"/assess/result/{job_id}").get_data(as_text=True))
     assert App.OUTCOME_NOT_UPDATED in page and "NOT saved" not in page
     assert len(application.assessments().load()) == 1
+
+
+# ----- which audit message the web shows ----------------------------------------------------------
+
+def test_only_actions_that_saved_something_flash_saved_but(web, tmp_path):
+    from tests.audit_files import break_audit
+    application, site, browser = web
+    ref = _two_assessments(application)
+    break_audit(tmp_path)
+    browser.post(f"/client/{ref}/edit", data={**_form_fields(site, sample_case()), "client.name": "Daniel K. Tan"})
+    assert App.AUDIT_NOT_WRITTEN in _flashes(browser)                         # the edit was saved
+    browser.get("/")
+    browser.post("/assessment/A1/archive")
+    assert App.AUDIT_NOT_WRITTEN in _flashes(browser)                         # the archive was saved
+    browser.get("/")
+    browser.post("/sync")
+    flashes = _flashes(browser)
+    assert App.AUDIT_LINE_NOT_WRITTEN in flashes and App.AUDIT_NOT_WRITTEN not in flashes
+    browser.get("/")
+    browser.post("/signout")
+    assert App.AUDIT_LINE_NOT_WRITTEN in _flashes(browser)
+
+
+def test_a_refusal_a_sign_in_a_check_and_a_download_flash_only_that_the_action_was_not_written(tmp_path, monkeypatch):
+    from tests.audit_files import break_audit
+    application, site, browser = _anonymous(tmp_path, monkeypatch)
+    break_audit(tmp_path)
+    officer, admin = account_with_role(application), account_with_role(application, "admin")
+    browser.post("/signin", data={"email": officer.email})
+    assert _flashes(browser) == [App.AUDIT_LINE_NOT_WRITTEN]
+    browser.get("/")
+    refused = browser.get("/audit")                                            # refused (403): nothing saved
+    assert refused.status_code == 403 and html.escape(App.AUDIT_LINE_NOT_WRITTEN) in refused.get_data(as_text=True)
+    browser.get("/")
+    sign_in(browser, application, "admin")
+    browser.post("/audit/verify")                                              # the log cannot even be read
+    assert App.AUDIT_UNAVAILABLE in _flashes(browser)
+    assert App.AUDIT_NOT_WRITTEN not in _flashes(browser)
+
+
+def test_a_download_whose_audit_line_failed_flashes_only_that_the_action_was_not_written(web, tmp_path):
+    from tests.audit_files import break_audit
+    application, _, browser = web
+    ref = sample_case()["client_ref"]
+    application.clients().save(sample_case())
+    browser.post(f"/client/{ref}/documents", content_type="multipart/form-data",
+                 data={"files": (io.BytesIO(b"payslip"), "payslip.txt")})
+    file_id = application.find_client(ref).documents()[0]["file_id"]
+    browser.get("/")
+    break_audit(tmp_path)
+    assert browser.get(f"/client/{ref}/documents/{file_id}").status_code == 200
+    assert _flashes(browser) == [App.AUDIT_LINE_NOT_WRITTEN]
+
+
+def test_a_failed_audit_request_then_a_good_one_on_the_same_thread_shows_no_stale_message(web, tmp_path):
+    from tests.audit_files import break_audit, fix_audit
+    application, _, browser = web
+    break_audit(tmp_path)
+    shown = browser.post("/sync", follow_redirects=True).get_data(as_text=True)
+    assert html.escape(App.AUDIT_LINE_NOT_WRITTEN) in shown and application.audit_write_failed() is True
+    fix_audit(tmp_path)
+    shown = browser.post("/sync", follow_redirects=True).get_data(as_text=True)
+    assert application.audit_write_failed() is False
+    assert "could not be written" not in shown

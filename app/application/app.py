@@ -80,6 +80,8 @@ class App:
     ASSESSMENTS_UNAVAILABLE: str = "We can't load the saved assessments right now. Please try again later."
     # Shown when an action was done and kept, but its line could not be added to the audit log.
     AUDIT_NOT_WRITTEN: str = "Saved, but this change could not be written to the audit log."
+    # Shown instead when the action saved nothing (a refusal, a sign-in, a check, a download, a failed save).
+    AUDIT_LINE_NOT_WRITTEN: str = "This action could not be written to the audit log."
     AUDIT_UNAVAILABLE: str = "We can't load the audit log right now. Please try again later."
     MAX_REFUSED_TEXT: int = 200
     # Shown when an assessment was saved but the client's outcome could not be written onto the client record.
@@ -487,7 +489,7 @@ class App:
                 # The assessment itself was saved, so the audit line stays "ok"; record_saved says what is missing.
                 self.__audit_note.outcome_failed = True
                 logger.error("App.save_assessment: could not save the client record for %s", verdict.client_ref)
-        self.__record("assessment_run", actor, verdict.client_ref, "ok", run_details)
+        self.__record("assessment_run", actor, verdict.client_ref, "ok", run_details, kept=True)
         return verdict.assessment_id
 
     @staticmethod
@@ -578,9 +580,10 @@ class App:
         if not saved:
             logger.error("App.save_client: could not save the client record %s", client_ref)
         if old is None:
-            self.__record("client_created", actor, client_ref, "ok" if saved else "failed")
+            self.__record("client_created", actor, client_ref, "ok" if saved else "failed", kept=saved)
         elif changes or not saved:
-            self.__record("client_edited", actor, client_ref, "ok" if saved else "failed", {"changes": changes})
+            self.__record("client_edited", actor, client_ref, "ok" if saved else "failed", {"changes": changes},
+                          kept=saved)
         return saved
 
     def __save_record(self, record: ClientRecord) -> bool:
@@ -782,7 +785,7 @@ class App:
         self.__start(actor)
         file_id = self.__documents.upload(file_path)
         self.__record("document_uploaded", actor, client_ref, "ok" if file_id else "failed",
-                      {"file_id": file_id or ""})
+                      {"file_id": file_id or ""}, kept=bool(file_id))
         return file_id
 
     def download_document(self, file_id: str, output_path: str, actor: str = TERMINAL,
@@ -891,7 +894,8 @@ class App:
         if reason:
             details["reason"] = reason
         self.__record(action, actor, str(saved.get("client_ref") or ""),
-                      "ok" if result == AssessmentRepository.CHANGED else "failed", details)
+                      "ok" if result == AssessmentRepository.CHANGED else "failed", details,
+                      kept=result == AssessmentRepository.CHANGED)
 
     @staticmethod
     def archive_reason_problem(reason: object) -> str:
@@ -1034,9 +1038,11 @@ class App:
             raise ValueError("The actor must be 'terminal' or the name of a configured account.")
 
     def __record(self, action: str, actor: str, client_ref: str = "", result: str = "ok",
-                 details: dict | None = None) -> bool:
+                 details: dict | None = None, kept: bool = False) -> bool:
         """Add one line to the audit log. Never raises: if it cannot be written the real error is logged,
-        audit_write_failed() turns True, and the terminal is told (the web app checks audit_write_failed())."""
+        audit_write_failed() turns True, and the terminal is told (the web app checks audit_write_failed()).
+        kept is True when the action saved something: the message then says "Saved, but ...", otherwise it
+        only says the action could not be written."""
         self.__audit_note.failed = False
         try:
             event = AuditEvent(actor=actor, action=action, client_ref=client_ref, result=result, details=details)
@@ -1048,7 +1054,7 @@ class App:
             logger.error("App.__record: the audit line for %s by %s was not written", action, actor)
             self.__audit_note.failed = True
             if actor == App.TERMINAL:
-                self.__ui.show_error(App.AUDIT_NOT_WRITTEN)
+                self.__ui.show_error(App.AUDIT_NOT_WRITTEN if kept else App.AUDIT_LINE_NOT_WRITTEN)
         return written
 
     # ----- the objects set-up code and tests reach through App ------------------------------

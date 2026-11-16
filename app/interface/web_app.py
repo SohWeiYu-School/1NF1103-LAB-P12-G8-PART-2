@@ -198,10 +198,11 @@ class WebApp:
             raise ValueError("Nobody is signed in.")
         return account.name
 
-    def __flash_audit_failure(self) -> None:
-        """Tell the officer when the last action was kept but its audit line could not be written."""
+    def __flash_audit_failure(self, kept: bool = False) -> None:
+        """Tell the officer when the last action's audit line could not be written. kept is True when the
+        action saved something ("Saved, but ..."); otherwise the message only says the action was not written."""
         if self.__app.audit_write_failed():
-            flash(App.AUDIT_NOT_WRITTEN)
+            flash(App.AUDIT_NOT_WRITTEN if kept else App.AUDIT_LINE_NOT_WRITTEN)
 
     def gate(self) -> Any:
         """Runs before every route. Nobody signed in: go to /signin (the progress poll gets a 401). The
@@ -661,7 +662,7 @@ class WebApp:
                 uploaded.save(path)
                 read.append(self.__app.read_document_for_extraction(path, name))
                 file_id = self.__app.upload_document(path, actor, client_ref)
-                self.__flash_audit_failure()
+                self.__flash_audit_failure(kept=file_id is not None)
                 if file_id is not None:
                     stored.append({"file_name": name, "file_id": file_id})
             finally:
@@ -729,7 +730,7 @@ class WebApp:
             logger.error("WebApp: the form for %s did not make a valid record: %r", record.get("client_ref"), error)
             return [f"The client could not be saved because {ClientRecord.why_unreadable(error)}."]
         saved = self.__app.save_client(client, self.__actor(), new_client)
-        self.__flash_audit_failure()
+        self.__flash_audit_failure(kept=saved)
         if not saved:
             return ["The client was not saved because the client database cannot be read or written right now. "
                     "Please try again later."]
@@ -768,7 +769,7 @@ class WebApp:
                 logger.error("WebApp: the assessment of %s stopped at a critical step", record.client_ref)
                 job["status"] = "error"
                 job["error"] = WebApp.ASSESSMENT_STOPPED + (
-                    " " + App.AUDIT_NOT_WRITTEN if self.__app.audit_write_failed() else "")
+                    " " + App.AUDIT_LINE_NOT_WRITTEN if self.__app.audit_write_failed() else "")
                 return
             assessment_id = self.__app.save_assessment(result, record, on_step=step, actor=actor)
             audit_failed = self.__app.audit_write_failed()
@@ -946,7 +947,7 @@ class WebApp:
             logger.error("WebApp.__change_archive: the saved assessments cannot be read: %r", error)
             flash(App.ASSESSMENTS_UNAVAILABLE)
             return redirect(url_for("home"))
-        self.__flash_audit_failure()
+        self.__flash_audit_failure(kept=result == App.ARCHIVE_CHANGED)
         client_ref = saved["client_ref"]
         keep_archived = False
         if result == App.ARCHIVE_CHANGED and not archive:
@@ -1056,7 +1057,7 @@ class WebApp:
             path = os.path.join(folder, name)
             uploaded.save(path)
             file_id = self.__app.upload_document(path, actor, client_ref)
-            self.__flash_audit_failure()
+            self.__flash_audit_failure(kept=file_id is not None)
             shutil.rmtree(folder, ignore_errors=True)
  
             if file_id is None:
@@ -1067,7 +1068,7 @@ class WebApp:
  
         if added:
             saved = self.__app.save_client(record, actor)
-            self.__flash_audit_failure()
+            self.__flash_audit_failure(kept=saved)
             if saved:
                 flash(f"{added} document(s) uploaded.")
             else:
@@ -1186,7 +1187,7 @@ class WebApp:
         if r.get("outcome_failed"):
             flash(App.OUTCOME_NOT_UPDATED)
         if r.get("audit_failed"):
-            flash(App.AUDIT_NOT_WRITTEN)
+            flash(App.AUDIT_NOT_WRITTEN if r.get("saved", True) else App.AUDIT_LINE_NOT_WRITTEN)
         if not r.get("saved", True):
             flash(WebApp.ASSESSMENT_NOT_SAVED)
         return self.show_report(r["record"], r["report"], r.get("assessed_at", ""), r.get("assessment_id"),

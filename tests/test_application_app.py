@@ -1139,8 +1139,8 @@ def test_the_terminal_is_told_when_the_audit_line_was_not_written_but_the_web_is
     monkeypatch.setattr(getattr(app, "_App__audit"), "save", lambda record: False)
     app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
     assert capsys.readouterr().out == ""
-    app.sync_to_cloud()                                  # the terminal
-    assert App.AUDIT_NOT_WRITTEN in capsys.readouterr().out
+    app.sync_to_cloud()                                  # the terminal: nothing was saved
+    assert App.AUDIT_LINE_NOT_WRITTEN in capsys.readouterr().out
 
 
 def test_the_audit_failure_flag_is_reset_by_the_next_action(app, monkeypatch):
@@ -1388,3 +1388,30 @@ def test_the_terminal_is_told_when_the_outcome_could_not_be_written(app, tmp_pat
     assert app.assess_client_record(record) is not None
     out = capsys.readouterr().out
     assert "Assessment saved." in out and App.OUTCOME_NOT_UPDATED in out
+
+
+def test_the_terminal_message_says_saved_only_when_something_was_saved(app, tmp_path, capsys):
+    from tests.audit_files import break_audit
+    break_audit(tmp_path)
+    app.save_client(ClientRecord.from_dict(sample_case()))                    # saved: "Saved, but ..."
+    out = capsys.readouterr().out
+    assert App.AUDIT_NOT_WRITTEN in out
+    app.refused("Shareen", "opening the audit log")                           # nothing saved
+    app.sync_to_cloud()
+    app.upload_document(str(tmp_path / "missing.pdf"))                         # not kept
+    out = capsys.readouterr().out
+    assert App.AUDIT_NOT_WRITTEN not in out and out.count(App.AUDIT_LINE_NOT_WRITTEN) == 2
+    source = tmp_path / "a.txt"
+    source.write_text("x", encoding="utf-8")
+    assert app.upload_document(str(source)) is not None                       # kept
+    assert App.AUDIT_NOT_WRITTEN in capsys.readouterr().out
+
+
+def test_an_archive_that_changed_something_says_saved_and_one_that_changed_nothing_writes_no_line(app, tmp_path, capsys):
+    from tests.audit_files import break_audit
+    _two_saved(app)
+    break_audit(tmp_path)
+    app.archive_assessment("A1")
+    assert app.audit_write_failed() is True and App.AUDIT_NOT_WRITTEN in capsys.readouterr().out
+    app.archive_assessment("A1")                                               # already archived: no line, no message
+    assert app.audit_write_failed() is False and capsys.readouterr().out == ""
