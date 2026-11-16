@@ -980,6 +980,10 @@ class App:
             match = next((a for a in self.__config.accounts
                           if " ".join(a.name.split()).casefold() == name.casefold()), None)
         actor = match.name if match is not None else App.UNKNOWN
+        if match is None and self.__config.accounts:
+            # check a password anyway, so a wrong name takes as long as a wrong password and the reply
+            # time does not show which names have accounts (the result is not used)
+            self.__config.accounts[0].check_password(password)
         self.__start(actor)
         if match is None or not match.check_password(password):
             self.__record("sign_in_failed", actor, "", "failed", {"portal": portal})
@@ -1036,7 +1040,8 @@ class App:
         if audit_filter.sort == "desc":
             events.reverse()                       # the file is oldest first
         return AuditPage(audit_filter.page_of(events), len(events), unreadable, len(readable),
-                         len({event.actor.casefold() for event in events}),
+                         len({event.actor.casefold() for event in events
+                              if event.actor not in (AuditEvent.TERMINAL, AuditEvent.UNKNOWN)}),
                          sum(1 for event in events if event.result == "failed"))
 
     def audit_trail(self, client_ref: str) -> tuple[list[AuditEvent], int]:

@@ -7,6 +7,7 @@ import pytest
 
 from app.application.app import App
 from app.application.assessment_runner import AssessmentRunner
+from app.model.account import Account
 from app.model.audit_event import AuditEvent
 from app.model.audit_filter import AuditFilter
 from app.model.client_record import ClientRecord
@@ -1111,6 +1112,14 @@ def test_an_unknown_name_is_recorded_as_the_unknown_actor_and_gets_the_same_mess
     [event] = _events(app)
     assert (event.actor, event.result, event.details) == ("unknown", "failed", {"portal": "admin"})
     assert app.sign_in("x" * 500, "y" * 500, App.OFFICER_PORTAL) == (None, App.SIGN_IN_WRONG)
+
+
+def test_an_unknown_name_still_checks_a_password_so_the_reply_time_gives_nothing_away(app, monkeypatch):
+    checked = []
+    real = Account.check_password
+    monkeypatch.setattr(Account, "check_password", lambda self, password: checked.append(password) or real(self, password))
+    assert app.sign_in("Nobody Here", "officer123", App.OFFICER_PORTAL) == (None, App.SIGN_IN_WRONG)
+    assert checked == ["officer123"]
 
 
 def test_the_right_password_at_the_wrong_portal_says_where_to_sign_in_and_is_recorded(app):
