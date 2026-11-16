@@ -87,13 +87,13 @@ class AssessmentRepository(JsonRepository):
 
     @staticmethod
     def archive_state(record: dict) -> str:
-        """ACTIVE, ARCHIVED, or UNREADABLE (the archive_log is not a list of entries that each have an
-        action of "archived" or "restored"). The last entry decides. Does not log: it is called for every row."""
+        """ACTIVE (no archive_log, or an empty list), ARCHIVED, or UNREADABLE (the archive_log is not a
+        list of entries that each have an action of "archived" or "restored" and, if given, an "at"
+        time and a reason as text). The last entry decides. Does not log: it is called for every row."""
         log = record.get("archive_log") if isinstance(record, dict) else None
-        if not log:
+        if log is None or log == []:
             return AssessmentRepository.ACTIVE
-        if not isinstance(log, list) or not all(
-                isinstance(entry, dict) and entry.get("action") in AssessmentRepository.__ACTIONS for entry in log):
+        if not isinstance(log, list) or not all(AssessmentRepository.__good_entry(entry) for entry in log):
             return AssessmentRepository.UNREADABLE
         return AssessmentRepository.ARCHIVED if log[-1]["action"] == "archived" else AssessmentRepository.ACTIVE
 
@@ -101,6 +101,12 @@ class AssessmentRepository(JsonRepository):
     def is_archived(record: dict) -> bool:
         """True if the assessment is hidden from the lists: archived, or archive log damaged (decision: hidden)."""
         return AssessmentRepository.archive_state(record) != AssessmentRepository.ACTIVE
+
+    @staticmethod
+    def __good_entry(entry: object) -> bool:
+        """True if one archive log line has the layout archive() and restore() write."""
+        return (isinstance(entry, dict) and entry.get("action") in AssessmentRepository.__ACTIONS
+                and isinstance(entry.get("at", ""), str) and isinstance(entry.get("reason", ""), str))
 
     @staticmethod
     def __visible(records: list[dict], include_archived: bool) -> list[dict]:

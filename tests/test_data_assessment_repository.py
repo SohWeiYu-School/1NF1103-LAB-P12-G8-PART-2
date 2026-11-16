@@ -174,7 +174,10 @@ def test_lists_hide_archived_unless_asked(tmp_path):
 
 
 DAMAGED_LOGS = ["text", 5, {"action": "archived"}, ["archived"], [None], [{"action": "deleted"}],
-                [{"action": "archived"}, "x"], [{"at": "2026"}], [{"action": "bogus"}, {"action": "archived"}]]
+                [{"action": "archived"}, "x"], [{"at": "2026"}], [{"action": "bogus"}, {"action": "archived"}],
+                "", {}, 0, False,                                            # empty, but not a list
+                [{"action": "archived", "at": 12345}], [{"action": "archived", "at": {"x": 1}}],
+                [{"action": "archived", "at": "2026-11-16", "reason": 7}]]
 
 
 def test_archive_state_of_every_damaged_shape_is_unreadable():
@@ -184,7 +187,7 @@ def test_archive_state_of_every_damaged_shape_is_unreadable():
 
 
 def test_archive_state_of_good_and_empty_logs():
-    for log in (None, [], "", {}):
+    for log in (None, []):
         assert R.archive_state({"archive_log": log}) == R.ACTIVE
     assert R.archive_state({}) == R.ACTIVE
     assert R.is_archived({}) is False
