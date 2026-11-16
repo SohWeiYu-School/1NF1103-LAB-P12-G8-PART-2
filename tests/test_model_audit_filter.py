@@ -78,7 +78,7 @@ def test_a_bad_preset_falls_back_to_7_days_and_says_what_is_allowed(value):
 def test_a_bad_group_is_ignored_and_the_good_ones_are_kept():
     f = AuditFilter.from_query(MultiDict([("group", "Client"), ("group", "Everything")]), NOW)
     assert f.groups == ("Client",)
-    assert f.problems() == ["'group' must be one of Sign-in, Client, Documents, Assessment, System; ignoring that value."]
+    assert f.problems() == ["'group' must be one of Sign-in, Client, Documents, Assessment, System, Flag updates; ignoring that value."]
     assert AuditFilter.from_query({"group": "Everything"}, NOW).all_groups() is True
 
 

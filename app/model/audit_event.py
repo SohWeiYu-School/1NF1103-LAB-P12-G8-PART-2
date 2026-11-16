@@ -32,7 +32,8 @@ class AuditEvent:
         "Client": ("client_created", "client_edited"),
         "Documents": ("autofill_used", "document_uploaded", "document_downloaded"),
         "Assessment": ("assessment_run", "assessment_failed", "assessment_archived", "assessment_restored"),
-        "System": ("cloud_sync", "audit_verified", "access_refused"),
+        "System": ("cloud_sync", "audit_verified", "access_refused", "data_unavailable"),
+        "Flag updates": ("flag_updated",),
     }
     ACTIONS: tuple[str, ...] = tuple(action for actions in GROUPS.values() for action in actions)
     LABELS: dict[str, str] = {
@@ -43,8 +44,11 @@ class AuditEvent:
         "assessment_run": "Assessed", "assessment_failed": "Assessment failed",
         "assessment_archived": "Archived an assessment", "assessment_restored": "Restored an assessment",
         "cloud_sync": "Cloud sync", "audit_verified": "Checked the audit log",
-        "access_refused": "Access refused",
+        "access_refused": "Access refused", "data_unavailable": "Database unreadable",
+        "flag_updated": "Updated a flag",
     }
+    __FLAG_STATES: dict[str, str] = {"open": "Open", "review": "In review", "followup": "Following up",
+                                     "resolved": "Resolved"}
     MAX_ACTOR: int = 80
     MAX_CLIENT_REF: int = 40
     MAX_EVENT_ID: int = 64
@@ -257,6 +261,17 @@ class AuditEvent:
         elif action == "access_refused":
             what = details.get("what")
             text = "Access refused" + (f": {what}" if isinstance(what, str) and what else "")
+        elif action == "data_unavailable":
+            what = details.get("what")
+            text = "Database unreadable" + (f": {what}" if isinstance(what, str) and what else "")
+        elif action == "flag_updated":
+            flag = AuditEvent.__plain(details.get("flag_id"))
+            before, after = details.get("from"), details.get("to")
+            if before in AuditEvent.__FLAG_STATES and after in AuditEvent.__FLAG_STATES and before != after:
+                text = AuditEvent.__words("Updated flag", flag,
+                                          f"({AuditEvent.__FLAG_STATES[before]} → {AuditEvent.__FLAG_STATES[after]})")
+            else:
+                text = AuditEvent.__words("Added a note to flag", flag)
         else:
             text = "(no action)"
         return text + (" — failed" if self.__result == "failed" else "")

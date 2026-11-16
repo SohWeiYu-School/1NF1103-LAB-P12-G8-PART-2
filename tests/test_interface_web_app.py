@@ -1528,7 +1528,7 @@ def test_the_filters_narrow_the_log_and_show_a_chip_that_removes_each_one(web):
     assert 'href="/admin/log?preset=30"' in page                                              # Clear all keeps the dates
     assert "Clear all" in page and "Remove this filter: Officer: Adrian" in page
     assert re.search(r"<option selected>Adrian</option>", page) and '<option>Shareen</option>' in page
-    assert 'value="Sign-in" checked' in page and 'value="Client">' in page and "1 of 5 groups" in page
+    assert 'value="Sign-in" checked' in page and 'value="Client">' in page and "1 of 6 groups" in page
     assert "Showing 1&ndash;1 of 1" in page
 
 
