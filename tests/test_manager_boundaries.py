@@ -91,3 +91,17 @@ def test_the_logic_manager_opens_no_files_and_makes_no_network_calls():
                      if module.split(".")[0] in ("requests", "urllib", "http", "socket", "openai", "google",
                                                  "pymongo", "os")]
     assert problems == []
+
+
+def test_the_web_app_asks_app_and_never_works_a_managers_object():
+    # #39: WebApp may call App, but not take one of App's managers' objects and work it itself.
+    handed_out = {"clients", "assessments", "documents", "record_builder"}
+    path = os.path.join(APP_DIR, "interface", "web_app.py")
+    with open(path, encoding="utf-8") as handle:
+        tree = ast.parse(handle.read())
+    problems = [f"web_app.py:{node.lineno} App.{node.func.attr}()" for node in ast.walk(tree)
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr in handed_out
+                and isinstance(node.func.value, (ast.Attribute, ast.Name))
+                and getattr(node.func.value, "attr", getattr(node.func.value, "id", "")) in ("__app", "app")]
+    assert problems == []
