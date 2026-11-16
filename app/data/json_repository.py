@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import tempfile
 from abc import abstractmethod
 
 from app.data.repository import Repository
@@ -72,10 +73,15 @@ class JsonRepository(Repository):
         same folder first, then swapped in, so a reader never sees a half-written file and a
         crash half way leaves the old file whole. Returns False (the real error logged, the
         temporary file removed) if the file could not be written or a record cannot be held in JSON."""
-        temporary = self._path + ".tmp"
+        temporary = None
         try:
-            os.makedirs(os.path.dirname(os.path.abspath(self._path)), exist_ok=True)
-            with open(temporary, "w", encoding="utf-8") as handle:
+            folder = os.path.dirname(os.path.abspath(self._path))
+            os.makedirs(folder, exist_ok=True)
+            # A name no other writer (thread or process) shares, so two writers never swap in
+            # each other's half-written file.
+            descriptor, temporary = tempfile.mkstemp(dir=folder, prefix=os.path.basename(self._path) + ".",
+                                                     suffix=".tmp")
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
                 json.dump(records, handle, indent=4, ensure_ascii=False)
                 handle.flush()
                 os.fsync(handle.fileno())
@@ -84,7 +90,7 @@ class JsonRepository(Repository):
         except (OSError, TypeError, ValueError) as error:   # TypeError/ValueError: a record JSON cannot hold
             logger.error("JsonRepository: could not write %s: %s", self._path, repr(error))
             try:
-                if os.path.exists(temporary):
+                if temporary is not None and os.path.exists(temporary):
                     os.remove(temporary)
             except OSError as cleanup_error:
                 logger.error("JsonRepository: could not remove %s: %s", temporary, repr(cleanup_error))

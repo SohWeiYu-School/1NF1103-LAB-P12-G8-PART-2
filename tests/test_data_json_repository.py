@@ -173,3 +173,36 @@ def test_a_record_json_cannot_hold_returns_false_and_keeps_the_old_file_whole(tm
     assert repository.save({"note_id": "N2", "tags": {"a", "b"}}) is False     # a set is not JSON
     assert path.read_text(encoding="utf-8") == before
     assert _leftover_temporary_files(tmp_path / "db") == []
+
+
+def test_no_temporary_file_is_left_after_a_good_write(tmp_path):
+    repository = _repository(tmp_path)
+    assert repository.save({"note_id": "N-1"}) is True
+    assert os.listdir(tmp_path / "db") == ["notes.json"]
+
+
+def test_no_temporary_file_is_left_after_a_failed_write(tmp_path):
+    repository = _repository(tmp_path)
+    assert repository.save({"note_id": "N-1"}) is True
+    assert repository.save({"note_id": object()}) is False     # JSON cannot hold this
+    assert os.listdir(tmp_path / "db") == ["notes.json"]
+    assert repository.load() == [{"note_id": "N-1"}]
+
+
+def test_two_repositories_writing_one_file_from_threads_leave_valid_json(tmp_path):
+    import threading
+    first, second = _repository(tmp_path), _repository(tmp_path)
+    results = []
+
+    def work(repository, tag):
+        for number in range(20):
+            results.append(repository._write_all([{"note_id": f"{tag}-{number}"}] * 50))
+
+    threads = [threading.Thread(target=work, args=(first, "a")), threading.Thread(target=work, args=(second, "b"))]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert all(results)
+    assert len(first.load()) == 50
+    assert os.listdir(tmp_path / "db") == ["notes.json"]
