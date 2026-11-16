@@ -38,7 +38,7 @@ class AuditEvent:
         "document_downloaded": "Document downloaded",
         "assessment_run": "Assessed", "assessment_failed": "Assessment failed",
         "assessment_archived": "Archived an assessment", "assessment_restored": "Restored an assessment",
-        "cloud_sync": "Cloud sync", "audit_verified": "Verified the audit log",
+        "cloud_sync": "Cloud sync", "audit_verified": "Checked the audit log",
         "access_refused": "Access refused",
     }
     MAX_ACTOR: int = 80
@@ -237,7 +237,8 @@ class AuditEvent:
         elif action == "cloud_sync":
             text = f"Cloud sync ({AuditEvent.__count(details.get('synced'), 'record')} synced)"
         elif action == "audit_verified":
-            text = "Verified the audit log"
+            # "failed" here means the check found changes, so the line says that instead of " — failed"
+            return "Checked the audit log: " + ("changes found" if self.__result == "failed" else "no changes found")
         elif action == "access_refused":
             what = details.get("what")
             text = "Access refused" + (f": {what}" if isinstance(what, str) and what else "")

@@ -167,7 +167,7 @@ def test_hash_matches_turns_false_when_the_stored_hash_is_wrong():
     ("assessment_archived", {"assessment_id": "abc"}, "C-0007", "Archived assessment abc"),
     ("assessment_restored", {"assessment_id": "1a2b3c4d-9999"}, "C-0007", "Restored assessment 1a2b3c4d…"),
     ("cloud_sync", {"synced": 4}, "", "Cloud sync (4 records synced)"),
-    ("audit_verified", {}, "", "Verified the audit log"),
+    ("audit_verified", {}, "", "Checked the audit log: no changes found"),
     ("access_refused", {"what": "open the audit log"}, "", "Access refused: open the audit log"),
     ("access_refused", {}, "", "Access refused"),
 ])
@@ -228,3 +228,9 @@ def test_every_action_has_one_group_and_one_label():
     assert tuple(seen) == AuditEvent.ACTIONS and len(set(seen)) == len(seen)
     assert set(AuditEvent.LABELS) == set(AuditEvent.ACTIONS)
     assert list(AuditEvent.GROUPS) == ["Sign-in", "Client", "Documents", "Assessment", "System"]
+
+
+def test_a_check_that_found_changes_says_so_and_has_no_failed_suffix():
+    event = _event(action="audit_verified", result="failed", details={"intact": False})
+    assert event.summary() == "Checked the audit log: changes found"
+    assert event.label == "Checked the audit log"
