@@ -66,7 +66,8 @@ class ConfigReader:
         if not isinstance(limits, dict):
             problems.append("config/policy.json 'assessment_rate_limit' must be an object")
         else:
-            cooldown = limits.get("cooldown_seconds", 60)
+            # An absent cooldown is allowed: the rate limiter applies its own default.
+            cooldown = limits.get("cooldown_seconds", 0)
             if isinstance(cooldown, bool) or not isinstance(cooldown, int) or cooldown < 0:
                 problems.append("config/policy.json 'assessment_rate_limit.cooldown_seconds' must be a whole "
                                 f"number of seconds, 0 or more (got {cooldown!r})")

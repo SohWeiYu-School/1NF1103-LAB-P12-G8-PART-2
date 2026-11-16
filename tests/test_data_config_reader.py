@@ -90,3 +90,13 @@ def test_a_rate_limit_setting_that_cannot_be_right_is_reported(tmp_path):
     problems = ConfigReader(str(folder)).problems()
     assert any("cooldown_seconds" in p and "'60'" in p for p in problems)
     assert any("enabled" in p and "'yes'" in p for p in problems)
+
+
+def test_a_rate_limit_with_no_cooldown_is_not_a_problem_and_has_no_default_here(tmp_path):
+    import shutil
+    folder = tmp_path / "config"
+    shutil.copytree("config", folder)
+    policy = json.loads((folder / "policy.json").read_text())
+    policy["assessment_rate_limit"] = {"enabled": True}
+    (folder / "policy.json").write_text(json.dumps(policy))
+    assert not any("cooldown_seconds" in p for p in ConfigReader(str(folder)).problems())
