@@ -486,8 +486,9 @@ VIEW = """{% extends "base.html" %}
     {% for a in assessments %}
     {% set state = archive_states[loop.index0] if loop.index0 < archive_states|length else 'active' %}
     <tr{% if state != 'active' %} style="opacity:.55"{% endif %}>
-      <td>{{ a.get('assessed_at', '')[:10] }}</td>
-      <td>{{ a.get('assessed_at', '')[11:16] }} UTC</td>
+      {% set when = a.get('assessed_at', '')|sgt %}
+      {% if ' ' in when %}<td>{{ when.rsplit(' ', 1)[0] }}</td><td>{{ when.rsplit(' ', 1)[1] }} SGT</td>
+      {% else %}<td>{{ when }}</td><td></td>{% endif %}
       <td>{{ (a.get('outcome') or (a.get('assessment') or {}).get('outcome') or '—').replace('_', ' ') }}{% if state == 'archived' %}{% set last = (a.get('archive_log') or [])[-1] %} (archived) &middot; {{ ('by ' ~ last.get('by')) if last.get('by') else 'Not recorded (before sign-in existed)' }}{% elif state == 'unreadable' %} (archive state unreadable){% endif %}</td>
       <td>
         {% if a.get('assessment_id') %}

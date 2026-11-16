@@ -965,6 +965,16 @@ def test_old_records_without_an_id_each_show_their_own_archive_state(web):
     assert page.count("(archived)") == 1
 
 
+def test_the_assessment_list_shows_singapore_time_like_the_history(web):
+    application, _, client = web
+    application.clients().save(sample_case())
+    ref = sample_case()["client_ref"]
+    application.assessments()._write_all([
+        {"client_ref": ref, "kind": "onboarding", "outcome": "PASSED", "assessed_at": "2026-02-05T18:30:00+00:00"}])
+    page = client.get(f"/client/{ref}").get_data(as_text=True)
+    assert "<td>6 Feb 2026</td><td>02:30 SGT</td>" in page and " UTC</td>" not in page
+
+
 def test_a_restore_that_worked_is_reported_even_if_the_list_cannot_be_read_afterwards(web, monkeypatch):
     application, _, client = web
     ref = _two_assessments(application)
@@ -1437,12 +1447,19 @@ def test_singapore_time_is_eight_hours_ahead_and_odd_text_is_left_alone(web):
     assert site.singapore_day("2026-12-31T20:30:00Z") == "1 Jan" and site.singapore_day("x") == "x"
     assert site.singapore_clock("2026-11-16T06:02:11Z") == "14:02" and site.singapore_clock(None) == "None"
     assert site.singapore_long("2026-11-15T06:02:11Z") == "15 November 2026, 14:02 SGT" and site.singapore_long("x") == "x"
+    # assessment times are saved with an offset and fractions of a second; a time with no offset is not guessed
+    assert site.singapore_time("2026-11-16T14:07:23.372667+00:00") == "16 Nov 2026 22:07"
+    assert site.singapore_time("2026-11-16T14:07:23") == "2026-11-16T14:07:23"
 
 
 def test_the_small_text_helpers():
     assert WebApp.initials("Wei Yu") == "WY" and WebApp.initials("Shareen") == "S" and WebApp.initials("") == ""
     assert WebApp.field_label("claims.declared_net_worth") == "Claims › Declared net worth"
     assert WebApp.field_label("investments[0].country") == "Investments 1 › Country"
+    # age and country of residence are saved under "career" but belong to the client
+    assert WebApp.field_label("career.age") == "Client › Age"
+    assert WebApp.field_label("career.country_of_residence") == "Client › Country of residence"
+    assert WebApp.field_label("career.occupation") == "Career › Occupation"
 
 
 def test_the_short_line_names_the_changed_fields(web):

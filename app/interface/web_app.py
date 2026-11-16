@@ -119,6 +119,7 @@ class WebApp:
                                "autofill_used": "Filled in by", "assessment_archived": "Archived by",
                                "assessment_restored": "Restored by", "cloud_sync": "Started by",
                                "audit_verified": "Checked by"}
+    PROFILE_IN_CAREER: tuple[str, ...] = ("career.age", "career.country_of_residence")   # saved under "career", shown as Client
     SINGAPORE: timezone = timezone(timedelta(hours=8))      # Singapore has no daylight saving: a fixed offset is exact
     NOT_ADMIN: str = "Only the admin can open the audit log."
     MAX_UPLOAD_BYTES: int = 40 * 1024 * 1024     # uploads for auto-fill: 40 MB per request
@@ -317,6 +318,18 @@ class WebApp:
         return f"{value:,}"
 
     @staticmethod
+    def __utc_moment(text: str) -> datetime:
+        """A saved time as a UTC moment: an audit time ("2026-11-16T06:02:11Z") or an assessment time with
+        its offset ("2026-11-16T06:02:11.123+00:00"). Raises ValueError for anything else, including a
+        time with no offset (its zone is unknown, so it is not guessed) and TypeError for a non-text."""
+        if not isinstance(text, str):
+            raise TypeError("a saved time must be text")
+        moment = datetime.fromisoformat(text)
+        if moment.tzinfo is None:
+            raise ValueError("a saved time must say its offset")
+        return moment.astimezone(timezone.utc)
+
+    @staticmethod
     def initials(name: str) -> str:
         """The first letters of the first two words of a name, in capitals ("Wei Yu" -> "WY")."""
         return "".join(word[0] for word in str(name).split()[:2]).upper()
@@ -325,7 +338,7 @@ class WebApp:
         """An audit time (UTC) as a Singapore day without the year: "16 Nov". Anything that is not such a
         time is shown as it is."""
         try:
-            moment = datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            moment = WebApp.__utc_moment(text)
         except (TypeError, ValueError):
             return str(text)
         local = moment.astimezone(WebApp.SINGAPORE)
@@ -334,7 +347,7 @@ class WebApp:
     def singapore_clock(self, text: str) -> str:
         """An audit time (UTC) as the Singapore clock time: "14:02". Anything else is shown as it is."""
         try:
-            moment = datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            moment = WebApp.__utc_moment(text)
         except (TypeError, ValueError):
             return str(text)
         return f"{moment.astimezone(WebApp.SINGAPORE):%H:%M}"
@@ -342,7 +355,7 @@ class WebApp:
     def singapore_long(self, text: str) -> str:
         """An audit time (UTC) as "15 November 2026, 14:02 SGT". Anything else is shown as it is."""
         try:
-            moment = datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            moment = WebApp.__utc_moment(text)
         except (TypeError, ValueError):
             return str(text)
         local = moment.astimezone(WebApp.SINGAPORE)
@@ -353,6 +366,8 @@ class WebApp:
         """A changed field's path in words: "claims.declared_net_worth" -> "Claims › Declared net worth",
         "investments[0].country" -> "Investments 1 › Country"."""
         parts = []
+        if str(path) in WebApp.PROFILE_IN_CAREER:
+            path = "client." + str(path).split(".", 1)[1]
         for part in str(path).split("."):
             name, _, index = part.partition("[")
             words = name.replace("_", " ").strip().capitalize()
@@ -376,7 +391,7 @@ class WebApp:
         """An audit time (UTC, 2026-11-16T06:02:11Z) as Singapore time: "16 Nov 2026 14:02". Anything
         that is not such a time is shown as it is."""
         try:
-            moment = datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            moment = WebApp.__utc_moment(text)
         except (TypeError, ValueError):
             return str(text)
         local = moment.astimezone(WebApp.SINGAPORE)
