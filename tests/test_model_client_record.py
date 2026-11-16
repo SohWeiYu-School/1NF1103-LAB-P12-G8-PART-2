@@ -218,3 +218,9 @@ def test_an_open_listed_job_beats_the_career_block_and_ended_jobs_are_the_last_r
     assert ClientRecord.from_dict(ended).current_job().occupation == "Planner"
     empty = ClientRecord.from_dict({"client_ref": "CL-1", "name": "D", "nationality": "M", "current_date": "2026-09-24"})
     assert empty.current_job() is None
+
+
+def test_why_unreadable_shows_a_value_errors_reason_but_hides_other_errors():
+    assert ClientRecord.why_unreadable(ValueError("age must be between 18 and 120")) == "age must be between 18 and 120"
+    hidden = ClientRecord.why_unreadable(AttributeError("'int' object has no attribute 'get'"))
+    assert hidden == "some of the details are not in the expected layout"

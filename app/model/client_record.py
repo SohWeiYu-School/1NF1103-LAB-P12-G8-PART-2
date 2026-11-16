@@ -308,6 +308,14 @@ class ClientRecord:
         return data
 
     @staticmethod
+    def why_unreadable(error: Exception) -> str:
+        """Why from_dict could not make a record, in words safe to show: a ValueError says what is
+        wrong; any other error is a record not laid out as expected (its details belong in the log)."""
+        if isinstance(error, ValueError):
+            return str(error)
+        return "some of the details are not in the expected layout"
+
+    @staticmethod
     def from_dict(data: dict) -> "ClientRecord":
         """Build a record from its saved layout. Raises ValueError if a value cannot be right."""
         career = dict(data.get("career") or {})
