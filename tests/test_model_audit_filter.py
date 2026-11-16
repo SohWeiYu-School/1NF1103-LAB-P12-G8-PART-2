@@ -110,7 +110,6 @@ def test_custom_dates_are_read_and_a_good_range_has_no_problem():
 
 
 @pytest.mark.parametrize("args, problem", [
-    ({"preset": "custom"}, AuditFilter.PROBLEM_BOTH_DATES),
     ({"preset": "custom", "from": "2026-11-10"}, AuditFilter.PROBLEM_BOTH_DATES),
     ({"preset": "custom", "to": "2026-11-10"}, AuditFilter.PROBLEM_BOTH_DATES),
     ({"preset": "custom", "from": "2026-11-12", "to": "2026-11-10"}, AuditFilter.PROBLEM_DATE_ORDER),
@@ -125,6 +124,9 @@ def test_a_bad_custom_range_says_why_and_shows_all_dates_for_now(args, problem):
 
 
 def test_the_mockups_two_date_messages_are_exact():
+    # Custom just picked, no dates yet: all dates, and no warning (the user did nothing wrong)
+    picked = AuditFilter.from_query({"preset": "custom"}, NOW)
+    assert picked.problems() == [] and picked.range_text(NOW) == "All dates"
     assert AuditFilter.PROBLEM_BOTH_DATES == "Pick both a start and an end date. Showing all dates for now."
     assert AuditFilter.PROBLEM_DATE_ORDER == "The start date must be on or before the end date. Showing all dates for now."
 

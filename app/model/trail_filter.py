@@ -100,6 +100,8 @@ class TrailFilter:
             if (date_from and first is None) or (date_to and last is None):
                 problems.append(AuditFilter.PROBLEM_DATE_FORMAT)
                 date_from, date_to, ignored = "", "", True
+            elif not date_from and not date_to:
+                ignored = True                     # Custom was just picked: all dates until both are chosen
             elif first is None or last is None:
                 problems.append(AuditFilter.PROBLEM_BOTH_DATES)
                 ignored = True

@@ -60,7 +60,6 @@ def test_bad_show_and_when_fall_back_with_plain_lines():
 
 
 @pytest.mark.parametrize("args, problem", [
-    ({"when": "custom"}, AuditFilter.PROBLEM_BOTH_DATES),
     ({"when": "custom", "from": "2026-11-10"}, AuditFilter.PROBLEM_BOTH_DATES),
     ({"when": "custom", "from": "2026-11-12", "to": "2026-11-10"}, AuditFilter.PROBLEM_DATE_ORDER),
     ({"when": "custom", "from": "2026-11-10", "to": "2026-12-10"}, AuditFilter.PROBLEM_FUTURE),
@@ -70,6 +69,11 @@ def test_a_bad_custom_range_says_why_and_shows_all_dates_for_now(args, problem):
     f = TrailFilter.from_query(args, NOW)
     assert f.problems() == [problem] and f.when == "custom" and f.day_range(NOW) is None
     assert f.matches(_event(at="2001-01-01T00:00:00Z"), NOW)
+
+
+def test_custom_just_picked_shows_all_dates_with_no_warning():
+    f = TrailFilter.from_query({"when": "custom"}, NOW)
+    assert f.problems() == [] and f.day_range(NOW) is None
 
 
 def test_a_value_that_is_not_text_is_a_problem_not_a_crash():
