@@ -713,3 +713,17 @@ def test_reading_problems_lists_things_worth_a_second_look(app):
     early = record.to_dict()
     early["career"]["career_start_year"] = 1900
     assert any("before age 14" in line for line in app.reading_problems(ClientRecord.from_dict(early), "2026-10-14"))
+
+
+def test_a_rate_limit_setting_that_is_not_an_object_is_logged_with_its_value(tmp_path, monkeypatch, caplog):
+    import shutil
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    root = tmp_path / "root"
+    shutil.copytree("config", root / "config")
+    policy = json.loads((root / "config" / "policy.json").read_text())
+    policy["assessment_rate_limit"] = "30 seconds"
+    (root / "config" / "policy.json").write_text(json.dumps(policy))
+    application = App(ai_caller=None, root=str(root), data_folder=str(tmp_path / "data"))
+    assert "'30 seconds'" in caplog.text and "assessment_rate_limit" in caplog.text
+    assert application.rate_limiter() is not None

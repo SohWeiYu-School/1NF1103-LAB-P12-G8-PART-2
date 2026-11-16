@@ -123,7 +123,12 @@ class App:
         self.__client_form: ClientForm = ClientForm(self.__ui, self.__report_view)
         schema = self.__case_files.load(os.path.join(root, "app", "schemas", "case_input.schema.json"), default={})
         self.__case_builder: CaseBuilder = CaseBuilder(self.__ui, schema)
-        limits = policy.get("assessment_rate_limit", {}) if isinstance(policy.get("assessment_rate_limit", {}), dict) else {}
+        limits = policy.get("assessment_rate_limit", {})
+        if not isinstance(limits, dict):
+            # start() reports the setting through ConfigReader.problems() and stops.
+            logger.warning("App: 'assessment_rate_limit' in policy.json must be an object, not %r; "
+                           "using the default rate limit", limits)
+            limits = {}
         try:
             self.__limiter: RateLimiter = RateLimiter(
                 limits.get("cooldown_seconds", RateLimiter.DEFAULT_COOLDOWN_SECONDS), limits.get("enabled", True))
