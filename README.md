@@ -168,8 +168,10 @@ How it works — the web app and the command line share every step, so the same 
 
 The form records what the client **declares** (from the KYC / declaration form). Anything the other documents show that the client did not declare — an offshore company, unexplained payments, a purchase funded differently — is not added to the form; it appears in the **Notes** as "Not declared:", "Conflict:" or "Check:".
 
-Every AI call (document reading, research, typologies, forecast, benchmark) uses the ONE model set
-as `OPENAI_MODEL` in `.env` (see `.env.example`). `FORECAST_WEB_SEARCH=on` lets the forecast check
+Every AI call (document reading, typologies, forecast, benchmark) uses the model set as
+`OPENAI_MODEL` in `.env` (see `.env.example`). Web searches (the crime scan's research, and the
+forecast's market check) use `OPENAI_RESEARCH_MODEL`, which must support limiting a search to given
+sites; when it is empty they use `OPENAI_MODEL` too. `FORECAST_WEB_SEARCH=on` lets the forecast check
 market figures online. If the AI can't describe one asset sensibly even after the system repairs its
 answer, that asset is held at its purchase price and the report says so; the rest still runs.
 
