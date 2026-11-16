@@ -415,3 +415,15 @@ No reviewed member was corrected; the code changed (follow-ups #10, #23, #50, #5
 - Layout: `AssessmentRunner` was widened to 480 and moved up beside `App` (it had grown into App's bottom edge); every App and AssessmentRunner line was re-routed. The long constant value is shortened with `...`. layout_check 0.
 - Known limit (accepted): `App.typologies_checked` reads the report's "Could not run" section, so an assessment saved
   before #56 with failed research would show no badge. None exist: the database is being reset (Marcus, #4).
+
+## #39 WebApp only talks to App (2026-11-16): code changed, the diagram follows it
+
+No reviewed member was corrected; the code changed (follow-up #39, option A from Marcus) and the diagram shows it.
+- Removed arrows: `WebApp ..> DocumentStore`, `WebApp ..> Repository`, `WebApp ..> DocumentRecordBuilder`. WebApp now
+  asks App instead of taking App's objects and working them itself. Its arrows are App, RateLimiter, ClientRecord and Typology.
+- Added to `App` (**T**, public interface): `owns_document(file_id)`, `read_document_for_extraction(path, name)`,
+  `all_clients()`, `all_assessments()`, `record_from_reading(extracted, today)`, `reading_problems(record, today)`.
+- Checker note: `WebApp -> DocumentStore` is listed as a false match in `not_drawn_checked.json`; the only
+  `documents()` call left in WebApp is `ClientRecord.documents()`, the record's own list.
+- Review fixes: App's comment and docstring corrected, and tests added (saved assessments are listed; autofill fills nothing
+  and says why when the reading cannot be a record; WebApp never calls App's manager getters). Scan 0, layout_check 0.
