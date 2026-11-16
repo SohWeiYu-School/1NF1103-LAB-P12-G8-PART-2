@@ -18,6 +18,7 @@ from app.interface.web_app import WebApp
 from app.model.client_record import ClientRecord
 from tests import fake_ai, fake_services
 from tests.logic_fixtures import sample_case
+from tests.audit_files import break_audit, fix_audit
 from tests.web_session import account_with_role, sign_in
 
 
@@ -1221,9 +1222,9 @@ def test_a_web_assessment_is_recorded_under_the_name_taken_in_the_request(tmp_pa
     assert "could not be written" not in client.get(f"/assess/result/{job_id}").get_data(as_text=True)
 
 
-def test_an_audit_line_that_could_not_be_written_is_flashed_after_a_web_save(web, monkeypatch):
+def test_an_audit_line_that_could_not_be_written_is_flashed_after_a_web_save(web, tmp_path):
     application, site, browser = web
-    monkeypatch.setattr(getattr(application, "_App__audit"), "save", lambda record: False)
+    break_audit(tmp_path)
     assert browser.post("/client/new", data=_form_fields(site, sample_case())).status_code == 302
     assert App.AUDIT_NOT_WRITTEN in _flashes(browser)
     assert len(application.clients().load()) == 1
@@ -1239,7 +1240,7 @@ def test_an_audit_failure_in_the_assessment_job_is_shown_on_the_result_page(tmp_
     application.clients().save(record)
     case, _ = application.read_case(ClientRecord.from_dict(record))
     fake_services.save_forecast_replies(application.response_cache(), case)
-    monkeypatch.setattr(getattr(application, "_App__audit"), "save", lambda row: False)
+    break_audit(tmp_path)
     job_id = client.post(f"/client/{record['client_ref']}/assess").headers["Location"].rsplit("/", 1)[-1]
     assert _wait_for(client, job_id)["status"] == "done"
     page = client.get(f"/assess/result/{job_id}").get_data(as_text=True)
@@ -1255,6 +1256,7 @@ def test_a_stopped_web_assessment_whose_audit_line_failed_says_so_in_its_message
     sign_in(client, application)
     record = sample_case()
     application.clients().save(record)
+    break_audit(tmp_path)
     job_id = client.post(f"/client/{record['client_ref']}/assess").headers["Location"].rsplit("/", 1)[-1]
     state = _wait_for(client, job_id)
     assert state["status"] == "error"
@@ -1262,11 +1264,11 @@ def test_a_stopped_web_assessment_whose_audit_line_failed_says_so_in_its_message
 
 
 class _StopAssessApp(App):
-    """An App whose assessment stops at once and whose audit line then cannot be written."""
+    """An App whose assessment stops at once (as if a critical step failed) and, in the test, whose
+    audit log cannot be written."""
 
     def assess(self, case, documents=None, on_step=None, show_failures=True, actor=App.TERMINAL):
-        getattr(self, "_App__audit").save = lambda row: False
-        self.refused(actor, "forcing a failed audit line")         # makes the thread's flag True
+        self.refused(actor, "forcing an audit line")               # in the test this fails, so the thread's flag is True
         return None
 
 
@@ -1592,7 +1594,6 @@ def test_the_result_page_says_when_the_outcome_could_not_be_written_to_the_clien
 # ----- which audit message the web shows ----------------------------------------------------------
 
 def test_only_actions_that_saved_something_flash_saved_but(web, tmp_path):
-    from tests.audit_files import break_audit
     application, site, browser = web
     ref = _two_assessments(application)
     break_audit(tmp_path)
@@ -1611,7 +1612,6 @@ def test_only_actions_that_saved_something_flash_saved_but(web, tmp_path):
 
 
 def test_a_refusal_a_sign_in_a_check_and_a_download_flash_only_that_the_action_was_not_written(tmp_path, monkeypatch):
-    from tests.audit_files import break_audit
     application, site, browser = _anonymous(tmp_path, monkeypatch)
     break_audit(tmp_path)
     officer, admin = account_with_role(application), account_with_role(application, "admin")
@@ -1628,7 +1628,6 @@ def test_a_refusal_a_sign_in_a_check_and_a_download_flash_only_that_the_action_w
 
 
 def test_a_download_whose_audit_line_failed_flashes_only_that_the_action_was_not_written(web, tmp_path):
-    from tests.audit_files import break_audit
     application, _, browser = web
     ref = sample_case()["client_ref"]
     application.clients().save(sample_case())
@@ -1642,7 +1641,6 @@ def test_a_download_whose_audit_line_failed_flashes_only_that_the_action_was_not
 
 
 def test_a_failed_audit_request_then_a_good_one_on_the_same_thread_shows_no_stale_message(web, tmp_path):
-    from tests.audit_files import break_audit, fix_audit
     application, _, browser = web
     break_audit(tmp_path)
     shown = browser.post("/sync", follow_redirects=True).get_data(as_text=True)

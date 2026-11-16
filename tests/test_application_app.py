@@ -13,6 +13,7 @@ from app.model.client_record import ClientRecord
 from app.model.match_result import MatchResult
 from app.model.verdict import Verdict
 from tests import fake_ai, fake_services
+from tests.audit_files import break_audit, fix_audit
 from tests.logic_fixtures import sample_case
 
 
@@ -1125,8 +1126,8 @@ def test_an_unknown_actor_is_a_programming_error_and_nothing_happens(app, tmp_pa
     assert app.clients().load() == [] and _events(app) == []
 
 
-def test_an_audit_line_that_cannot_be_written_leaves_the_action_standing_and_is_flagged(app, monkeypatch, caplog):
-    monkeypatch.setattr(getattr(app, "_App__audit"), "save", lambda record: False)
+def test_an_audit_line_that_cannot_be_written_leaves_the_action_standing_and_is_flagged(app, tmp_path, caplog):
+    break_audit(tmp_path)
     assert app.audit_write_failed() is False
     assert app.save_client(ClientRecord.from_dict(sample_case()), "Shareen") is True
     assert app.audit_write_failed() is True
@@ -1135,21 +1136,19 @@ def test_an_audit_line_that_cannot_be_written_leaves_the_action_standing_and_is_
 
 
 def test_the_terminal_is_told_when_the_audit_line_was_not_written_but_the_web_is_not_printed_to(
-        app, monkeypatch, capsys):
-    monkeypatch.setattr(getattr(app, "_App__audit"), "save", lambda record: False)
+        app, tmp_path, capsys):
+    break_audit(tmp_path)
     app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
     assert capsys.readouterr().out == ""
     app.sync_to_cloud()                                  # the terminal: nothing was saved
     assert App.AUDIT_LINE_NOT_WRITTEN in capsys.readouterr().out
 
 
-def test_the_audit_failure_flag_is_reset_by_the_next_action(app, monkeypatch):
-    audit = getattr(app, "_App__audit")
-    original = audit.save
-    monkeypatch.setattr(audit, "save", lambda record: False)
+def test_the_audit_failure_flag_is_reset_by_the_next_action(app, tmp_path):
+    break_audit(tmp_path)
     app.sync_to_cloud("Shareen")
     assert app.audit_write_failed() is True
-    monkeypatch.setattr(audit, "save", original)
+    fix_audit(tmp_path)
     app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
     assert app.audit_write_failed() is False
     app.archive_assessment("nope", "", "Shareen")        # writes no line, so nothing can have failed
@@ -1164,9 +1163,9 @@ def test_an_audit_file_that_is_a_folder_does_not_stop_the_action(app, tmp_path, 
     assert "audit" in caplog.text.lower()
 
 
-def test_the_audit_flag_belongs_to_one_thread(app, monkeypatch):
+def test_the_audit_flag_belongs_to_one_thread(app, tmp_path):
     import threading
-    monkeypatch.setattr(getattr(app, "_App__audit"), "save", lambda record: False)
+    break_audit(tmp_path)
     app.sync_to_cloud("Shareen")
     seen = []
     thread = threading.Thread(target=lambda: seen.append(app.audit_write_failed()))
@@ -1391,7 +1390,6 @@ def test_the_terminal_is_told_when_the_outcome_could_not_be_written(app, tmp_pat
 
 
 def test_the_terminal_message_says_saved_only_when_something_was_saved(app, tmp_path, capsys):
-    from tests.audit_files import break_audit
     break_audit(tmp_path)
     app.save_client(ClientRecord.from_dict(sample_case()))                    # saved: "Saved, but ..."
     out = capsys.readouterr().out
@@ -1408,7 +1406,6 @@ def test_the_terminal_message_says_saved_only_when_something_was_saved(app, tmp_
 
 
 def test_an_archive_that_changed_something_says_saved_and_one_that_changed_nothing_writes_no_line(app, tmp_path, capsys):
-    from tests.audit_files import break_audit
     _two_saved(app)
     break_audit(tmp_path)
     app.archive_assessment("A1")
