@@ -500,5 +500,23 @@
   "assessment_rate_limit": {
     "enabled": true,
     "cooldown_seconds": 60
+  },
+  "audit": {
+    "watched_fields": [
+      "claims.declared_net_worth",
+      "career.annual_income",
+      "claims.expected_aum",
+      "claims.asset_composition",
+      "claims.pep_status",
+      "sow_declaration"
+    ],
+    "window_days": 30,
+    "repeat_assessments": 3,
+    "jump_levels": 2,
+    "work_start": "08:00",
+    "work_end": "20:00",
+    "spike_multiplier": 3,
+    "spike_min": 3,
+    "spike_baseline_days": 14
   }
 }
