@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `7807beb` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `6623eda` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -83,7 +83,7 @@ How to fix: **UML:** add or correct the `= value`. Where the code is computed, d
 
 ## Stage 7: Relationships (0)
 
-149 of 151 UML arrows are confirmed in the code by the pattern check (its known blind spots are listed in uml/FOLLOW_UPS.md #44).
+146 of 148 UML arrows are confirmed in the code by the pattern check (its known blind spots are listed in uml/FOLLOW_UPS.md #44).
 
 How to fix: mostly **UML** (redraw an arrow, change a verb or multiplicity, add missing arrows). Where an arrow shows a model class but the code passes a plain `dict`, the team has to decide: either the diagram drops the arrow, or the code starts using the model class (a bigger change).
 
@@ -97,7 +97,7 @@ Real class-to-class links in the code that the drawing rule says to draw, with n
 - `Typology -- "1..*" ResearchReport : cites`: linked by report id: a Typology keeps the ids of the ResearchReports it cites (source_ids), not the objects; the link is real in the data, so the diagram keeps it
 - `VerdictEngine ..> MatchResult : uses`: checked by hand: __type_patterns reads m.typology, match.category and calls match.fired() on the MatchResult objects in crime_result (app/logic/verdict_engine.py:82, 102-103); the scan cannot see it because the class name is never written there
 
-### Not drawn, by the drawing rule (13)
+### Not drawn, by the drawing rule (14)
 
 An arrow is drawn when a class stores, creates or directly works with another class, including calling methods on an object it gets back from another call. Not drawn: reads of another class's constant, and objects a class only passes on (checked by hand). See uml/UML_CORRECTIONS.md, stage 7.
 
@@ -114,6 +114,7 @@ An arrow is drawn when a class stores, creates or directly works with another cl
 - ReportView → DocumentStore: false match: record.documents() returns a list of document entries, not the DocumentStore (report_view.py:270)
 - VerdictEngine → FuturePaths: constant only
 - WebApp → ClientForm: constant only
+- WebApp → DocumentStore: false match: record.documents() returns the client's list of document entries, not the DocumentStore (web_app.py:601, 834); since #39 WebApp asks App (owns_document, read_document_for_extraction)
 
 ## Appendix: values shortened with `...` (checked by pattern: class name or folder, 98)
 

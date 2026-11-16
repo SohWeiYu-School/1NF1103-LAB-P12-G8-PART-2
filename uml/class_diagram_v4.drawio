@@ -87,7 +87,7 @@
           <mxGeometry height="1860" width="4210" x="80" y="8671" as="geometry" />
         </mxCell>
         <mxCell id="c33" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="App" vertex="1">
-          <mxGeometry height="1276" width="640" x="2050" y="3512" as="geometry" />
+          <mxGeometry height="1366" width="640" x="2050" y="3512" as="geometry" />
         </mxCell>
         <mxCell id="c34" parent="c33" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __ai_caller : Callable | None = None&lt;br&gt;− __config : Config = Config(...) {get}&lt;br&gt;− __ui : ConsoleUI = ConsoleUI()&lt;br&gt;− __report_view : ReportView = ReportView(...)&lt;br&gt;− __client_form : ClientForm = ClientForm(...)&lt;br&gt;− __case_builder : CaseBuilder = CaseBuilder(...)&lt;br&gt;− __case_files : CaseFiles = CaseFiles(...)&lt;br&gt;− __limiter : RateLimiter = RateLimiter(...)&lt;br&gt;− __clients : Repository = ClientRepository(...)&lt;br&gt;− __assessments : AssessmentRepository = AssessmentRepository(...)&lt;br&gt;− __runner : AssessmentRunner = AssessmentRunner(...)&lt;br&gt;− __documents : DocumentStore = DocumentStore(...)&lt;br&gt;− __document_ai : DocumentAI = DocumentAI(...)&lt;br&gt;− __response_cache : ResponseCache = ResponseCache(...)&lt;br&gt;− __syncs : list[CloudSync] = [CloudSync(...), CloudSync(...)]&lt;br&gt;− __config_reader : ConfigReader = ConfigReader(...)&lt;br&gt;− __root : str = ROOT_DIR&lt;br&gt;− __settings_ok : bool = True&lt;br&gt;+ CRITICAL_STEPS : tuple[str, ...] = (&amp;quot;Deciding the verdict&amp;quot;,) «const»&lt;br&gt;+ ASSESSMENTS_UNAVAILABLE : str = &amp;quot;We can&amp;#x27;t load the saved assessments ... «const»&lt;br&gt;+ ASSESSMENT_COLLECTION : str = &amp;quot;ai_assessments&amp;quot; «const»&lt;br&gt;+ CLIENTS_UNAVAILABLE : str = &amp;quot;We can&amp;#x27;t load the client database ri... «const»&lt;br&gt;+ CLIENT_COLLECTION : str = &amp;quot;client_cases&amp;quot; «const»&lt;br&gt;+ LOG_HANDLER_NAME : str = &amp;quot;app_log_file&amp;quot; «const»&lt;br&gt;+ NOISY_LOGGERS : tuple[str, ...] = (...) «const»&lt;br&gt;+ SETTINGS_UNAVAILABLE : str = &amp;quot;The app&amp;#x27;s settings could not be load... «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="400" width="640" y="26" as="geometry" />
@@ -95,8 +95,8 @@
         <mxCell id="c35" parent="c33" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
           <mxGeometry height="1" width="640" y="425.5" as="geometry" />
         </mxCell>
-        <mxCell id="c36" parent="c33" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(ai_caller : Callable[[str, dict, dict], str | None] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;root : str = ROOT_DIR, data_folder : str = &amp;quot;data&amp;quot;)&lt;br&gt;+ start(arguments : list[str]) : int&lt;br&gt;+ run_menu() : None&lt;br&gt;+ run_case_file(path : str) : bool&lt;br&gt;+ use_recorded_replies() : int&lt;br&gt;+ assess_client_record(record : ClientRecord) : Verdict | None&lt;br&gt;+ find_client(client_ref : str) : ClientRecord | None&lt;br&gt;+ save_client(record : ClientRecord) : bool&lt;br&gt;+ client_assessments(client_ref : str) : list[dict]&lt;br&gt;+ find_assessment(assessment_id : str) : dict | None&lt;br&gt;+ list_assessments() : None&lt;br&gt;+ upload_document(file_path : str) : str | None&lt;br&gt;+ download_document(file_id : str, output_path : str) : bool&lt;br&gt;+ sync_to_cloud() : dict&lt;br&gt;+ today() : str «static»&lt;br&gt;− __new_client_from_documents() : ClientRecord | None&lt;br&gt;− __maybe_assess(record : ClientRecord) : None&lt;br&gt;− __prepare_case(record : ClientRecord) : dict | None&lt;br&gt;− __handle_failure(step : str, error : str) : bool&lt;br&gt;− __ai_model() : str&lt;br&gt;− __configure_logging() : None&lt;br&gt;− __create_document_ai() : DocumentAI&lt;br&gt;− __create_runner(policy : dict) : AssessmentRunner&lt;br&gt;− __crime_declaration_layout(declaration : Declaration | None) : dict | None «static»&lt;br&gt;− __crime_result_layout(crime_result : dict | None) : dict | None «static»&lt;br&gt;− __fill_field(builder : DocumentRecordBuilder, record : ClientRecord, field : dict,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;optional : bool = False) : ClientRecord&lt;br&gt;− __handle_failure_quietly(step : str, error : str) : bool&lt;br&gt;− __require_settings() : None&lt;br&gt;− __saved_verdict(saved : dict) : Verdict | None&lt;br&gt;− __show_step(number : int, label : str) : None&lt;br&gt;+ ai_available() : bool&lt;br&gt;+ assess(case : dict, supporting_documents : list[dict] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;on_step : Callable[[int, str], None] | None = None, on_failure : Callable[[str, str],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;bool] | None = None, show_failures : bool = True) : dict | None&lt;br&gt;+ assessments() : AssessmentRepository&lt;br&gt;+ clients() : Repository&lt;br&gt;+ documents() : DocumentStore&lt;br&gt;+ forecast_settings() : dict&lt;br&gt;+ new_client_ref() : str&lt;br&gt;+ rate_limiter() : RateLimiter&lt;br&gt;+ read_amount(text : object) : float | None&lt;br&gt;+ read_case(record : ClientRecord) : tuple[dict | None, list[str]]&lt;br&gt;+ read_documents(documents : list[dict]) : tuple[dict | None, list[str]]&lt;br&gt;+ record_builder(date : str = &amp;quot;&amp;quot;) : DocumentRecordBuilder&lt;br&gt;+ response_cache() : ResponseCache&lt;br&gt;+ runner() : AssessmentRunner&lt;br&gt;+ save_assessment(result : dict, record : ClientRecord | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;on_step : Callable[[int, str], None] | None = None) : str | None&lt;br&gt;+ settings_ok() : bool&lt;br&gt;+ start_web(host : str = &amp;quot;&amp;quot;, port : int = 0) : int&lt;br&gt;+ steps() : list[str]&lt;br&gt;+ validate_case(case : object) : list[str]&lt;br&gt;+ client_ref_taken(client_ref : str) : bool&lt;br&gt;+ typologies_checked(report : dict | None) : bool «static»&lt;/div&gt;" vertex="1">
-          <mxGeometry height="850" width="640" y="426" as="geometry" />
+        <mxCell id="c36" parent="c33" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(ai_caller : Callable[[str, dict, dict], str | None] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;root : str = ROOT_DIR, data_folder : str = &amp;quot;data&amp;quot;)&lt;br&gt;+ start(arguments : list[str]) : int&lt;br&gt;+ run_menu() : None&lt;br&gt;+ run_case_file(path : str) : bool&lt;br&gt;+ use_recorded_replies() : int&lt;br&gt;+ assess_client_record(record : ClientRecord) : Verdict | None&lt;br&gt;+ find_client(client_ref : str) : ClientRecord | None&lt;br&gt;+ save_client(record : ClientRecord) : bool&lt;br&gt;+ client_assessments(client_ref : str) : list[dict]&lt;br&gt;+ find_assessment(assessment_id : str) : dict | None&lt;br&gt;+ list_assessments() : None&lt;br&gt;+ upload_document(file_path : str) : str | None&lt;br&gt;+ download_document(file_id : str, output_path : str) : bool&lt;br&gt;+ sync_to_cloud() : dict&lt;br&gt;+ today() : str «static»&lt;br&gt;− __new_client_from_documents() : ClientRecord | None&lt;br&gt;− __maybe_assess(record : ClientRecord) : None&lt;br&gt;− __prepare_case(record : ClientRecord) : dict | None&lt;br&gt;− __handle_failure(step : str, error : str) : bool&lt;br&gt;− __ai_model() : str&lt;br&gt;− __configure_logging() : None&lt;br&gt;− __create_document_ai() : DocumentAI&lt;br&gt;− __create_runner(policy : dict) : AssessmentRunner&lt;br&gt;− __crime_declaration_layout(declaration : Declaration | None) : dict | None «static»&lt;br&gt;− __crime_result_layout(crime_result : dict | None) : dict | None «static»&lt;br&gt;− __fill_field(builder : DocumentRecordBuilder, record : ClientRecord, field : dict,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;optional : bool = False) : ClientRecord&lt;br&gt;− __handle_failure_quietly(step : str, error : str) : bool&lt;br&gt;− __require_settings() : None&lt;br&gt;− __saved_verdict(saved : dict) : Verdict | None&lt;br&gt;− __show_step(number : int, label : str) : None&lt;br&gt;+ ai_available() : bool&lt;br&gt;+ assess(case : dict, supporting_documents : list[dict] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;on_step : Callable[[int, str], None] | None = None, on_failure : Callable[[str, str],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;bool] | None = None, show_failures : bool = True) : dict | None&lt;br&gt;+ assessments() : AssessmentRepository&lt;br&gt;+ clients() : Repository&lt;br&gt;+ documents() : DocumentStore&lt;br&gt;+ forecast_settings() : dict&lt;br&gt;+ new_client_ref() : str&lt;br&gt;+ rate_limiter() : RateLimiter&lt;br&gt;+ read_amount(text : object) : float | None&lt;br&gt;+ read_case(record : ClientRecord) : tuple[dict | None, list[str]]&lt;br&gt;+ read_documents(documents : list[dict]) : tuple[dict | None, list[str]]&lt;br&gt;+ record_builder(date : str = &amp;quot;&amp;quot;) : DocumentRecordBuilder&lt;br&gt;+ response_cache() : ResponseCache&lt;br&gt;+ runner() : AssessmentRunner&lt;br&gt;+ save_assessment(result : dict, record : ClientRecord | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;on_step : Callable[[int, str], None] | None = None) : str | None&lt;br&gt;+ settings_ok() : bool&lt;br&gt;+ start_web(host : str = &amp;quot;&amp;quot;, port : int = 0) : int&lt;br&gt;+ steps() : list[str]&lt;br&gt;+ validate_case(case : object) : list[str]&lt;br&gt;+ client_ref_taken(client_ref : str) : bool&lt;br&gt;+ typologies_checked(report : dict | None) : bool «static»&lt;br&gt;+ all_assessments() : list[dict]&lt;br&gt;+ all_clients() : list[dict]&lt;br&gt;+ owns_document(file_id : str) : bool&lt;br&gt;+ read_document_for_extraction(path : str, name : str) : dict&lt;br&gt;+ reading_problems(record : ClientRecord, today : str = &amp;quot;&amp;quot;) : list[str]&lt;br&gt;+ record_from_reading(extracted : dict, today : str = &amp;quot;&amp;quot;) : tuple[ClientRecord, list[dict]]&lt;/div&gt;" vertex="1">
+          <mxGeometry height="940" width="640" y="426" as="geometry" />
         </mxCell>
         <mxCell id="c37" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="WebApp" vertex="1">
           <mxGeometry height="1126" width="620" x="2000" y="90" as="geometry" />
@@ -1488,8 +1488,8 @@
         <mxCell id="c375" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=1.0000;exitY=0.1500;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.6700;entryDx=0;entryDy=0;entryPerimeter=0;" target="c45" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2710" y="3703.4" />
-              <mxPoint x="3250" y="3700" />
+              <mxPoint x="2710" y="3716.9" />
+              <mxPoint x="3250" y="3720" />
               <mxPoint x="3250" y="1880" />
               <mxPoint x="3080" y="1884.92" />
             </Array>
@@ -1569,7 +1569,7 @@
         <mxCell id="c386" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.3300;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.1500;entryDx=0;entryDy=0;entryPerimeter=0;" target="c237" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2261.2" y="4810" />
+              <mxPoint x="2261.2" y="4900" />
               <mxPoint x="2260" y="5850" />
               <mxPoint x="2030" y="5850" />
               <mxPoint x="2030" y="8780" />
@@ -1583,7 +1583,8 @@
         <mxCell id="c388" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.7500;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.3300;entryY=1.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c89" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2530" y="4810" />
+              <mxPoint x="2530" y="4900" />
+              <mxPoint x="2870" y="4900" />
               <mxPoint x="2868.4" y="4810" />
             </Array>
           </mxGeometry>
@@ -1592,9 +1593,9 @@
           <mxGeometry height="16" width="40" x="2862.4" y="4794" as="geometry" />
         </mxCell>
         <mxCell id="c390" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=0.1500;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.1500;entryDx=0;entryDy=0;entryPerimeter=0;" target="c165" value="creates">
-          <mxGeometry x="0.8752" relative="1" as="geometry">
+          <mxGeometry x="-0.7199" relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2146" y="4810" />
+              <mxPoint x="2146" y="4900" />
               <mxPoint x="2150" y="5840" />
               <mxPoint x="1990" y="5840" />
               <mxPoint x="1990" y="7060" />
@@ -1608,8 +1609,8 @@
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="2146" y="3490" />
-              <mxPoint x="1880" y="3490" />
-              <mxPoint x="1880" y="160" />
+              <mxPoint x="1850" y="3490" />
+              <mxPoint x="1850" y="160" />
               <mxPoint x="1310" y="163.2" />
             </Array>
           </mxGeometry>
@@ -1617,28 +1618,29 @@
         <mxCell id="c393" parent="1" style="text;html=1;fontSize=11;fontStyle=1;fontColor=#0F172A;align=center;verticalAlign=middle;" value="2" vertex="1">
           <mxGeometry height="16" width="40" x="1286" y="143.2" as="geometry" />
         </mxCell>
-        <mxCell id="c394" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.2500;exitY=0.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.6000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c209" value="">
+        <mxCell id="c394" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.2500;exitY=0.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.3300;entryDx=0;entryDy=0;entryPerimeter=0;" target="c209" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="2210" y="3490" />
               <mxPoint x="2210" y="2550" />
-              <mxPoint x="1870" y="2550" />
-              <mxPoint x="1870" y="240" />
-              <mxPoint x="530" y="240" />
-              <mxPoint x="530" y="216.6" />
+              <mxPoint x="1890" y="2550" />
+              <mxPoint x="1890" y="60" />
+              <mxPoint x="540" y="60" />
+              <mxPoint x="540" y="160" />
+              <mxPoint x="530" y="159.63" />
             </Array>
           </mxGeometry>
         </mxCell>
         <mxCell id="c395" parent="1" style="text;html=1;fontSize=11;fontStyle=1;fontColor=#0F172A;align=center;verticalAlign=middle;" value="1" vertex="1">
-          <mxGeometry height="16" width="40" x="504" y="196.6" as="geometry" />
+          <mxGeometry height="16" width="40" x="504" y="139.63" as="geometry" />
         </mxCell>
         <mxCell id="c396" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.3300;exitY=0.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.8500;entryDx=0;entryDy=0;entryPerimeter=0;" target="c205" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="2261.2" y="3490" />
               <mxPoint x="2260" y="2530" />
-              <mxPoint x="1850" y="2530" />
-              <mxPoint x="1850" y="1040" />
+              <mxPoint x="1830" y="2530" />
+              <mxPoint x="1830" y="1040" />
               <mxPoint x="1730" y="1038.1" />
             </Array>
           </mxGeometry>
@@ -1647,10 +1649,10 @@
           <mxGeometry height="16" width="40" x="1704" y="1018.1" as="geometry" />
         </mxCell>
         <mxCell id="c398" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=1.0000;exitY=0.3300;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.1500;entryY=1.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c61" value="creates">
-          <mxGeometry x="-0.6106" relative="1" as="geometry">
+          <mxGeometry x="-0.6129" relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2710" y="3933.08" />
-              <mxPoint x="4730" y="3930" />
+              <mxPoint x="2710" y="3962.78" />
+              <mxPoint x="4730" y="3960" />
               <mxPoint x="4729.5" y="700" />
             </Array>
           </mxGeometry>
@@ -1658,8 +1660,8 @@
         <mxCell id="c399" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=1.0000;exitY=0.4000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.8500;entryDx=0;entryDy=0;entryPerimeter=0;" target="c77" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2710" y="4022.4" />
-              <mxPoint x="5820" y="4020" />
+              <mxPoint x="2710" y="4058.4" />
+              <mxPoint x="5820" y="4060" />
               <mxPoint x="5820" y="1340" />
               <mxPoint x="5740" y="1338.85" />
             </Array>
@@ -1668,13 +1670,13 @@
         <mxCell id="c400" parent="1" style="text;html=1;fontSize=11;fontStyle=1;fontColor=#0F172A;align=center;verticalAlign=middle;" value="1" vertex="1">
           <mxGeometry height="16" width="40" x="5714" y="1318.85" as="geometry" />
         </mxCell>
-        <mxCell id="c401" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=0.4000;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.1500;entryDx=0;entryDy=0;entryPerimeter=0;" target="c169" value="creates">
-          <mxGeometry x="-0.8060" relative="1" as="geometry">
+        <mxCell id="c401" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=0.4000;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.8500;entryY=0.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c169" value="creates">
+          <mxGeometry x="-0.7918" relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2306" y="4810" />
-              <mxPoint x="2310" y="5220" />
-              <mxPoint x="760" y="5220" />
-              <mxPoint x="760" y="5575.4" />
+              <mxPoint x="2306" y="4900" />
+              <mxPoint x="2310" y="5320" />
+              <mxPoint x="680" y="5320" />
+              <mxPoint x="680" y="5470" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -1692,8 +1694,9 @@
         <mxCell id="c403" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=1.0000;exitY=0.5000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.1500;entryY=1.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c85" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2710" y="4150" />
-              <mxPoint x="4210" y="4150" />
+              <mxPoint x="2710" y="4195" />
+              <mxPoint x="2710" y="3860" />
+              <mxPoint x="4210" y="3860" />
               <mxPoint x="4214.5" y="390" />
             </Array>
           </mxGeometry>
@@ -1702,11 +1705,11 @@
           <mxGeometry height="16" width="40" x="4208.5" y="377" as="geometry" />
         </mxCell>
         <mxCell id="c406" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=0.6700;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.8500;entryDx=0;entryDy=0;entryPerimeter=0;" target="c201" value="creates">
-          <mxGeometry x="-0.8539" relative="1" as="geometry">
+          <mxGeometry x="-0.8566" relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2478.8" y="4810" />
-              <mxPoint x="2480" y="4820" />
-              <mxPoint x="1840" y="4820" />
+              <mxPoint x="2478.8" y="4900" />
+              <mxPoint x="2480" y="4910" />
+              <mxPoint x="1840" y="4910" />
               <mxPoint x="1840" y="790" />
               <mxPoint x="1730" y="786.6" />
             </Array>
@@ -1835,12 +1838,12 @@
           </mxGeometry>
         </mxCell>
         <mxCell id="c421" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=0.5000;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.2500;entryDx=0;entryDy=0;entryPerimeter=0;" target="c265" value="uses">
-          <mxGeometry x="-0.9073" relative="1" as="geometry">
+          <mxGeometry x="-0.8993" relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2370" y="4810" />
-              <mxPoint x="2370" y="5330" />
-              <mxPoint x="770" y="5330" />
-              <mxPoint x="770" y="6090" />
+              <mxPoint x="2370" y="4900" />
+              <mxPoint x="2370" y="5460" />
+              <mxPoint x="760" y="5460" />
+              <mxPoint x="760" y="6090" />
               <mxPoint x="520" y="6090" />
               <mxPoint x="520" y="8690" />
               <mxPoint x="650" y="8690" />
@@ -1985,9 +1988,9 @@
           </mxGeometry>
         </mxCell>
         <mxCell id="c435" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=0.8500;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.2500;entryDx=0;entryDy=0;entryPerimeter=0;" target="c241" value="uses">
-          <mxGeometry x="-0.7854" relative="1" as="geometry">
+          <mxGeometry x="-0.7978" relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2594" y="4810" />
+              <mxPoint x="2594" y="4900" />
               <mxPoint x="2590" y="6010" />
               <mxPoint x="3640" y="6010" />
               <mxPoint x="3640" y="8720" />
@@ -2139,8 +2142,8 @@
         <mxCell id="c454" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=0.6000;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.8500;entryDx=0;entryDy=0;entryPerimeter=0;" target="c446" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2434" y="4810" />
-              <mxPoint x="1190" y="4810" />
+              <mxPoint x="2434" y="4900" />
+              <mxPoint x="1190" y="4900" />
               <mxPoint x="1190" y="1132.85" />
             </Array>
           </mxGeometry>
@@ -2263,9 +2266,9 @@
           </mxGeometry>
         </mxCell>
         <mxCell id="c471" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=0.2500;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.5000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c257" value="uses">
-          <mxGeometry x="-0.8005" relative="1" as="geometry">
+          <mxGeometry x="-0.8143" relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2210" y="4810" />
+              <mxPoint x="2210" y="4900" />
               <mxPoint x="2210" y="5830" />
               <mxPoint x="1980" y="5830" />
               <mxPoint x="1980" y="6190" />
@@ -2318,7 +2321,7 @@
           </mxGeometry>
         </mxCell>
         <mxCell id="c475" edge="1" parent="1" source="c37" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=1.0000;exitY=0.3300;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.6700;entryDx=0;entryDy=0;entryPerimeter=0;" target="c273" value="uses">
-          <mxGeometry x="-0.7423" relative="1" as="geometry">
+          <mxGeometry x="-0.9645" relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="2640" y="461.6" />
               <mxPoint x="2640" y="10" />
@@ -2380,7 +2383,7 @@
         <mxCell id="c481" edge="1" parent="1" source="c33" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=1.0000;exitY=0.2500;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.8500;entryDx=0;entryDy=0;entryPerimeter=0;" target="c297" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="2710" y="3831" />
+              <mxPoint x="2710" y="3853.5" />
               <mxPoint x="2710" y="3490" />
               <mxPoint x="2220" y="3490" />
               <mxPoint x="2220" y="2540" />
@@ -2613,42 +2616,6 @@
               <mxPoint x="3860" y="9480" />
               <mxPoint x="3140" y="9480" />
               <mxPoint x="3140" y="9643.18" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="c503" edge="1" parent="1" source="c37" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=1.0000;exitY=0.4000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.8500;entryY=0.0000;entryDx=0;entryDy=0;entryPerimeter=0;" target="c169" value="uses">
-          <mxGeometry x="-0.7674" relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="2640" y="540.4" />
-              <mxPoint x="2650" y="530" />
-              <mxPoint x="2650" y="60" />
-              <mxPoint x="1830" y="60" />
-              <mxPoint x="1830" y="5190" />
-              <mxPoint x="680" y="5190" />
-              <mxPoint x="680" y="5470" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="c504" edge="1" parent="1" source="c37" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=1.0000;exitY=0.1500;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.3300;entryDx=0;entryDy=0;entryPerimeter=0;" target="c209" value="uses">
-          <mxGeometry x="0.0441" relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="2640" y="258.9" />
-              <mxPoint x="2660" y="260" />
-              <mxPoint x="2660" y="50" />
-              <mxPoint x="540" y="50" />
-              <mxPoint x="540" y="160" />
-              <mxPoint x="530" y="159.63" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="c505" edge="1" parent="1" source="c37" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=1.0000;exitY=0.2500;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.1500;entryDx=0;entryDy=0;entryPerimeter=0;" target="c181" value="loads from">
-          <mxGeometry x="0.4591" relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="2640" y="371.5" />
-              <mxPoint x="2670" y="370" />
-              <mxPoint x="2670" y="40" />
-              <mxPoint x="1310" y="40" />
-              <mxPoint x="1310" y="108.3" />
             </Array>
           </mxGeometry>
         </mxCell>

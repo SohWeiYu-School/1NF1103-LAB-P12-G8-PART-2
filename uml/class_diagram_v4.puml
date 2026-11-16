@@ -638,6 +638,12 @@ package "Application (app/application)" {
     +validate_case(case : object) : list[str]
     +client_ref_taken(client_ref : str) : bool
     {static} +typologies_checked(report : dict | None) : bool
+    +all_assessments() : list[dict]
+    +all_clients() : list[dict]
+    +owns_document(file_id : str) : bool
+    +read_document_for_extraction(path : str, name : str) : dict
+    +reading_problems(record : ClientRecord, today : str = "") : list[str]
+    +record_from_reading(extracted : dict, today : str = "") : tuple[ClientRecord, list[dict]]
   }
   class AssessmentRunner {
     -__verdict_engine : VerdictEngine = VerdictEngine(...)
@@ -1443,9 +1449,6 @@ VerdictEngine o-- "1..*" RiskAnalysis
 WebApp -- App : calls
 WebApp -- RateLimiter : checks with
 WebApp ..> ClientRecord : uses
-WebApp ..> DocumentRecordBuilder : uses
-WebApp ..> DocumentStore : uses
-WebApp ..> Repository : loads from
 WebApp ..> Typology : uses
 WordReader --|> DocumentReader
 
