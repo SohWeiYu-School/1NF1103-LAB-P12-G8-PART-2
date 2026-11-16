@@ -2083,3 +2083,11 @@ def test_the_admin_client_list_is_read_only_and_links_to_the_admin_client_page(w
     page = browser.get("/admin/clients").get_data(as_text=True)
     assert "Read-only for admins" in page and "Find" not in page and "+ New client" not in page
     assert "can't edit clients or run assessments" in page
+
+
+def test_no_page_template_holds_a_stray_control_character():
+    """A CSS escape such as \\25BE inside a Python string turns into an invisible character; the arrows must be written \\\\25BE."""
+    from app.interface.web_templates import TEMPLATES
+    for name, text in TEMPLATES.items():
+        assert not [c for c in text if ord(c) < 32 and c not in "\n\r\t"], name
+    assert "\\25BE" in TEMPLATES["base.html"] and "\\25B8" in TEMPLATES["base.html"]

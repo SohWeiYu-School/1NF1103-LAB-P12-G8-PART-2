@@ -56,6 +56,7 @@ main{padding-block:24px 64px}
 .spread{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);min-width:0;padding:18px 22px;margin-bottom:16px}
 .stack .panel{padding:0;margin-bottom:0}
+.panel-pad{padding:18px 20px}
 .stack .panel.panel-pad{padding:18px 20px}
 .btn{display:inline-flex;gap:6px;align-items:center;border-radius:6px;padding:7px 14px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);cursor:pointer;font-size:.88rem;font-weight:500;text-decoration:none;white-space:nowrap}
 .btn.secondary{background:var(--surface);color:var(--accent)}
@@ -74,7 +75,7 @@ main{padding-block:24px 64px}
 .seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
 details.multi{position:relative}
 details.multi summary{list-style:none;border:1px solid var(--line-strong);border-radius:6px;padding:6px 28px 6px 9px;cursor:pointer;min-height:34px;background:var(--surface);position:relative;white-space:nowrap}
-details.multi summary::after{content:"\25BE";position:absolute;right:9px;color:var(--muted)}
+details.multi summary::after{content:"\\25BE";position:absolute;right:9px;color:var(--muted)}
 details.multi summary::-webkit-details-marker{display:none}
 .multi-pop{position:absolute;z-index:15;top:calc(100% + 4px);left:0;background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);min-width:220px}
 .multi-pop label{display:flex;gap:8px;align-items:center;padding:5px 6px;border-radius:5px;cursor:pointer;margin:0;color:var(--ink)}
@@ -125,7 +126,7 @@ tr.detail td{background:var(--surface-2);padding:12px 16px 14px}
 .line .by{margin-left:auto;font-size:.82rem}
 details.info summary{display:inline-flex;gap:4px;align-items:center;cursor:pointer;font-size:.78rem;color:var(--accent);list-style:none;padding:1px 0}
 details.info summary::-webkit-details-marker{display:none}
-details.info summary::before{content:"\25B8";font-size:.7rem;transition:transform .15s}
+details.info summary::before{content:"\\25B8";font-size:.7rem;transition:transform .15s}
 details.info[open] summary::before{transform:rotate(90deg)}
 details.info[open]{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px 10px;margin-top:2px}
 details.info .kv{margin-top:6px}
@@ -947,7 +948,7 @@ AUDIT_ROWS = """{% macro short(e) -%}
 {%- elif e.action == 'assessment_failed' -%}Stopped before finishing
 {%- elif e.action in ('document_uploaded', 'document_downloaded') -%}<span class="mono">{{ d.get('file_id') or 'a document' }}</span>
 {%- elif e.action == 'autofill_used' -%}Details filled in from documents
-{%- else -%}{{ e.summary() }}
+{%- else -%}{{ e.summary().replace(' — failed', '') }}
 {%- endif -%}
 {%- endmacro %}
 
