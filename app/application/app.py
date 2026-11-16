@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from dotenv import load_dotenv
@@ -34,6 +34,8 @@ from app.interface.rate_limiter import RateLimiter
 from app.interface.report_view import ReportView
 from app.logic.case_reader import CaseReader
 from app.logic.audit_chain import AuditChain
+from app.logic.audit_insights import AuditInsights
+from app.logic.audit_stats import AuditStats
 from app.logic.case_timeline import CaseTimeline
 from app.logic.document_record_builder import DocumentRecordBuilder
 from app.logic.record_diff import RecordDiff
@@ -41,9 +43,13 @@ from app.model.account import Account
 from app.model.audit_event import AuditEvent
 from app.model.audit_filter import AuditFilter
 from app.model.audit_page import AuditPage
+from app.model.audit_policy import AuditPolicy
 from app.model.client_record import ClientRecord
 from app.model.config import Config
 from app.model.declaration import Declaration
+from app.model.flag import Flag
+from app.model.flag_ticket import FlagTicket
+from app.model.overview_page import OverviewPage
 from app.model.verdict import Verdict
 
 logger = logging.getLogger(__name__)
@@ -95,6 +101,12 @@ class App:
     # Shown instead when the action saved nothing (a refusal, a sign-in, a check, a download, a failed save).
     AUDIT_LINE_NOT_WRITTEN: str = "This action could not be written to the audit log."
     AUDIT_UNAVAILABLE: str = "We can't load the audit log right now. Please try again later."
+    # Shown when an admin's update to a flag could not be written to the audit log (so it was NOT saved).
+    FLAG_NOT_SAVED: str = "Your update was not saved. The audit log can't be written right now. Please try again later."
+    FLAG_GONE: str = ("That flag no longer exists. The rule may no longer match, for example after the log "
+                      "was repaired.")
+    FLAG_ADMIN_ONLY: str = "Only an administrator can update a flag."
+    FLAGS_UNAVAILABLE: str = "The flags could not be worked out right now. Please try again later."
     MAX_REFUSED_TEXT: int = 200
     REFUSAL_REPEAT_SECONDS: int = 60          # the same refusal by the same person is written once in this time
     # Shown when an assessment was saved but the client's outcome could not be written onto the client record.
@@ -198,8 +210,25 @@ class App:
             # start() reports the setting through ConfigReader.problems() and stops; App itself must not crash.
             logger.error("App: the assessment rate limit setting is not valid, using the default: %s", error)
             self.__limiter = RateLimiter()
+        audit_settings = policy.get("audit", {})
+        if not isinstance(audit_settings, dict):
+            # start() reports the setting through ConfigReader.problems() and stops.
+            logger.error("App: 'audit' in policy.json must be an object, not %r; using the default audit "
+                         "settings", audit_settings)
+            audit_settings = {}
+        try:
+            self.__audit_policy: AuditPolicy = AuditPolicy.from_dict(audit_settings)
+        except ValueError as error:
+            # start() reports the setting through ConfigReader.problems() and stops; App itself must not crash.
+            logger.error("App: the audit settings are not valid, using the defaults: %s", error)
+            self.__audit_policy = AuditPolicy()
 
     # ----- what the front ends are given ----------------------------------------------
+
+    @property
+    def audit_policy(self) -> AuditPolicy:
+        """The settings the flag rules use (working hours, windows, limits)."""
+        return self.__audit_policy
 
     @property
     def config(self) -> Config:
@@ -329,6 +358,7 @@ class App:
             self.__ui.show_message(f"{len(self.__assessments.load())} saved assessment(s) loaded.")
         except (OSError, ValueError) as error:
             logger.error("App.run_menu: the saved assessments cannot be read: %r", error)
+            self.__read_failed("assessments", App.TERMINAL)
             self.__ui.show_error(App.ASSESSMENTS_UNAVAILABLE)
         while True:
             choice = self.__ui.show_app_menu()
@@ -366,6 +396,7 @@ class App:
                     clients = self.__clients.load()
                 except (OSError, ValueError) as error:
                     logger.error("App.run_menu: the client records cannot be read: %r", error)
+                    self.__read_failed("client records", App.TERMINAL)
                     self.__ui.show_error(App.CLIENTS_UNAVAILABLE)
                     continue
                 self.__report_view.show_client_list(clients)
@@ -580,6 +611,7 @@ class App:
             saved = self.__clients.find(client_ref)
         except (OSError, ValueError) as error:
             logger.error("App.find_client: the client records cannot be read: %r", error)
+            self.__read_failed("client records")
             raise ValueError(App.CLIENTS_UNAVAILABLE) from error
         if saved is None:
             return None
@@ -758,6 +790,7 @@ class App:
             return self.__clients.find(client_ref) is not None
         except (OSError, ValueError) as error:
             logger.error("App.client_ref_taken: the client records cannot be read: %r", error)
+            self.__read_failed("client records")
             raise ValueError(App.CLIENTS_UNAVAILABLE) from error
 
     def validate_case(self, case: object) -> list[str]:
@@ -781,6 +814,7 @@ class App:
                                                include_archived=with_archived)
         except (OSError, ValueError) as error:
             logger.error("App.list_assessments: the saved assessments cannot be read: %r", error)
+            self.__read_failed("assessments", App.TERMINAL)
             self.__ui.show_error(App.ASSESSMENTS_UNAVAILABLE)
             return
         # One state per record (not per id: old records may share a missing id).
@@ -869,6 +903,7 @@ class App:
             return self.__clients.load()
         except (OSError, ValueError) as error:
             logger.error("App.all_clients: the client records cannot be read: %r", error)
+            self.__read_failed("client records")
             raise ValueError(App.CLIENTS_UNAVAILABLE) from error
 
     def all_assessments(self, include_archived: bool = False) -> list[dict]:
@@ -878,6 +913,7 @@ class App:
             return self.__assessments.query("", include_archived)
         except (OSError, ValueError) as error:
             logger.error("App.all_assessments: the saved assessments cannot be read: %r", error)
+            self.__read_failed("assessments")
             raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
 
     def archive_assessment(self, assessment_id: str, reason: str = "", actor: str = TERMINAL) -> str:
@@ -894,6 +930,7 @@ class App:
             result = self.__assessments.archive(assessment_id, reason, actor)
         except (OSError, ValueError) as error:
             logger.error("App.archive_assessment: the saved assessments cannot be read: %r", error)
+            self.__read_failed("assessments", actor)
             raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
         self.__record_archive("assessment_archived", actor, assessment_id, result, reason.strip())
         return result
@@ -906,6 +943,7 @@ class App:
             result = self.__assessments.restore(assessment_id, actor)
         except (OSError, ValueError) as error:
             logger.error("App.restore_assessment: the saved assessments cannot be read: %r", error)
+            self.__read_failed("assessments", actor)
             raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
         self.__record_archive("assessment_restored", actor, assessment_id, result, "")
         return result
@@ -919,6 +957,7 @@ class App:
             saved = self.__assessments.find(assessment_id) or {}
         except (OSError, ValueError) as error:
             logger.error("App.__record_archive: the saved assessment cannot be read for the audit line: %r", error)
+            self.__read_failed("assessments", actor)
             saved = {}
         details = {"assessment_id": str(saved.get("assessment_id") or assessment_id).strip()}
         outcome = saved.get("outcome")
@@ -1029,20 +1068,124 @@ class App:
     def audit_log(self, audit_filter: AuditFilter, now: datetime | None = None) -> AuditPage:
         """One page of the log in the filter's order, with the counts the page needs, all from one read:
         how many events match, how many rows cannot be read, how many readable events the whole log holds
-        (so a page can tell an empty log from a filter that matches nothing), and how many different people and
-        failures there are among the matches. An empty log gives an empty page. Raises ValueError(AUDIT_UNAVAILABLE)
-        if the log cannot be read, and ValueError if audit_filter is not an AuditFilter."""
+        (so a page can tell an empty log from a filter that matches nothing), how many different people and
+        failures there are among the matches, and how many flags are still to handle (open_flags, whatever
+        the filter). "Flagged only" keeps the events behind a flag that is not resolved. An empty log gives
+        an empty page. Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read, ValueError(FLAGS_UNAVAILABLE)
+        if the flags cannot be worked out, and ValueError if audit_filter is not an AuditFilter or now has
+        no timezone."""
         if not isinstance(audit_filter, AuditFilter):
             raise ValueError("The audit log needs an AuditFilter.")
-        now = now or datetime.now(timezone.utc)
-        readable, unreadable = App.__audit_events(self.__audit_rows("audit_log"), "audit_log")
-        events = [event for event in readable if audit_filter.matches(event, now)]
+        now = App.__checked_now(now)
+        readable, unreadable, _, flags, tickets = self.__flag_view("audit_log", now, False)
+        unresolved = [flag for flag in flags if tickets[flag.flag_id].status != "resolved"]
+        flagged = {sequence for flag in unresolved for sequence in flag.sequences}
+        events = [event for event in readable if audit_filter.matches(event, now, flagged)]
         if audit_filter.sort == "desc":
             events.reverse()                       # the file is oldest first
         return AuditPage(audit_filter.page_of(events), len(events), unreadable, len(readable),
                          len({event.actor.casefold() for event in events
                               if event.actor not in (AuditEvent.TERMINAL, AuditEvent.UNKNOWN)}),
-                         sum(1 for event in events if event.result == "failed"))
+                         sum(1 for event in events if event.result == "failed"), len(unresolved))
+
+    def audit_overview(self, preset: str = OverviewPage.DEFAULT_PRESET, tab: str = OverviewPage.DEFAULT_TAB,
+                       page: int = 1, now: datetime | None = None) -> OverviewPage:
+        """Everything the admin Overview shows, from one read of the log: the numbers for the range (preset is
+        "today", "7", "30" or "90" days back from today, Singapore days), the chain check, the failures per day,
+        the flags by type and one page (6) of the flags table for the tab ("handle", "open", "review",
+        "followup", "resolved" or "all"). In the table the flags that are not resolved come first, by priority
+        then newest; the resolved ones follow, newest first. A page past the end gives the last page.
+        Raises ValueError for a preset, tab or page that is not allowed, ValueError(AUDIT_UNAVAILABLE) if the
+        log cannot be read (never an empty page), ValueError(AUDIT_KEY_MISSING) if the log has entries and no
+        audit key is set (the chain cannot be checked), and ValueError(FLAGS_UNAVAILABLE) if the flags cannot
+        be worked out."""
+        if preset not in OverviewPage.PRESETS:
+            raise ValueError(f"The range must be one of {', '.join(OverviewPage.PRESETS)} (got {preset!r}).")
+        if tab not in OverviewPage.TABS:
+            raise ValueError(f"The tab must be one of {', '.join(OverviewPage.TABS)} (got {tab!r}).")
+        if isinstance(page, bool) or not isinstance(page, int) or page < 1:
+            raise ValueError(f"The page must be a whole number, 1 or more (got {page!r}).")
+        now = App.__checked_now(now)
+        readable, unreadable, broken_at, flags, tickets = self.__flag_view("audit_overview", now, True)
+        today = AuditFilter.singapore_day(now)
+        day_to = today
+        day_from = today - timedelta(days=1 if preset == "today" else int(preset)) + timedelta(days=1)
+        stats = AuditStats(readable, flags, tickets, day_from, day_to, now)
+        ordered = App.__table_order([tickets[flag.flag_id] for flag in flags])
+        counts = {"handle": stats.to_handle, "open": 0, "review": 0, "followup": 0, "resolved": 0,
+                  "all": len(ordered)}
+        for ticket in ordered:
+            counts[ticket.status] += 1
+        shown = ordered if tab == "all" else [t for t in ordered if (t.status != "resolved" if tab == "handle"
+                                                                      else t.status == tab)]
+        page_count = max(1, -(-len(shown) // OverviewPage.PAGE_SIZE))
+        page = min(page, page_count)
+        start = (page - 1) * OverviewPage.PAGE_SIZE
+        return OverviewPage(
+            preset, day_from, day_to, stats.to_handle, stats.not_started, stats.in_progress, stats.actions,
+            stats.change_percent(stats.actions, stats.actions_before), stats.failures,
+            stats.change_percent(stats.failures, stats.failures_before), broken_at,
+            [(day.isoformat(), kinds) for day, kinds in stats.failures_by_day()], stats.flags_by_type(),
+            stats.severity_counts(), tab, counts, shown[start:start + OverviewPage.PAGE_SIZE], page, page_count,
+            unreadable)
+
+    def flag(self, flag_id: str, now: datetime | None = None) -> FlagTicket | None:
+        """The ticket (the flag, its status and its history) for a flag id, or None if the rules find no
+        flag with that id now. Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read (never None),
+        ValueError(FLAGS_UNAVAILABLE) if the flags cannot be worked out, and ValueError if flag_id is not text."""
+        if not isinstance(flag_id, str):
+            raise ValueError("The flag id must be text.")
+        _, _, _, _, tickets = self.__flag_view("flag", App.__checked_now(now), False)
+        return tickets.get(flag_id.strip())
+
+    def update_flag(self, flag_id: str, actor: str, status: str, note: str, waiting_on: str = "",
+                    outcome: str = "", now: datetime | None = None) -> tuple[FlagTicket | None, list[str], int]:
+        """An admin moves a flag to a status (or adds a note: the same status) and writes one "flag_updated"
+        line in the audit log. Returns (the ticket as it is now, the problems, the new entry's number):
+          saved           (ticket, [], N)  N is the entry's number, for "Saved in the audit log as entry #N"
+                          (0 only if the line was written but could not be found again to read its number)
+          not valid       (ticket, [what is wrong], 0)  nothing is written; the messages are FlagTicket's
+          flag is gone    (None, [FLAG_GONE], 0)
+          not written     (ticket, [FLAG_NOT_SAVED], 0)  the update was NOT saved; audit_write_failed() is True
+        Raises ValueError if actor is not an admin account, if status, note, waiting_on, outcome or flag_id is
+        not text, ValueError(AUDIT_KEY_MISSING) if no audit key is set, ValueError(AUDIT_UNAVAILABLE) if the
+        log cannot be read (the update is then not saved either), and ValueError(FLAGS_UNAVAILABLE)."""
+        self.__start(actor)
+        if not any(account.name == actor and account.is_admin() for account in self.__config.accounts):
+            raise ValueError(App.FLAG_ADMIN_ONLY)
+        for name, value in (("flag id", flag_id), ("status", status), ("note", note), ("waiting on", waiting_on),
+                            ("outcome", outcome)):
+            if not isinstance(value, str):
+                raise ValueError(f"The {name} must be text.")
+        if not self.__audit_key:
+            raise ValueError(App.AUDIT_KEY_MISSING)
+        now = App.__checked_now(now)
+        ticket = self.__flag_view("update_flag", now, False)[4].get(flag_id.strip())
+        if ticket is None:
+            return None, [App.FLAG_GONE], 0
+        problems = ticket.check_update(status, note, waiting_on, outcome)
+        if problems:
+            return ticket, problems, 0
+        details = ticket.update_details(actor, status, note, waiting_on, outcome)
+        if not self.__record("flag_updated", actor, ticket.flag.client_ref, "ok", details):
+            return ticket, [App.FLAG_NOT_SAVED], 0
+        event_id = getattr(self.__audit_note, "event_id", "")
+        try:
+            events, _, _, _, tickets = self.__flag_view("update_flag", now, False)
+        except ValueError:
+            return ticket, [], 0                     # saved, but it cannot be read back; already logged
+        sequence = next((event.sequence for event in events if event.event_id == event_id), 0)
+        return tickets.get(ticket.flag.flag_id, ticket), [], sequence
+
+    def client_flags(self, client_ref: str, now: datetime | None = None) -> list[FlagTicket]:
+        """The tickets of the flags that are not resolved for one client (matched ignoring case; an empty
+        reference matches nothing), in the order of the Overview table. [] only when there are none. Raises
+        ValueError(AUDIT_UNAVAILABLE) if the log cannot be read, and ValueError(FLAGS_UNAVAILABLE)."""
+        wanted = str(client_ref or "").strip().casefold()
+        _, _, _, flags, tickets = self.__flag_view("client_flags", App.__checked_now(now), False)
+        return App.__table_order([tickets[flag.flag_id] for flag in flags
+                                  if wanted and flag.client_ref.casefold() == wanted
+                                  and tickets[flag.flag_id].status != "resolved"])
 
     def audit_trail(self, client_ref: str) -> tuple[list[AuditEvent], int]:
         """(every audit event about one client, newest first; how many rows of the whole log cannot be read
@@ -1089,6 +1232,63 @@ class App:
             raise ValueError(App.AUDIT_UNAVAILABLE) from error
 
     @staticmethod
+    def __checked_now(now: datetime | None) -> datetime:
+        """now, or the current time; ValueError if it carries no timezone."""
+        now = now or datetime.now(timezone.utc)
+        if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("The time must carry a timezone.")
+        return now
+
+    @staticmethod
+    def __table_order(tickets: list[FlagTicket]) -> list[FlagTicket]:
+        """Flags that are not resolved first, by priority (the order given, newest first, is kept inside a
+        priority), then the resolved ones in the order given."""
+        rank = {severity: number for number, severity in enumerate(OverviewPage.SEVERITIES)}
+        open_ones = sorted((t for t in tickets if t.status != "resolved"), key=lambda t: rank[t.flag.severity])
+        return open_ones + [t for t in tickets if t.status == "resolved"]
+
+    def __flag_view(self, caller: str, now: datetime, strict: bool
+                    ) -> tuple[list[AuditEvent], int, int, list[Flag], dict[str, FlagTicket]]:
+        """One read of the log, worked into (the readable events, how many rows cannot be read, the first
+        broken entry or 0, the flags newest first, a ticket per flag id). strict says the chain must be
+        checked: with no audit key that is an error (ValueError(AUDIT_KEY_MISSING)); when not strict the
+        entry is taken as 0 and the missing key is logged (start() already refuses to run without a key).
+        Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read, ValueError(FLAGS_UNAVAILABLE) if the
+        rules fail."""
+        rows = self.__audit_rows(caller)
+        events, unreadable = App.__audit_events(rows, caller)
+        broken_at = 0
+        if rows and not self.__audit_key:
+            if strict:
+                raise ValueError(App.AUDIT_KEY_MISSING)
+            logger.error("App.%s: the audit log was not checked for changes, no audit key is set", caller)
+        elif rows:
+            breaks = AuditChain(rows, self.__audit_key).breaks()
+            broken_at = breaks[0] if breaks else 0
+        try:
+            flags = AuditInsights(events, self.__audit_policy, broken_at, now).flags()
+            updates = [event for event in events if event.action == "flag_updated"]
+            tickets = {flag.flag_id: FlagTicket(flag, updates) for flag in flags}
+        except (ValueError, TypeError, KeyError, AttributeError) as error:
+            logger.error("App.%s: the flags could not be worked out from the audit log: %r", caller, error)
+            raise ValueError(App.FLAGS_UNAVAILABLE) from error
+        return events, unreadable, broken_at, flags, tickets
+
+    def __read_failed(self, what: str, actor: str = UNKNOWN) -> None:
+        """Write one "database unreadable" line (it feeds the "Read failed" bar of the Overview), at most
+        once for each request (thread). Never raises, and leaves audit_write_failed() as it was: the line is
+        about a read that failed, not about an action that was kept."""
+        if getattr(self.__audit_note, "read_failed", False):
+            return
+        self.__audit_note.read_failed = True
+        failed_before = bool(getattr(self.__audit_note, "failed", False))
+        try:
+            self.__record("data_unavailable", actor, "", "failed", {"what": what})
+        except Exception as error:                    # __record never raises; this is for certainty
+            logger.error("App.__read_failed: the audit line could not be written: %r", error)
+        self.__audit_note.failed = failed_before
+
+    @staticmethod
     def __audit_events(rows: list[dict], caller: str) -> tuple[list[AuditEvent], int]:
         """(the rows that can be shown as events, and how many cannot). A row can be shown if it is sealed
         and has a time and an id of its own written in the row (a hand-added row would otherwise be given a
@@ -1124,6 +1324,7 @@ class App:
         Raises ValueError (a programming error) if actor is neither TERMINAL, UNKNOWN nor a configured account name."""
         self.__audit_note.failed = False
         self.__audit_note.outcome_failed = False
+        self.__audit_note.read_failed = False
         known = isinstance(actor, str) and (actor in (App.TERMINAL, App.UNKNOWN)
                                             or any(account.name == actor for account in self.__config.accounts))
         if not known:
@@ -1138,6 +1339,7 @@ class App:
         self.__audit_note.failed = False
         try:
             event = AuditEvent(actor=actor, action=action, client_ref=client_ref, result=result, details=details)
+            self.__audit_note.event_id = event.event_id
             written = self.__audit.save(event.to_dict())
         except Exception as error:
             logger.error("App.__record: the audit line for %s could not be made or saved: %r", action, error)
