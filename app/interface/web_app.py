@@ -677,7 +677,7 @@ class WebApp:
         if not read:
             return self.show_form(heading, values, ["Choose at least one document to read."], documents=documents)
 
-        extracted, warnings = self.__app.read_documents(read, self.__actor())
+        extracted, warnings = self.__app.read_documents(read, self.__actor(), client_ref)
         self.__flash_audit_failure()
         if extracted is None:
             flash("Document reading is not available right now — please try again later.")

@@ -1556,3 +1556,16 @@ def test_a_hand_added_row_is_on_neither_the_log_nor_the_history_but_verify_repor
     assert "Mallory" not in browser.get("/audit?days=all").get_data(as_text=True)
     browser.post("/audit/verify")
     assert "changed outside the app" in html.unescape(browser.get("/audit").get_data(as_text=True))
+
+
+def test_auto_filling_an_existing_client_shows_in_that_clients_history(tmp_path, monkeypatch):
+    application = App(fake_ai.caller(documents_reply=AI_READING), data_folder=str(tmp_path))
+    client = WebApp(application).flask().test_client()
+    sign_in(client, application)
+    ref = sample_case()["client_ref"]
+    application.clients().save(sample_case())
+    client.post(f"/client/{ref}/autofill", content_type="multipart/form-data", data={
+        "autofill_files": (io.BytesIO(b"Daniel Tan, Portfolio Manager"), "cv.txt")})
+    assert {event.action for event in application.audit_trail(ref)} == {"document_uploaded", "autofill_used"}
+    page = client.get(f"/client/{ref}").get_data(as_text=True)
+    assert "Used document auto-fill" in page

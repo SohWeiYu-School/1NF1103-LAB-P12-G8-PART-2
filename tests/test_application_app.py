@@ -1337,3 +1337,10 @@ def test_a_save_of_something_that_is_not_a_result_raises_and_is_recorded_without
         app.save_assessment({}, None, actor="Adrian")
     [event] = _events(app)
     assert (event.action, event.client_ref, event.actor) == ("assessment_failed", "", "Adrian")
+
+
+def test_reading_documents_for_a_client_ties_the_line_to_that_client(app):
+    app.read_documents([{"kind": "error", "error": "scan.pdf could not be opened."}], "Shareen", "C-7")
+    [event] = _events(app)
+    assert event.client_ref == "C-7"
+    assert [e.action for e in app.audit_trail("C-7")] == ["autofill_used"]

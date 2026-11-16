@@ -667,9 +667,11 @@ class App:
                                f"({len(record.documents())} document(s) attached).")
         return record if self.__client_form.ask_after_save(record) else None
 
-    def read_documents(self, documents: list[dict], actor: str = TERMINAL) -> tuple[dict | None, list[str]]:
+    def read_documents(self, documents: list[dict], actor: str = TERMINAL,
+                       client_ref: str = "") -> tuple[dict | None, list[str]]:
         """Ask the AI to read documents the DocumentStore has opened. Returns (details, warnings).
-        Reading at least one document is written to the audit log (how many, and how many details were found)."""
+        Reading at least one document is written to the audit log (how many, and how many details were found);
+        client_ref, when the documents are for a saved client, ties that line to the client's History."""
         self.__start(actor)
         service = self.__document_ai
         extracted = service.run({"documents": documents})
@@ -677,7 +679,7 @@ class App:
         for warning in warnings:
             logger.info(warning)
         if documents:
-            self.__record("autofill_used", actor, "", "ok" if extracted is not None else "failed",
+            self.__record("autofill_used", actor, client_ref, "ok" if extracted is not None else "failed",
                           {"documents": len(documents), "fields": App.__count_fields(extracted)})
         return extracted, warnings
 
