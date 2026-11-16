@@ -109,26 +109,6 @@ def test_there_is_no_way_to_replace_update_or_delete_an_event():
         assert not hasattr(AuditRepository, name)
 
 
-def test_for_client_gives_that_clients_events_oldest_first_ignoring_case(tmp_path):
-    repo = _repo(tmp_path)
-    repo.save(_record("client_created", "C-0007"))
-    repo.save(_record("client_created", "C-0008"))
-    repo.save(_record("client_edited", "c-0007"))
-    found = repo.for_client(" C-0007 ")
-    assert [r["action"] for r in found] == ["client_created", "client_edited"]
-    assert [r["sequence"] for r in found] == [1, 3]
-    assert repo.for_client("C-9999") == [] and repo.for_client("") == []
-
-
-def test_for_client_on_a_missing_file_is_empty_but_on_a_damaged_file_it_raises(tmp_path):
-    import pytest
-    repo = _repo(tmp_path)
-    assert repo.for_client("C-1") == []
-    (tmp_path / "audit_log.json").write_text("{broken", encoding="utf-8")
-    with pytest.raises(ValueError):
-        repo.for_client("C-1")
-
-
 def test_two_threads_saving_twenty_events_each_keep_the_chain_valid(tmp_path):
     repo = _repo(tmp_path)
     results: list[bool] = []

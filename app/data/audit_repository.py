@@ -67,11 +67,3 @@ class AuditRepository(JsonRepository):
                 logger.error("AuditRepository.save: not saved, the event could not be sealed: %r", error)
                 return False
             return self._write_all(rows + [sealed])
-
-    def for_client(self, client_ref: str) -> list[dict]:
-        """Every event about one client, oldest first (the reference is matched ignoring case). An
-        empty reference matches nothing. Raises OSError or ValueError if the file cannot be read."""
-        wanted = str(client_ref or "").strip().casefold()
-        if not wanted:
-            return []
-        return [row for row in self.load() if str(row.get("client_ref", "")).casefold() == wanted]
