@@ -1,5 +1,6 @@
 """Config: policy and vocabulary held as one object."""
 
+from app.model.account import Account
 from app.model.config import Config
 
 POLICY = {"country_aliases": {"uae": "united arab emirates", "hk": "hong kong"}}
@@ -32,3 +33,18 @@ def test_same_country_lower_cases_names_with_no_short_form():
 
 def test_same_country_copes_with_an_empty_name():
     assert Config({}, {}).same_country(None) == ""
+
+
+def test_config_made_with_two_arguments_has_no_accounts():
+    config = Config(POLICY, VOCABULARY)
+    assert config.accounts == [] and config.account("a@b.com") is None
+
+
+def test_config_holds_the_accounts_and_finds_one_by_email_ignoring_case():
+    shareen = Account("shareen@orbit.local", "Shareen", "officer")
+    admin = Account("admin@orbit.local", "Orbit Admin", "admin")
+    config = Config(POLICY, VOCABULARY, [admin, shareen])
+    assert config.accounts == [admin, shareen]
+    assert config.account(" SHAREEN@orbit.local ") is shareen
+    assert config.account("nobody@orbit.local") is None
+    assert config.account(None) is None

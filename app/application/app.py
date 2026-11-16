@@ -31,6 +31,7 @@ from app.interface.report_view import ReportView
 from app.logic.case_reader import CaseReader
 from app.logic.case_timeline import CaseTimeline
 from app.logic.document_record_builder import DocumentRecordBuilder
+from app.model.account import Account
 from app.model.client_record import ClientRecord
 from app.model.config import Config
 from app.model.declaration import Declaration
@@ -95,14 +96,19 @@ class App:
         self.__config_reader: ConfigReader = ConfigReader(os.path.join(root, "config"))
         self.__settings_ok: bool = True
         try:
-            policy_file, vocabulary_file = (self.__config_reader.read(name) for name in ConfigReader.FILE_NAMES)
+            policy_file, vocabulary_file, accounts_file = (self.__config_reader.read(name)
+                                                           for name in ConfigReader.FILE_NAMES)
+            entries = accounts_file.get("accounts")
+            if not isinstance(entries, list):
+                raise ValueError("config/accounts.json 'accounts' must be a list")
+            accounts = [Account.from_dict(entry) for entry in entries]
         except (OSError, ValueError) as error:
             # App must not crash while it is built, and must not run on empty rules: start() and
             # start_web() see this flag, tell the officer and stop. The reader has logged the details.
             logger.error("App: the settings could not be loaded: %r", error)
             self.__settings_ok = False
-            policy_file, vocabulary_file = {}, {}
-        self.__config: Config = Config(policy_file, vocabulary_file)
+            policy_file, vocabulary_file, accounts = {}, {}, []
+        self.__config: Config = Config(policy_file, vocabulary_file, accounts)
         policy = self.__config.policy
 
         # Data Manager

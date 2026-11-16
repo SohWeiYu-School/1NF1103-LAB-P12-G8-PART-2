@@ -840,3 +840,22 @@ def test_the_menu_can_list_archived_assessments_too_and_marks_them(app, monkeypa
     app.list_assessments()
     out = capsys.readouterr().out
     assert out.count("(archived)") == 1 and out.count("(archive state unreadable)") == 1 and "C-3" in out
+
+
+@pytest.mark.parametrize("damage", ["missing", "damaged", "bad_entry", "not_a_list"])
+def test_a_bad_accounts_file_stops_the_app_like_a_bad_policy_file(tmp_path, monkeypatch, capsys, damage):
+    import shutil
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    root = tmp_path / "root"
+    shutil.copytree("config", root / "config")
+    accounts = root / "config" / "accounts.json"
+    if damage == "missing":
+        accounts.unlink()
+    else:
+        accounts.write_text({"damaged": "{broken", "bad_entry": '{"accounts": [{"email": "x"}]}',
+                             "not_a_list": '{"accounts": 5}'}[damage])
+    application = App(ai_caller=None, root=str(root), data_folder=str(tmp_path / "data"))   # no crash
+    assert application.start([]) == 1
+    out = capsys.readouterr().out
+    assert App.SETTINGS_UNAVAILABLE in out and "Traceback" not in out and "accounts.json" not in out

@@ -1,0 +1,8 @@
+{"accounts": [
+  {"email": "admin@orbit.local", "name": "Orbit Admin", "role": "admin"},
+  {"email": "shareen@orbit.local", "name": "Shareen", "role": "officer"},
+  {"email": "adrian@orbit.local", "name": "Adrian", "role": "officer"},
+  {"email": "dominic@orbit.local", "name": "Dominic", "role": "officer"},
+  {"email": "weiyu@orbit.local", "name": "Wei Yu", "role": "officer"},
+  {"email": "shennon@orbit.local", "name": "Shennon", "role": "officer"}
+]}
