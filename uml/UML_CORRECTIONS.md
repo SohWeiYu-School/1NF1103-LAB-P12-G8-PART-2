@@ -202,7 +202,7 @@ After the review, the checker also verifies abbreviated values: `X(...)` must na
 | JsonRepository, DatabaseRepository, MongoRepository, ClientProfile, ClientRecord | `__init__` | parameter defaults shown (`= ""`) | **B**: every parameter has a default so an object can be built empty and filled from saved data (every attribute then has a default, CLAUDE.md §1) |
 | ConsoleUI | `show`, `show_ai_unavailable` | `text : str = ""`, `feature : str = "Assessment"` | **B**: defaults below review level |
 | ConsoleUI | `__read`, `__write` | `lambda question: input(...)`, `lambda text: print(...)` | **T**: `input`/`print` are looked up when called, so a swapped `builtins.input` (the console tests) still works (stage 3 batch B) |
-| Claims | `__pep_status` | `""` (not `"no"`) | **T**: the code's default is `""`. Note: `""` is in `Claims.NO_PEP_VALUES`, so a blank status counts as "not a PEP" (follow-up #41) |
+| Claims | `__pep_status` | `""` (not `"no"`) | **T**: the code's default is `""`. Note: a blank status means "not answered" and is treated as a PEP; `""` was taken out of `Claims.NO_PEP_VALUES` (follow-up #41) |
 | Verdict | `__outcome` | `"MANUAL_REVIEW"` (not `""`) | **T**: `""` is impossible (the outcome check rejects it). The safe default for an unfinished verdict is a person checking it |
 | CrimeScan | `__indicators` | `[GiftOrInheritanceUnnamed(...), ...]` | **T**: CrimeScan builds its five indicators in `__init__` |
 | WebApp | `__flask` | `Flask(...)` | **B**: `Flask(__name__)` was not wrong; the checker flagged it because the code builds it in a local variable first. `(...)` matches the convention above |
@@ -427,3 +427,15 @@ No reviewed member was corrected; the code changed (follow-up #39, option A from
   `documents()` call left in WebApp is `ClientRecord.documents()`, the record's own list.
 - Review fixes: App's comment and docstring corrected, and tests added (saved assessments are listed; autofill fills nothing
   and says why when the reading cannot be a record; WebApp never calls App's manager getters). Scan 0, layout_check 0.
+
+## Small follow-ups (2026-11-16): code changed, the diagram follows it
+
+No reviewed member was corrected; the code changed (follow-ups #7, #8, #16, #22, #33, #35, #40, #49; Marcus took the
+fix/leave recommendation for each) and the diagram shows the new signatures.
+- `ClientForm.pick_client(find_fn)` and `find_existing_client(find_fn, ...)`: `find_fn` is required (no `None` default). **T**.
+- Added `ClientRecord.why_unreadable(error)` (static, **T**): the one safe reason shown when a saved or typed record cannot
+  be read. App, ClientForm and WebApp all use it, so the technical text of a TypeError/AttributeError never reaches the screen.
+- `VerdictEngine`: `#_is_pep` -> `-__is_pep` (no child; CLAUDE.md §1).
+- Not a diagram change: `config/policy.json` no longer has `verdict.no_pep_values`; `Claims.NO_PEP_VALUES` is the one list.
+  `ConfigReader` no longer applies a cooldown default; `RateLimiter.DEFAULT_COOLDOWN_SECONDS` is the one default.
+- Layout: ClientRecord grew one line; 9 lines re-routed. layout_check 0.

@@ -213,7 +213,6 @@ package "IO Manager (app/interface)" {
     +get_sow_declaration() : str
     +get_supporting_documents(upload_fn : Callable[[str], str | None] | None = None) : list[dict[str, str]]
     +ask_optional_field(field : dict) : int | float | list[str] | None
-    {static} -__why(error : Exception) : str
   }
   class ConsoleUI {
     -__read : Callable[[str], str] = lambda question: input(...)
@@ -980,7 +979,7 @@ package "Logic Manager (app/logic)" {
     #_documents(assessment : dict | None, bench : list[Check], crime : list[Check], typologies : list[Typology] | None, case : dict, docs : list[Check] | None = None) : list[dict]
     -__feature(name : str) : RiskAnalysis | None
     -__feature_checks(name : str, context : dict) : list[Check]
-    #_is_pep(case : dict) : bool
+    -__is_pep(case : dict) : bool
     #_items(checks : list[dict], statuses : tuple) : list[dict]
     +features() : list[RiskAnalysis]
   }
@@ -1150,6 +1149,7 @@ package "Domain Model (app/model)" {
     {static} -__whole_percent(value : object) : int | None
     +career_start_year() : int | None
     +investments() : list[Investment]
+    {static} +why_unreadable(error : Exception) : str
   }
   class Config {
     -__policy : dict = {} {get}

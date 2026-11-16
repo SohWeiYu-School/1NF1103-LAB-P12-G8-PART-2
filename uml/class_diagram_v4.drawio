@@ -147,7 +147,7 @@
           <mxGeometry height="310" width="580" y="186" as="geometry" />
         </mxCell>
         <mxCell id="c53" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="ClientForm" vertex="1">
-          <mxGeometry height="691" width="560" x="2000" y="1818" as="geometry" />
+          <mxGeometry height="676" width="560" x="2000" y="1818" as="geometry" />
         </mxCell>
         <mxCell id="c54" parent="c53" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __ui : ConsoleUI = ConsoleUI()&lt;br&gt;− __report_view : ReportView = ReportView(...)&lt;br&gt;+ PAYMENT_METHODS : list[str] = [...] «const»&lt;br&gt;+ PEP_OPTIONS : list[str] = [...] «const»&lt;br&gt;+ MAX_ID_TRIES : int = 10 «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="85" width="560" y="26" as="geometry" />
@@ -155,8 +155,8 @@
         <mxCell id="c55" parent="c53" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
           <mxGeometry height="1" width="560" y="110.5" as="geometry" />
         </mxCell>
-        <mxCell id="c56" parent="c53" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(ui : ConsoleUI | None = None, report_view : ReportView | None = None)&lt;br&gt;+ create_new_client(save_fn : Callable[[ClientRecord], bool] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;upload_fn : Callable[[str], str | None] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;is_taken_fn : Callable[[str], bool] | None = None) : ClientRecord | None&lt;br&gt;+ edit_existing_client(record : ClientRecord, upload_fn : Callable[[str],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;str | None] | None = None) : ClientRecord&lt;br&gt;+ pick_client(find_fn : Callable[[str],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;ClientRecord | None]) : ClientRecord | None&lt;br&gt;+ generate_client_id(is_taken_fn : Callable[[str], bool] | None = None) : str&lt;br&gt;+ ask_document_folder() : str | None&lt;br&gt;− __ask_job(previous : bool = False) : dict&lt;br&gt;− __ask_asset() : dict&lt;br&gt;− __get_claims() : dict&lt;br&gt;− __edit_career_record(record : dict) : None&lt;br&gt;− __edit_asset_record(record : dict) : None&lt;br&gt;− __edit_sow_declaration(record : dict) : None&lt;br&gt;+ add_asset_record(record : dict) : None&lt;br&gt;+ add_career_record(record : dict) : None&lt;br&gt;+ add_supporting_documents(record : dict, upload_fn : Callable[[str],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;str | None] | None = None) : None&lt;br&gt;+ ask_after_save(record : ClientRecord) : bool&lt;br&gt;+ ask_missing_field(field : dict) : str | int | float | list[str] | dict[str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;float]&lt;br&gt;+ edit_asset_composition(record : dict) : None&lt;br&gt;+ edit_client_declarations(record : dict) : None&lt;br&gt;+ edit_client_profile(record : dict) : None&lt;br&gt;+ find_existing_client(find_fn : Callable[[str], ClientRecord | None],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;save_fn : Callable[[ClientRecord], bool] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;download_fn : Callable[[str, str], bool] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;upload_fn : Callable[[str], str | None] | None = None) : None&lt;br&gt;+ get_career_history() : list&lt;br&gt;+ get_client_profile() : dict&lt;br&gt;+ get_investments() : list&lt;br&gt;+ get_sow_declaration() : str&lt;br&gt;+ get_supporting_documents(upload_fn : Callable[[str],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;str | None] | None = None) : list[dict[str, str]]&lt;br&gt;+ ask_optional_field(field : dict) : int | float | list[str] | None&lt;br&gt;− __why(error : Exception) : str «static»&lt;/div&gt;" vertex="1">
-          <mxGeometry height="580" width="560" y="111" as="geometry" />
+        <mxCell id="c56" parent="c53" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(ui : ConsoleUI | None = None, report_view : ReportView | None = None)&lt;br&gt;+ create_new_client(save_fn : Callable[[ClientRecord], bool] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;upload_fn : Callable[[str], str | None] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;is_taken_fn : Callable[[str], bool] | None = None) : ClientRecord | None&lt;br&gt;+ edit_existing_client(record : ClientRecord, upload_fn : Callable[[str],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;str | None] | None = None) : ClientRecord&lt;br&gt;+ pick_client(find_fn : Callable[[str],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;ClientRecord | None]) : ClientRecord | None&lt;br&gt;+ generate_client_id(is_taken_fn : Callable[[str], bool] | None = None) : str&lt;br&gt;+ ask_document_folder() : str | None&lt;br&gt;− __ask_job(previous : bool = False) : dict&lt;br&gt;− __ask_asset() : dict&lt;br&gt;− __get_claims() : dict&lt;br&gt;− __edit_career_record(record : dict) : None&lt;br&gt;− __edit_asset_record(record : dict) : None&lt;br&gt;− __edit_sow_declaration(record : dict) : None&lt;br&gt;+ add_asset_record(record : dict) : None&lt;br&gt;+ add_career_record(record : dict) : None&lt;br&gt;+ add_supporting_documents(record : dict, upload_fn : Callable[[str],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;str | None] | None = None) : None&lt;br&gt;+ ask_after_save(record : ClientRecord) : bool&lt;br&gt;+ ask_missing_field(field : dict) : str | int | float | list[str] | dict[str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;float]&lt;br&gt;+ edit_asset_composition(record : dict) : None&lt;br&gt;+ edit_client_declarations(record : dict) : None&lt;br&gt;+ edit_client_profile(record : dict) : None&lt;br&gt;+ find_existing_client(find_fn : Callable[[str], ClientRecord | None],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;save_fn : Callable[[ClientRecord], bool] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;download_fn : Callable[[str, str], bool] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;upload_fn : Callable[[str], str | None] | None = None) : None&lt;br&gt;+ get_career_history() : list&lt;br&gt;+ get_client_profile() : dict&lt;br&gt;+ get_investments() : list&lt;br&gt;+ get_sow_declaration() : str&lt;br&gt;+ get_supporting_documents(upload_fn : Callable[[str],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;str | None] | None = None) : list[dict[str, str]]&lt;br&gt;+ ask_optional_field(field : dict) : int | float | list[str] | None&lt;/div&gt;" vertex="1">
+          <mxGeometry height="565" width="560" y="111" as="geometry" />
         </mxCell>
         <mxCell id="c57" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="CaseBuilder" vertex="1">
           <mxGeometry height="346" width="460" x="2000" y="1442" as="geometry" />
@@ -275,7 +275,7 @@
         <mxCell id="c95" parent="c93" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
           <mxGeometry height="1" width="420" y="170.5" as="geometry" />
         </mxCell>
-        <mxCell id="c96" parent="c93" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(features : list[RiskAnalysis] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;config : Config | None = None)&lt;br&gt;+ combine(case : dict, results : dict) : Verdict&lt;br&gt;+ describe_piece(case : dict, piece : str | None) : str&lt;br&gt;− __build_context(case : dict, results : dict) : dict&lt;br&gt;− __collect_checks(context : dict) : dict[str, list[Check]]&lt;br&gt;− __report(verdict : Verdict) : dict&lt;br&gt;− __agreement(checks : list[Check]) : list[dict]&lt;br&gt;− __type_patterns(forecast : dict | None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;assessment : dict | None, crime_result : dict | None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;typologies : list[Typology] | None) : list[dict]&lt;br&gt;− __evidence(case : dict, results : dict,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;assessment : dict | None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;honest : dict | None) : list[dict]&lt;br&gt;# _benchmark_items(checks : list[dict]) : list[dict]&lt;br&gt;− __check(feature : str, check : str, label : str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;theme : str, status : str, detail : str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;explanation : str = &amp;quot;&amp;quot;, group : str = &amp;quot;&amp;quot;) : Check&lt;br&gt;# _documents(assessment : dict | None, bench : list[Check],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;crime : list[Check],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;typologies : list[Typology] | None, case : dict,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;docs : list[Check] | None = None) : list[dict]&lt;br&gt;− __feature(name : str) : RiskAnalysis | None&lt;br&gt;− __feature_checks(name : str, context : dict) : list[Check]&lt;br&gt;# _is_pep(case : dict) : bool&lt;br&gt;# _items(checks : list[dict], statuses : tuple) : list[dict]&lt;br&gt;+ features() : list[RiskAnalysis]&lt;/div&gt;" vertex="1">
+        <mxCell id="c96" parent="c93" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(features : list[RiskAnalysis] | None = None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;config : Config | None = None)&lt;br&gt;+ combine(case : dict, results : dict) : Verdict&lt;br&gt;+ describe_piece(case : dict, piece : str | None) : str&lt;br&gt;− __build_context(case : dict, results : dict) : dict&lt;br&gt;− __collect_checks(context : dict) : dict[str, list[Check]]&lt;br&gt;− __report(verdict : Verdict) : dict&lt;br&gt;− __agreement(checks : list[Check]) : list[dict]&lt;br&gt;− __type_patterns(forecast : dict | None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;assessment : dict | None, crime_result : dict | None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;typologies : list[Typology] | None) : list[dict]&lt;br&gt;− __evidence(case : dict, results : dict,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;assessment : dict | None,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;honest : dict | None) : list[dict]&lt;br&gt;# _benchmark_items(checks : list[dict]) : list[dict]&lt;br&gt;− __check(feature : str, check : str, label : str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;theme : str, status : str, detail : str,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;explanation : str = &amp;quot;&amp;quot;, group : str = &amp;quot;&amp;quot;) : Check&lt;br&gt;# _documents(assessment : dict | None, bench : list[Check],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;crime : list[Check],&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;typologies : list[Typology] | None, case : dict,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;docs : list[Check] | None = None) : list[dict]&lt;br&gt;− __feature(name : str) : RiskAnalysis | None&lt;br&gt;− __feature_checks(name : str, context : dict) : list[Check]&lt;br&gt;− __is_pep(case : dict) : bool&lt;br&gt;# _items(checks : list[dict], statuses : tuple) : list[dict]&lt;br&gt;+ features() : list[RiskAnalysis]&lt;/div&gt;" vertex="1">
           <mxGeometry height="415" width="420" y="171" as="geometry" />
         </mxCell>
         <mxCell id="c97" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=40;horizontal=1;collapsible=0;fillColor=#E3DAFF;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="&lt;span style=&quot;font-weight: normal; font-size: 10px; color: rgb(100, 116, 139);&quot;&gt;«abstract»&lt;/span&gt;&lt;br&gt;&lt;i&gt;RiskAnalysis&lt;/i&gt;" vertex="1">
@@ -711,7 +711,7 @@
           <mxGeometry height="85" width="320" y="66" as="geometry" />
         </mxCell>
         <mxCell id="c241" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="ClientRecord" vertex="1">
-          <mxGeometry height="721" width="550" x="2480" y="8759" as="geometry" />
+          <mxGeometry height="736" width="550" x="2480" y="8759" as="geometry" />
         </mxCell>
         <mxCell id="c242" parent="c241" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;− __client_ref : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __profile : ClientProfile = ClientProfile(...) {get}&lt;br&gt;− __current_date : str = &amp;quot;&amp;quot; {get}&lt;br&gt;− __sow_declaration : str = &amp;quot;&amp;quot; {get, set}&lt;br&gt;− __career_history : list[Job] = []&lt;br&gt;− __investments : list[Investment] = []&lt;br&gt;− __claims : Claims | None = None {get}&lt;br&gt;− __declaration : Declaration = Declaration() {get}&lt;br&gt;− __supporting_documents : list[dict] = []&lt;br&gt;− __review_status : ReviewStatus = ReviewStatus() {get}&lt;br&gt;− __career_extra : dict = {}&lt;br&gt;− __extra : dict = {}&lt;br&gt;+ CAREER_JOB_KEYS : tuple[str, ...] = (...) «const»&lt;br&gt;+ MIN_WORKING_AGE : int = 14 «const»&lt;br&gt;+ REQUIRED : tuple[str, ...] = (...) «const»&lt;br&gt;− __OWN_KEYS : tuple[str, ...] = (...) «const»&lt;/div&gt;" vertex="1">
           <mxGeometry height="250" width="550" y="26" as="geometry" />
@@ -719,8 +719,8 @@
         <mxCell id="c243" parent="c241" style="line;strokeWidth=1;strokeColor=#64748B;fillColor=none;html=1;rotatable=0;" value="" vertex="1">
           <mxGeometry height="1" width="550" y="275.5" as="geometry" />
         </mxCell>
-        <mxCell id="c244" parent="c241" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(client_ref : str = &amp;quot;&amp;quot;, name : str = &amp;quot;&amp;quot;, nationality : str = &amp;quot;&amp;quot;,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;current_date : str = &amp;quot;&amp;quot;, country_of_residence : str = &amp;quot;&amp;quot;,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;age : int | None = None)&lt;br&gt;+ jobs() : list[Job]&lt;br&gt;+ add_job(details : dict) : Job&lt;br&gt;+ add_investment(details : dict) : Investment&lt;br&gt;+ set_claims(details : dict) : Claims&lt;br&gt;+ current_job() : Job | None&lt;br&gt;+ documents() : list[dict]&lt;br&gt;+ add_document(entry : dict) : None&lt;br&gt;+ record_assessment(verdict : Verdict, case : dict) : None&lt;br&gt;+ problems() : list[str]&lt;br&gt;+ warnings(policy : dict) : list[str]&lt;br&gt;+ crime_scan_input() : dict&lt;br&gt;+ benchmark_input() : dict&lt;br&gt;+ to_dict() : dict&lt;br&gt;+ from_dict(data : dict) : ClientRecord «static»&lt;br&gt;− __check_job_order() : list[str]&lt;br&gt;− __check_one_current_job() : list[str]&lt;br&gt;− __check_asset_years() : list[str]&lt;br&gt;− __check_schema() : list[str]&lt;br&gt;− __check_start_age() : list[str]&lt;br&gt;− __check_assets_vs_worth() : list[str]&lt;br&gt;− __check_split_against_assets(policy : dict) : list[str]&lt;br&gt;− __this_year() : int | None&lt;br&gt;− __whole(value : object) : int | None «static»&lt;br&gt;− __whole_percent(value : object) : int | None «static»&lt;br&gt;+ career_start_year() : int | None&lt;br&gt;+ investments() : list[Investment]&lt;/div&gt;" vertex="1">
-          <mxGeometry height="445" width="550" y="276" as="geometry" />
+        <mxCell id="c244" parent="c241" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingTop=2;overflow=hidden;whiteSpace=nowrap;fontFamily=Courier New;fontSize=11;fontColor=#1E293B;rotatable=0;" value="&lt;div style=&quot;line-height:15px&quot;&gt;+ __init__(client_ref : str = &amp;quot;&amp;quot;, name : str = &amp;quot;&amp;quot;, nationality : str = &amp;quot;&amp;quot;,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;current_date : str = &amp;quot;&amp;quot;, country_of_residence : str = &amp;quot;&amp;quot;,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;age : int | None = None)&lt;br&gt;+ jobs() : list[Job]&lt;br&gt;+ add_job(details : dict) : Job&lt;br&gt;+ add_investment(details : dict) : Investment&lt;br&gt;+ set_claims(details : dict) : Claims&lt;br&gt;+ current_job() : Job | None&lt;br&gt;+ documents() : list[dict]&lt;br&gt;+ add_document(entry : dict) : None&lt;br&gt;+ record_assessment(verdict : Verdict, case : dict) : None&lt;br&gt;+ problems() : list[str]&lt;br&gt;+ warnings(policy : dict) : list[str]&lt;br&gt;+ crime_scan_input() : dict&lt;br&gt;+ benchmark_input() : dict&lt;br&gt;+ to_dict() : dict&lt;br&gt;+ from_dict(data : dict) : ClientRecord «static»&lt;br&gt;− __check_job_order() : list[str]&lt;br&gt;− __check_one_current_job() : list[str]&lt;br&gt;− __check_asset_years() : list[str]&lt;br&gt;− __check_schema() : list[str]&lt;br&gt;− __check_start_age() : list[str]&lt;br&gt;− __check_assets_vs_worth() : list[str]&lt;br&gt;− __check_split_against_assets(policy : dict) : list[str]&lt;br&gt;− __this_year() : int | None&lt;br&gt;− __whole(value : object) : int | None «static»&lt;br&gt;− __whole_percent(value : object) : int | None «static»&lt;br&gt;+ career_start_year() : int | None&lt;br&gt;+ investments() : list[Investment]&lt;br&gt;+ why_unreadable(error : Exception) : str «static»&lt;/div&gt;" vertex="1">
+          <mxGeometry height="460" width="550" y="276" as="geometry" />
         </mxCell>
         <mxCell id="c245" parent="1" style="swimlane;html=1;fontStyle=1;fontSize=13;align=center;verticalAlign=middle;startSize=26;horizontal=1;collapsible=0;fillColor=#DDE6F3;swimlaneFillColor=#FFFFFF;strokeColor=#475569;fontColor=#1E293B;container=1;" value="Job" vertex="1">
           <mxGeometry height="346" width="490" x="2130" y="9725" as="geometry" />
@@ -1401,7 +1401,7 @@
         <mxCell id="c362" edge="1" parent="1" source="c241" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=1.0000;exitY=0.8500;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.1500;entryDx=0;entryDy=0;entryPerimeter=0;" target="c249" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="3050" y="9371.85" />
+              <mxPoint x="3050" y="9384.6" />
               <mxPoint x="3140" y="9370" />
               <mxPoint x="3140" y="9580.9" />
             </Array>
@@ -1425,7 +1425,7 @@
         <mxCell id="c366" edge="1" parent="1" source="c241" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;startArrow=diamond;startFill=1;startSize=18;endArrow=none;exitX=1.0000;exitY=0.4000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.1500;entryDx=0;entryDy=0;entryPerimeter=0;" target="c289" value="">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="3050" y="9047.4" />
+              <mxPoint x="3050" y="9053.4" />
               <mxPoint x="3120" y="9050" />
               <mxPoint x="3120" y="9360" />
               <mxPoint x="4270" y="9360" />
@@ -1976,7 +1976,7 @@
         <mxCell id="c434" edge="1" parent="1" source="c241" style="html=1;rounded=0;edgeStyle=none;strokeColor=#334155;strokeWidth=1.5;jumpStyle=arc;jumpSize=8;fontSize=11;labelBackgroundColor=#FFFFFF;fontStyle=2;fontColor=#64748B;endArrow=open;endFill=0;endSize=11;dashed=1;exitX=1.0000;exitY=0.1500;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.3300;entryDx=0;entryDy=0;entryPerimeter=0;" target="c265" value="uses">
           <mxGeometry x="-0.3418" relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="3050" y="8867.15" />
+              <mxPoint x="3050" y="8869.4" />
               <mxPoint x="3060" y="8870" />
               <mxPoint x="3060" y="8720" />
               <mxPoint x="1540" y="8720" />
@@ -1996,7 +1996,7 @@
               <mxPoint x="3640" y="8720" />
               <mxPoint x="3070" y="8720" />
               <mxPoint x="3070" y="8940" />
-              <mxPoint x="3050" y="8939.25" />
+              <mxPoint x="3050" y="8943" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -2012,7 +2012,7 @@
               <mxPoint x="3580" y="8730" />
               <mxPoint x="3140" y="8730" />
               <mxPoint x="3140" y="9000" />
-              <mxPoint x="3050" y="8996.93" />
+              <mxPoint x="3050" y="9001.9" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -2023,7 +2023,7 @@
               <mxPoint x="2340" y="3460" />
               <mxPoint x="3820" y="3460" />
               <mxPoint x="3820" y="9240" />
-              <mxPoint x="3050" y="9242.07" />
+              <mxPoint x="3050" y="9252.1" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -2035,7 +2035,7 @@
               <mxPoint x="2570" y="3480" />
               <mxPoint x="3830" y="3480" />
               <mxPoint x="3830" y="9300" />
-              <mxPoint x="3050" y="9299.75" />
+              <mxPoint x="3050" y="9311" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -2059,7 +2059,7 @@
               <mxPoint x="3110" y="3380" />
               <mxPoint x="3850" y="3380" />
               <mxPoint x="3850" y="9190" />
-              <mxPoint x="3050" y="9191.6" />
+              <mxPoint x="3050" y="9200.6" />
             </Array>
           </mxGeometry>
         </mxCell>
@@ -2070,7 +2070,7 @@
               <mxPoint x="500" y="8610" />
               <mxPoint x="3080" y="8610" />
               <mxPoint x="3080" y="9120" />
-              <mxPoint x="3050" y="9119.5" />
+              <mxPoint x="3050" y="9127" />
             </Array>
           </mxGeometry>
         </mxCell>
