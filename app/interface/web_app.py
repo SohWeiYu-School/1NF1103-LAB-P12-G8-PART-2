@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import threading
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from flask import (Flask, abort, flash, g, redirect, render_template,
@@ -23,6 +24,8 @@ from app.interface.client_form import ClientForm
 from app.interface.rate_limiter import RateLimiter
 from app.interface.web_templates import TEMPLATES
 from app.model.account import Account
+from app.model.audit_event import AuditEvent
+from app.model.audit_filter import AuditFilter
 from app.model.client_record import ClientRecord
 from app.model.typology import Typology
 
@@ -102,6 +105,10 @@ class WebApp:
     }
     ADMIN_ONLY_REVIEWS: str = "The admin account can only review the audit log."
     AUDIT_ENDPOINTS: tuple[str, ...] = ("audit_log_view", "audit_verify")
+    # The chips above the log: label -> the web address value that removes it.
+    CHIP_KEYS: dict[str, str] = {"Period": "days", "Officer": "actor", "Group": "group",
+                                 "Client": "client_ref", "Result": "result"}
+    SINGAPORE: timezone = timezone(timedelta(hours=8))      # Singapore has no daylight saving: a fixed offset is exact
     NOT_ADMIN: str = "Only the admin can open the audit log."
     CHOOSE_ACCOUNT: str = "Please choose one of the listed accounts."
     MAX_UPLOAD_BYTES: int = 40 * 1024 * 1024     # uploads for auto-fill: 40 MB per request
@@ -127,11 +134,14 @@ class WebApp:
         flask.config["MAX_CONTENT_LENGTH"] = WebApp.MAX_UPLOAD_BYTES
         flask.config["SESSION_COOKIE_SAMESITE"] = "Lax"       # the cookie holds only the signed-in email
         flask.jinja_env.loader = DictLoader(TEMPLATES)
+        flask.jinja_env.filters["sgt"] = self.singapore_time
         flask.jinja_env.globals.update(PEP_OPTIONS=ClientForm.PEP_OPTIONS, PAYMENT_OPTIONS=ClientForm.PAYMENT_METHODS)
         flask.before_request(self.gate)
         flask.context_processor(lambda: {"account": self.__current()})
         flask.add_url_rule('/signin', endpoint='signin', view_func=self.signin, methods=['GET', 'POST'])
         flask.add_url_rule('/signout', endpoint='signout', view_func=self.signout, methods=['POST'])
+        flask.add_url_rule('/audit', endpoint='audit_log_view', view_func=self.audit_log_view)
+        flask.add_url_rule('/audit/verify', endpoint='audit_verify', view_func=self.audit_verify, methods=['POST'])
         flask.add_url_rule('/', endpoint='home', view_func=self.home)
         flask.add_url_rule('/find', endpoint='find', view_func=self.find)
         flask.add_url_rule('/client/new', endpoint='new_client', view_func=self.new_client, methods=['GET', 'POST'])
@@ -231,8 +241,53 @@ class WebApp:
             session["account"] = signed_in.email
             g.account = signed_in
             self.__flash_audit_failure()
-            return redirect(url_for("home"))
+            return redirect(url_for("audit_log_view") if signed_in.is_admin() else url_for("home"))
         return render_template("signin.html", accounts=self.__app.accounts(), problem="")
+
+    def singapore_time(self, text: str) -> str:
+        """An audit time (UTC, 2026-11-16T06:02:11Z) as Singapore time: "16 Nov 2026 14:02". Anything
+        that is not such a time is shown as it is."""
+        try:
+            moment = datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            return str(text)
+        local = moment.astimezone(WebApp.SINGAPORE)
+        return f"{local.day} {local:%b %Y %H:%M}"
+
+    def audit_log_view(self) -> str:
+        """The audit log (admin only, the gate checks): filter bar, chips, one page of events. If the log
+        cannot be read the page says so and shows no table (it never shows an empty log for an error)."""
+        audit_filter = AuditFilter.from_query(request.args)
+        events: list | None = None
+        total, error, anything = 0, "", True
+        try:
+            events, total = self.__app.audit_log(audit_filter)
+            if total == 0:
+                anything = self.__app.audit_log(AuditFilter(days=0))[1] > 0     # is the whole log empty?
+        except ValueError:
+            error = App.AUDIT_UNAVAILABLE
+        query = audit_filter.to_query()
+        chips = [(label, text, url_for("audit_log_view", **{key: value for key, value in query.items()
+                                                            if key not in (WebApp.CHIP_KEYS[label], "page")}))
+                 for label, text in audit_filter.chips()]
+        officers = [account.name for account in self.__app.accounts()] + [App.TERMINAL]
+        if audit_filter.actor and audit_filter.actor not in officers:
+            officers.append(audit_filter.actor)
+        return render_template("audit.html", events=events, total=total, error=error, anything=anything,
+                               audit_filter=audit_filter, query=query, chips=chips, officers=officers,
+                               groups=list(AuditEvent.GROUPS), day_choices=AuditFilter.DAY_CHOICES,
+                               page=audit_filter.page_for(total), pages=audit_filter.page_count(total))
+
+    def audit_verify(self) -> Response:
+        """Check the hash chain of the whole log, say what was found, and show the log again."""
+        try:
+            chain = self.__app.verify_audit_log(self.__actor())
+        except ValueError:
+            flash(App.AUDIT_UNAVAILABLE)
+            return redirect(url_for("audit_log_view"))
+        self.__flash_audit_failure()
+        flash(chain.summary(), "success" if chain.intact() else "warning")
+        return redirect(url_for("audit_log_view"))
 
     def signout(self) -> Response:
         """Sign out: the audit log is told, the session is emptied."""

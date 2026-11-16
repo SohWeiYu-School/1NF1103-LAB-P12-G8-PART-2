@@ -61,7 +61,9 @@ BASE = """<!doctype html>
   <nav>
     {% if account %}
     <a class="nav-link" href="{{ url_for('list_assessments_view') }}">Assessments</a>
-    {% if not account.is_admin() %}
+    {% if account.is_admin() %}
+    <a class="nav-link" href="{{ url_for('audit_log_view') }}">Audit</a>
+    {% else %}
     <form method="post" action="{{ url_for('sync_to_cloud') }}" style="margin:0">
       <button class="nav-link" type="submit" style="cursor:pointer">Sync to Cloud</button>
     </form>
@@ -747,6 +749,106 @@ ERROR = """{% extends "base.html" %}
 {% endblock %}
 """
 
+AUDIT_ROWS = """{% macro event_table(events, show_client=true) %}
+<table class="audit">
+  <thead><tr><th>Time (SGT)</th><th>Who</th><th>What</th>{% if show_client %}<th>Client</th>{% endif %}<th>Details</th><th>Result</th></tr></thead>
+  <tbody>
+  {% for e in events %}
+  <tr>
+    <td style="white-space:nowrap">{{ e.at|sgt }}</td>
+    <td>{{ e.actor }}</td>
+    <td>{{ e.label }}</td>
+    {% if show_client %}<td>{% if e.client_ref %}<a href="{{ url_for('view_client', client_ref=e.client_ref) }}">{{ e.client_ref }}</a>{% endif %}</td>{% endif %}
+    <td>{{ e.summary() }}
+      {% set changes = e.details.get('changes') if e.action == 'client_edited' else none %}
+      {% if changes %}
+      <details><summary>Show the changes</summary>
+        <ul style="margin:6px 0 0; padding-left:18px">
+          {% for c in changes %}<li><code>{{ c.get('field') }}</code>: {{ c.get('before') if c.get('before') is not none else '(empty)' }} &rarr; {{ c.get('after') if c.get('after') is not none else '(empty)' }}</li>{% endfor %}
+        </ul>
+      </details>
+      {% endif %}
+    </td>
+    <td>{% if e.result == 'ok' %}<span class="badge badge-pass">OK</span>{% else %}<span class="badge badge-bad">Failed</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endmacro %}
+"""
+
+AUDIT = """{% extends "base.html" %}
+{% from "audit_rows.html" import event_table %}
+{% block title %}Audit log — Orbit{% endblock %}
+{% block content %}
+<div style="display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px">
+  <h1 style="margin:0">Audit log</h1>
+  <form method="post" action="{{ url_for('audit_verify') }}" style="margin:0">
+    <button type="submit" class="secondary">Verify log</button>
+  </form>
+</div>
+
+{% for problem in audit_filter.problems() %}<div class="notes" style="margin:0 0 10px">{{ problem }}</div>{% endfor %}
+
+<form method="get" action="{{ url_for('audit_log_view') }}" class="panel" style="padding:12px 16px">
+  <div class="grid" style="grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:0 12px">
+    <label>Period
+      <select name="days">
+        {% for d in day_choices %}{% set value = 'all' if d == 0 else d %}
+        <option value="{{ value }}"{{ ' selected' if d == audit_filter.days else '' }}>{{ 'All time' if d == 0 else ('Last 24 hours' if d == 1 else 'Last ' ~ d ~ ' days') }}</option>
+        {% endfor %}
+      </select></label>
+    <label>Officer
+      <select name="actor">
+        <option value="">Everyone</option>
+        {% for name in officers %}<option{{ ' selected' if name == audit_filter.actor else '' }}>{{ name }}</option>{% endfor %}
+      </select></label>
+    <label>Group
+      <select name="group">
+        <option value="">Every group</option>
+        {% for name in groups %}<option{{ ' selected' if name == audit_filter.group else '' }}>{{ name }}</option>{% endfor %}
+      </select></label>
+    <label>Client reference
+      <input name="client_ref" maxlength="40" value="{{ audit_filter.client_ref }}"></label>
+    <label>Result
+      <select name="result">
+        <option value="">Both</option>
+        <option value="ok" {{ 'selected' if audit_filter.result == 'ok' else '' }}>OK</option>
+        <option value="failed" {{ 'selected' if audit_filter.result == 'failed' else '' }}>Failed</option>
+      </select></label>
+  </div>
+  <div class="actions"><button type="submit">Apply filters</button>
+    <a class="button secondary" href="{{ url_for('audit_log_view') }}">Reset</a></div>
+</form>
+
+{% if chips %}
+<div class="actions" style="margin-bottom:12px">
+  {% for label, text, remove in chips %}
+  <span class="badge badge-warn">{{ label }}: {{ text }} <a href="{{ remove }}" aria-label="Remove the {{ label }} filter" style="color:inherit; text-decoration:none">&times;</a></span>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="panel" style="padding:0; overflow:hidden">
+  {% if error %}
+    <p class="muted" style="padding:20px 22px; margin:0">{{ error }}</p>
+  {% elif not events %}
+    <p class="muted" style="padding:20px 22px; margin:0">{{ 'No activity matches these filters.' if anything else 'No activity recorded yet.' }}</p>
+  {% else %}
+    {{ event_table(events) }}
+    <div style="padding:10px 22px; color:var(--muted); font-size:.82rem; border-top:1px solid var(--line); display:flex; justify-content:space-between">
+      <span>{{ total }} event{{ 's' if total != 1 else '' }} &middot; page {{ page }} of {{ pages }}</span>
+      <span>
+        {% if page > 1 %}<a href="{{ url_for('audit_log_view', **dict(query, page=page - 1)) }}">&larr; Newer</a>{% endif %}
+        {% if page > 1 and page < pages %} &middot; {% endif %}
+        {% if page < pages %}<a href="{{ url_for('audit_log_view', **dict(query, page=page + 1)) }}">Older &rarr;</a>{% endif %}
+      </span>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+"""
+
 SIGNIN = """{% extends "base.html" %}
 {% block title %}Sign in — Orbit{% endblock %}
 {% block content %}
@@ -779,6 +881,8 @@ FORBIDDEN = """{% extends "base.html" %}
 """
 
 TEMPLATES: dict[str, str] = {
+    "audit_rows.html": AUDIT_ROWS,
+    "audit.html": AUDIT,
     "signin.html": SIGNIN,
     "forbidden.html": FORBIDDEN,
     "base.html": BASE,

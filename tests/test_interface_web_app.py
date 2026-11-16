@@ -1,7 +1,9 @@
 """WebApp: the browser front end, driven through Flask's test client. No network: the App
 behind it has a made-up AI caller and keeps its files in a temporary folder."""
 
+import html
 import io
+import json
 import re
 import shutil
 import time
@@ -1266,3 +1268,178 @@ class _StopAssessApp(App):
         getattr(self, "_App__audit").save = lambda row: False
         self.refused(actor, "forcing a failed audit line")         # makes the thread's flag True
         return None
+
+
+# ----- the audit log page ----------------------------------------------------------------------
+
+def _put_events(application, count: int, actor: str = "Shareen") -> None:
+    for _ in range(count):
+        application.refused(actor, "opening the audit log")
+
+
+def test_the_admin_signing_in_lands_on_the_audit_log(tmp_path, monkeypatch):
+    application, _, browser = _anonymous(tmp_path, monkeypatch)
+    admin = account_with_role(application, "admin")
+    reply = browser.post("/signin", data={"email": admin.email})
+    assert reply.headers["Location"].endswith("/audit")
+    page = browser.get("/audit")
+    assert page.status_code == 200 and ">Audit</a>" in page.get_data(as_text=True)
+    assert "Signed in as" in page.get_data(as_text=True)
+
+
+def test_an_officer_opening_the_audit_log_gets_a_403_page_and_the_refusal_is_recorded(web):
+    application, _, browser = web
+    officer = account_with_role(application)
+    for method, url in (("get", "/audit"), ("get", "/audit?days=all"), ("post", "/audit/verify")):
+        reply = getattr(browser, method)(url)
+        assert reply.status_code == 403, url
+        assert "Only the admin can open the audit log." in reply.get_data(as_text=True)
+    refused = [event for event in _events(application) if event.action == "access_refused"]
+    assert len(refused) == 3 and {event.actor for event in refused} == {officer.name}
+    assert refused[0].details == {"what": "opening the audit log"}
+    assert ">Audit</a>" not in browser.get("/").get_data(as_text=True)
+
+
+def test_an_empty_log_says_no_activity_recorded_yet(web):
+    _, _, browser = _admin_web(web)
+    page = browser.get("/audit").get_data(as_text=True)
+    assert "No activity recorded yet." in page and "<table" not in page
+
+
+def test_the_log_shows_time_in_singapore_actor_label_client_summary_and_result(web):
+    application, site, browser = _admin_web(web)
+    application.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    ref = sample_case()["client_ref"]
+    page = browser.get("/audit").get_data(as_text=True)
+    event = _events(application)[0]
+    assert site.singapore_time(event.at) in page
+    for shown in ("Shareen", "Client created", f"Created client {ref}", f'href="/client/{ref}"', "badge-pass"):
+        assert shown in page, shown
+
+
+def test_singapore_time_is_eight_hours_ahead_and_odd_text_is_left_alone(web):
+    _, site, _ = web
+    assert site.singapore_time("2026-11-16T06:02:11Z") == "16 Nov 2026 14:02"
+    assert site.singapore_time("2026-12-31T20:30:00Z") == "1 Jan 2027 04:30"
+    assert site.singapore_time("not a time") == "not a time" and site.singapore_time(None) == "None"
+
+
+def test_an_edit_row_lists_before_and_after_in_a_details_block_and_escapes_them(web):
+    application, _, browser = _admin_web(web)
+    record = ClientRecord.from_dict(sample_case())
+    application.save_client(record, "Shareen")
+    application.save_client(ClientRecord.from_dict({**record.to_dict(), "name": "<script>alert(1)</script>"}), "Adrian")
+    page = browser.get("/audit").get_data(as_text=True)
+    assert "<details>" in page and "<code>name</code>" in page and "&rarr;" in page
+    assert sample_case()["name"] in page
+    assert "<script>alert(1)</script>" not in page and "&lt;script&gt;alert(1)&lt;/script&gt;" in page
+
+
+def test_the_filters_narrow_the_log_and_show_a_chip_that_removes_each_one(web):
+    application, _, browser = _admin_web(web)
+    application.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    application.sign_in("adrian@orbit.local")
+    application.sync_to_cloud("Shareen")
+    page = browser.get("/audit?actor=Adrian&group=Sign-in&result=ok&days=30&client_ref=").get_data(as_text=True)
+    assert "Signed in</td>" in page and "Cloud sync</td>" not in page and "Client created</td>" not in page
+    for label in ("Period: Last 30 days", "Officer: Adrian", "Group: Sign-in", "Result: OK"):
+        assert label in page, label
+    assert 'href="/audit?actor=Adrian&amp;group=Sign-in&amp;result=ok"' in page          # the Period chip's remove link
+    assert 'aria-label="Remove the Officer filter"' in page
+    assert re.search(r'<option value="30" selected>', page) and re.search(r"<option selected>Adrian</option>", page)
+    assert "1 event &middot; page 1 of 1" in page
+
+
+def test_a_client_filter_matches_one_clients_events_whatever_the_case(web):
+    application, _, browser = _admin_web(web)
+    ref = sample_case()["client_ref"]
+    application.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    application.sync_to_cloud("Shareen")
+    page = browser.get(f"/audit?client_ref={ref.lower()}").get_data(as_text=True)
+    assert "Client created</td>" in page and "Cloud sync</td>" not in page
+
+
+def test_filters_that_match_nothing_say_so_instead_of_no_activity_yet(web):
+    application, _, browser = _admin_web(web)
+    application.sync_to_cloud("Shareen")
+    page = browser.get("/audit?actor=Nobody").get_data(as_text=True)
+    assert "No activity matches these filters." in page and "No activity recorded yet." not in page
+
+
+def test_bad_filter_values_fall_back_and_are_explained_on_the_page(web):
+    application, _, browser = _admin_web(web)
+    application.sync_to_cloud("Shareen")
+    page = browser.get("/audit?days=999&group=Nonsense&result=maybe&page=zero")
+    assert page.status_code == 200
+    text = html.unescape(page.get_data(as_text=True))
+    for problem in ("'days' must be one of 1, 7, 30, 90 or all", "'group' must be one of Sign-in",
+                    "'result' must be ok or failed", "'page' must be a whole number"):
+        assert problem in text, problem
+    assert "Cloud sync</td>" in text                          # the defaults still show the log
+
+
+def test_the_log_is_paged_fifty_to_a_page_newest_first(web):
+    application, _, browser = _admin_web(web)
+    _put_events(application, 52)
+    application.sync_to_cloud("Adrian")                       # the newest
+    first = browser.get("/audit").get_data(as_text=True)
+    assert first.count("Access refused</td>") == 49 and first.index("Cloud sync</td>") < first.index("Access refused</td>")
+    assert "53 events &middot; page 1 of 2" in first and "Older &rarr;" in first and "Newer" not in first
+    second = browser.get("/audit?page=2").get_data(as_text=True)
+    assert second.count("Access refused</td>") == 3 and "page 2 of 2" in second
+    assert "Newer" in second and "Older" not in second
+    assert "page 2 of 2" in browser.get("/audit?page=99").get_data(as_text=True)      # past the end shows the last page
+    assert 'href="/audit?page=2"' in first
+
+
+def test_verify_log_reports_an_untouched_log_as_a_success_and_records_it(web):
+    application, _, browser = _admin_web(web)
+    _put_events(application, 2)
+    admin = account_with_role(application, "admin")
+    reply = browser.post("/audit/verify")
+    assert reply.status_code == 302 and reply.headers["Location"].endswith("/audit")
+    with browser.session_transaction() as session:
+        assert [category for category, _ in session["_flashes"]] == ["success"]
+    page = browser.get("/audit").get_data(as_text=True)
+    assert 'class="msg msg-success"' in page and "No changes found in the 2 entries." in page
+    last = _events(application)[-1]
+    assert (last.action, last.actor, last.result) == ("audit_verified", admin.name, "ok")
+
+
+def test_verify_log_after_the_file_was_changed_shows_a_warning(web, tmp_path):
+    application, _, browser = _admin_web(web)
+    _put_events(application, 3)
+    path = tmp_path / "local database" / "audit_log.json"
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    rows[1]["actor"] = "Somebody Else"
+    path.write_text(json.dumps(rows), encoding="utf-8")
+    browser.post("/audit/verify")
+    page = browser.get("/audit").get_data(as_text=True)
+    assert 'class="msg msg-warning"' in page and "changed outside the app" in page
+    assert _events(application)[-1].result == "failed"
+
+
+def test_an_unreadable_audit_log_says_so_and_shows_no_table(web, tmp_path):
+    application, _, browser = _admin_web(web)
+    application.sync_to_cloud("Shareen")
+    path = tmp_path / "local database" / "audit_log.json"
+    path.unlink()
+    path.mkdir()                                              # cannot be read as a file
+    page = browser.get("/audit")
+    assert page.status_code == 200
+    text = page.get_data(as_text=True)
+    assert html.unescape(text).count(App.AUDIT_UNAVAILABLE) == 1 and "<table" not in text and "No activity" not in text
+    browser.post("/audit/verify")
+    assert App.AUDIT_UNAVAILABLE in _flashes(browser)
+
+
+def test_the_filter_form_offers_every_account_the_terminal_and_every_group(web):
+    application, _, browser = _admin_web(web)
+    page = browser.get("/audit").get_data(as_text=True)
+    for account in application.accounts():
+        assert f"<option>{account.name}</option>" in page
+    assert "<option>terminal</option>" in page
+    for group in ("Sign-in", "Client", "Documents", "Assessment", "System"):
+        assert f"<option>{group}</option>" in page
+    for choice in ("all", "1", "7", "30", "90"):
+        assert f'<option value="{choice}"' in page
