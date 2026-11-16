@@ -137,6 +137,7 @@ class WebApp:
         flask.config["SESSION_COOKIE_SAMESITE"] = "Lax"       # the cookie holds only the signed-in email
         flask.jinja_env.loader = DictLoader(TEMPLATES)
         flask.jinja_env.filters["sgt"] = self.singapore_time
+        flask.jinja_env.filters["shown"] = self.shown_value
         flask.jinja_env.globals.update(PEP_OPTIONS=ClientForm.PEP_OPTIONS, PAYMENT_OPTIONS=ClientForm.PAYMENT_METHODS)
         flask.before_request(self.gate)
         flask.context_processor(lambda: {"account": self.__current()})
@@ -246,6 +247,18 @@ class WebApp:
             self.__flash_audit_failure()
             return redirect(url_for("audit_log_view") if signed_in.is_admin() else url_for("home"))
         return render_template("signin.html", accounts=self.__app.accounts(), problem="")
+
+    def shown_value(self, value: Any) -> str:
+        """One value from an audit change as the pages show numbers: thousands separators and no trailing
+        .0 on a whole number (16500000 and 9500000.0 show as 16,500,000 and 9,500,000). Text is unchanged;
+        nothing (None) is "(empty)"."""
+        if value is None:
+            return "(empty)"
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return str(value)
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
+        return f"{value:,}"
 
     def singapore_time(self, text: str) -> str:
         """An audit time (UTC, 2026-11-16T06:02:11Z) as Singapore time: "16 Nov 2026 14:02". Anything

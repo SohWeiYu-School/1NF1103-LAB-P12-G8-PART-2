@@ -777,7 +777,7 @@ AUDIT_ROWS = """{% macro event_table(events, show_client=true) %}
       {% if changes %}
       <details><summary>Show the changes</summary>
         <ul style="margin:6px 0 0; padding-left:18px">
-          {% for c in changes %}<li><code>{{ c.get('field') }}</code>: {{ c.get('before') if c.get('before') is not none else '(empty)' }} &rarr; {{ c.get('after') if c.get('after') is not none else '(empty)' }}</li>{% endfor %}
+          {% for c in changes %}<li><code>{{ c.get('field') }}</code>: {{ c.get('before')|shown }} &rarr; {{ c.get('after')|shown }}</li>{% endfor %}
         </ul>
       </details>
       {% endif %}

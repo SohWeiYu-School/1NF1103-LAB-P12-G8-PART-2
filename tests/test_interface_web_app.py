@@ -1649,3 +1649,27 @@ def test_a_failed_audit_request_then_a_good_one_on_the_same_thread_shows_no_stal
     shown = browser.post("/sync", follow_redirects=True).get_data(as_text=True)
     assert application.audit_write_failed() is False
     assert "could not be written" not in shown
+
+
+def test_shown_value_writes_numbers_like_the_rest_of_the_app(web):
+    _, site, _ = web
+    for value, expected in ((16500000, "16,500,000"), (9500000.0, "9,500,000"), (7.5, "7.5"),
+                            (1234.25, "1,234.25"), (0, "0"), (-2500000.0, "-2,500,000"),
+                            (None, "(empty)"), ("Daniel Tan", "Daniel Tan"), (True, "True"),
+                            ("16500000", "16500000"), (["SG", "UK"], "['SG', 'UK']")):
+        assert site.shown_value(value) == expected, value
+
+
+def test_an_edit_in_the_log_and_the_history_shows_numbers_with_separators(web):
+    application, _, browser = web
+    ref = sample_case()["client_ref"]
+    record = ClientRecord.from_dict(sample_case())
+    application.save_client(record, "Shareen")
+    data = record.to_dict()
+    data["claims"] = {**data["claims"], "declared_net_worth": 9500000.0}
+    application.save_client(ClientRecord.from_dict(data), "Shareen")
+    old = f"{sample_case()['claims']['declared_net_worth']:,.0f}"
+    history = browser.get(f"/client/{ref}").get_data(as_text=True)
+    assert f"{old} &rarr; 9,500,000</li>" in history and "9500000.0" not in history
+    sign_in(browser, application, "admin")
+    assert f"{old} &rarr; 9,500,000</li>" in browser.get("/audit").get_data(as_text=True)
