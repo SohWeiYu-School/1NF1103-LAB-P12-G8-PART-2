@@ -331,15 +331,17 @@ VIEW = """{% extends "base.html" %}
   <h2>Assessment History</h2>
   <p class="muted">The assessment history cannot be shown because the saved assessments could not be read.</p>
 </div>
-{% elif assessments %}
+{% elif assessments or archived_count %}
 <div class="panel" style="margin-bottom:20px">
   <h2>Assessment History</h2>
-  <table>
+  <table style="table-layout:fixed">
+    <colgroup><col style="width:17%"><col style="width:15%"><col style="width:34%"><col style="width:12%"><col style="width:22%"></colgroup>
     {% for a in assessments %}
-    <tr>
+    {% set state = archive_states.get(a.get('assessment_id'), 'active') %}
+    <tr{% if state != 'active' %} style="opacity:.55"{% endif %}>
       <td>{{ a.get('assessed_at', '')[:10] }}</td>
       <td>{{ a.get('assessed_at', '')[11:16] }} UTC</td>
-      <td>{{ (a.get('outcome') or (a.get('assessment') or {}).get('outcome') or '—').replace('_', ' ') }}</td>
+      <td>{{ (a.get('outcome') or (a.get('assessment') or {}).get('outcome') or '—').replace('_', ' ') }}{% if state == 'archived' %} (archived){% elif state == 'unreadable' %} (archive state unreadable){% endif %}</td>
       <td>
         {% if a.get('assessment_id') %}
         <a href="{{ url_for('view_assessment', assessment_id=a.get('assessment_id')) }}">View</a>
@@ -347,9 +349,21 @@ VIEW = """{% extends "base.html" %}
         <span class="muted">—</span>
         {% endif %}
       </td>
+      <td>
+        {% if a.get('assessment_id') and state != 'unreadable' %}
+        <form method="post" action="{{ url_for('restore_assessment' if state == 'archived' else 'archive_assessment', assessment_id=a.get('assessment_id')) }}" style="margin:0">
+          <button type="submit" class="secondary">{{ 'Restore' if state == 'archived' else 'Archive' }}</button>
+        </form>
+        {% endif %}
+      </td>
     </tr>
     {% endfor %}
   </table>
+  {% if show_archived %}
+  <p style="margin:12px 0 0"><a href="{{ url_for('view_client', client_ref=record.get('client_ref', '')) }}">Hide archived</a></p>
+  {% elif archived_count %}
+  <p style="margin:12px 0 0"><a href="{{ url_for('view_client', client_ref=record.get('client_ref', ''), archived='1') }}">Show archived ({{ archived_count }})</a></p>
+  {% endif %}
 </div>
 {% endif %}
  
@@ -425,6 +439,17 @@ ASSESS_RESULT = """{% extends "base.html" %}
 <div class="actions" style="margin-bottom:16px">
   <a class="button secondary" href="{{ url_for('view_client', client_ref=record.get('client_ref', '')) }}">Back to client</a>
 </div>
+
+{% if archive_state == 'unreadable' %}
+<div class="msg">This assessment's archive record is damaged, so it cannot be archived or restored.</div>
+{% elif archive %}
+<div class="msg" style="display:flex; justify-content:space-between; align-items:center; gap:12px">
+  <span>This assessment is archived{% if archive.get('at') %} (since {{ archive['at'][:10] }}){% endif %}{% if archive.get('reason') %}: {{ archive['reason'] }}{% endif %}. It is hidden from the lists but kept as a record. The client's current outcome is not changed.</span>
+  <form method="post" action="{{ url_for('restore_assessment', assessment_id=assessment_id) }}" style="margin:0">
+    <button type="submit" class="secondary">Restore</button>
+  </form>
+</div>
+{% endif %}
 
 {% if report %}
 {% set h = report['header'] %}
@@ -564,6 +589,8 @@ ASSESSMENTS = """{% extends "base.html" %}
 <div class="panel">
   {% if assessments is none %}
     <p class="muted">The saved assessments cannot be shown because they could not be read.</p>
+  {% elif not assessments and archived_count %}
+    <p class="muted">All {{ archived_count }} assessment(s) are archived. Open a client and click Show archived to see them.</p>
   {% elif not assessments %}
     <p class="muted">No assessments saved yet. Open a client and click Run Assessment.</p>
   {% else %}

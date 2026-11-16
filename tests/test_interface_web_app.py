@@ -731,3 +731,168 @@ def test_the_secret_key_from_env_is_used(tmp_path, monkeypatch):
     monkeypatch.setenv("MONGODB_URI", "")
     monkeypatch.setenv("SECRET_KEY", "a-key-for-this-test")
     assert WebApp(App(None, data_folder=str(tmp_path))).flask().secret_key == "a-key-for-this-test"
+
+
+# ----- archive and restore -------------------------------------------------------------------
+
+def _two_assessments(application):
+    application.clients().save(sample_case())
+    ref = sample_case()["client_ref"]
+    for number in (1, 2):
+        assert application.assessments().save({
+            "assessment_id": f"A{number}", "client_ref": ref, "kind": "onboarding", "outcome": "PASSED",
+            "assessed_at": f"2026-0{number}-05T10:30:00+00:00", "report": None})
+    return ref
+
+
+def test_archive_hides_an_assessment_and_says_it_is_not_deleted(web):
+    application, _, client = web
+    ref = _two_assessments(application)
+    reply = client.post("/assessment/A1/archive")
+    assert reply.status_code == 302 and reply.headers["Location"].endswith(f"/client/{ref}")
+    assert "Assessment archived. It is hidden from the lists, not deleted." in _flashes(client)
+    assert [a["assessment_id"] for a in application.all_assessments()] == ["A2"]
+    assert len(application.assessments().load()) == 2
+
+
+def test_archive_and_restore_need_post_and_an_assessment_that_exists(web):
+    application, _, client = web
+    _two_assessments(application)
+    assert client.get("/assessment/A1/archive").status_code != 200          # a link cannot archive
+    assert "archive_log" not in application.find_assessment("A1")
+    assert client.post("/assessment/NOPE/archive").status_code == 404
+    assert client.post("/assessment/NOPE/restore").status_code == 404
+
+
+def test_archiving_twice_and_restoring_an_active_one_say_so(web):
+    application, _, client = web
+    _two_assessments(application)
+    client.post("/assessment/A1/restore")
+    assert "This assessment is not archived." in _flashes(client)
+    client.post("/assessment/A1/archive")
+    client.post("/assessment/A1/archive")
+    assert "This assessment is already archived." in _flashes(client)
+    assert len(application.find_assessment("A1")["archive_log"]) == 1
+
+
+def test_restore_brings_it_back_and_keeps_the_archived_view_while_others_are_archived(web):
+    application, _, client = web
+    ref = _two_assessments(application)
+    client.post("/assessment/A1/archive")
+    client.post("/assessment/A2/archive")
+    reply = client.post("/assessment/A1/restore")
+    assert reply.headers["Location"].endswith(f"/client/{ref}?archived=1")
+    assert "Assessment restored." in _flashes(client)
+    reply = client.post("/assessment/A2/restore")
+    assert reply.headers["Location"].endswith(f"/client/{ref}")
+
+
+def test_a_damaged_archive_record_cannot_be_changed(web):
+    application, _, client = web
+    ref = _two_assessments(application)
+    records = application.assessments().load()
+    records[0]["archive_log"] = "broken"
+    application.assessments()._write_all(records)
+    for action in ("archive", "restore"):
+        client.post(f"/assessment/A1/{action}")
+        assert "This assessment's archive record is damaged, so it cannot be changed." in _flashes(client)
+    assert application.assessments().find("A1")["archive_log"] == "broken"
+
+
+def test_archiving_that_could_not_be_saved_says_so(web, monkeypatch):
+    application, _, client = web
+    _two_assessments(application)
+    monkeypatch.setattr(application.assessments(), "_write_all", lambda records: False)
+    client.post("/assessment/A1/archive")
+    assert "The assessment was not archived because saving failed. Please try again later." in _flashes(client)
+    assert "archive_log" not in application.find_assessment("A1")
+    application.assessments().__dict__.pop("_write_all")
+    client.post("/assessment/A1/archive")
+    monkeypatch.setattr(application.assessments(), "_write_all", lambda records: False)
+    client.post("/assessment/A1/restore")
+    assert "The assessment was not restored because saving failed. Please try again later." in _flashes(client)
+
+
+def test_archiving_from_a_damaged_file_goes_home_with_the_safe_message(web, tmp_path):
+    _, _, client = web
+    _damage(tmp_path, "ai_assessments.json")
+    for action in ("archive", "restore"):
+        reply = client.post(f"/assessment/A1/{action}")
+        assert reply.status_code == 302 and reply.headers["Location"].endswith("/")
+        assert App.ASSESSMENTS_UNAVAILABLE in _flashes(client)
+
+
+def test_the_client_page_hides_archived_ones_and_can_show_them(web):
+    application, _, client = web
+    ref = _two_assessments(application)
+    client.post("/assessment/A1/archive")
+    page = client.get(f"/client/{ref}").get_data(as_text=True)
+    assert "/assessment/A2/archive" in page and "/assessment/A1/" not in page
+    assert "Show archived (1)" in page and "(archived)" not in page
+    page = client.get(f"/client/{ref}?archived=1").get_data(as_text=True)
+    assert "/assessment/A1/restore" in page and "/assessment/A2/archive" in page
+    assert "(archived)" in page and "Hide archived" in page and "Show archived" not in page
+
+
+def test_a_client_whose_assessments_are_all_archived_still_has_the_history_panel(web):
+    application, _, client = web
+    ref = _two_assessments(application)
+    client.post("/assessment/A1/archive")
+    client.post("/assessment/A2/archive")
+    page = client.get(f"/client/{ref}").get_data(as_text=True)
+    assert "Assessment History" in page and "Show archived (2)" in page
+
+
+def test_a_damaged_archive_record_is_marked_and_has_no_button(web):
+    application, _, client = web
+    ref = _two_assessments(application)
+    records = application.assessments().load()
+    records[0]["archive_log"] = [{"action": "bogus"}]
+    application.assessments()._write_all(records)
+    page = client.get(f"/client/{ref}?archived=1").get_data(as_text=True)
+    assert "(archive state unreadable)" in page
+    assert "/assessment/A1/archive" not in page and "/assessment/A1/restore" not in page
+    assert "/assessment/A2/archive" in page
+
+
+def test_an_archived_assessment_page_has_a_banner_with_the_date_and_reason(web):
+    application, _, client = web
+    _two_assessments(application)
+    assert application.assessments().archive("A1", "entered twice") == App.ARCHIVE_CHANGED
+    page = client.get("/assessment/A1").get_data(as_text=True)
+    assert "This assessment is archived (since " in page and ": entered twice. It is hidden from the lists" in page
+    assert "The client's current outcome is not changed." in page
+    assert "/assessment/A1/restore" in page
+    assert "archived" not in client.get("/assessment/A2").get_data(as_text=True).split("<h1>")[1]
+
+
+def test_a_damaged_archive_record_gives_a_banner_and_no_button_on_the_assessment_page(web):
+    application, _, client = web
+    _two_assessments(application)
+    records = application.assessments().load()
+    records[0]["archive_log"] = "broken"
+    application.assessments()._write_all(records)
+    page = client.get("/assessment/A1").get_data(as_text=True)
+    assert "This assessment's archive record is damaged, so it cannot be archived or restored." in page
+    assert "/assessment/A1/restore" not in page and "/assessment/A1/archive" not in page
+
+
+def test_an_assessment_page_uses_the_name_the_client_had_when_it_was_assessed(web):
+    application, _, client = web
+    ref = _two_assessments(application)
+    records = application.assessments().load()
+    records[0]["case"] = {"name": "Old Name Pte"}
+    application.assessments()._write_all(records)
+    assert "Old Name Pte" in client.get("/assessment/A1").get_data(as_text=True)
+    assert "Old Name Pte" not in client.get("/assessment/A2").get_data(as_text=True)
+
+
+def test_the_assessments_page_hides_archived_ones_and_says_when_all_are_archived(web):
+    application, _, client = web
+    _two_assessments(application)
+    client.post("/assessment/A1/archive")
+    page = client.get("/assessments").get_data(as_text=True)
+    assert "/assessment/A2" in page and "/assessment/A1" not in page
+    client.post("/assessment/A2/archive")
+    page = client.get("/assessments").get_data(as_text=True)
+    assert "All 2 assessment(s) are archived." in page and "No assessments saved yet" not in page
