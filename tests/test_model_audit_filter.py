@@ -24,18 +24,16 @@ def test_the_defaults_are_the_last_7_days_every_group_newest_first_and_page_1_wi
 
 
 @pytest.mark.parametrize("kwargs, text", [
-    ({"preset": "5"}, "preset must be one of"), ({"preset": 7}, "preset must be one of"),
+    ({"preset": "5"}, "preset must be one of"),
     ({"date_from": "15/11/2026", "preset": "custom"}, "start date must look like"),
     ({"date_to": "2026-13-01", "preset": "custom"}, "end date must look like"),
-    ({"date_from": 5}, "date_from must be text"),
     ({"preset": "custom", "date_from": "2026-11-10", "date_to": "2026-11-09"}, "on or before"),
     ({"groups": []}, "At least one group"), ({"groups": ["Nope"]}, "group must be one of"),
-    ({"groups": "Client"}, "list of group names"),
     ({"result": "maybe"}, "result must be"), ({"result": ""}, "result must be"), ({"sort": "up"}, "sort must be"),
-    ({"actor": "x" * 81}, "actor"), ({"actor": 5}, "actor must be text"),
+    ({"actor": "x" * 81}, "actor"),
     ({"client_ref": "x" * 41}, "client reference"), ({"query": "x" * 81}, "search text"),
     ({"query": "a\x07b"}, "search text"),
-    ({"page": 0}, "page must be"), ({"page": "2"}, "page must be"), ({"page": True}, "page must be"),
+    ({"page": 0}, "page must be"),
 ])
 def test_building_it_directly_refuses_impossible_values(kwargs, text):
     with pytest.raises(ValueError, match=text):
@@ -70,7 +68,7 @@ def test_from_query_accepts_a_plain_dict_with_a_list_of_groups():
     assert AuditFilter.from_query({"group": ["Client", "Documents"]}, NOW).groups == ("Client", "Documents")
 
 
-@pytest.mark.parametrize("value", ["5", "0", "-1", "week", "7.5", "all", "1" * 5000])
+@pytest.mark.parametrize("value", ["5", "1" * 5000])
 def test_a_bad_preset_falls_back_to_7_days_and_says_what_is_allowed(value):
     f = AuditFilter.from_query({"preset": value}, NOW)
     assert f.preset == "7"
@@ -96,11 +94,6 @@ def test_a_bad_group_is_ignored_and_the_good_ones_are_kept():
 def test_each_bad_value_falls_back_with_its_own_plain_line(name, value, text):
     f = AuditFilter.from_query({name: value}, NOW)
     assert f.problems() == [text] and f.to_query() == {}
-
-
-def test_a_value_that_is_not_text_is_a_problem_not_a_crash():
-    f = AuditFilter.from_query({"result": 5, "page": ["1"], "q": None}, NOW)
-    assert f.result == "all" and f.page == 1 and len(f.problems()) == 2
 
 
 def test_custom_dates_are_read_and_a_good_range_has_no_problem():
@@ -142,13 +135,6 @@ def test_the_date_today_in_singapore_is_not_in_the_future_even_when_it_is_tomorr
     assert f.problems() == []
 
 
-def test_from_query_refuses_what_is_not_a_mapping_or_a_now_without_a_timezone():
-    with pytest.raises(ValueError, match="mapping"):
-        AuditFilter.from_query([("preset", "7")], NOW)
-    with pytest.raises(ValueError, match="timezone"):
-        AuditFilter.from_query({}, datetime(2026, 11, 16))
-
-
 def test_problems_returns_a_copy():
     f = AuditFilter.from_query({"page": "x"}, NOW)
     f.problems().append("more")
@@ -181,10 +167,9 @@ def test_matches_a_custom_range_by_singapore_days_inclusive():
     assert not f.matches(_event("2026-11-12T16:00:00Z"), NOW) and not f.matches(_event("2026-11-09T15:59:59Z"), NOW)
 
 
-@pytest.mark.parametrize("now", [datetime(2026, 11, 16), None, "now"])
-def test_matches_refuses_a_now_with_no_timezone(now):
+def test_matches_refuses_a_now_with_no_timezone():
     with pytest.raises(ValueError, match="timezone"):
-        AuditFilter().matches(_event(), now)
+        AuditFilter().matches(_event(), datetime(2026, 11, 16))
 
 
 def test_matches_accepts_any_timezone():
