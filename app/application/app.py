@@ -727,6 +727,13 @@ class App:
         """The model name the AI caller reports, or "" when there is no caller."""
         return getattr(self.__ai_caller, "model_name", lambda: "")() if self.__ai_caller else ""
 
+    def __ai_search_model(self) -> str:
+        """The model the AI caller uses for a web search (research), or the normal model's name
+        when the caller has no separate one."""
+        if not self.__ai_caller:
+            return ""
+        return getattr(self.__ai_caller, "search_model_name", self.__ai_model)()
+
     def __create_document_ai(self) -> DocumentAI:
         """The document reader. It gets no caller when the AI is unavailable, so it then uses
         saved replies only."""
@@ -743,7 +750,7 @@ class App:
         settings = self.forecast_settings()
         return AssessmentRunner(
             self.__config,
-            ResearchAI("ai", self.__ai_caller, model, 0.0, cache, policy.get("research_max_reports", 8),
+            ResearchAI("ai", self.__ai_caller, self.__ai_search_model(), 0.0, cache, policy.get("research_max_reports", 8),
                        policy.get("research_max_excerpts_per_report", 5)),
             TypologyAI("ai", self.__ai_caller, model, 0.0, cache, policy.get("typology_max_patterns", 5)),
             BenchmarkAI("ai", self.__ai_caller, model, 0.0, cache),

@@ -736,3 +736,18 @@ def test_find_client_hides_the_technical_text_of_a_badly_laid_out_record(app, ca
     assert "not in the expected layout" in str(error.value)
     assert "attribute" not in str(error.value)                  # the technical details stay in the log
     assert "App.find_client" in caplog.text
+
+
+def test_the_research_asks_with_the_callers_research_model(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    caller = fake_ai.caller()
+    caller.search_model_name = lambda: "research-model"
+    application = App(caller, data_folder=str(tmp_path))
+    case = sample_case()
+    fake_services.save_forecast_replies(application.response_cache(), case)
+    assert application.assess(case) is not None
+    models = {key: options.get("model") for key, options in caller.asked}
+    assert models["reports"] == "research-model"                       # the web search
+    assert models["sector_typologies"] == "fake-model"                 # everything else
+    assert models["expected_wealth"] == "fake-model"
