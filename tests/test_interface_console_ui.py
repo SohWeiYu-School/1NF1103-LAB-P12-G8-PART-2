@@ -196,3 +196,9 @@ def test_a_known_age_or_employer_size_is_shown_and_kept_on_enter():
     assert ui.keep_int("Age", 51, 18, 120) == 51
     assert ui.keep_count("Employer size", "2500") == "2500"
     assert ask.asked == ["Age [51]: ", "Employer size [2500]: "]
+
+
+def test_the_main_menu_shows_the_product_name_orbit():
+    shown = []
+    ConsoleUI(read=_answers("1"), write=shown.append).show_app_menu()
+    assert any("ORBIT" in line for line in shown)

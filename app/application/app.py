@@ -42,7 +42,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 
 
 class App:
-    """The Source of Wealth screening system.
+    """Orbit, the Source of Wealth screening system.
 
     App is the only place that knows about all four managers. It creates the Data, AI,
     Logic and IO objects, keeps them, and passes data between them; the managers never

@@ -35,7 +35,7 @@ class ConsoleUI:
     def show_app_menu(self) -> str:
         """Display the unified main menu and return the user's choice (1-8)."""
         self.__write("\n========================================")
-        self.__write("     SOURCE OF WEALTH SCREENING SYSTEM")
+        self.__write("     ORBIT · SOURCE OF WEALTH SCREENING")
         self.__write("========================================")
         self.__write("1. New Client (type in, then the combined assessment)")
         self.__write("2. New Client from Documents (auto-fill from a folder of documents)")
