@@ -92,7 +92,7 @@ def test_a_rate_limit_setting_that_cannot_be_right_is_reported(tmp_path):
     assert any("enabled" in p and "'yes'" in p for p in problems)
 
 
-def test_a_rate_limit_with_no_cooldown_is_not_a_problem_and_has_no_default_here(tmp_path):
+def test_a_rate_limit_with_no_cooldown_is_not_a_problem(tmp_path):
     import shutil
     folder = tmp_path / "config"
     shutil.copytree("config", folder)
