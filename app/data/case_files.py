@@ -1,4 +1,4 @@
-"""CaseFiles: the case files kept on disk (the samples and the recorded AI replies)."""
+"""CaseFiles: the case files kept on disk (the sample cases and the input schema)."""
 
 import json
 import logging
@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class CaseFiles:
-    """Reads single JSON files: a sample case, a schema, a file of recorded AI replies.
+    """Reads single JSON files: a sample case or a schema.
     A missing or damaged file gives the default instead of an error.
 
     folder is where the sample cases are kept.

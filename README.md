@@ -137,8 +137,10 @@ python main.py                                  # the menu
 python main.py --web                            # the web app
 python main.py --case data/sample/case_001.json # assess one case file
 python main.py --all-samples                    # assess every sample case
-python main.py --all-samples --demo             # the same, with recorded AI replies (no API key)
 ```
+
+On a Mac, port 5000 is often taken by AirPlay. Start the web app on another port instead:
+`PORT=5001 python main.py --web`, then open http://127.0.0.1:5001.
 
 ---
 
