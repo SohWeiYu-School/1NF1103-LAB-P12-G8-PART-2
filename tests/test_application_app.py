@@ -1412,3 +1412,39 @@ def test_an_archive_that_changed_something_says_saved_and_one_that_changed_nothi
     assert app.audit_write_failed() is True and App.AUDIT_NOT_WRITTEN in capsys.readouterr().out
     app.archive_assessment("A1")                                               # already archived: no line, no message
     assert app.audit_write_failed() is False and capsys.readouterr().out == ""
+
+
+def test_without_an_audit_key_app_is_built_but_start_and_start_web_stop_with_a_message(tmp_path, monkeypatch, capsys,
+                                                                                       caplog):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    monkeypatch.delenv("AUDIT_KEY", raising=False)
+    import shutil
+    shutil.copytree("config", tmp_path / "root" / "config")      # a root with no .env, so no key is read from it
+    application = App(ai_caller=None, root=str(tmp_path / "root"), data_folder=str(tmp_path / "data"))
+    assert not application.audit_key_ok()
+    for run in (lambda: application.start([]), lambda: application.start(["--web"]), application.start_web):
+        assert run() == 1
+        out = capsys.readouterr().out
+        assert App.AUDIT_KEY_MISSING in out and "AUDIT_KEY" not in out
+    assert "AUDIT_KEY" in caplog.text                         # the real reason is logged
+    with pytest.raises(ValueError, match="key is missing"):
+        application.verify_audit_log("Orbit Admin")
+
+
+def test_an_audit_key_shorter_than_32_characters_counts_as_not_set(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    monkeypatch.setenv("AUDIT_KEY", "short-secret")
+    application = App(ai_caller=None, data_folder=str(tmp_path / "data"))
+    assert not application.audit_key_ok() and application.start_web() == 1
+    assert App.AUDIT_KEY_MISSING in capsys.readouterr().out
+
+
+def test_verify_with_a_different_key_than_the_log_was_written_with_reports_changes(app, tmp_path, monkeypatch):
+    app.sync_to_cloud()
+    app.sync_to_cloud()
+    monkeypatch.setenv("AUDIT_KEY", "f" * 64)
+    other = App(ai_caller=None, data_folder=str(tmp_path))
+    chain = other.verify_audit_log("Orbit Admin")
+    assert not chain.intact() and "entries 1, 2 do not match" in chain.summary()

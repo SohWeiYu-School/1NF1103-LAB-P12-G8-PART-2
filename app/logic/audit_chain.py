@@ -10,8 +10,10 @@ class AuditChain:
 
     A row breaks the chain when its hash does not match its content, its previous_hash is not the
     hash of the row before it (the all-zero start hash for the first), or its sequence is not the
-    one before plus 1. A row that cannot be read as an event is itself a break. The work is done
-    once, when the object is made.
+    one before plus 1, or when the saved row is not exactly the event built from it (extra or missing
+    keys, untrimmed text). The hashes are made with a secret key, so a row rewritten by someone who
+    does not know the key breaks the chain. A row that cannot be read as an event is itself a break.
+    The work is done once, when the object is made.
 
     Breaks are named by the row's 1-based position in the file, not by the sequence stored in it,
     because a changed row's own sequence cannot be trusted. The hash covers the fields as AuditEvent
@@ -23,11 +25,16 @@ class AuditChain:
     MAX_NAMED: int = 5            # how many entry numbers the summary names before "and N more"
     __HASH_PATTERN: str = r"^[0-9a-f]{64}$"
 
-    def __init__(self, rows: list[dict] | None = None) -> None:
-        """rows are the saved rows in file order. Raises ValueError if rows is not a list."""
+    def __init__(self, rows: list[dict] | None = None, key: str = "") -> None:
+        """rows are the saved rows in file order; key is the secret the hashes were made with. Raises
+        ValueError if rows is not a list, or if there are rows and key is empty (nothing can be checked
+        without the key; an empty list needs no key)."""
         rows = [] if rows is None else rows
         if not isinstance(rows, list):
             raise ValueError("The audit rows must be a list.")
+        if rows and (not isinstance(key, str) or not key):
+            raise ValueError("The audit key is empty: the log cannot be checked without it.")
+        self.__key: str = key if isinstance(key, str) else ""
         self.__rows: list[dict] = list(rows)
         self.__events: list[AuditEvent] = []
         self.__unreadable: list[int] = []         # 1-based row numbers
@@ -58,7 +65,10 @@ class AuditChain:
                                      and sequence >= 1 else expected_sequence) + 1
                 continue
             self.__events.append(event)
-            broken = (not event.hash_matches()
+            # A row also breaks if it is not exactly what the event would be saved as: padded text, extra
+            # keys or left-out default keys do not change the hash, which covers the normalised fields.
+            broken = (not event.hash_matches(self.__key)
+                      or row != event.to_dict()
                       or (expected_hash is not None and event.previous_hash != expected_hash)
                       or event.sequence != expected_sequence)
             if broken:

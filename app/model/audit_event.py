@@ -1,6 +1,7 @@
 """AuditEvent: one line of the audit log, sealed into a hash chain."""
 
 import hashlib
+import hmac
 import json
 import re
 import uuid
@@ -13,6 +14,8 @@ class AuditEvent:
     A new event is unsealed (sequence 0, no hash). The repository seals it onto the end of the
     chain with seal(): that fixes its place (sequence), the hash of the line before it, and its own
     hash, which covers every other field. Change any field later and hash_matches() turns False.
+    The hash is an HMAC: it is made with a secret key, so someone who edits the file and does not
+    know the key cannot work out a hash that matches.
 
     The hash covers the fields as this class normalises them (text trimmed, details rewritten as
     plain JSON), not the raw bytes in the file. The chain can only show that the log is consistent
@@ -170,17 +173,21 @@ class AuditEvent:
         """A short plain label for the action ("Client edited"); "" for an unset event."""
         return AuditEvent.LABELS.get(self.__action, "")
 
-    def compute_hash(self) -> str:
-        """The SHA-256 of every field except the hash, written as sorted, compact JSON. The same
-        fields always give the same hash. Raises ValueError for an unset event (no action)."""
+    def compute_hash(self, key: str) -> str:
+        """The HMAC-SHA-256, made with key, of every field except the hash, written as sorted, compact
+        JSON. The same fields and key always give the same hash. Raises ValueError for an empty key or
+        an unset event (no action)."""
+        if not isinstance(key, str) or not key:
+            raise ValueError("The audit key is empty: a hash cannot be made without it.")
         data = self.to_dict()
         del data["hash"]
         text = json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+        return hmac.new(key.encode("utf-8"), text.encode("utf-8"), hashlib.sha256).hexdigest()
 
-    def seal(self, sequence: int, previous_hash: str) -> None:
-        """Fix this event's place in the chain and set its hash. Raises ValueError for a sequence
-        below 1, a previous hash that is not 64 lowercase hex characters, or an event with no action."""
+    def seal(self, sequence: int, previous_hash: str, key: str) -> None:
+        """Fix this event's place in the chain and set its hash, made with key. Raises ValueError for a
+        sequence below 1, a previous hash that is not 64 lowercase hex characters, an empty key, or an
+        event with no action."""
         if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1:
             raise ValueError(f"A sealed event needs a sequence of 1 or more (got {sequence!r}).")
         if not isinstance(previous_hash, str) or not re.match(AuditEvent.__HASH_PATTERN, previous_hash):
@@ -188,17 +195,20 @@ class AuditEvent:
                              "(the first entry uses 64 zeros).")
         if not self.__action:
             raise ValueError("An event with no action cannot be sealed.")
+        if not isinstance(key, str) or not key:
+            raise ValueError("The audit key is empty: an event cannot be sealed without it.")
         self.__sequence = sequence
         self.__previous_hash = previous_hash
-        self.__hash = self.compute_hash()
+        self.__hash = self.compute_hash(key)
 
     def is_sealed(self) -> bool:
         """True once seal() has given it a sequence and a hash."""
         return self.__sequence >= 1 and bool(self.__hash)
 
-    def hash_matches(self) -> bool:
-        """True if the stored hash is the hash of the fields as they are now."""
-        return bool(self.__hash) and self.__hash == self.compute_hash()
+    def hash_matches(self, key: str) -> bool:
+        """True if the stored hash is the hash, made with key, of the fields as they are now. Raises
+        ValueError for an empty key."""
+        return bool(self.__hash) and hmac.compare_digest(self.__hash, self.compute_hash(key))
 
     def summary(self) -> str:
         """One plain line for the log and the client's history, e.g. "Edited client C-0007 (2 fields

@@ -27,3 +27,12 @@ def _suppress_console_logging():
         root.removeHandler(h)
     yield
     root.removeHandler(null)
+
+TEST_AUDIT_KEY = "0123456789abcdef" * 4        # 64 hex characters, only ever used by the tests
+
+
+@pytest.fixture(autouse=True)
+def _audit_key(monkeypatch):
+    """The audit log is signed with AUDIT_KEY, and App refuses to start without one. Every test gets the
+    same fixed key; a test about a missing key deletes it itself."""
+    monkeypatch.setenv("AUDIT_KEY", TEST_AUDIT_KEY)

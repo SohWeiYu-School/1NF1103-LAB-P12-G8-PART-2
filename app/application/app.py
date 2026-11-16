@@ -70,6 +70,8 @@ class App:
                                       "google_genai", "hpack", "pymongo")
     # What the user is told when the settings files cannot be loaded (the real error goes to the log).
     SETTINGS_UNAVAILABLE: str = "The app's settings could not be loaded. Please contact your administrator."
+    AUDIT_KEY_MISSING: str = "The audit log is not set up (its key is missing). Please contact your administrator."
+    MIN_AUDIT_KEY: int = 32           # a shorter AUDIT_KEY in .env counts as not set
     LOG_HANDLER_NAME: str = "app_log_file"
     # Who did an action when nobody signed in: the command line.
     TERMINAL: str = AuditEvent.TERMINAL
@@ -133,7 +135,15 @@ class App:
         self.__clients: Repository = ClientRepository(os.path.join(database_dir, "sow_cases.json"))
         self.__assessments: AssessmentRepository = AssessmentRepository(
             os.path.join(database_dir, "ai_assessments.json"))
-        self.__audit: AuditRepository = AuditRepository(os.path.join(database_dir, "audit_log.json"))
+        # The key signs the audit chain. App must not crash while it is built without one: start() and
+        # start_web() see audit_key_ok() and stop. The key itself is never logged or shown.
+        self.__audit_key: str = os.getenv("AUDIT_KEY", "").strip()
+        if len(self.__audit_key) < App.MIN_AUDIT_KEY:
+            logger.error("App: AUDIT_KEY is not set or is shorter than %d characters, so the audit log cannot "
+                         "be written or checked", App.MIN_AUDIT_KEY)
+            self.__audit_key = ""
+        self.__audit: AuditRepository = AuditRepository(os.path.join(database_dir, "audit_log.json"),
+                                                        key=self.__audit_key)
         # Whether the last audit line of this thread could not be written (each web request has its own thread).
         self.__audit_note: threading.local = threading.local()
         # Document ids are paths from the folder that holds the data folder ("data/documents/...").
@@ -196,6 +206,10 @@ class App:
         """False when the settings files could not be loaded: no assessment can then be trusted."""
         return self.__settings_ok
 
+    def audit_key_ok(self) -> bool:
+        """False when AUDIT_KEY is missing or too short: the audit log cannot then be trusted."""
+        return bool(self.__audit_key)
+
     def __require_settings(self) -> None:
         """Raises RuntimeError(SETTINGS_UNAVAILABLE) instead of running on empty rules."""
         if not self.__settings_ok:
@@ -250,6 +264,9 @@ class App:
         if not self.__settings_ok:
             self.__ui.show_error(App.SETTINGS_UNAVAILABLE)
             return 1
+        if not self.__audit_key:
+            self.__ui.show_error(App.AUDIT_KEY_MISSING)
+            return 1
         problems = self.__config_reader.problems()
         if problems:
             for problem in problems:
@@ -286,6 +303,9 @@ class App:
         self.__configure_logging()
         if not self.__settings_ok:
             self.__ui.show_error(App.SETTINGS_UNAVAILABLE)
+            return 1
+        if not self.__audit_key:
+            self.__ui.show_error(App.AUDIT_KEY_MISSING)
             return 1
         WebApp(self, self.__limiter).start(host or os.getenv("HOST") or "127.0.0.1", port or int(os.getenv("PORT") or 5000))
         return 0
@@ -982,10 +1002,13 @@ class App:
     def verify_audit_log(self, actor: str) -> AuditChain:
         """Check the hash chain of the whole log and write an "audit verified" line. The line's result is
         "failed" only when the chain is broken (the check itself ran; if it could not run, nothing is written
-        and ValueError is raised). Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read."""
+        and ValueError is raised). Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read, and
+        ValueError(AUDIT_KEY_MISSING) if no audit key is set."""
         self.__start(actor)
+        if not self.__audit_key:
+            raise ValueError(App.AUDIT_KEY_MISSING)
         rows = self.__audit_rows("verify_audit_log")
-        chain = AuditChain(rows)
+        chain = AuditChain(rows, self.__audit_key)
         self.__record("audit_verified", actor, "", "ok" if chain.intact() else "failed",
                       {"entries": len(rows), "intact": chain.intact(), "breaks": len(chain.breaks())})
         return chain

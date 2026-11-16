@@ -6,6 +6,7 @@ import threading
 
 from app.data.audit_repository import AuditRepository
 from app.model.audit_event import AuditEvent
+from tests.conftest import TEST_AUDIT_KEY as KEY
 
 
 def _record(action="client_edited", ref="C-0007", actor="Shareen", **more) -> dict:
@@ -13,7 +14,7 @@ def _record(action="client_edited", ref="C-0007", actor="Shareen", **more) -> di
 
 
 def _repo(tmp_path) -> AuditRepository:
-    return AuditRepository(str(tmp_path / "audit_log.json"))
+    return AuditRepository(str(tmp_path / "audit_log.json"), key=KEY)
 
 
 def _rows(tmp_path) -> list[dict]:
@@ -25,7 +26,7 @@ def test_the_first_event_is_sequence_1_chained_to_genesis(tmp_path):
     assert repo.save(_record()) is True
     row = _rows(tmp_path)[0]
     assert row["sequence"] == 1 and row["previous_hash"] == AuditEvent.GENESIS
-    assert AuditEvent.from_dict(row).hash_matches()
+    assert AuditEvent.from_dict(row).hash_matches(KEY)
 
 
 def test_each_event_is_chained_to_the_one_before(tmp_path):
@@ -36,12 +37,12 @@ def test_each_event_is_chained_to_the_one_before(tmp_path):
     assert [r["sequence"] for r in rows] == [1, 2, 3]
     assert rows[0]["previous_hash"] == AuditEvent.GENESIS
     assert rows[1]["previous_hash"] == rows[0]["hash"] and rows[2]["previous_hash"] == rows[1]["hash"]
-    assert all(AuditEvent.from_dict(r).hash_matches() for r in rows)
+    assert all(AuditEvent.from_dict(r).hash_matches(KEY) for r in rows)
 
 
 def test_a_sealed_record_is_sealed_again_in_its_real_place(tmp_path):
     other = AuditEvent(action="signed_in")
-    other.seal(99, "a" * 64)
+    other.seal(99, "a" * 64, KEY)
     repo = _repo(tmp_path)
     repo.save(other.to_dict())
     assert _rows(tmp_path)[0]["sequence"] == 1 and _rows(tmp_path)[0]["previous_hash"] == AuditEvent.GENESIS
@@ -147,7 +148,7 @@ def test_two_threads_saving_twenty_events_each_keep_the_chain_valid(tmp_path):
     assert rows[0]["previous_hash"] == AuditEvent.GENESIS
     for before, row in zip(rows, rows[1:]):
         assert row["previous_hash"] == before["hash"]
-    assert all(AuditEvent.from_dict(r).hash_matches() for r in rows)
+    assert all(AuditEvent.from_dict(r).hash_matches(KEY) for r in rows)
 
 
 def test_a_surrogate_in_the_record_is_refused_not_crashed(tmp_path, caplog):
@@ -162,10 +163,28 @@ def test_a_seal_that_fails_returns_false_logs_the_details_and_writes_nothing(tmp
     repo.save(_record())
     before = (tmp_path / "audit_log.json").read_text(encoding="utf-8")
 
-    def broken(self, sequence, previous_hash):
+    def broken(self, sequence, previous_hash, key):
         raise ValueError("seal went wrong")
 
     monkeypatch.setattr(AuditEvent, "seal", broken)
     assert repo.save(_record("signed_in")) is False
     assert (tmp_path / "audit_log.json").read_text(encoding="utf-8") == before
     assert "ValueError('seal went wrong')" in caplog.text
+
+
+def test_without_a_key_save_returns_false_logs_an_error_and_writes_nothing(tmp_path, caplog):
+    repo = AuditRepository(str(tmp_path / "audit_log.json"))
+    assert repo.save(_record()) is False
+    assert not (tmp_path / "audit_log.json").exists()
+    assert "no audit key is set" in caplog.text
+    keyed = _repo(tmp_path)
+    keyed.save(_record())
+    before = (tmp_path / "audit_log.json").read_text(encoding="utf-8")
+    assert AuditRepository(str(tmp_path / "audit_log.json"), key="").save(_record()) is False
+    assert (tmp_path / "audit_log.json").read_text(encoding="utf-8") == before
+
+
+def test_events_are_sealed_with_the_key_the_repository_was_given(tmp_path):
+    _repo(tmp_path).save(_record())
+    event = AuditEvent.from_dict(_rows(tmp_path)[0])
+    assert event.hash_matches(KEY) and not event.hash_matches("f" * 64)

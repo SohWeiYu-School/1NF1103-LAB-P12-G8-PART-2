@@ -19,8 +19,10 @@ class AuditRepository(JsonRepository):
     __HASH_PATTERN: str = r"^[0-9a-f]{64}$"
 
     def __init__(self, path: str = os.path.join(JsonRepository.DATA_DIR, "audit_log.json"),
-                 key_field: str = "event_id") -> None:
+                 key_field: str = "event_id", key: str = "") -> None:
+        """key is the secret that signs the chain; without it save() refuses to write."""
         super().__init__(path, key_field)
+        self.__key: str = key if isinstance(key, str) else ""
         # save() reads the file, adds a row and writes it back; the lock stops two saves at the
         # same time from taking the same sequence number.
         self.__lock: threading.Lock = threading.Lock()
@@ -30,7 +32,10 @@ class AuditRepository(JsonRepository):
         False (the reason logged, the file untouched) if the record is not a valid audit event, if the
         file cannot be read (so it is never overwritten) or if it cannot be written. If the last row is
         damaged the event is still added, chained to the all-zero start hash, and a warning is logged;
-        checking the chain will show the break."""
+        checking the chain will show the break. Also False, with nothing written, if no audit key is set."""
+        if not self.__key:
+            logger.error("AuditRepository.save: not saved, no audit key is set")
+            return False
         try:
             event = AuditEvent.from_dict(record)
         except ValueError as error:
@@ -56,7 +61,7 @@ class AuditRepository(JsonRepository):
                 if isinstance(last_sequence, int) and not isinstance(last_sequence, bool) and last_sequence >= 1:
                     sequence = last_sequence + 1
             try:
-                event.seal(sequence, previous_hash)
+                event.seal(sequence, previous_hash, self.__key)
                 sealed = event.to_dict()
             except ValueError as error:
                 logger.error("AuditRepository.save: not saved, the event could not be sealed: %r", error)

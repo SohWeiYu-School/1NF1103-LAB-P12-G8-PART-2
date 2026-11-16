@@ -5,6 +5,7 @@ import re
 import pytest
 
 from app.model.audit_event import AuditEvent
+from tests.conftest import TEST_AUDIT_KEY as KEY
 
 AT = "2026-11-15T06:02:11Z"
 
@@ -27,7 +28,7 @@ def test_an_event_with_all_defaults_builds_and_is_unset():
 
 def test_an_unset_event_cannot_be_saved_hashed_or_sealed():
     event = AuditEvent()
-    for call in (event.to_dict, event.compute_hash, lambda: event.seal(1, AuditEvent.GENESIS)):
+    for call in (event.to_dict, lambda: event.compute_hash(KEY), lambda: event.seal(1, AuditEvent.GENESIS, KEY)):
         with pytest.raises(ValueError, match="no action"):
             call()
 
@@ -76,12 +77,12 @@ def test_an_empty_client_ref_is_allowed():
 
 def test_to_dict_has_the_documented_key_order_and_from_dict_round_trips():
     event = _event()
-    event.seal(3, "a" * 64)
+    event.seal(3, "a" * 64, KEY)
     data = event.to_dict()
     assert list(data) == ["event_id", "sequence", "at", "actor", "action", "client_ref", "result",
                           "details", "previous_hash", "hash"]
     again = AuditEvent.from_dict(data)
-    assert again.to_dict() == data and again.hash_matches() and again.is_sealed()
+    assert again.to_dict() == data and again.hash_matches(KEY) and again.is_sealed()
 
 
 def test_from_dict_accepts_an_unsealed_record_and_drops_unknown_keys():
@@ -98,14 +99,14 @@ def test_from_dict_refuses_anything_wrong(data):
 
 def test_the_hash_is_the_same_each_time_and_64_hex():
     event = _event()
-    event.seal(1, AuditEvent.GENESIS)
-    assert event.hash == event.compute_hash() == _sealed().hash
+    event.seal(1, AuditEvent.GENESIS, KEY)
+    assert event.hash == event.compute_hash(KEY) == _sealed().hash
     assert re.match(r"^[0-9a-f]{64}$", event.hash)
 
 
 def _sealed(**changes) -> AuditEvent:
     event = _event(**changes)
-    event.seal(1, AuditEvent.GENESIS)
+    event.seal(1, AuditEvent.GENESIS, KEY)
     return event
 
 
@@ -119,17 +120,17 @@ def test_the_hash_changes_when_any_field_changes(changes):
 
 def test_the_hash_changes_with_the_sequence_and_the_previous_hash():
     first, second, third = _event(), _event(), _event()
-    first.seal(1, AuditEvent.GENESIS)
-    second.seal(2, AuditEvent.GENESIS)
-    third.seal(1, "b" * 64)
+    first.seal(1, AuditEvent.GENESIS, KEY)
+    second.seal(2, AuditEvent.GENESIS, KEY)
+    third.seal(1, "b" * 64, KEY)
     assert len({first.hash, second.hash, third.hash}) == 3
 
 
 def test_seal_sets_the_chain_fields_and_marks_the_event_sealed():
     event = _event()
-    assert not event.is_sealed() and not event.hash_matches()
-    event.seal(5, "c" * 64)
-    assert event.sequence == 5 and event.previous_hash == "c" * 64 and event.is_sealed() and event.hash_matches()
+    assert not event.is_sealed() and not event.hash_matches(KEY)
+    event.seal(5, "c" * 64, KEY)
+    assert event.sequence == 5 and event.previous_hash == "c" * 64 and event.is_sealed() and event.hash_matches(KEY)
 
 
 @pytest.mark.parametrize("sequence, previous", [(0, AuditEvent.GENESIS), (-1, AuditEvent.GENESIS),
@@ -138,14 +139,14 @@ def test_seal_sets_the_chain_fields_and_marks_the_event_sealed():
 def test_seal_refuses_a_bad_sequence_or_previous_hash(sequence, previous):
     event = _event()
     with pytest.raises(ValueError):
-        event.seal(sequence, previous)
+        event.seal(sequence, previous, KEY)
     assert not event.is_sealed()                      # a refused seal changes nothing
 
 
 def test_hash_matches_turns_false_when_the_stored_hash_is_wrong():
     event = _sealed()
     wrong = AuditEvent.from_dict({**event.to_dict(), "actor": "Someone Else"})
-    assert wrong.hash == event.hash and not wrong.hash_matches()
+    assert wrong.hash == event.hash and not wrong.hash_matches(KEY)
 
 
 @pytest.mark.parametrize("action, details, ref, expected", [
@@ -213,7 +214,7 @@ def test_a_lone_surrogate_anywhere_is_refused_at_construction(changes):
 
 def test_non_ascii_text_is_fine_and_is_hashed_as_written():
     event = _sealed(actor="Zoë Müller", details={"note": "日本語"})
-    assert event.hash_matches() and event.details == {"note": "日本語"}
+    assert event.hash_matches(KEY) and event.details == {"note": "日本語"}
 
 
 def test_every_action_has_one_group_and_one_label():
@@ -234,3 +235,32 @@ def test_a_check_that_found_changes_says_so_and_has_no_failed_suffix():
     event = _event(action="audit_verified", result="failed", details={"intact": False})
     assert event.summary() == "Checked the audit log: changes found"
     assert event.label == "Checked the audit log"
+
+
+def test_a_different_key_gives_a_different_hash_and_does_not_match():
+    event = _sealed()
+    other_key = "f" * 64
+    assert event.compute_hash(other_key) != event.compute_hash(KEY)
+    assert event.hash_matches(KEY) and not event.hash_matches(other_key)
+
+
+def test_the_hash_is_a_keyed_hmac_not_a_plain_sha256():
+    import hashlib
+    import json
+    event = _sealed()
+    data = event.to_dict()
+    del data["hash"]
+    plain = hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":"),
+                                      ensure_ascii=False).encode("utf-8")).hexdigest()
+    assert event.hash != plain
+
+
+def test_an_empty_key_is_refused_and_a_refused_seal_changes_nothing():
+    event = _event()
+    with pytest.raises(ValueError, match="key"):
+        event.seal(1, AuditEvent.GENESIS, "")
+    assert not event.is_sealed() and event.sequence == 0 and event.previous_hash == ""
+    with pytest.raises(ValueError, match="key"):
+        _sealed().compute_hash("")
+    with pytest.raises(ValueError, match="key"):
+        _sealed().hash_matches("")
