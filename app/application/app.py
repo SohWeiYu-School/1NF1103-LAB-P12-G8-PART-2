@@ -614,10 +614,12 @@ class App:
             logger.error("App.list_assessments: the saved assessments cannot be read: %r", error)
             self.__ui.show_error(App.ASSESSMENTS_UNAVAILABLE)
             return
-        states = {match.get("assessment_id"): App.archive_state(match) for match in matches} if with_archived else None
+        # One state per record (not per id: old records may share a missing id).
+        states = [App.archive_state(match) for match in matches] if with_archived else None
         self.__report_view.show_assessment_list(matches, states)
         if matches and self.__ui.ask_yes_no("Open one in full?"):
-            labels = [f"{match['client_ref']}  {match['kind']}" for match in matches]
+            marks = [ReportView.ARCHIVE_MARKS.get(state, "") for state in states] if states else [""] * len(matches)
+            labels = [f"{match['client_ref']}  {match['kind']}{mark}" for match, mark in zip(matches, marks)]
             chosen = matches[self.__ui.ask_choice("Which one?", labels)]
             if chosen.get("report"):                                         # the combined assessment
                 verdict = self.__saved_verdict(chosen)

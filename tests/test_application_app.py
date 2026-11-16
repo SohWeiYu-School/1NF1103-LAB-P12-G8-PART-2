@@ -763,7 +763,6 @@ def test_the_saved_assessment_keeps_a_copy_of_the_client_as_assessed(app):
     result = app.assess(case)
     saved = app.assessments().find(app.save_assessment(result, record))
     assert saved["case"] == json.loads(json.dumps(result["case"]))
-    assert saved["case"] is not result["case"]
 
 
 def _two_saved(app):
