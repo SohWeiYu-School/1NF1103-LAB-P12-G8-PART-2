@@ -127,7 +127,9 @@ class ClientRecord:
         The command line's New Client form keeps the current job only in "career", so when no listed
         job is open and "career" names another job, that job is returned (its own start year is not
         known). When "career" only repeats the last listed job (the web form copies it there, even
-        once it has ended), or names none, the last job listed is the best available answer."""
+        once it has ended), or names none, the last job listed is the best available answer.
+        Accepted limit: a client back in an earlier job (same occupation and employer) gets that earlier
+        listed job; the saved data cannot tell this apart from the web form's copy."""
         for job in reversed(self.__career_history):
             if job.is_current():
                 return job
