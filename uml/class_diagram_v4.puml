@@ -189,7 +189,7 @@ package "IO Manager (app/interface)" {
     +__init__(ui : ConsoleUI | None = None, report_view : ReportView | None = None)
     +create_new_client(save_fn : Callable[[ClientRecord], bool] | None = None, upload_fn : Callable[[str], str | None] | None = None, is_taken_fn : Callable[[str], bool] | None = None) : ClientRecord | None
     +edit_existing_client(record : ClientRecord, upload_fn : Callable[[str], str | None] | None = None) : ClientRecord
-    +pick_client(find_fn : Callable[[str], ClientRecord | None] | None = None) : ClientRecord | None
+    +pick_client(find_fn : Callable[[str], ClientRecord | None]) : ClientRecord | None
     +generate_client_id(is_taken_fn : Callable[[str], bool] | None = None) : str
     +ask_document_folder() : str | None
     -__ask_job(previous : bool = False) : dict
@@ -206,13 +206,14 @@ package "IO Manager (app/interface)" {
     +edit_asset_composition(record : dict) : None
     +edit_client_declarations(record : dict) : None
     +edit_client_profile(record : dict) : None
-    +find_existing_client(find_fn : Callable[[str], ClientRecord | None] | None = None, save_fn : Callable[[ClientRecord], bool] | None = None, download_fn : Callable[[str, str], bool] | None = None, upload_fn : Callable[[str], str | None] | None = None) : None
+    +find_existing_client(find_fn : Callable[[str], ClientRecord | None], save_fn : Callable[[ClientRecord], bool] | None = None, download_fn : Callable[[str, str], bool] | None = None, upload_fn : Callable[[str], str | None] | None = None) : None
     +get_career_history() : list
     +get_client_profile() : dict
     +get_investments() : list
     +get_sow_declaration() : str
     +get_supporting_documents(upload_fn : Callable[[str], str | None] | None = None) : list[dict[str, str]]
     +ask_optional_field(field : dict) : int | float | list[str] | None
+    {static} -__why(error : Exception) : str
   }
   class ConsoleUI {
     -__read : Callable[[str], str] = lambda question: input(...)

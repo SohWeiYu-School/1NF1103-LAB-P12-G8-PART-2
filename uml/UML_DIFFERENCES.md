@@ -1,6 +1,6 @@
 # UML v4 vs code: differences, staged
 
-Checked code at commit `b5e9f7d` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
+Checked code at commit `b8db364` against `uml/class_diagram_v4.puml`, which is converted from `uml/class_diagram_v4.drawio` and was independently verified as faithful. Every class, attribute, property, constant and method signature was compared by script, so nothing was sampled.
 
 **How to use this file:** work through one stage at a time, and tick `[x]` when an item is fixed. Then re-export the draw.io file, regenerate the `.puml` and re-run the check.
 
@@ -97,7 +97,7 @@ Real class-to-class links in the code that the drawing rule says to draw, with n
 - `Typology -- "1..*" ResearchReport : cites`: linked by report id: a Typology keeps the ids of the ResearchReports it cites (source_ids), not the objects; the link is real in the data, so the diagram keeps it
 - `VerdictEngine ..> MatchResult : uses`: checked by hand: __type_patterns reads m.typology, match.category and calls match.fired() on the MatchResult objects in crime_result (app/logic/verdict_engine.py:82, 102-103); the scan cannot see it because the class name is never written there
 
-### Not drawn, by the drawing rule (14)
+### Not drawn, by the drawing rule (16)
 
 An arrow is drawn when a class stores, creates or directly works with another class, including calling methods on an object it gets back from another call. Not drawn: reads of another class's constant, and objects a class only passes on (checked by hand). See uml/UML_CORRECTIONS.md, stage 7.
 
@@ -105,6 +105,7 @@ An arrow is drawn when a class stores, creates or directly works with another cl
 - AssessmentRunner → Declaration: only passed on: the declaration goes straight into CrimeScan's methods (assessment_runner.py:212-216)
 - AssessmentRunner → ResearchReport: only passed on: the reports go straight into CrimeScan.verify_typology_sources (assessment_runner.py:143, 158)
 - AssessmentRunner → Verdict: only passed on: the Verdict from combine() is put into the result dict unchanged (assessment_runner.py:229, 242-)
+- Benchmark → Claims: constant only
 - CaseBuilder → ClientForm: constant only
 - ClientForm → DocumentStore: false match: record.documents() returns a list of document entries, not the DocumentStore (client_form.py:763)
 - Forecast → ClientRecord: only passed on: the case is handed to AssetPath.build (forecast.py:146, 270)
@@ -112,6 +113,7 @@ An arrow is drawn when a class stores, creates or directly works with another cl
 - OnboardingAssessor → Verdict: constant only
 - PayCalibrator → MarketModel: constant only
 - ReportView → DocumentStore: false match: record.documents() returns a list of document entries, not the DocumentStore (report_view.py:270)
+- VerdictEngine → Claims: constant only
 - VerdictEngine → FuturePaths: constant only
 - WebApp → ClientForm: constant only
 - WebApp → DocumentStore: false match: record.documents() returns the client's list of document entries, not the DocumentStore (web_app.py:601, 834); since #39 WebApp asks App (owns_document, read_document_for_extraction)
