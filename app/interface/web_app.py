@@ -271,8 +271,12 @@ class WebApp:
         return f"{local.day} {local:%b %Y %H:%M}"
 
     def audit_log_view(self) -> str:
-        """The audit log (admin only, the gate checks): filter bar, chips, one page of events. If the log
-        cannot be read the page says so and shows no table (it never shows an empty log for an error)."""
+        """The audit log (admin only, the gate checks): filter bar, chips, one page of events."""
+        return self.__show_audit_log()
+
+    def __show_audit_log(self, broken_ids: list[str] | None = None) -> str:
+        """The audit log page. If the log cannot be read the page says so and shows no table (it never shows
+        an empty log for an error). broken_ids are the events a Verify log found changed: their rows are marked."""
         audit_filter = AuditFilter.from_query(request.args)
         events: list | None = None
         total, error, anything = 0, "", True
@@ -292,10 +296,12 @@ class WebApp:
         return render_template("audit.html", events=events, total=total, error=error, anything=anything,
                                audit_filter=audit_filter, query=query, chips=chips, officers=officers,
                                groups=list(AuditEvent.GROUPS), day_choices=AuditFilter.DAY_CHOICES,
-                               page=audit_filter.page_for(total), pages=audit_filter.page_count(total))
+                               page=audit_filter.page_for(total), pages=audit_filter.page_count(total),
+                               broken_ids=broken_ids or [])
 
-    def audit_verify(self) -> Response:
-        """Check the hash chain of the whole log, say what was found, and show the log again."""
+    def audit_verify(self) -> str | Response:
+        """Check the hash chain of the whole log, say what was found, and show the log (the same filters
+        as the page it was pressed on) with the changed rows marked."""
         try:
             chain = self.__app.verify_audit_log(self.__actor())
         except ValueError:
@@ -303,7 +309,7 @@ class WebApp:
             return redirect(url_for("audit_log_view"))
         self.__flash_audit_failure()
         flash(chain.summary(), "success" if chain.intact() else "warning")
-        return redirect(url_for("audit_log_view"))
+        return self.__show_audit_log(chain.broken_ids())
 
     def signout(self) -> Response:
         """Sign out: the audit log is told, the session is emptied."""

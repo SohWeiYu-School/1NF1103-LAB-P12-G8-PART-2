@@ -1399,11 +1399,10 @@ def test_verify_log_reports_an_untouched_log_as_a_success_and_records_it(web):
     _put_events(application, 2)
     admin = account_with_role(application, "admin")
     reply = browser.post("/audit/verify")
-    assert reply.status_code == 302 and reply.headers["Location"].endswith("/audit")
-    with browser.session_transaction() as session:
-        assert [category for category, _ in session["_flashes"]] == ["success"]
-    page = browser.get("/audit").get_data(as_text=True)
+    assert reply.status_code == 200
+    page = reply.get_data(as_text=True)
     assert 'class="msg msg-success"' in page and "No changes found in the 2 entries." in page
+    assert "Changed outside the app" not in page
     last = _events(application)[-1]
     assert (last.action, last.actor, last.result) == ("audit_verified", admin.name, "ok")
 
@@ -1415,10 +1414,30 @@ def test_verify_log_after_the_file_was_changed_shows_a_warning(web, tmp_path):
     rows = json.loads(path.read_text(encoding="utf-8"))
     rows[1]["actor"] = "Somebody Else"
     path.write_text(json.dumps(rows), encoding="utf-8")
-    browser.post("/audit/verify")
-    page = browser.get("/audit").get_data(as_text=True)
+    page = browser.post("/audit/verify").get_data(as_text=True)
     assert 'class="msg msg-warning"' in page and "changed outside the app" in page
     assert _events(application)[-1].result == "failed"
+    rows_html = page.split("<tbody>")[1].split("</tbody>")[0].split("<tr>")[1:]
+    marked = [row for row in rows_html if "Changed outside the app" in row]
+    assert len(marked) == 1 and "Somebody Else" in marked[0]               # only the tampered row is marked
+    assert "Changed outside the app" not in browser.get("/audit").get_data(as_text=True)
+
+
+def test_verify_keeps_the_filters_of_the_page_it_was_pressed_on_and_marks_a_row_on_it(web, tmp_path):
+    application, _, browser = _admin_web(web)
+    _put_events(application, 2, "Shareen")
+    _put_events(application, 2, "Adrian")
+    path = tmp_path / "local database" / "audit_log.json"
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    rows[3]["actor"] = "Adrian "                                           # still Adrian, but the hash no longer fits
+    rows[3]["details"] = {"what": "changed"}
+    path.write_text(json.dumps(rows), encoding="utf-8")
+    page = browser.get("/audit?actor=Adrian").get_data(as_text=True)
+    assert 'action="/audit/verify?actor=Adrian"' in page
+    shown = browser.post("/audit/verify?actor=Adrian").get_data(as_text=True)
+    assert "Officer: Adrian" in shown
+    assert shown.count("Changed outside the app") == 1
+    assert "Shareen</td>" not in shown
 
 
 def test_an_unreadable_audit_log_says_so_and_shows_no_table(web, tmp_path):
@@ -1556,8 +1575,7 @@ def test_a_hand_added_row_is_on_neither_the_log_nor_the_history_but_verify_repor
     assert "Mallory" not in browser.get(f"/client/{ref}").get_data(as_text=True)
     sign_in(browser, application, "admin")
     assert "Mallory" not in browser.get("/audit?days=all").get_data(as_text=True)
-    browser.post("/audit/verify")
-    assert "changed outside the app" in html.unescape(browser.get("/audit").get_data(as_text=True))
+    assert "changed outside the app" in html.unescape(browser.post("/audit/verify").get_data(as_text=True))
 
 
 def test_auto_filling_an_existing_client_shows_in_that_clients_history(tmp_path, monkeypatch):

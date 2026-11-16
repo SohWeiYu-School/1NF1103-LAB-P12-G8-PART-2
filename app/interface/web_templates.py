@@ -762,7 +762,7 @@ ERROR = """{% extends "base.html" %}
 {% endblock %}
 """
 
-AUDIT_ROWS = """{% macro event_table(events, show_client=true) %}
+AUDIT_ROWS = """{% macro event_table(events, show_client=true, broken_ids=[]) %}
 <table class="audit">
   <thead><tr><th>Time (SGT)</th><th>Who</th><th>What</th>{% if show_client %}<th>Client</th>{% endif %}<th>Details</th><th>Result</th></tr></thead>
   <tbody>
@@ -782,7 +782,8 @@ AUDIT_ROWS = """{% macro event_table(events, show_client=true) %}
       </details>
       {% endif %}
     </td>
-    <td>{% if e.result == 'ok' %}<span class="badge badge-pass">OK</span>{% else %}<span class="badge badge-bad">Failed</span>{% endif %}</td>
+    <td>{% if e.result == 'ok' %}<span class="badge badge-pass">OK</span>{% else %}<span class="badge badge-bad">Failed</span>{% endif %}
+      {% if e.event_id in broken_ids %}<br><span class="badge badge-warn" style="margin-top:4px">Changed outside the app</span>{% endif %}</td>
   </tr>
   {% endfor %}
   </tbody>
@@ -796,7 +797,7 @@ AUDIT = """{% extends "base.html" %}
 {% block content %}
 <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px">
   <h1 style="margin:0">Audit log</h1>
-  <form method="post" action="{{ url_for('audit_verify') }}" style="margin:0">
+  <form method="post" action="{{ url_for('audit_verify', **query) }}" style="margin:0">
     <button type="submit" class="secondary">Verify log</button>
   </form>
 </div>
@@ -848,7 +849,7 @@ AUDIT = """{% extends "base.html" %}
   {% elif not events %}
     <p class="muted" style="padding:20px 22px; margin:0">{{ 'No activity matches these filters.' if anything else 'No activity recorded yet.' }}</p>
   {% else %}
-    {{ event_table(events) }}
+    {{ event_table(events, true, broken_ids) }}
     <div style="padding:10px 22px; color:var(--muted); font-size:.82rem; border-top:1px solid var(--line); display:flex; justify-content:space-between">
       <span>{{ total }} event{{ 's' if total != 1 else '' }} &middot; page {{ page }} of {{ pages }}</span>
       <span>
