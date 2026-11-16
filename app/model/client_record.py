@@ -122,10 +122,20 @@ class ClientRecord:
         return self.__claims
 
     def current_job(self) -> Job | None:
-        """The latest job with no end year; if every job has ended, the last one listed."""
+        """The latest job with no end year.
+
+        The command line's New Client form keeps the current job only in "career", so when no listed
+        job is open and "career" names an occupation, that job is returned (its own start year is not
+        known). With neither, the last job listed is the best available answer."""
         for job in reversed(self.__career_history):
             if job.is_current():
                 return job
+        if str(self.__career_extra.get("occupation") or "").strip():
+            details = {key: self.__career_extra.get(key) for key in ClientRecord.CAREER_JOB_KEYS}
+            return Job(occupation=str(details["occupation"] or ""), seniority=str(details["seniority"] or ""),
+                       industry=str(details["industry"] or ""), employer_name=str(details["employer_name"] or ""),
+                       employer_size=str(details["employer_size"] or ""),
+                       country=str(self.__career_extra.get("country") or ""))
         return self.__career_history[-1] if self.__career_history else None
 
     def career_start_year(self) -> int | None:

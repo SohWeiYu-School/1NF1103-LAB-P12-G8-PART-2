@@ -195,3 +195,26 @@ def test_documents_are_kept_in_the_order_they_were_added():
     assert record.documents() == [{"file_id": "f1", "file_name": "tax.pdf"}]
     with pytest.raises(ValueError):
         record.add_document("tax.pdf")
+
+
+def test_a_current_job_kept_only_in_career_is_the_current_job():
+    saved = {"client_ref": "CL-1", "name": "Daniel Tan", "nationality": "Malaysian", "current_date": "2026-09-24",
+             "career": {"occupation": "COO", "seniority": "C-suite", "industry": "Shipping",
+                        "employer_name": "Straits Harbour", "employer_size": "2500",
+                        "country_of_residence": "Singapore", "age": 51, "career_start_year": 1996},
+             "career_history": [{"start_year": 1998, "end_year": 2016, "occupation": "Planner",
+                                "seniority": "Junior", "industry": "Shipping", "employer_name": "Pacific Crest",
+                                "employer_size": "5000", "country": "Singapore"}]}
+    job = ClientRecord.from_dict(saved).current_job()
+    assert job.occupation == "COO"
+    assert job.is_current()
+
+
+def test_an_open_listed_job_beats_the_career_block_and_ended_jobs_are_the_last_resort():
+    assert _record().current_job().occupation == "COO"
+    ended = {"client_ref": "CL-1", "name": "Daniel Tan", "nationality": "Malaysian", "current_date": "2026-09-24",
+             "career": {"country_of_residence": "Singapore", "age": 51},
+             "career_history": [{"start_year": 1998, "end_year": 2016, "occupation": "Planner"}]}
+    assert ClientRecord.from_dict(ended).current_job().occupation == "Planner"
+    empty = ClientRecord.from_dict({"client_ref": "CL-1", "name": "D", "nationality": "M", "current_date": "2026-09-24"})
+    assert empty.current_job() is None
