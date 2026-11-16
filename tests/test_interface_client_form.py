@@ -285,3 +285,10 @@ def test_an_edit_of_a_malformed_record_gives_a_plain_message_and_leaves_it_uncha
     out = capsys.readouterr().out
     assert "could not be kept" in out and "not in the expected layout" in out
     assert "AttributeError" not in out and "Traceback" not in out
+
+
+def test_finding_a_client_needs_a_find_function():
+    with pytest.raises(TypeError):
+        _form().pick_client()
+    with pytest.raises(TypeError):
+        _form().find_existing_client()

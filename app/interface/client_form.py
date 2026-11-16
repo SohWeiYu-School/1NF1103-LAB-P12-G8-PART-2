@@ -684,7 +684,7 @@ class ClientForm:
             return str(error)
         return "some of the details are not in the expected layout"
 
-    def pick_client(self, find_fn: Callable[[str], ClientRecord | None] | None = None) -> ClientRecord | None:
+    def pick_client(self, find_fn: Callable[[str], ClientRecord | None]) -> ClientRecord | None:
         """Ask for a client reference and look the client up with find_fn. Returns the ClientRecord,
         or None if the officer went back, no client has that reference, or the saved record cannot
         be read (find_fn raises ValueError saying why). The officer is told which of these it was."""
@@ -698,7 +698,7 @@ class ClientForm:
         self.__ui.show("\nSearching saved clients...")
 
         try:
-            client_record = find_fn(client_ref) if find_fn else None
+            client_record = find_fn(client_ref)
         except ValueError as error:      # the saved record, or the client database, cannot be read
             self.__ui.show_error(str(error))
             self.__ui.read_answer("\nPress Enter to return to the main menu...")
@@ -730,7 +730,7 @@ class ClientForm:
         folder = folder.strip('"').strip("'")          # paths dragged into the terminal come quoted
         return folder or None
 
-    def find_existing_client(self, find_fn: Callable[[str], ClientRecord | None] | None = None,
+    def find_existing_client(self, find_fn: Callable[[str], ClientRecord | None],
                              save_fn: Callable[[ClientRecord], bool] | None = None,
                              download_fn: Callable[[str, str], bool] | None = None,
                              upload_fn: Callable[[str], str | None] | None = None) -> None:
