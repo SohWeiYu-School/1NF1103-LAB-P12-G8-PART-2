@@ -1,4 +1,4 @@
-"""Golden case test harness — see tests/golden/README.md for format."""
+"""Golden case test harness — see tests/cases/README.md for format."""
 
 import glob
 import json
