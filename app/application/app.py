@@ -975,29 +975,30 @@ class App:
             raise ValueError(f"What was refused must be printable text of 1 to {App.MAX_REFUSED_TEXT} characters.")
         self.__record("access_refused", actor, "", "ok", {"what": text})
 
-    def audit_log(self, audit_filter: AuditFilter, now: datetime | None = None) -> tuple[list[AuditEvent], int]:
-        """(one page of events, newest first, and how many events match the filter in all). An empty
-        log gives ([], 0). Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read, and ValueError
-        if audit_filter is not an AuditFilter."""
+    def audit_log(self, audit_filter: AuditFilter,
+                  now: datetime | None = None) -> tuple[list[AuditEvent], int, int]:
+        """(one page of events, newest first; how many events match the filter in all; how many rows of the
+        whole log cannot be read and so are not listed). An empty log gives ([], 0, 0). Raises
+        ValueError(AUDIT_UNAVAILABLE) if the log cannot be read, and ValueError if audit_filter is not an
+        AuditFilter."""
         if not isinstance(audit_filter, AuditFilter):
             raise ValueError("The audit log needs an AuditFilter.")
         now = now or datetime.now(timezone.utc)
-        events = [event for event in App.__audit_events(self.__audit_rows("audit_log"), "audit_log")
-                  if audit_filter.matches(event, now)]
+        readable, unreadable = App.__audit_events(self.__audit_rows("audit_log"), "audit_log")
+        events = [event for event in readable if audit_filter.matches(event, now)]
         events.reverse()
-        return audit_filter.page_of(events), len(events)
+        return audit_filter.page_of(events), len(events), unreadable
 
-    def audit_trail(self, client_ref: str) -> list[AuditEvent]:
-        """Every audit event about one client, newest first. [] if there are none. Raises
-        ValueError(AUDIT_UNAVAILABLE) if the log cannot be read."""
-        try:
-            rows = self.__audit.for_client(client_ref)
-        except (OSError, ValueError) as error:
-            logger.error("App.audit_trail: the audit log cannot be read: %r", error)
-            raise ValueError(App.AUDIT_UNAVAILABLE) from error
-        events = App.__audit_events(rows, "audit_trail")
+    def audit_trail(self, client_ref: str) -> tuple[list[AuditEvent], int]:
+        """(every audit event about one client, newest first; how many rows of the whole log cannot be read
+        and so may be missing from it). The reference is matched ignoring case; an empty one matches nothing.
+        Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read."""
+        rows = self.__audit_rows("audit_trail")
+        readable, unreadable = App.__audit_events(rows, "audit_trail")
+        wanted = str(client_ref or "").strip().casefold()
+        events = [event for event in readable if wanted and event.client_ref.casefold() == wanted]
         events.reverse()
-        return events
+        return events, unreadable
 
     def verify_audit_log(self, actor: str) -> AuditChain:
         """Check the hash chain of the whole log and write an "audit verified" line. The line's result is
@@ -1022,10 +1023,11 @@ class App:
             raise ValueError(App.AUDIT_UNAVAILABLE) from error
 
     @staticmethod
-    def __audit_events(rows: list[dict], caller: str) -> list[AuditEvent]:
-        """The rows that can be shown as events: sealed, and with a time and an id of their own written in
-        the row (a hand-added row would otherwise be given a made-up time). Others are counted and logged
-        here; Verify log shows them."""
+    def __audit_events(rows: list[dict], caller: str) -> tuple[list[AuditEvent], int]:
+        """(the rows that can be shown as events, and how many cannot). A row can be shown if it is sealed
+        and has a time and an id of its own written in the row (a hand-added row would otherwise be given a
+        made-up time). The others are counted and logged here; the pages say how many there are, and Verify
+        log shows which."""
         events: list[AuditEvent] = []
         unreadable = 0
         for row in rows:
@@ -1040,7 +1042,7 @@ class App:
                 unreadable += 1
         if unreadable:
             logger.warning("App.%s: %d audit row(s) cannot be read and are not listed", caller, unreadable)
-        return events
+        return events, unreadable
 
     def client_outcome_failed(self) -> bool:
         """True if the last save_assessment in this thread saved the assessment but could not write its

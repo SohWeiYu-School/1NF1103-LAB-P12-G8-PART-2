@@ -390,11 +390,14 @@ VIEW = """{% extends "base.html" %}
   <h2>History</h2>
   {% if history_error %}
   <p class="muted">{{ history_error }}</p>
-  {% elif not history %}
+  {% else %}
+  {% if history_unreadable %}<div class="notes" style="margin:0 0 10px">{{ history_unreadable }} {{ 'entry' if history_unreadable == 1 else 'entries' }} in the audit log can't be read, so this history may be incomplete.</div>{% endif %}
+  {% if not history %}
   <p class="muted">No history recorded yet.</p>
   {% else %}
   {{ event_table(history, false) }}
   {% if history_total > history_limit %}<p class="muted" style="margin:10px 0 0">Showing the latest {{ history_limit }} of {{ history_total }} events.</p>{% endif %}
+  {% endif %}
   {% endif %}
 </div>
 
@@ -843,11 +846,13 @@ AUDIT = """{% extends "base.html" %}
 </div>
 {% endif %}
 
+{% if unreadable and not error %}<div class="notes" style="margin:0 0 10px">{{ unreadable }} {{ 'entry' if unreadable == 1 else 'entries' }} in the audit log can't be read. Use Verify log to see which.</div>{% endif %}
+
 <div class="panel" style="padding:0; overflow:hidden">
   {% if error %}
     <p class="muted" style="padding:20px 22px; margin:0">{{ error }}</p>
   {% elif not events %}
-    <p class="muted" style="padding:20px 22px; margin:0">{{ 'No activity matches these filters.' if anything else 'No activity recorded yet.' }}</p>
+    <p class="muted" style="padding:20px 22px; margin:0">{{ 'No activity matches these filters.' if anything else ('No activity can be shown.' if unreadable else 'No activity recorded yet.') }}</p>
   {% else %}
     {{ event_table(events, true, broken_ids) }}
     <div style="padding:10px 22px; color:var(--muted); font-size:.82rem; border-top:1px solid var(--line); display:flex; justify-content:space-between">

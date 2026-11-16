@@ -1466,6 +1466,54 @@ def test_the_filter_form_offers_every_account_the_terminal_and_every_group(web):
         assert f'<option value="{choice}"' in page
 
 
+def _add_unreadable_rows(tmp_path, count):
+    path = tmp_path / "local database" / "audit_log.json"
+    rows = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    rows += [{"action": "cloud_sync", "actor": "Shareen"} for _ in range(count)]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(rows), encoding="utf-8")
+
+
+def test_the_audit_page_warns_when_some_entries_cannot_be_read(web, tmp_path):
+    application, _, browser = _admin_web(web)
+    _put_events(application, 2)
+    assert "can't be read" not in browser.get("/audit").get_data(as_text=True)
+    _add_unreadable_rows(tmp_path, 1)
+    page = html.unescape(browser.get("/audit").get_data(as_text=True))
+    assert "1 entry in the audit log can't be read. Use Verify log to see which." in page
+    assert "<table" in page                                          # the readable entries are still listed
+    _add_unreadable_rows(tmp_path, 1)
+    page = html.unescape(browser.get("/audit?actor=Nobody").get_data(as_text=True))
+    assert "2 entries in the audit log can't be read. Use Verify log to see which." in page
+
+
+def test_a_log_where_every_entry_is_unreadable_does_not_say_no_activity_recorded(web, tmp_path):
+    _, _, browser = _admin_web(web)
+    _add_unreadable_rows(tmp_path, 2)
+    page = html.unescape(browser.get("/audit").get_data(as_text=True))
+    assert "2 entries in the audit log can't be read." in page
+    assert "No activity recorded yet." not in page and "<table" not in page
+
+
+def test_the_client_history_warns_both_roles_when_entries_cannot_be_read(web, tmp_path):
+    application, _, browser = web
+    ref = sample_case()["client_ref"]
+    application.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    for role in ("officer", "admin"):
+        sign_in(browser, application, role)
+        assert "can't be read" not in browser.get(f"/client/{ref}").get_data(as_text=True)
+    _add_unreadable_rows(tmp_path, 1)
+    for role in ("officer", "admin"):
+        sign_in(browser, application, role)
+        history = html.unescape(browser.get(f"/client/{ref}").get_data(as_text=True))
+        history = history[history.index('id="history"'):]
+        assert "1 entry in the audit log can't be read, so this history may be incomplete." in history
+        assert "Client created" in history
+    _add_unreadable_rows(tmp_path, 2)
+    page = html.unescape(browser.get(f"/client/{ref}").get_data(as_text=True))
+    assert "3 entries in the audit log can't be read, so this history may be incomplete." in page
+
+
 # ----- the client's History ---------------------------------------------------------------------
 
 def test_the_client_page_shows_its_history_newest_first_to_both_roles(web):
@@ -1586,7 +1634,7 @@ def test_auto_filling_an_existing_client_shows_in_that_clients_history(tmp_path,
     application.clients().save(sample_case())
     client.post(f"/client/{ref}/autofill", content_type="multipart/form-data", data={
         "autofill_files": (io.BytesIO(b"Daniel Tan, Portfolio Manager"), "cv.txt")})
-    assert {event.action for event in application.audit_trail(ref)} == {"document_uploaded", "autofill_used"}
+    assert {event.action for event in application.audit_trail(ref)[0]} == {"document_uploaded", "autofill_used"}
     page = client.get(f"/client/{ref}").get_data(as_text=True)
     assert "Used document auto-fill" in page
 

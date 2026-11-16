@@ -868,7 +868,7 @@ def test_a_bad_accounts_file_stops_the_app_like_a_bad_policy_file(tmp_path, monk
 
 def _events(app, **filters) -> list[AuditEvent]:
     """Every audit event that matches, oldest first (the whole log unless filters narrow it)."""
-    events, _ = app.audit_log(AuditFilter(days=0, **filters))
+    events, _, _ = app.audit_log(AuditFilter(days=0, **filters))
     return list(reversed(events))
 
 
@@ -1055,7 +1055,7 @@ def test_upload_and_download_are_recorded_with_the_file_id_only(app, tmp_path):
         "document_uploaded", "Shareen", "C-9", {"file_id": file_id})
     assert (downloaded.action, downloaded.actor, downloaded.details) == (
         "document_downloaded", "Adrian", {"file_id": file_id})
-    assert [event.action for event in app.audit_trail("c-9")] == ["document_downloaded", "document_uploaded"]
+    assert [event.action for event in app.audit_trail("c-9")[0]] == ["document_downloaded", "document_uploaded"]
 
 
 def test_a_document_that_could_not_be_kept_or_copied_is_recorded_as_failed(app, tmp_path):
@@ -1192,11 +1192,11 @@ def test_the_log_gives_newest_first_with_the_total_and_applies_the_filter(app):
     app.save_client(record, "Shareen")
     app.sign_in("adrian@orbit.local")
     app.sync_to_cloud("Shareen")
-    events, total = app.audit_log(AuditFilter())
+    events, total, _ = app.audit_log(AuditFilter())
     assert total == 3 and [event.action for event in events] == ["cloud_sync", "signed_in", "client_created"]
-    events, total = app.audit_log(AuditFilter(actor="shareen"))
+    events, total, _ = app.audit_log(AuditFilter(actor="shareen"))
     assert total == 2 and {event.actor for event in events} == {"Shareen"}
-    events, total = app.audit_log(AuditFilter(group="Sign-in"))
+    events, total, _ = app.audit_log(AuditFilter(group="Sign-in"))
     assert [event.action for event in events] == ["signed_in"] and total == 1
     assert app.audit_log(AuditFilter(client_ref=record.client_ref.lower()))[1] == 1
 
@@ -1213,14 +1213,14 @@ def test_the_log_uses_the_time_it_is_given_for_the_period(app):
 def test_the_log_is_paged_and_the_total_counts_every_match(app):
     for _ in range(AuditFilter.PAGE_SIZE + 3):
         app.refused("Shareen", "opening the audit log")
-    events, total = app.audit_log(AuditFilter(page=1))
+    events, total, _ = app.audit_log(AuditFilter(page=1))
     assert len(events) == AuditFilter.PAGE_SIZE and total == AuditFilter.PAGE_SIZE + 3
     assert len(app.audit_log(AuditFilter(page=2))[0]) == 3
 
 
 def test_an_empty_log_is_an_empty_list_not_an_error(app):
-    assert app.audit_log(AuditFilter()) == ([], 0)
-    assert app.audit_trail("C-1") == []
+    assert app.audit_log(AuditFilter()) == ([], 0, 0)
+    assert app.audit_trail("C-1") == ([], 0)
 
 
 def test_the_log_needs_a_filter(app):
@@ -1252,7 +1252,7 @@ def test_the_trail_of_one_client_is_newest_first(app):
     app.save_client(record, "Shareen")
     app.save_client(ClientRecord.from_dict({**record.to_dict(), "name": "Someone Else"}), "Adrian")
     app.sync_to_cloud()
-    assert [event.action for event in app.audit_trail(record.client_ref)] == ["client_edited", "client_created"]
+    assert [event.action for event in app.audit_trail(record.client_ref)[0]] == ["client_edited", "client_created"]
 
 
 def test_verifying_an_untouched_log_passes_and_is_recorded(app):
@@ -1303,9 +1303,9 @@ def test_a_hand_added_row_without_a_time_or_id_is_not_listed_but_verify_reports_
     rows.append({"action": "cloud_sync", "actor": "Shareen", "sequence": 3, "hash": "a" * 64,
                  "previous_hash": rows[0]["hash"]})                                  # sealed-looking, no at or id
     path.write_text(json.dumps(rows), encoding="utf-8")
-    events, total = app.audit_log(AuditFilter())
+    events, total, _ = app.audit_log(AuditFilter())
     assert total == 1 and [event.actor for event in events] == ["Shareen"]
-    assert app.audit_trail("") == []
+    assert app.audit_trail("") == ([], 2)        # no client matches, but two rows are unreadable
     assert "2 audit row(s) cannot be read and are not listed" in caplog.text
     chain = app.verify_audit_log("Orbit Admin")
     assert not chain.intact() and len(chain.breaks()) >= 2
@@ -1342,7 +1342,7 @@ def test_reading_documents_for_a_client_ties_the_line_to_that_client(app):
     app.read_documents([{"kind": "error", "error": "scan.pdf could not be opened."}], "Shareen", "C-7")
     [event] = _events(app)
     assert event.client_ref == "C-7"
-    assert [e.action for e in app.audit_trail("C-7")] == ["autofill_used"]
+    assert [e.action for e in app.audit_trail("C-7")[0]] == ["autofill_used"]
 
 
 def test_a_new_client_that_could_not_be_saved_because_the_file_is_unreadable_is_recorded_as_created(app, tmp_path):
@@ -1448,3 +1448,29 @@ def test_verify_with_a_different_key_than_the_log_was_written_with_reports_chang
     other = App(ai_caller=None, data_folder=str(tmp_path))
     chain = other.verify_audit_log("Orbit Admin")
     assert not chain.intact() and "entries 1, 2 do not match" in chain.summary()
+
+
+def _add_unreadable_rows(tmp_path, count):
+    """Append rows the app cannot show (unsealed, no time, no id) to the audit file."""
+    path = tmp_path / "local database" / "audit_log.json"
+    rows = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    rows += [{"action": "cloud_sync", "actor": "Shareen"} for _ in range(count)]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(rows), encoding="utf-8")
+
+
+def test_the_log_and_the_trail_count_the_unreadable_rows_of_the_whole_log(app, tmp_path):
+    ref = _assessed(app)[0].client_ref
+    assert app.audit_log(AuditFilter(days=0))[2] == 0 and app.audit_trail(ref)[1] == 0
+    _add_unreadable_rows(tmp_path, 3)
+    events, total, unreadable = app.audit_log(AuditFilter(days=0))
+    assert total == len(events) and unreadable == 3
+    trail, trail_unreadable = app.audit_trail(ref)
+    assert trail and trail_unreadable == 3                    # counted for the whole log, not just this client
+    assert app.audit_log(AuditFilter(days=0, client_ref="nobody"))[1:] == (0, 3)     # a filter never hides them
+
+
+def test_a_log_where_every_row_is_unreadable_gives_no_events_and_the_count(app, tmp_path):
+    _add_unreadable_rows(tmp_path, 2)
+    assert app.audit_log(AuditFilter(days=0)) == ([], 0, 2)
+    assert app.audit_trail("C-1") == ([], 2)

@@ -279,9 +279,9 @@ class WebApp:
         an empty log for an error). broken_ids are the events a Verify log found changed: their rows are marked."""
         audit_filter = AuditFilter.from_query(request.args)
         events: list | None = None
-        total, error, anything = 0, "", True
+        total, unreadable, error, anything = 0, 0, "", True
         try:
-            events, total = self.__app.audit_log(audit_filter)
+            events, total, unreadable = self.__app.audit_log(audit_filter)
             if total == 0:
                 anything = self.__app.audit_log(AuditFilter(days=0))[1] > 0     # is the whole log empty?
         except ValueError:
@@ -294,6 +294,7 @@ class WebApp:
         if audit_filter.actor and audit_filter.actor not in officers:
             officers.append(audit_filter.actor)
         return render_template("audit.html", events=events, total=total, error=error, anything=anything,
+                               unreadable=unreadable,
                                audit_filter=audit_filter, query=query, chips=chips, officers=officers,
                                groups=list(AuditEvent.GROUPS), day_choices=AuditFilter.DAY_CHOICES,
                                page=audit_filter.page_for(total), pages=audit_filter.page_count(total),
@@ -930,14 +931,15 @@ class WebApp:
             flash(App.ASSESSMENTS_UNAVAILABLE)
             assessments = None
         history: list | None = None
-        history_error = ""
+        history_error, history_unreadable = "", 0
         try:
-            history = self.__app.audit_trail(client_ref)
+            history, history_unreadable = self.__app.audit_trail(client_ref)
         except ValueError:
             history_error = App.AUDIT_UNAVAILABLE         # the rest of the page still shows
         shown = None if history is None else history[:WebApp.HISTORY_LIMIT]
         return render_template("client_view.html", record=saved, history=shown,
-                               history_error=history_error, history_total=len(history or []),
+                               history_error=history_error, history_unreadable=history_unreadable,
+                               history_total=len(history or []),
                                history_limit=WebApp.HISTORY_LIMIT,
                                values=self.values_from_record(saved), SECTIONS=WebApp.SECTIONS,
                                assessments=assessments, problems=record.problems(),
