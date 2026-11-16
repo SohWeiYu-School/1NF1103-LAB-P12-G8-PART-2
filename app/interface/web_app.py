@@ -413,7 +413,7 @@ class WebApp:
         (field names, age from the date of birth, wealth split as fractions, oldest job first).
         A value no client record can have is left out (autofill_form says which). Raises ValueError
         only if the reading as a whole cannot be a record."""
-        record, _, _ = self.__app.record_builder(current_date or self.today()).build(extracted, "")
+        record, _ = self.__app.record_from_reading(extracted, current_date or self.today())
         return self.values_from_reading(record, extracted)
 
     def values_from_reading(self, record: ClientRecord, extracted: dict) -> dict:
@@ -480,7 +480,7 @@ class WebApp:
 
     def _is_stored_document(self, file_id: str) -> bool:
         """Only accept document references this app made (the DocumentStore decides)."""
-        return self.__app.documents().owns(file_id)
+        return self.__app.owns_document(file_id)
 
     def pending_documents(self, form: MultiDict) -> list[dict]:
         """Documents uploaded during auto-fill, carried in hidden boxes until the client is saved."""
@@ -500,7 +500,7 @@ class WebApp:
             try:
                 path = os.path.join(folder, name)
                 uploaded.save(path)
-                read.append(self.__app.documents().read_for_extraction(path, name))
+                read.append(self.__app.read_document_for_extraction(path, name))
                 file_id = self.__app.upload_document(path)
                 if file_id is not None:
                     stored.append({"file_name": name, "file_id": file_id})
@@ -522,9 +522,8 @@ class WebApp:
             flash("Document reading is not available right now — please try again later.")
         filled, notes = [], list(warnings)
         if extracted is not None:
-            builder = self.__app.record_builder(self.today())
             try:
-                record, _, dropped = builder.build(extracted, "")
+                record, dropped = self.__app.record_from_reading(extracted, self.today())
             except ValueError as error:
                 logger.error("WebApp.autofill_form: the AI's reading is not a possible record: %r", error)
                 flash(f"The documents were read, but the details cannot be used because {error}. "
@@ -537,7 +536,7 @@ class WebApp:
             notes += dropped_messages
             notes += extracted.get("notes") or []
             # the same second-look checks the command line shows after reading documents
-            notes += builder.check(record)
+            notes += self.__app.reading_problems(record, self.today())
         if extracted is not None and filled:
             flash(f"Read {len(read)} document(s) and filled {len(filled)} box(es), highlighted in yellow. "
                   "Check every highlighted value before saving.")
@@ -658,10 +657,9 @@ class WebApp:
         """The client list. If the saved clients cannot be read the page says so and shows no list
         (it never shows "No clients yet" for a read failure)."""
         try:
-            clients = self.__app.clients().load()
-        except (OSError, ValueError) as error:
-            logger.error("WebApp.home: the client records cannot be read: %r", error)
-            flash(App.CLIENTS_UNAVAILABLE)
+            clients = self.__app.all_clients()
+        except ValueError as error:
+            flash(str(error))
             clients = None
         return render_template("home.html", clients=clients)
 
@@ -937,10 +935,9 @@ class WebApp:
 
     def list_assessments_view(self) -> str:
         try:
-            assessments = self.__app.assessments().load()
-        except (OSError, ValueError) as error:
-            logger.error("WebApp.list_assessments_view: the saved assessments cannot be read: %r", error)
-            flash(App.ASSESSMENTS_UNAVAILABLE)
+            assessments = self.__app.all_assessments()
+        except ValueError as error:
+            flash(str(error))
             assessments = None
         return render_template("assessments.html", assessments=assessments)
 
