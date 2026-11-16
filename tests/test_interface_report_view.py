@@ -82,6 +82,26 @@ def test_the_assessment_list_shows_one_line_per_assessment():
     assert "2026-09-25" in lines[2]
 
 
+def test_archived_and_damaged_assessments_are_marked_in_the_list_when_states_are_given():
+    records = [{"assessment_id": "A1", "client_ref": "SOW-1", "kind": "onboarding", "assessment": {"outcome": "PASSED"}},
+               {"assessment_id": "A2", "client_ref": "SOW-2", "kind": "onboarding", "assessment": {"outcome": "PASSED"}},
+               {"assessment_id": "A3", "client_ref": "SOW-3", "kind": "onboarding", "assessment": {"outcome": "PASSED"}}]
+    states = ["active", "archived", "unreadable"]               # one per record, in the same order
+    lines = _view().format_assessment_list(records, states).splitlines()
+    assert "archived" not in lines[1] and "unreadable" not in lines[1]
+    assert lines[2].endswith(" (archived)")
+    assert lines[3].endswith(" (archive state unreadable)")
+    assert "(archived)" not in "".join(_view().format_assessment_list(records).splitlines())
+
+
+def test_records_with_the_same_missing_id_each_get_their_own_mark():
+    records = [{"client_ref": "SOW-1", "kind": "onboarding", "assessment": {"outcome": "PASSED"}},
+               {"client_ref": "SOW-1", "kind": "onboarding", "assessment": {"outcome": "PASSED"}}]
+    lines = _view().format_assessment_list(records, ["archived", "active"]).splitlines()
+    assert lines[1].endswith(" (archived)")
+    assert "archived" not in lines[2]
+
+
 def test_showing_a_client_record_prints_through_the_console(capsys):
     record = ClientRecord.from_dict({"client_ref": "SOW-1", "name": "Daniel Tan", "nationality": "Malaysian",
                                      "career": {"occupation": "COO"}, "career_history": [], "investments": [],
