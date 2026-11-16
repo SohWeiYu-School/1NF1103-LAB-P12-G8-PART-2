@@ -78,6 +78,8 @@ class App:
     ARCHIVE_NOT_FOUND: str = AssessmentRepository.NOT_FOUND
     ARCHIVE_NO_CHANGE: str = AssessmentRepository.NO_CHANGE
     ARCHIVE_NOT_SAVED: str = AssessmentRepository.NOT_SAVED
+    ARCHIVE_BAD_REASON: str = "bad_reason"
+    MAX_ARCHIVE_REASON: int = AssessmentRepository.MAX_REASON_LENGTH
 
     def __init__(self, ai_caller: Callable[[str, dict, dict], str | None] | None = None,
                  root: str = ROOT_DIR, data_folder: str = "data") -> None:
@@ -692,13 +694,16 @@ class App:
             logger.error("App.all_assessments: the saved assessments cannot be read: %r", error)
             raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
 
-    def archive_assessment(self, assessment_id: str) -> str:
-        """Hide one assessment from the lists (nothing is deleted). Returns ARCHIVE_CHANGED,
-        ARCHIVE_NOT_FOUND, ARCHIVE_NO_CHANGE (already archived), ARCHIVE_UNREADABLE (its archive log is
-        damaged) or ARCHIVE_NOT_SAVED. Raises ValueError(ASSESSMENTS_UNAVAILABLE) if the saved
-        assessments cannot be read. The client record is not touched."""
+    def archive_assessment(self, assessment_id: str, reason: str = "") -> str:
+        """Hide one assessment from the lists (nothing is deleted), with an optional reason. Returns
+        ARCHIVE_CHANGED, ARCHIVE_NOT_FOUND, ARCHIVE_NO_CHANGE (already archived), ARCHIVE_UNREADABLE (its
+        archive log is damaged), ARCHIVE_NOT_SAVED, or ARCHIVE_BAD_REASON (nothing archived; reason_problem
+        says why). Raises ValueError(ASSESSMENTS_UNAVAILABLE) if the saved assessments cannot be read.
+        The client record is not touched."""
+        if AssessmentRepository.reason_problem(reason):
+            return App.ARCHIVE_BAD_REASON          # checked first, so it is never taken for a read error
         try:
-            return self.__assessments.archive(assessment_id)
+            return self.__assessments.archive(assessment_id, reason)
         except (OSError, ValueError) as error:
             logger.error("App.archive_assessment: the saved assessments cannot be read: %r", error)
             raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
@@ -711,6 +716,11 @@ class App:
         except (OSError, ValueError) as error:
             logger.error("App.restore_assessment: the saved assessments cannot be read: %r", error)
             raise ValueError(App.ASSESSMENTS_UNAVAILABLE) from error
+
+    @staticmethod
+    def archive_reason_problem(reason: object) -> str:
+        """What is wrong with an archive reason, in plain words; "" if it is fine."""
+        return AssessmentRepository.reason_problem(reason)
 
     @staticmethod
     def archive_state(saved: dict) -> str:

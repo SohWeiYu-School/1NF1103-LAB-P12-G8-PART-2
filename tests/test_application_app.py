@@ -784,6 +784,17 @@ def test_archive_and_restore_hide_and_show_an_assessment_in_the_lists(app):
     assert len(app.all_assessments()) == 2
 
 
+def test_archive_saves_the_reason_and_refuses_a_bad_one_without_archiving(app):
+    _two_saved(app)
+    assert app.archive_assessment("A1", "x" * (App.MAX_ARCHIVE_REASON + 1)) == App.ARCHIVE_BAD_REASON
+    assert app.archive_assessment("A1", "two\nlines") == App.ARCHIVE_BAD_REASON
+    assert "archive_log" not in app.find_assessment("A1")
+    assert "at most 200 characters" in App.archive_reason_problem("x" * 201)
+    assert App.archive_reason_problem("typed the wrong net worth") == ""
+    assert app.archive_assessment("A1", "  typed the wrong net worth  ") == App.ARCHIVE_CHANGED
+    assert app.find_assessment("A1")["archive_log"][-1]["reason"] == "typed the wrong net worth"
+
+
 def test_archive_and_restore_report_every_other_result(app):
     _two_saved(app)
     assert app.restore_assessment("A1") == App.ARCHIVE_NO_CHANGE
