@@ -174,6 +174,15 @@ def test_hash_matches_turns_false_when_the_stored_hash_is_wrong():
     ("audit_verified", {}, "", "Checked the audit log: no changes found"),
     ("access_refused", {"what": "open the audit log"}, "", "Access refused: open the audit log"),
     ("access_refused", {}, "", "Access refused"),
+    ("data_unavailable", {"what": "client records"}, "", "The client database could not be read"),
+    ("data_unavailable", {"what": "assessments"}, "", "The assessment database could not be read"),
+    ("data_unavailable", {"what": "sync log"}, "", "The sync log could not be read"),
+    ("data_unavailable", {}, "", "The database could not be read"),
+    ("flag_updated", {"flag_id": "F-SHO-SOW-1-484", "from": "open", "to": "review"}, "SOW-1",
+     "Updated flag F-SHO-SOW-1-484 (Open → In review)"),
+    ("flag_updated", {"flag_id": "F-INT-303", "from": "review", "to": "review", "note": "checking"}, "",
+     "Added a note to flag F-INT-303"),
+    ("flag_updated", {}, "", "Added a note to flag"),
 ])
 def test_summary_is_one_plain_line_per_action(action, details, ref, expected):
     assert _event(action=action, details=details, client_ref=ref).summary() == expected
@@ -230,7 +239,10 @@ def test_every_action_has_one_group_and_one_label():
             seen.append(action)
     assert tuple(seen) == AuditEvent.ACTIONS and len(set(seen)) == len(seen)
     assert set(AuditEvent.LABELS) == set(AuditEvent.ACTIONS)
-    assert list(AuditEvent.GROUPS) == ["Sign-in", "Client", "Documents", "Assessment", "System"]
+    assert list(AuditEvent.GROUPS) == ["Sign-in", "Client", "Documents", "Assessment", "System", "Flag updates"]
+    assert AuditEvent(action="flag_updated").label == "Updated a flag"
+    assert AuditEvent(action="data_unavailable").group == "System"
+    assert AuditEvent(action="data_unavailable").label == "Database unreadable"
 
 
 def test_a_check_that_found_changes_says_so_and_has_no_failed_suffix():

@@ -20,3 +20,14 @@ def break_audit(tmp_path) -> None:
 def fix_audit(tmp_path) -> None:
     """Take the folder away again: the log is then missing, which is an empty log."""
     os.rmdir(audit_path(tmp_path))
+
+
+def seed_audit(tmp_path, lines) -> None:
+    """Write audit lines with the times the test chooses, signed with the test key, as App would write them.
+    Each line is (action, time as 2026-11-10T02:00:00Z, actor, client reference, result, details)."""
+    from app.data.audit_repository import AuditRepository
+    from app.model.audit_event import AuditEvent
+    repository = AuditRepository(audit_path(tmp_path), key=os.getenv("AUDIT_KEY", ""))
+    for action, at, actor, client, result, details in lines:
+        assert repository.save(AuditEvent(at=at, actor=actor, action=action, client_ref=client, result=result,
+                                          details=details).to_dict())

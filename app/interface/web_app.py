@@ -14,6 +14,7 @@ from typing import Any
 from flask import (Flask, abort, flash, g, redirect, render_template,
                    request, send_file, session, url_for)
 from jinja2 import DictLoader
+from markupsafe import Markup, escape
 from werkzeug.datastructures import FileStorage, MultiDict
 from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
@@ -28,6 +29,9 @@ from app.model.audit_event import AuditEvent
 from app.model.audit_filter import AuditFilter
 from app.model.audit_page import AuditPage
 from app.model.client_record import ClientRecord
+from app.model.flag import Flag
+from app.model.flag_ticket import FlagTicket
+from app.model.overview_page import OverviewPage
 from app.model.trail_filter import TrailFilter
 from app.model.typology import Typology
 
@@ -100,9 +104,9 @@ class WebApp:
     OFFICER_KEY: str = "officer"           # session keys: one browser can be signed in to both portals
     ADMIN_KEY: str = "admin"
     ADMIN_ENDPOINTS: tuple[str, ...] = ("admin_home", "admin_signin", "admin_signout", "audit_log_view", "audit_verify",
-                                        "admin_clients", "admin_view_client", "admin_view_assessment",
+                                        "admin_flag", "admin_clients", "admin_view_client", "admin_view_assessment",
                                         "admin_download_document")
-    AUDIT_ENDPOINTS: tuple[str, ...] = ("audit_log_view", "audit_verify")
+    AUDIT_ENDPOINTS: tuple[str, ...] = ("audit_log_view", "audit_verify", "admin_home", "admin_flag")
     # The officer page an admin page's address is the twin of: the admin portal shows the same page read-only.
     ADMIN_TWINS: dict[str, str] = {"home": "admin_clients", "view_client": "admin_view_client",
                                    "view_assessment": "admin_view_assessment",
@@ -119,6 +123,24 @@ class WebApp:
                                "autofill_used": "Filled in by", "assessment_archived": "Archived by",
                                "assessment_restored": "Restored by", "cloud_sync": "Started by",
                                "audit_verified": "Checked by"}
+    SEVERITY_CLASS: dict[str, str] = {"high": "alert", "medium": "warning", "low": "info"}   # the mockup's names for the colours
+    SEVERITY_COLOURS: dict[str, str] = {"high": "var(--bad)", "medium": "var(--warn)", "low": "#7b8794"}
+    OVERVIEW_RANGES: tuple[tuple[str, str], ...] = (("today", "Today"), ("7", "7 days"), ("30", "30 days"),
+                                                    ("90", "90 days"))
+    # The fields the flag rules watch, in words (a field that is not here is named from its path).
+    FLAG_FIELDS: dict[str, str] = {
+        "claims.declared_net_worth": "Declared net worth",
+        "claims.expected_aum": "Expected AUM", "claims.asset_composition": "Asset composition",
+        "claims.pep_status": "PEP status", "sow_declaration": "Source of wealth story"}
+    FLAG_FIELDS_SHORT: dict[str, str] = {
+        "claims.declared_net_worth": "net worth", "claims.expected_aum": "AUM",
+        "claims.asset_composition": "asset split", "claims.pep_status": "PEP status",
+        "sow_declaration": "SoW story"}
+    FAILURE_KINDS: tuple[str, ...] = ("AI step not run", "Save failed", "Read failed", "Sync failed")
+    WEEKDAYS: tuple[str, ...] = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    SAFE_FLAG_ERRORS: tuple[str, ...] = (App.AUDIT_UNAVAILABLE, App.AUDIT_KEY_MISSING, App.FLAGS_UNAVAILABLE,
+                                          App.FLAG_ADMIN_ONLY)
+    MAX_FORM_TEXT: int = 1000                    # a longer note is cut, then refused by the model as too long
     PROFILE_IN_CAREER: tuple[str, ...] = ("career.age", "career.country_of_residence")   # saved under "career", shown as Client
     SINGAPORE: timezone = timezone(timedelta(hours=8))      # Singapore has no daylight saving: a fixed offset is exact
     NOT_ADMIN: str = "Only the admin can open the audit log."
@@ -153,8 +175,14 @@ class WebApp:
         flask.jinja_env.filters["sgt_long"] = self.singapore_long
         flask.jinja_env.filters["field_label"] = self.field_label
         flask.jinja_env.filters["short_fields"] = self.short_fields
+        flask.jinja_env.filters["sgt_when"] = self.singapore_when
+        flask.jinja_env.filters["sgt_ago"] = self.singapore_ago
+        flask.jinja_env.filters["day_when"] = self.day_when
+        flask.jinja_env.filters["flag_field"] = self.flag_field
+        flask.jinja_env.filters["plain_number"] = self.trim
         flask.jinja_env.globals.update(GROUP_COLOURS=WebApp.GROUP_COLOURS, DONE_BY=WebApp.DONE_BY)
         flask.jinja_env.globals["link"] = self.portal_link
+        flask.jinja_env.globals["open_flags"] = self.open_flag_count
         flask.jinja_env.globals.update(PEP_OPTIONS=ClientForm.PEP_OPTIONS, PAYMENT_OPTIONS=ClientForm.PAYMENT_METHODS)
         flask.before_request(self.gate)
         flask.context_processor(lambda: {"account": self.__current(), "portal": self.__portal()})
@@ -163,6 +191,8 @@ class WebApp:
         flask.add_url_rule('/admin', endpoint='admin_home', view_func=self.admin_home)
         flask.add_url_rule('/admin/signin', endpoint='admin_signin', view_func=self.signin, methods=['GET', 'POST'])
         flask.add_url_rule('/admin/signout', endpoint='admin_signout', view_func=self.signout, methods=['POST'])
+        flask.add_url_rule('/admin/flags/<flag_id>', endpoint='admin_flag', view_func=self.admin_flag,
+                           methods=['GET', 'POST'])
         flask.add_url_rule('/admin/log', endpoint='audit_log_view', view_func=self.audit_log_view)
         flask.add_url_rule('/admin/log/verify', endpoint='audit_verify', view_func=self.audit_verify, methods=['POST'])
         flask.add_url_rule('/admin/clients', endpoint='admin_clients', view_func=self.home)
@@ -262,9 +292,11 @@ class WebApp:
         """Runs before every route. Nobody signed in at this portal: go to its sign-in page (the progress poll
         gets a 401). An officer who opens an admin page is refused (403, and the refusal is recorded)."""
         endpoint = request.endpoint
+        current = self.__current()
+        self.__app.begin_request(current.name if current is not None else App.UNKNOWN)   # who a failed read is recorded for
         if endpoint in ("signin", "admin_signin", "static"):
             return None
-        if self.__current() is not None:
+        if current is not None:
             return None
         if self.__portal() == App.ADMIN_PORTAL:
             officer = self.__session_account(WebApp.OFFICER_KEY)
@@ -280,15 +312,388 @@ class WebApp:
             return {"status": "error", "error": "Please sign in again."}, 401
         return redirect(url_for("signin"))
 
-    def admin_home(self) -> Response:
-        """The admin portal's front page: for now the activity log."""
-        return redirect(url_for("audit_log_view"))
+    def open_flag_count(self) -> int | None:
+        """The number on the admin header's Overview badge: the flags still to handle. A page that has worked it
+        out already leaves it in g; any other admin page asks App once. None when it cannot be worked out (the
+        header then shows a "!" badge, never a made-up 0); the reason is logged."""
+        if "open_flags" not in g:
+            seen = self.__app.flags_to_handle()           # a page that just worked the flags out: no second read
+            if seen is not None:
+                g.open_flags = seen
+                return seen
+            g.open_flags = self.__app.open_flag_count(datetime.now(timezone.utc))   # App keeps it until the log changes
+        return g.open_flags
+
+    @staticmethod
+    def __shown_error(error: ValueError) -> str:
+        """The text of an App error that is safe to show; any other ValueError is logged and shown as the
+        audit log being unavailable."""
+        if str(error) in WebApp.SAFE_FLAG_ERRORS:
+            return str(error)
+        logger.error("WebApp: an unexpected error while reading the audit log: %r", error)
+        return App.AUDIT_UNAVAILABLE
+
+    def __overview_query(self) -> tuple[str, str, int, list[str]]:
+        """(range, tab, page, problems) from the web address. A value that is not allowed is replaced by its
+        default and explained in problems, so the page still shows."""
+        problems: list[str] = []
+        preset, tab, page = OverviewPage.DEFAULT_PRESET, OverviewPage.DEFAULT_TAB, 1
+        text = request.args.get("range", "").strip().lower()
+        if text in OverviewPage.PRESETS:
+            preset = text
+        elif text:
+            problems.append("'range' must be one of today, 7, 30 or 90; showing the last 7 days.")
+        text = request.args.get("tab", "").strip().lower()
+        if text in OverviewPage.TABS:
+            tab = text
+        elif text:
+            problems.append(f"'tab' must be one of {', '.join(OverviewPage.TABS)}; showing "
+                            f"{OverviewPage.TAB_NAMES[OverviewPage.DEFAULT_TAB]}.")
+        text = request.args.get("page", "").strip()
+        if text.isascii() and text.isdigit() and 1 <= len(text) <= 9 and int(text) >= 1:
+            page = int(text)
+        elif text:
+            problems.append("'page' must be a whole number, 1 or more; showing page 1.")
+        return preset, tab, page, problems
+
+    def admin_home(self) -> str:
+        """The admin Overview: the numbers, the chart and the flags table. If the log cannot be read it says
+        so and shows no numbers (never an empty dashboard for an error)."""
+        now = datetime.now(timezone.utc)
+        local = now.astimezone(WebApp.SINGAPORE)
+        today_long = f"{local:%A}, {local.day} {local:%B %Y}"
+        preset, tab, page, problems = self.__overview_query()
+        try:
+            view = self.__app.audit_overview(preset, tab, page, now)
+        except ValueError as error:
+            g.open_flags = None
+            return render_template("overview.html", error=WebApp.__shown_error(error), today_long=today_long)
+        g.open_flags = view.open_flags
+        names = self.__client_names([row.flag.client_ref for row in view.rows])
+        rows = [{"ticket": ticket, "css": WebApp.SEVERITY_CLASS[ticket.flag.severity],
+                 "client": names.get(ticket.flag.client_ref, ""),
+                 "detail": self.__row_detail(ticket, view.evidence(ticket.flag.flag_id))} for ticket in view.rows]
+        severities = [(key, Flag.SEVERITY_NAMES[key], view.severity_counts[key], WebApp.SEVERITY_COLOURS[key])
+                      for key in OverviewPage.SEVERITIES]
+        open_in_range = sum(view.severity_counts.values())
+        types = [{"kind": kind, "name": name, "count": count, "percent": percent,
+                  "priority": Flag.SEVERITY_NAMES[view.type_severity[kind]],
+                  "css": WebApp.SEVERITY_CLASS[view.type_severity[kind]]}
+                 for kind, name, count, percent in view.flags_by_type]
+        return render_template("overview.html", error="", view=view, problems=problems, today_long=today_long,
+                               ranges=WebApp.OVERVIEW_RANGES, tabs=list(OverviewPage.TAB_NAMES.items()),
+                               chart=self.__failure_chart(view), rows=rows, severities=severities,
+                               open_in_range=open_in_range, types=types, page_size=OverviewPage.PAGE_SIZE,
+                               shown_total=view.tab_counts[view.tab])
+
+    def __client_names(self, refs: list[str]) -> dict[str, str]:
+        """The name of each client reference that has a saved record. A client that cannot be read is left
+        out (the page then shows its reference); the first read failure stops the look-ups, as App has
+        already logged it."""
+        names: dict[str, str] = {}
+        for ref in dict.fromkeys(ref for ref in refs if ref):
+            try:
+                record = self.__app.find_client(ref)
+            except ValueError:
+                break
+            if record is not None and str(record.to_dict().get("name") or "").strip():
+                names[ref] = str(record.to_dict()["name"]).strip()
+        return names
+
+    @staticmethod
+    def __median(values: list[int]) -> float:
+        ordered = sorted(values)
+        middle = len(ordered) // 2
+        if not ordered:
+            return 0
+        return ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+
+    def __failure_chart(self, view: OverviewPage) -> dict:
+        """The "Failures over time" chart: one bar per day (per week when the range is over 31 days), the
+        sentence under it, and the same numbers for the table (which also stands in when the chart cannot load)."""
+        days = view.failures_by_day
+        kinds = WebApp.FAILURE_KINDS
+        unit, size = ("day", 1) if len(days) <= 31 else ("week", 7)
+        chunks = [days[start:start + size] for start in range(0, len(days), size)]
+
+        def short(text: str) -> str:
+            day = datetime.strptime(text, "%Y-%m-%d")
+            return f"{day.day} {day:%b}"
+        labels = [short(chunk[0][0]) for chunk in chunks]
+        longs = [short(chunk[0][0]) if len(chunk) == 1 else f"{short(chunk[0][0])}\u2013{short(chunk[-1][0])}"
+                 for chunk in chunks]
+        data = {kind: [sum(counts.get(kind, 0) for _, counts in chunk) for chunk in chunks] for kind in kinds}
+        sums = [sum(data[kind][i] for kind in kinds) for i in range(len(chunks))]
+        total = sum(sums)
+        if not total:
+            caption = "No failures in this range. The AI service and the database answered every time."
+        else:
+            biggest = max(sums)
+            at = sums.index(biggest)
+            usual = WebApp.__median([n for i, n in enumerate(sums) if i != at])
+            ai = data["AI step not run"][at]
+            where = f"on {longs[at]}" if unit == "day" else f"in the week {longs[at]}"
+            ai_text = (f"{ai} were AI steps that did not run, so those assessments" if ai > 1
+                       else "1 was an AI step that did not run, so that assessment")
+            rest = total - biggest
+            compare = f" (a usual {unit} has {usual:g})" if len(sums) > 1 else ""     # one bar: nothing to compare with
+            caption = (f"<b>{biggest} failure{'' if biggest == 1 else 's'} {where}</b>{compare}. " + (f"{ai_text} may be missing evidence and should be re-run." if ai
+                                          else "None were AI steps.")
+                       + (f" {rest} other failure{'' if rest == 1 else 's'} in the rest of the range." if rest
+                          else ""))
+        return {"unit": unit, "kinds": kinds, "data": data, "sums": sums, "longs": longs, "totals":
+                {kind: sum(data[kind]) for kind in kinds}, "caption": Markup(caption),
+                "json": {"labels": labels, "longs": longs, "kinds": list(kinds), "data": data}}
+
+    def __badge(self, event: AuditEvent) -> Markup:
+        outcome = str(event.details.get("outcome") or "")
+        if not outcome:
+            return Markup(escape("Assessment saved"))
+        return Markup('<span class="badge b-{}">{}</span>').format(outcome, outcome.replace("_", " ").capitalize())
+
+    def __row_detail(self, ticket: FlagTicket, events: list[AuditEvent]) -> Markup:
+        """The Detail column of the flags table: a short phrase for the kind, from the entries behind the flag
+        (the flag's own headline if they cannot all be read)."""
+        flag = ticket.flag
+        by_number = {event.sequence: event for event in events}
+        found = [by_number[n] for n in flag.sequences if n in by_number]
+        if not found or len(found) != len(flag.sequences):
+            return Markup(escape(flag.headline))
+        if flag.kind == "shop":
+            before, edit, after = found
+            minutes = round((WebApp.__utc_moment(after.at) - WebApp.__utc_moment(edit.at)).total_seconds() / 60)
+            fields = " & ".join(dict.fromkeys(WebApp.__short_field(c.get("field"), self.flag_field(c.get("field")))
+                                              for c in flag.changes))
+            return Markup("{} &rarr; {} {} min after {} edited").format(
+                self.__badge(before), self.__badge(after), minutes, fields)
+        if flag.kind == "other":
+            return Markup("Officer {} edited it; owner officer is {}").format(found[0].actor, flag.owner)
+        if flag.kind == "repeat":
+            days = max(1, round((WebApp.__utc_moment(found[-1].at) - WebApp.__utc_moment(found[0].at))
+                                .total_seconds() / 86400))
+            same = len({str(event.details.get("outcome")) for event in found}) == 1
+            return Markup("{} runs in {} days, {}").format(len(found), days,
+                                                           "same result each time" if same else "results changed")
+        if flag.kind == "hours":
+            return Markup("{} at {} by officer {}").format(found[0].label, self.singapore_clock(found[0].at),
+                                                          found[0].actor)
+        return Markup(escape(flag.headline))
+
+    def singapore_when(self, text: str, with_time: bool = True) -> str:
+        """An audit time (UTC) as "Fri 13 Nov, 14:05" in Singapore time ("Fri 13 Nov" without the time).
+        Anything else is shown as it is."""
+        try:
+            local = WebApp.__utc_moment(text).astimezone(WebApp.SINGAPORE)
+        except (TypeError, ValueError, OverflowError):
+            return str(text)
+        day = f"{WebApp.WEEKDAYS[local.weekday()]} {local.day} {local:%b}"
+        return f"{day}, {local:%H:%M}" if with_time else day
+
+    def day_when(self, text: str) -> str:
+        """A day (2026-11-13) as "Fri 13 Nov". Anything else is shown as it is."""
+        try:
+            day = datetime.strptime(str(text), "%Y-%m-%d")
+        except ValueError:
+            return str(text)
+        return f"{WebApp.WEEKDAYS[day.weekday()]} {day.day} {day:%b}"
+
+    def singapore_ago(self, text: str) -> str:
+        """How long ago an audit time was, in Singapore days: "today", "1 day ago", "6 days ago"."""
+        try:
+            then = WebApp.__utc_moment(text).astimezone(WebApp.SINGAPORE).date()
+        except (TypeError, ValueError, OverflowError):
+            return ""
+        days = (datetime.now(timezone.utc).astimezone(WebApp.SINGAPORE).date() - then).days
+        return "today" if days <= 0 else ("1 day ago" if days == 1 else f"{days} days ago")
+
+    @staticmethod
+    def __parent_field(path: Any) -> str:
+        """The watched field a path is inside ("claims.asset_composition" for "claims.asset_composition.cash"),
+        or "" if it is not inside one the page has a name for."""
+        text = str(path)
+        return next((known for known in WebApp.FLAG_FIELDS if text == known or text.startswith((known + ".", known + "["))), "")
+
+    @staticmethod
+    def __short_field(path: Any, fallback: str) -> str:
+        """A changed field in two words for a table row; the parts of one field share one name."""
+        return WebApp.FLAG_FIELDS_SHORT.get(WebApp.__parent_field(path), fallback)
+
+    def flag_field(self, path: Any) -> str:
+        """A changed field's name for the flag pages: "Declared net worth"; a part of a watched field is
+        shown under it: "Asset composition \u203a Cash"."""
+        parent = WebApp.__parent_field(path)
+        if parent and str(path) != parent:
+            return f"{WebApp.FLAG_FIELDS[parent]} \u203a {WebApp.field_label(path).split(' \u203a ')[-1]}"
+        return WebApp.FLAG_FIELDS.get(str(path)) or WebApp.field_label(path).split(" \u203a ")[-1]
+
+    def __what_failed(self, event: AuditEvent) -> str:
+        """One line for the failure table of a failure-spike flag."""
+        details = event.details
+        if event.action == "assessment_failed":
+            return str(details.get("step") or "An assessment stopped before it finished")
+        if event.action == "data_unavailable":
+            return event.summary()
+        if event.action == "cloud_sync":
+            return "The cloud sync failed"
+        return "A save failed"
+
+    def __picture(self, ticket: FlagTicket, events: list[AuditEvent], entries: int, client_name: str,
+                  history: list[AuditEvent] | None = None) -> dict:
+        """Everything the "What happened" picture of a flag needs: the rule in words, the entries behind the
+        flag in order (complete is False when some of them cannot be read), and the extras for the kind."""
+        flag = ticket.flag
+        policy = self.__app.audit_policy
+        by_number = {event.sequence: event for event in events}
+        ordered = [by_number[n] for n in flag.sequences if n in by_number]
+        rules = {
+            "shop": f"Verdict moved {policy.jump_levels}+ levels after an edit, within {policy.window_days} days",
+            "other": "Client edited by an officer who doesn't own it",
+            "repeat": f"More than {policy.repeat_assessments} assessments in {policy.window_days} days",
+            "hours": f"Edit or assessment outside {policy.work_start}\u2013{policy.work_end}",
+            "spike": f"Failures at least {self.trim(policy.spike_multiplier)}\u00d7 a usual day "
+                     f"(and {policy.spike_min}+)",
+            "integrity": "Fingerprint chain broken"}
+        picture: dict = {"flag": flag, "rule": rules[flag.kind], "client_name": client_name, "ordered": ordered,
+                         "complete": len(ordered) == len(flag.sequences), "entries": entries,
+                         "created": next((e for e in (history or []) if e.action == "client_created"), None),
+                         "rule_hours": f"{policy.work_start} to {policy.work_end}"}
+        if flag.kind == "hours" and ordered:
+            local = WebApp.__utc_moment(ordered[0].at).astimezone(WebApp.SINGAPORE)
+            start, end = policy.work_start_minutes, policy.work_end_minutes
+            ticks = [(minutes / 14.4, f"{minutes // 60:02d}:{minutes % 60:02d}")
+                     for minutes in (0, start, 720, end, 1440)]
+            picture["clock"] = {"work_left": start / 14.4, "work_width": (end - start) / 14.4,
+                                "at": (local.hour * 60 + local.minute) / 14.4, "time": f"{local:%H:%M}",
+                                "ticks": ticks}
+        if flag.kind == "spike":
+            counts = {kind: 0 for kind in WebApp.FAILURE_KINDS}
+            for event in ordered:
+                counts[self.__failure_kind(event)] += 1
+            picture["kinds"] = [(kind, count) for kind, count in counts.items() if count]
+            picture["what"] = {event.sequence: self.__what_failed(event) for event in ordered}
+        return picture
+
+    @staticmethod
+    def __failure_kind(event: AuditEvent) -> str:
+        if event.action == "assessment_failed":
+            return "AI step not run"
+        if event.action == "data_unavailable":
+            return "Read failed"
+        return "Sync failed" if event.action == "cloud_sync" else "Save failed"
+
+    def __flag_log_link(self, flag: Flag, events: list[AuditEvent]) -> str:
+        """The activity log narrowed as far as it can be to the entries behind a flag: the days they happened
+        on, the client, and "flagged only" (the log cannot pick out one flag's entries)."""
+        days = sorted({AuditFilter.event_day(event) for event in events})
+        if flag.kind == "spike":
+            days = [datetime.strptime(flag.day, "%Y-%m-%d").date()]
+        if not days:
+            days = [AuditFilter.singapore_day(WebApp.__utc_moment(flag.raised_at))]
+        query: dict[str, str] = {"preset": "custom", "from": days[0].isoformat(), "to": days[-1].isoformat()}
+        if flag.kind != "integrity":
+            query["flagged"] = "1"
+        if flag.client_ref:
+            query["client_ref"] = flag.client_ref
+        return url_for("audit_log_view", **query)
+
+    def __flag_evidence(self, ticket: FlagTicket, events: list[AuditEvent], client_name: str) -> list[dict]:
+        """The links under "What happened": the client's history, the log entries behind the flag, and each
+        assessment involved."""
+        flag = ticket.flag
+        links: list[dict] = []
+        if flag.client_ref:
+            links.append({"href": self.portal_link("view_client", client_ref=flag.client_ref),
+                          "text": f"{client_name or flag.client_ref}'s full history", "side": "\u2192"})
+        if flag.sequences:
+            shown = " ".join(f"#{n}" for n in flag.sequences[:4]) + (" \u2026" if len(flag.sequences) > 4 else "")
+            count = len(flag.sequences)
+            links.append({"href": self.__flag_log_link(flag, events),
+                          "text": f"The {count} log {'entries' if count > 1 else 'entry'} behind this flag",
+                          "side": f"{shown} \u2192", "mono": True})
+        for event in events:
+            if event.action == "assessment_run" and event.details.get("assessment_id"):
+                links.append({"href": self.portal_link("view_assessment",
+                                                       assessment_id=event.details["assessment_id"]),
+                              "text": f"Assessment {event.details['assessment_id']} \u00b7 "
+                                      f"{self.singapore_day(event.at)}", "badge": event})
+        if flag.kind == "integrity":
+            links.append({"href": self.__flag_log_link(flag, events),
+                          "text": f"Entries around #{flag.broken_at} in the activity log", "side": "\u2192"})
+        return links
+
+    def admin_flag(self, flag_id: str) -> str | Response | tuple[str, int]:
+        """One flag as a ticket: what happened, the evidence, the update form and the activity. POST saves an
+        update (a new status, or a note) in the audit log."""
+        if request.method == "POST":
+            return self.__update_flag(flag_id)
+        return self.__show_flag(flag_id)
+
+    def __show_flag(self, flag_id: str, draft: dict[str, str] | None = None,
+                    errors: list[str] | None = None) -> str | tuple[str, int]:
+        """The flag page. draft is what the admin typed in the update form (kept when it is shown again with
+        errors). A flag the rules no longer find gives the "no longer exists" panel and a 404."""
+        now = datetime.now(timezone.utc)
+        draft = draft or {}
+        try:
+            ticket, events, entries = self.__app.flag_evidence(flag_id, now)
+        except ValueError as error:
+            g.open_flags = None
+            return render_template("flag.html", error=WebApp.__shown_error(error), ticket=None)
+        if ticket is None:
+            return render_template("flag.html", error="", ticket=None, gone=App.FLAG_GONE), 404
+        flag = ticket.flag
+        names = self.__client_names([flag.client_ref])
+        history = None
+        if flag.kind == "other":
+            try:
+                history = self.__app.audit_trail(flag.client_ref)[0]
+            except ValueError:
+                history = None                       # only the owner's "created" time is missing from the picture
+        picture = self.__picture(ticket, events, entries, names.get(flag.client_ref, ""), history)
+        status = draft.get("status") if draft.get("status") in FlagTicket.STATUSES else ticket.status
+        return render_template(
+            "flag.html", error="", ticket=ticket, pic=picture, history=list(reversed(ticket.history)),
+            evidence=self.__flag_evidence(ticket, events, names.get(flag.client_ref, "")),
+            sev_css=WebApp.SEVERITY_CLASS[flag.severity], statuses=list(FlagTicket.STATUSES.items()),
+            statuses_by_key=FlagTicket.STATUSES, outcomes=list(FlagTicket.OUTCOMES.items()),
+            outcomes_by_key=FlagTicket.OUTCOMES, waiting_on_choices=FlagTicket.WAITING_ON, draft_status=status,
+            draft_wait=draft.get("waiting_on", ""), draft_outcome=draft.get("outcome", ""),
+            draft_note=draft.get("note", ""), errors=errors or [])
+
+    def __update_flag(self, flag_id: str) -> str | Response | tuple[str, int]:
+        """Save the update form of a flag. Only text is taken from the form, cut to a sensible length; App
+        checks it again. Saved: back to the flag page with the toast. Not valid or not written: the page
+        again with what was typed and what is wrong."""
+        draft = {name: request.form.get(name, "")[:limit] for name, limit in
+                 (("status", 40), ("waiting_on", 80), ("outcome", 40), ("note", WebApp.MAX_FORM_TEXT))}
+        try:
+            ticket, problems, sequence = self.__app.update_flag(
+                flag_id, self.__actor(), draft["status"].strip(), draft["note"], draft["waiting_on"].strip(),
+                draft["outcome"].strip(), datetime.now(timezone.utc))
+        except ValueError as error:
+            g.open_flags = None
+            return render_template("flag.html", ticket=None,
+                                   error=WebApp.__shown_error(error) + " Your update was not saved.")
+        if ticket is None:
+            return render_template("flag.html", error="", ticket=None, gone=App.FLAG_GONE), 404
+        if problems:
+            return self.__show_flag(flag_id, draft, problems)
+        if sequence:
+            last = ticket.history[-1]
+            name = FlagTicket.STATUSES[draft["status"].strip()]
+            text = (f"{ticket.flag.flag_id} is now {name}" if last["from"] != last["to"] else "Note added") \
+                + f". Saved in the audit log as entry #{sequence}."
+        else:
+            # Written, but the new line could not be read back: whether the status moved is not known here.
+            text = "Your update was saved in the audit log."
+        flash(text, "toast")
+        return redirect(url_for("admin_flag", flag_id=ticket.flag.flag_id))
 
     def signin(self) -> str | Response:
         """Sign in by name and password at this portal. Anyone already signed in here goes to the portal's front page."""
         admin = self.__portal() == App.ADMIN_PORTAL
         if self.__current() is not None:
-            return redirect(url_for("audit_log_view") if admin else url_for("home"))
+            return redirect(url_for("admin_home") if admin else url_for("home"))
         name = ""
         problem = ""
         if request.method == "POST":
@@ -298,7 +703,7 @@ class WebApp:
                 session[WebApp.ADMIN_KEY if admin else WebApp.OFFICER_KEY] = signed_in.email
                 g.account = signed_in
                 self.__flash_audit_failure()
-                return redirect(url_for("audit_log_view") if admin else url_for("home"))
+                return redirect(url_for("admin_home") if admin else url_for("home"))
             self.__flash_audit_failure()
         demo = [{"name": account.name, "password": WebApp.DEMO_PASSWORDS[account.role]}
                 for account in self.__app.accounts() if account.is_admin() == admin]
@@ -411,8 +816,9 @@ class WebApp:
         error = ""
         try:
             log = self.__app.audit_log(audit_filter, now)
-        except ValueError:
-            error = App.AUDIT_UNAVAILABLE
+        except ValueError as problem:
+            error = WebApp.__shown_error(problem)        # the real kind of problem: log, flags or key
+        g.open_flags = log.open_flags if log is not None else None      # the header badge: no second read
         query = audit_filter.to_query()
         chips = [(text, url_for("audit_log_view", **{k: v for k, v in query.items() if k not in (key, "page")}))
                  for key, text in audit_filter.chips()]
@@ -1081,7 +1487,10 @@ class WebApp:
             history = self.__by_day(shown)
         except ValueError:
             history_error = App.AUDIT_UNAVAILABLE         # the rest of the page still shows
+        flag_boxes, flags_error, flagged_sequences = self.__client_flag_boxes(
+            client_ref, str(saved.get("name") or ""), everything if history is not None else [], bool(history_error), now)
         return render_template("client_view.html", record=saved, history=history,
+                               flag_boxes=flag_boxes, flags_error=flags_error, flagged_sequences=flagged_sequences,
                                history_error=history_error, history_unreadable=history_unreadable,
                                history_total=history_total, history_count=history_count,
                                trail_filter=trail_filter, trail_shows=list(TrailFilter.SHOW_LABELS.items()),
@@ -1091,6 +1500,26 @@ class WebApp:
                                assessments=assessments, problems=record.problems(),
                                show_archived=show_archived, archived_count=archived_count,
                                archive_states=archive_states, max_reason=App.MAX_ARCHIVE_REASON)
+
+    def __client_flag_boxes(self, client_ref: str, client_name: str, history: list[AuditEvent], history_failed: bool,
+                            now: datetime) -> tuple[list[dict], str, set[int]]:
+        """For the admin's client page: the "Why this client is flagged" boxes (one per flag that is not
+        resolved, each with the picture of what happened), the line to show if they cannot be worked out, and the
+        numbers of the log entries behind them (the timeline marks those). Officers get nothing."""
+        account = self.__current()
+        if account is None or not account.is_admin():
+            return [], "", set()
+        if history_failed:                         # the page already says the log cannot be read
+            return [], "", set()
+        try:
+            tickets = self.__app.client_flags(client_ref, now)
+        except ValueError as error:
+            return [], WebApp.__shown_error(error), set()
+        by_number = {event.sequence: event for event in history}
+        boxes = [{"ticket": ticket, "css": WebApp.SEVERITY_CLASS[ticket.flag.severity],
+                  "pic": self.__picture(ticket, [by_number[n] for n in ticket.flag.sequences if n in by_number], 0,
+                                        client_name, history)} for ticket in tickets]
+        return boxes, "", {n for ticket in tickets for n in ticket.flag.sequences}
 
     @staticmethod
     def __by_day(events: list[AuditEvent]) -> list[tuple[str, list[AuditEvent]]]:

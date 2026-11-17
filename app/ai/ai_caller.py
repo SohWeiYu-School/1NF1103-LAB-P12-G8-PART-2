@@ -46,17 +46,6 @@ def openai_caller(client: object = None, model: str = "", search_model: str = ""
             state["client"] = OpenAI(api_key=os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_AI_API_KEY"))
         return state["client"]
 
-    def at_temperature_zero(create: Callable, **request):
-        """Ask at temperature 0 (same question, same answer). Some models only accept their
-        default temperature; for those the request is sent again without it."""
-        try:
-            return create(temperature=0, **request)
-        except Exception as error:
-            if "temperature" not in str(error).lower():
-                raise
-            logger.info("%s does not accept temperature 0; asking again with its default", request.get("model"))
-            return create(**request)
-
     def call(prompt: str, schema: dict | None = None, options: dict | None = None) -> str | None:
         options = options if options is not None else {}
         use_model = options.get("model") or model or os.getenv("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL
@@ -69,8 +58,8 @@ def openai_caller(client: object = None, model: str = "", search_model: str = ""
                 tool = {"type": "web_search"}
                 if options.get("domains"):
                     tool["filters"] = {"allowed_domains": options["domains"]}
-                response = at_temperature_zero(
-                    api.responses.create, model=use_model, input=prompt, tools=[tool], tool_choice="required",
+                response = api.responses.create(
+                    model=use_model, input=prompt, tools=[tool], tool_choice="required",
                     include=["web_search_call.action.sources"],
                     text={"format": {"type": "json_schema", "name": name, "schema": schema, "strict": True}})
                 text = response.output_text
@@ -83,8 +72,8 @@ def openai_caller(client: object = None, model: str = "", search_model: str = ""
                                 {"role": "user", "content": options["parts"]}]
                 else:
                     messages = [{"role": "user", "content": prompt}]
-                response = at_temperature_zero(api.chat.completions.create, model=use_model,
-                                               response_format=response_format, messages=messages)
+                response = api.chat.completions.create(model=use_model, response_format=response_format,
+                                                       messages=messages)
                 text = response.choices[0].message.content
         except Exception as error:   # no key, no network, a refused request: all mean "no answer"
             logger.warning("openai_caller failed: %s", repr(error))
@@ -157,7 +146,7 @@ def gemini_caller(client: object = None, model: str = "", search_model: str = ""
             from google.genai import types
             tools = [types.Tool(google_search=types.GoogleSearch())] if searching else None
             config = types.GenerateContentConfig(
-                temperature=0, tools=tools, response_mime_type="application/json",
+                tools=tools, response_mime_type="application/json",
                 response_schema=gemini_schema(schema, unsupported_schema_keys) if schema else None)
             response = connect().models.generate_content(model=use_model, contents=prompt, config=config)
             text = response.text

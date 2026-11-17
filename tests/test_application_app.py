@@ -7,6 +7,7 @@ import pytest
 
 from app.application.app import App
 from app.application.assessment_runner import AssessmentRunner
+from app.logic.audit_insights import AuditInsights
 from app.model.account import Account
 from app.model.audit_event import AuditEvent
 from app.model.audit_filter import AuditFilter
@@ -604,6 +605,29 @@ def test_a_damaged_policy_is_logged_to_the_log_file_not_shown_on_the_terminal(tm
         assert "policy.json" not in text and "JSONDecodeError" not in text and "Errno" not in text
     assert "policy.json" in log and "JSONDecodeError" in log          # the real error is in the log
     assert log.count("Config file") == 1                              # and written once
+
+
+def test_the_log_file_starts_a_new_file_when_full_and_keeps_three_old_ones(tmp_path, monkeypatch):
+    import logging
+    root = _app_with_damaged_policy(tmp_path, monkeypatch)
+    root_logger = logging.getLogger()
+    saved_handlers, saved_level = root_logger.handlers[:], root_logger.level
+    root_logger.handlers = []                                  # a fresh process: nothing configured yet
+    try:
+        App(ai_caller=None, root=str(root), data_folder=str(tmp_path / "data"))
+        handler = root_logger.handlers[0]
+        assert (handler.maxBytes, handler.backupCount) == (App.LOG_MAX_BYTES, App.LOG_BACKUPS) == (5 * 1024 * 1024, 3)
+        for _ in range(App.LOG_BACKUPS + 2):                   # fill it up more often than files are kept
+            handler.doRollover()
+            logging.getLogger("test").warning("a line after a new file was started")
+        handler.flush()
+    finally:
+        for handler in root_logger.handlers:
+            handler.close()
+        root_logger.handlers, root_logger.level = saved_handlers, saved_level
+    files = sorted(path.name for path in (root / "logs").iterdir())
+    assert files == ["app.log", "app.log.1", "app.log.2", "app.log.3"]          # the oldest ones were deleted
+    assert "a line after a new file" in (root / "logs" / "app.log").read_text(encoding="utf-8")
 
 
 def test_an_app_with_broken_settings_says_so_and_refuses_to_assess(tmp_path, monkeypatch):
@@ -1530,3 +1554,454 @@ def test_a_log_where_every_row_is_unreadable_gives_no_events_and_the_count(app, 
     log = app.audit_log(AuditFilter("custom"))
     assert (log.events, log.total, log.unreadable, log.everything) == ([], 0, 2, 0)
     assert app.audit_trail("C-1") == ([], 2)
+
+
+# ----- the audit Overview, flags and "database unreadable" lines ----------------------------------------
+
+import stat
+from datetime import date, datetime, timezone
+
+from app.model.overview_page import OverviewPage
+from tests.audit_files import audit_path, seed_audit
+
+FLAG_NOW = datetime(2026, 11, 16, 8, 0, tzinfo=timezone.utc)          # 16:00 on Monday 16 Nov in Singapore
+ADMIN = "Orbit Admin"
+NIGHT_OWNER = [("client_created", "2026-11-10T02:00:00Z", "Shareen", "SOW-1", "ok", {}),
+               # Adrian did not create SOW-1 and changed a watched field: "Edited by non-owner", high (entry 2)
+               ("client_edited", "2026-11-10T03:00:00Z", "Adrian", "SOW-1", "ok",
+                {"changes": [{"field": "claims.expected_aum", "before": 1, "after": 2}]}),
+               # 00:00 in Singapore: "After-hours activity", low (entry 3)
+               ("assessment_run", "2026-11-11T16:00:00Z", "Shareen", "SOW-1", "ok",
+                {"outcome": "PASSED", "assessment_id": "A-1"})]
+
+
+@pytest.fixture
+def flagged(app, tmp_path):
+    """An App whose audit log holds one high flag (F-OTH-SOW-1-2) and one low flag (F-HOU-SOW-1-3)."""
+    seed_audit(tmp_path, NIGHT_OWNER)
+    return app
+
+
+def _log_text(tmp_path):
+    return (tmp_path / "local database" / "audit_log.json").read_text(encoding="utf-8")
+
+
+def test_the_audit_settings_come_from_the_policy(app):
+    assert app.audit_policy.window_days == 30 and app.audit_policy.jump_levels == 2
+
+
+@pytest.mark.parametrize("value, text", [("often", "'often'"), ({"window_days": 0}, "window_days")])
+def test_a_bad_audit_setting_is_logged_and_the_defaults_are_used(tmp_path, monkeypatch, caplog, value, text):
+    import shutil
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    root = tmp_path / "root"
+    shutil.copytree("config", root / "config")
+    policy = json.loads((root / "config" / "policy.json").read_text())
+    policy["audit"] = value
+    (root / "config" / "policy.json").write_text(json.dumps(policy))
+    application = App(ai_caller=None, root=str(root), data_folder=str(tmp_path / "data"))
+    assert text in caplog.text and "audit" in caplog.text
+    assert application.audit_policy.window_days == 30                      # the defaults
+
+
+def test_the_overview_counts_the_range_and_the_flags(flagged):
+    page = flagged.audit_overview("7", now=FLAG_NOW)
+    assert (page.preset, page.day_from, page.day_to) == ("7", date(2026, 11, 10), date(2026, 11, 16))
+    assert (page.to_handle, page.not_started, page.in_progress, page.open_flags) == (2, 2, 0, 2)
+    assert (page.actions, page.failures, page.broken_at, page.unreadable) == (3, 0, 0, 0)
+    assert page.intact and page.actions_change is None and page.failures_change is None   # no earlier data
+    assert page.severity_counts == {"high": 1, "medium": 0, "low": 1}
+    assert [kind for kind, _, _, _ in page.flags_by_type] == ["other", "hours"]
+    assert page.type_severity == {"other": "high", "hours": "low"}
+    assert page.entries == 3 and [e.sequence for e in page.evidence("F-OTH-SOW-1-2")] == [2]
+    assert page.evidence("F-HOU-SOW-1-3")[0].action == "assessment_run" and page.evidence("F-X") == []
+    assert [ticket.flag.flag_id for ticket in page.rows] == ["F-OTH-SOW-1-2", "F-HOU-SOW-1-3"]    # high before low
+    assert (page.tab, page.page, page.page_count) == ("handle", 1, 1)
+    assert page.tab_counts == {"handle": 2, "open": 2, "review": 0, "followup": 0, "resolved": 0, "all": 2}
+    assert [day for day, _ in page.failures_by_day] == [f"2026-11-{n}" for n in range(10, 17)]
+
+
+def test_the_ranges_are_singapore_days_back_from_today(flagged):
+    spans = {preset: flagged.audit_overview(preset, now=FLAG_NOW) for preset in OverviewPage.PRESETS}
+    assert (spans["today"].day_from, spans["today"].day_to) == (date(2026, 11, 16),) * 2
+    assert spans["7"].day_from == date(2026, 11, 10)
+    assert spans["30"].day_from == date(2026, 10, 18) and spans["90"].day_from == date(2026, 8, 19)
+    assert spans["today"].actions == 0 and spans["today"].flags_by_type == []      # nothing raised today ...
+    assert spans["today"].to_handle == 2 and spans["today"].rows                   # ... but flags stay until resolved
+
+
+def test_the_change_against_the_range_before_is_given_when_the_log_reaches_back(app, tmp_path):
+    seed_audit(tmp_path, [("cloud_sync", "2026-11-03T04:00:00Z", "terminal", "", "ok", {"synced": 1})] +
+               [("cloud_sync", f"2026-11-1{n}T04:00:00Z", "terminal", "", "failed", {"synced": 0}) for n in range(0, 3)])
+    page = app.audit_overview("7", now=FLAG_NOW)                  # 10 to 16 Nov; before: 3 to 9 Nov
+    assert (page.actions, page.failures) == (3, 3)
+    assert page.actions_change == 200 and page.failures_change is None      # 1 action before, no failures before
+
+
+@pytest.mark.parametrize("kwargs", [{"preset": "1"}, {"preset": "custom"}, {"preset": 7}, {"tab": "done"},
+                                    {"page": 0}, {"page": "1"}, {"page": True}, {"now": datetime(2026, 11, 16)}])
+def test_the_overview_refuses_a_range_tab_page_or_time_that_is_not_allowed(flagged, kwargs):
+    with pytest.raises(ValueError):
+        flagged.audit_overview(**kwargs)
+
+
+def test_an_empty_log_gives_an_overview_with_no_flags_not_an_error(app):
+    page = app.audit_overview(now=FLAG_NOW)
+    assert (page.to_handle, page.actions, page.rows, page.broken_at) == (0, 0, [], 0)
+
+
+def test_the_flags_table_has_six_to_a_page_and_a_page_past_the_end_is_the_last(app, tmp_path):
+    lines = []
+    for number in range(8):             # eight clients, each edited by its owner at 00:00 in Singapore
+        client = f"C-{number}"
+        lines += [("client_created", "2026-11-10T02:00:00Z", "Shareen", client, "ok", {}),
+                  ("client_edited", "2026-11-11T16:00:00Z", "Shareen", client, "ok",
+                   {"changes": [{"field": "career.employer", "before": "A", "after": "B"}]})]
+    seed_audit(tmp_path, lines)
+    first = app.audit_overview(now=FLAG_NOW)
+    assert (first.page, first.page_count, len(first.rows), first.tab_counts["all"]) == (1, 2, 6, 8)
+    assert len(app.audit_overview(page=2, now=FLAG_NOW).rows) == 2
+    assert app.audit_overview(page=9, now=FLAG_NOW).page == 2
+    assert len({t.flag.flag_id for t in first.rows} | {t.flag.flag_id for t in app.audit_overview(
+        page=2, now=FLAG_NOW).rows}) == 8
+
+
+def test_the_tabs_follow_each_flags_status_and_resolved_flags_go_last(flagged):
+    ticket, problems, _ = flagged.update_flag("F-OTH-SOW-1-2", ADMIN, "review", "Asked Adrian why.", now=FLAG_NOW)
+    assert problems == [] and ticket.status == "review"
+    flagged.update_flag("F-HOU-SOW-1-3", ADMIN, "resolved", "Planned night work.", outcome="legit", now=FLAG_NOW)
+    page = flagged.audit_overview(tab="all", now=FLAG_NOW)
+    assert [t.flag.flag_id for t in page.rows] == ["F-OTH-SOW-1-2", "F-HOU-SOW-1-3"]
+    assert page.tab_counts == {"handle": 1, "open": 0, "review": 1, "followup": 0, "resolved": 1, "all": 2}
+    assert (page.to_handle, page.not_started, page.in_progress) == (1, 0, 1)
+    assert [t.flag.flag_id for t in flagged.audit_overview(tab="handle", now=FLAG_NOW).rows] == ["F-OTH-SOW-1-2"]
+    assert [t.flag.flag_id for t in flagged.audit_overview(tab="resolved", now=FLAG_NOW).rows] == ["F-HOU-SOW-1-3"]
+    assert flagged.audit_overview(tab="open", now=FLAG_NOW).rows == []
+    assert page.flags_by_type[0][:3] == ("other", "Edited by non-owner", 1) and page.severity_counts["low"] == 0
+
+
+def test_a_resolved_flag_that_is_older_than_a_new_open_one_still_sorts_after_it(app, tmp_path):
+    """Unresolved first by priority then newest, then resolved newest first, whatever their priority."""
+    seed_audit(tmp_path, NIGHT_OWNER)
+    app.update_flag("F-OTH-SOW-1-2", ADMIN, "resolved", "Checked with Adrian.", outcome="fixed", now=FLAG_NOW)
+    assert [t.flag.flag_id for t in app.audit_overview(tab="all", now=FLAG_NOW).rows] == \
+        ["F-HOU-SOW-1-3", "F-OTH-SOW-1-2"]
+
+
+def test_a_changed_log_shows_in_the_overview_with_its_flag_and_unreadable_rows_are_counted(flagged, tmp_path):
+    path = tmp_path / "local database" / "audit_log.json"
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    rows[1]["actor"] = "Someone Else"
+    path.write_text(json.dumps(rows + [{"junk": 1}]), encoding="utf-8")
+    page = flagged.audit_overview(now=FLAG_NOW)
+    assert (page.broken_at, page.intact, page.unreadable) == (2, False, 1)
+    assert "F-INT-2" in [t.flag.flag_id for t in page.rows]
+    assert page.rows[0].flag.severity == "high"
+
+
+def test_a_flag_update_added_to_the_file_by_hand_cannot_close_a_flag(flagged, tmp_path):
+    """Only lines the app signed with its key move a flag: a forged "resolved" line (any hash) is ignored,
+    even for the "log changed outside the app" flag it would hide, while a real update after it still counts."""
+    path = tmp_path / "local database" / "audit_log.json"
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    forged = dict(rows[-1], action="flag_updated", actor=ADMIN, result="ok", sequence=len(rows) + 1,
+                  details={"flag_id": "F-INT-4", "from": "open", "to": "resolved", "waiting_on": "",
+                           "outcome": "legit", "note": "Nothing to see here."}, hash="ab" * 32)
+    path.write_text(json.dumps(rows + [forged]), encoding="utf-8")
+    page = flagged.audit_overview(tab="all", now=FLAG_NOW)
+    integrity = [t for t in page.rows if t.flag.kind == "integrity"]
+    assert page.unreadable == 0 and page.broken_at == 4                 # the forged line is read, but ...
+    assert len(integrity) == 1 and integrity[0].status == "open"        # ... it does not close the flag
+    ticket, problems, _ = flagged.update_flag(integrity[0].flag.flag_id, ADMIN, "review", "Reported it to IT.",
+                                              now=FLAG_NOW)
+    assert problems == [] and ticket.status == "review"            # a real update made by the app still counts
+
+
+def test_a_log_without_a_key_cannot_be_checked_so_the_overview_says_so(tmp_path, monkeypatch, caplog):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    import shutil
+    shutil.copytree("config", tmp_path / "root" / "config")      # a root with no .env, so no key is read from it
+    seed_audit(tmp_path / "data", NIGHT_OWNER)
+    monkeypatch.delenv("AUDIT_KEY")
+    keyless = App(ai_caller=None, root=str(tmp_path / "root"), data_folder=str(tmp_path / "data"))
+    with pytest.raises(ValueError, match="key is missing"):
+        keyless.audit_overview(now=FLAG_NOW)
+    with pytest.raises(ValueError, match="key is missing"):
+        keyless.update_flag("F-OTH-SOW-1-2", ADMIN, "review", "Asked Adrian why.", now=FLAG_NOW)
+    assert keyless.audit_log(AuditFilter(), FLAG_NOW).total == 3          # the log itself can still be shown
+    assert "not checked for changes" in caplog.text
+
+
+def test_when_the_log_cannot_be_read_the_flag_methods_say_so_not_empty(flagged, tmp_path):
+    break_audit(tmp_path)
+    for call in (lambda: flagged.audit_overview(now=FLAG_NOW), lambda: flagged.flag("F-OTH-SOW-1-2"), lambda: flagged.flag_evidence("F-OTH-SOW-1-2"),
+                 lambda: flagged.client_flags("SOW-1"),
+                 lambda: flagged.update_flag("F-OTH-SOW-1-2", ADMIN, "review", "Asked Adrian why."),
+                 lambda: flagged.audit_log(AuditFilter())):
+        with pytest.raises(ValueError, match="audit log"):
+            call()
+
+
+def test_a_flag_is_found_by_its_id_or_is_none(flagged):
+    ticket = flagged.flag(" F-OTH-SOW-1-2 ", FLAG_NOW)
+    assert (ticket.flag.kind, ticket.status, ticket.flag.client_ref) == ("other", "open", "SOW-1")
+    assert flagged.flag("F-OTH-SOW-1-99", FLAG_NOW) is None and flagged.flag("", FLAG_NOW) is None
+    with pytest.raises(ValueError):
+        flagged.flag(None)
+
+
+def test_the_flag_evidence_is_the_ticket_the_entries_behind_it_and_the_size_of_the_log(flagged, tmp_path):
+    ticket, entries, size = flagged.flag_evidence(" F-OTH-SOW-1-2 ", FLAG_NOW)
+    assert ticket.flag.flag_id == "F-OTH-SOW-1-2" and [e.sequence for e in entries] == [2] and size == 3
+    assert flagged.flag_evidence("F-OTH-SOW-1-99", FLAG_NOW) == (None, [], 0)
+    with pytest.raises(ValueError, match="must be text"):
+        flagged.flag_evidence(None)
+    _add_unreadable_rows(tmp_path, 2)
+    assert flagged.flag_evidence("F-HOU-SOW-1-3", FLAG_NOW)[2] == 5      # the unreadable rows still count
+
+
+def test_an_update_writes_one_line_in_the_log_and_gives_back_its_number(flagged, tmp_path):
+    ticket, problems, entry = flagged.update_flag("F-OTH-SOW-1-2", ADMIN, "followup", "  Asked Adrian by email. ",
+                                                  "Officer who made the change", now=FLAG_NOW)
+    assert problems == [] and entry == 4 and flagged.audit_write_failed() is False
+    assert (ticket.status, ticket.waiting_on, ticket.assignee) == ("followup", "Officer who made the change", ADMIN)
+    line = _events(flagged)[-1]
+    assert (line.action, line.actor, line.client_ref, line.result, line.sequence) == \
+        ("flag_updated", ADMIN, "SOW-1", "ok", 4)
+    assert line.details == {"flag_id": "F-OTH-SOW-1-2", "from": "open", "to": "followup",
+                            "waiting_on": "Officer who made the change", "outcome": "", "note": "Asked Adrian by email."}
+    assert flagged.flag("F-OTH-SOW-1-2", FLAG_NOW).status == "followup"          # rebuilt from the log
+    assert flagged.verify_audit_log(ADMIN).intact()                              # and the chain still holds
+    _, _, again = flagged.update_flag("F-OTH-SOW-1-2", ADMIN, "followup", "Still waiting for a reply.", now=FLAG_NOW)
+    assert again == 6                                                            # entry 5 is the "verified" line
+
+
+@pytest.mark.parametrize("args, text", [
+    (("review", "no"), "at least 5 characters"),
+    (("review", "x" * 501), "500 characters"),
+    (("done", "Asked Adrian why."), "Choose a status"),
+    (("followup", "Asked Adrian why."), "who you are waiting on"),
+    (("resolved", "Planned night work."), "outcome before resolving")])
+def test_an_update_that_is_not_valid_says_why_and_writes_nothing(flagged, args, text):
+    before = len(_events(flagged))
+    ticket, problems, entry = flagged.update_flag("F-OTH-SOW-1-2", ADMIN, *args, now=FLAG_NOW)
+    assert ticket.status == "open" and entry == 0 and any(text in line for line in problems)
+    assert len(_events(flagged)) == before
+
+
+def test_an_update_to_a_flag_that_is_gone_says_so_and_writes_nothing(flagged):
+    assert flagged.update_flag("F-OTH-SOW-1-99", ADMIN, "review", "Asked Adrian why.", now=FLAG_NOW) == \
+        (None, [App.FLAG_GONE], 0)
+    assert len(_events(flagged)) == 3
+
+
+def test_only_an_admin_can_update_a_flag_and_the_inputs_must_be_text(flagged):
+    for actor in ("Shareen", "terminal", "unknown", "Mallory", None):
+        with pytest.raises(ValueError):
+            flagged.update_flag("F-OTH-SOW-1-2", actor, "review", "Asked Adrian why.", now=FLAG_NOW)
+    for kwargs in ({"flag_id": 5}, {"status": ["review"]}, {"note": None}, {"waiting_on": 1}, {"outcome": 1}):
+        arguments = {"flag_id": "F-OTH-SOW-1-2", "status": "review", "note": "Asked Adrian why."} | kwargs
+        with pytest.raises(ValueError, match="must be text"):
+            flagged.update_flag(actor=ADMIN, now=FLAG_NOW, **arguments)
+    assert len(_events(flagged)) == 3
+
+
+def test_an_update_that_cannot_be_written_is_not_saved_and_the_caller_can_tell(flagged, tmp_path, caplog):
+    folder = tmp_path / "local database"
+    folder.chmod(stat.S_IRUSR | stat.S_IXUSR)                  # readable, but no new file can be made in it
+    try:
+        ticket, problems, entry = flagged.update_flag("F-OTH-SOW-1-2", ADMIN, "review", "Asked Adrian why.",
+                                                      now=FLAG_NOW)
+    finally:
+        folder.chmod(stat.S_IRWXU)
+    assert problems == [App.FLAG_NOT_SAVED] and entry == 0 and ticket.status == "open"
+    assert flagged.audit_write_failed() is True
+    assert "was not written" in caplog.text
+    assert flagged.flag("F-OTH-SOW-1-2", FLAG_NOW).status == "open" and len(_events(flagged)) == 3
+
+
+def test_the_flags_of_one_client_are_the_ones_not_resolved(flagged):
+    assert [t.flag.flag_id for t in flagged.client_flags(" sow-1 ", FLAG_NOW)] == ["F-OTH-SOW-1-2", "F-HOU-SOW-1-3"]
+    assert flagged.client_flags("C-9", FLAG_NOW) == [] and flagged.client_flags("", FLAG_NOW) == []
+    flagged.update_flag("F-OTH-SOW-1-2", ADMIN, "resolved", "Checked with Adrian.", outcome="legit", now=FLAG_NOW)
+    assert [t.flag.flag_id for t in flagged.client_flags("SOW-1", FLAG_NOW)] == ["F-HOU-SOW-1-3"]
+
+
+def test_the_log_can_show_only_the_entries_behind_open_flags_and_counts_them(flagged):
+    everything = flagged.audit_log(AuditFilter(), FLAG_NOW)
+    assert (everything.total, everything.open_flags) == (3, 2)
+    only = flagged.audit_log(AuditFilter(flagged_only=True), FLAG_NOW)
+    assert [event.sequence for event in only.events] == [3, 2] and (only.total, only.open_flags) == (2, 2)
+    assert everything.flagged == frozenset({2, 3}) and only.flagged == frozenset({2, 3})
+    flagged.update_flag("F-HOU-SOW-1-3", ADMIN, "resolved", "Planned night work.", outcome="legit", now=FLAG_NOW)
+    after = flagged.audit_log(AuditFilter(flagged_only=True), FLAG_NOW)
+    assert [event.sequence for event in after.events] == [2] and after.open_flags == 1
+    assert flagged.audit_log(AuditFilter(flagged_only=True, actor="Shareen"), FLAG_NOW).total == 0
+
+
+def test_an_unreadable_client_database_is_written_to_the_log_once_per_request(app, tmp_path):
+    _damage(tmp_path, "sow_cases.json")
+    for call in (lambda: app.find_client("C-1"), app.all_clients, lambda: app.client_ref_taken("C-1")):
+        with pytest.raises(ValueError, match="client database"):
+            call()
+    [line] = _events(app)
+    assert (line.action, line.actor, line.client_ref, line.result, line.details) == \
+        ("data_unavailable", App.UNKNOWN, "", "failed", {"what": "client records"})
+    assert app.audit_write_failed() is False
+
+
+def test_an_unreadable_assessment_database_is_written_to_the_log_with_who_asked(app, tmp_path):
+    _damage(tmp_path, "ai_assessments.json")
+    with pytest.raises(ValueError, match="saved assessments"):
+        app.all_assessments()
+    app.refused("Shareen", "something")                        # a new request starts
+    with pytest.raises(ValueError, match="saved assessments"):
+        app.archive_assessment("A-1", "", "Shareen")
+    lines = [event for event in _events(app) if event.action == "data_unavailable"]
+    assert [(e.actor, e.details) for e in lines] == [(App.UNKNOWN, {"what": "assessments"}),
+                                                     ("Shareen", {"what": "assessments"})]
+
+
+def test_a_read_failure_line_that_cannot_be_written_never_raises_and_does_not_hide_the_read_error(app, tmp_path):
+    _damage(tmp_path, "sow_cases.json")
+    break_audit(tmp_path)
+    with pytest.raises(ValueError, match="client database"):          # the real problem, not an audit one
+        app.find_client("C-1")
+    assert app.audit_write_failed() is False
+
+
+def test_the_read_failures_are_the_read_failed_bar_of_the_overview(app, tmp_path):
+    _damage(tmp_path, "sow_cases.json")
+    with pytest.raises(ValueError):
+        app.all_clients()
+    page = app.audit_overview()
+    assert page.failures == 1 and page.failures_by_day[-1][1]["Read failed"] == 1
+
+
+class _FailingRules:
+    """Stands in for AuditInsights when the flag rules cannot run."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def flags(self):
+        raise ValueError("made-up rule failure")
+
+
+class _SkippingRules:
+    """Stands in for AuditInsights when the rules found flags that could not be built."""
+    skipped = 2
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def flags(self):
+        return []
+
+
+def _app_with_rules(tmp_path, monkeypatch, rules):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    return App(ai_caller=None, data_folder=str(tmp_path), rules=rules)
+
+
+def test_the_flag_rules_must_be_a_class(tmp_path):
+    with pytest.raises(ValueError, match="flag rules must be a class"):
+        App(ai_caller=None, data_folder=str(tmp_path), rules="AuditInsights")
+    with pytest.raises(ValueError, match="flag rules must be a class"):
+        App(ai_caller=None, data_folder=str(tmp_path), rules=lambda *args: None)
+
+
+def test_the_log_still_shows_its_events_when_the_flag_rules_fail(tmp_path, monkeypatch, caplog):
+    app = _app_with_rules(tmp_path, monkeypatch, _FailingRules)
+    app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    log = app.audit_log(AuditFilter())
+    assert log.total == 1 and log.flags_ok is False and log.open_flags is None and log.flagged == frozenset()
+    assert "the flags could not be worked out" in caplog.text and "made-up rule failure" in caplog.text
+    with pytest.raises(ValueError, match="flags could not be worked out"):
+        app.audit_log(AuditFilter(flagged_only=True))
+    with pytest.raises(ValueError, match="flags could not be worked out"):
+        app.audit_overview()
+
+
+def test_flags_that_could_not_be_built_are_logged_and_counted_on_the_pages(tmp_path, monkeypatch, caplog):
+    app = _app_with_rules(tmp_path, monkeypatch, _SkippingRules)
+    app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    assert app.audit_log(AuditFilter()).flags_skipped == 2
+    assert app.audit_overview().flags_skipped == 2
+    assert "2 flag(s) found by the rules could not be built" in caplog.text
+
+
+class _CountingRules:
+    """The real flag rules, counting how many times they are run."""
+    runs = 0
+
+    def __init__(self, *args, **kwargs) -> None:
+        _CountingRules.runs += 1
+        self.__real = AuditInsights(*args, **kwargs)
+        self.skipped = self.__real.skipped
+
+    def flags(self):
+        return self.__real.flags()
+
+
+def test_the_open_flag_count_is_kept_until_the_log_changes(tmp_path, monkeypatch):
+    _CountingRules.runs = 0
+    app = _app_with_rules(tmp_path, monkeypatch, _CountingRules)
+    seed_audit(tmp_path, NIGHT_OWNER)
+    assert app.open_flag_count(FLAG_NOW) == 2 and _CountingRules.runs == 1
+    assert app.open_flag_count(FLAG_NOW) == 2 and _CountingRules.runs == 1        # same log: no second run
+    app.update_flag("F-HOU-SOW-1-3", ADMIN, "resolved", "Planned night work.", outcome="legit", now=FLAG_NOW)
+    assert app.open_flag_count(FLAG_NOW) == 1                                      # a new line: worked out again
+    runs = _CountingRules.runs
+    assert runs > 1 and app.open_flag_count(FLAG_NOW) == 1 and _CountingRules.runs == runs
+
+
+def test_an_open_flag_count_that_cannot_be_worked_out_is_none_not_zero(tmp_path, monkeypatch, caplog):
+    app = _app_with_rules(tmp_path, monkeypatch, _FailingRules)
+    seed_audit(tmp_path, NIGHT_OWNER)
+    assert app.open_flag_count(FLAG_NOW) is None and "the open flags cannot be counted" in caplog.text
+    assert app.open_flag_count(FLAG_NOW) is None                                   # a failure is never kept
+    break_audit(tmp_path)
+    assert app.open_flag_count(FLAG_NOW) is None
+
+
+def test_an_empty_log_has_no_open_flags(app):
+    assert app.open_flag_count() == 0
+
+
+def test_a_read_failure_line_names_the_actor_the_request_began_with_and_each_request_gets_its_own_line(app, tmp_path):
+    _damage(tmp_path, "sow_cases.json")
+    app.begin_request("Shareen")
+    with pytest.raises(ValueError, match="client database"):
+        app.all_clients()
+    with pytest.raises(ValueError, match="client database"):
+        app.find_client("C-1")                                  # same request: no second line
+    app.begin_request("Adrian")
+    with pytest.raises(ValueError, match="client database"):
+        app.all_clients()
+    app.begin_request(App.UNKNOWN)
+    with pytest.raises(ValueError, match="client database"):
+        app.all_clients()
+    lines = [event for event in _events(app) if event.action == "data_unavailable"]
+    assert [event.actor for event in lines] == ["Shareen", "Adrian", App.UNKNOWN]
+
+
+def test_begin_request_refuses_a_name_that_is_not_an_account_and_keeps_a_pending_audit_failure(app):
+    with pytest.raises(ValueError, match="actor"):
+        app.begin_request("Nobody Here")
+    with pytest.raises(ValueError, match="actor"):
+        app.begin_request(None)
+    app.begin_request(App.TERMINAL)
+    assert app.audit_write_failed() is False
+
+
+def test_flags_to_handle_is_known_only_after_the_flags_were_worked_out_in_this_request(flagged):
+    flagged.begin_request(ADMIN)
+    assert flagged.flags_to_handle() is None
+    flagged.client_flags("SOW-1", FLAG_NOW)
+    assert isinstance(flagged.flags_to_handle(), int) and flagged.flags_to_handle() > 0
+    flagged.begin_request(ADMIN)
+    assert flagged.flags_to_handle() is None

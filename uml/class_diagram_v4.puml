@@ -351,7 +351,7 @@ package "IO Manager (app/interface)" {
     +SOW_FIELDS : list[tuple[str, str, str]] = [...] «const»
     +ASSESSMENT_FAILED : str = "The assessment could not be complete... «const»
     +ASSESSMENT_STOPPED : str = "The assessment was stopped because a... «const»
-    +AUDIT_ENDPOINTS : tuple[str, ...] = ("audit_log_view", "audit_verify") «const»
+    +AUDIT_ENDPOINTS : tuple[str, ...] = ("audit_log_view", "audit_verify", "admin_home", "admin_flag") «const»
     +NOT_ADMIN : str = "Only the admin can open the audit log." «const»
     +SINGAPORE : timezone = timezone(timedelta(hours=8)) «const»
     +ADMIN_ENDPOINTS : tuple[str, ...] = (...) «const»
@@ -362,6 +362,15 @@ package "IO Manager (app/interface)" {
     +GROUP_COLOURS : dict[str, str] = {...} «const»
     +OFFICER_KEY : str = "officer" «const»
     +PROFILE_IN_CAREER : tuple[str, ...] = (...) «const»
+    +FAILURE_KINDS : tuple[str, ...] = (...) «const»
+    +FLAG_FIELDS : dict[str, str] = {...} «const»
+    +FLAG_FIELDS_SHORT : dict[str, str] = {...} «const»
+    +MAX_FORM_TEXT : int = 1000 «const»
+    +OVERVIEW_RANGES : tuple[tuple[str, str], ...] = (...) «const»
+    +SAFE_FLAG_ERRORS : tuple[str, ...] = (...) «const»
+    +SEVERITY_CLASS : dict[str, str] = {...} «const»
+    +SEVERITY_COLOURS : dict[str, str] = {...} «const»
+    +WEEKDAYS : tuple[str, ...] = (...) «const»
     --
     +__init__(app : App | None = None, limiter : RateLimiter | None = None)
     +start(host : str = "127.0.0.1", port : int = 5000, debug : bool = False) : None
@@ -433,7 +442,7 @@ package "IO Manager (app/interface)" {
     -__portal() : str
     -__session_account(key : str) : Account | None
     {static} -__utc_moment(text : str) : datetime
-    +admin_home() : Response
+    +admin_home() : str
     {static} +field_label(path : Any) : str
     {static} +initials(name : str) : str
     +portal_link(endpoint : str, **values : Any) : str
@@ -441,6 +450,29 @@ package "IO Manager (app/interface)" {
     +singapore_clock(text : str) : str
     +singapore_day(text : str) : str
     +singapore_long(text : str) : str
+    -__badge(event : AuditEvent) : Markup
+    -__client_flag_boxes(client_ref : str, client_name : str, history : list[AuditEvent], history_failed : bool, now : datetime) : tuple[list[dict], str, set[int]]
+    -__client_names(refs : list[str]) : dict[str, str]
+    -__failure_chart(view : OverviewPage) : dict
+    {static} -__failure_kind(event : AuditEvent) : str
+    -__flag_evidence(ticket : FlagTicket, events : list[AuditEvent], client_name : str) : list[dict]
+    -__flag_log_link(flag : Flag, events : list[AuditEvent]) : str
+    {static} -__median(values : list[int]) : float
+    -__overview_query() : tuple[str, str, int, list[str]]
+    {static} -__parent_field(path : Any) : str
+    -__picture(ticket : FlagTicket, events : list[AuditEvent], entries : int, client_name : str, history : list[AuditEvent] | None = None) : dict
+    -__row_detail(ticket : FlagTicket, events : list[AuditEvent]) : Markup
+    {static} -__short_field(path : Any, fallback : str) : str
+    -__show_flag(flag_id : str, draft : dict[str, str] | None = None, errors : list[str] | None = None) : str | tuple[str, int]
+    {static} -__shown_error(error : ValueError) : str
+    -__update_flag(flag_id : str) : str | Response | tuple[str, int]
+    -__what_failed(event : AuditEvent) : str
+    +admin_flag(flag_id : str) : str | Response | tuple[str, int]
+    +day_when(text : str) : str
+    +flag_field(path : Any) : str
+    +open_flag_count() : int | None
+    +singapore_ago(text : str) : str
+    +singapore_when(text : str, with_time : bool = True) : str
   }
 }
 
@@ -688,8 +720,18 @@ package "Application (app/application)" {
     +UNKNOWN : str = AuditEvent.UNKNOWN «const»
     -__recent_refusals : dict[tuple[str, str], float] = {}
     -__refusal_lock : threading.Lock = threading.Lock()
+    +FLAGS_UNAVAILABLE : str = "The flags could not be worked out ri... «const»
+    +FLAG_ADMIN_ONLY : str = "Only an administrator can update a f... «const»
+    +FLAG_GONE : str = "That flag no longer exists. The rule... «const»
+    +FLAG_NOT_SAVED : str = "Your update was not saved. The audit... «const»
+    -__audit_policy : AuditPolicy = AuditPolicy.from_dict(audit_settings) {get}
+    -__rules : type[AuditInsights] = AuditInsights
+    -__flag_count_lock : threading.Lock = threading.Lock()
+    -__flag_count : tuple[tuple[int, str], int] | None = None
+    +LOG_MAX_BYTES : int = 5 * 1024 * 1024 «const»
+    +LOG_BACKUPS : int = 3 «const»
     --
-    +__init__(ai_caller : Callable[[str, dict, dict], str | None] | None = None, root : str = ROOT_DIR, data_folder : str = "data")
+    +__init__(ai_caller : Callable[[str, dict, dict], str | None] | None = None, root : str = ROOT_DIR, data_folder : str = "data", rules : type[AuditInsights] = AuditInsights)
     +start(arguments : list[str]) : int
     +run_menu() : None
     +run_case_file(path : str) : bool
@@ -772,6 +814,22 @@ package "Application (app/application)" {
     +verify_audit_log(actor : str) : AuditChain
     +audit_key_ok() : bool
     +last_activity() : dict[str, AuditEvent]
+    -__check_actor(actor : str) : None
+    {static} -__checked_now(now : datetime | None) : datetime
+    -__flag_view(caller : str, now : datetime, strict : bool) : tuple[list[AuditEvent], int, int, list[Flag], dict[str, FlagTicket]]
+    -__read_failed(what : str, actor : str = "") : None
+    -__read_log(caller : str, strict : bool) : tuple[list[AuditEvent], int, int]
+    {static} -__table_order(tickets : list[FlagTicket]) : list[FlagTicket]
+    -__work_out_flags(caller : str, events : list[AuditEvent], broken_at : int, now : datetime) : tuple[list[Flag], dict[str, FlagTicket], int]
+    +audit_overview(preset : str = OverviewPage.DEFAULT_PRESET, tab : str = OverviewPage.DEFAULT_TAB, page : int = 1, now : datetime | None = None) : OverviewPage
+    +begin_request(actor : str) : None
+    +client_flags(client_ref : str, now : datetime | None = None) : list[FlagTicket]
+    +flag(flag_id : str, now : datetime | None = None) : FlagTicket | None
+    +flag_evidence(flag_id : str, now : datetime | None = None) : tuple[FlagTicket | None, list[AuditEvent], int]
+    +flags_to_handle() : int | None
+    +update_flag(flag_id : str, actor : str, status : str, note : str, waiting_on : str = "", outcome : str = "", now : datetime | None = None) : tuple[FlagTicket | None, list[str], int]
+    +open_flag_count(now : datetime | None = None) : int | None
+    -__events_of(rows : list[dict], caller : str, strict : bool) : tuple[list[AuditEvent], int, int]
   }
   class AssessmentRunner {
     -__verdict_engine : VerdictEngine = VerdictEngine(...)
@@ -833,6 +891,86 @@ package "Logic Manager (app/logic)" {
     +unreadable_count() : int
     -__broken_ids : list[str] = []
     +broken_ids() : list[str]
+  }
+  class AuditInsights {
+    +ACTION_NAMES : dict[str, str] = {...} «const»
+    +FAILURE_KINDS : tuple[str, ...] = (...) «const»
+    +FIELD_NAMES : dict[str, str] = {...} «const»
+    +MAX_LISTED_RUNS : int = 8 «const»
+    +MAX_MOVES : int = 3 «const»
+    +MAX_QUOTED : int = 60 «const»
+    +MONTHS : tuple[str, ...] = (...) «const»
+    +VERDICT_LABELS : dict[str, str] = {...} «const»
+    -__DAY : timedelta = timedelta(days=1) «const»
+    -__NO_ACCOUNT : frozenset[str] = frozenset((AuditEvent.TERMINAL, Audit... «const»
+    -__broken_at : int = 0
+    -__events : list[AuditEvent] = []
+    -__now : datetime | None = None
+    -__policy : AuditPolicy = AuditPolicy() if policy is None else ...
+    -__skipped : int = 0 {get}
+    --
+    {static} -__amount(count : int, singular : str) : str
+    -__built(make : Callable[[], Flag | list[Flag]]) : list[Flag]
+    -__bursts(runs : list[AuditEvent]) : list[list[AuditEvent]]
+    {static} -__changes(event : AuditEvent) : list[dict]
+    -__client_flags(reference : str, history : list[AuditEvent]) : list[Flag]
+    {static} -__clock(moment : datetime) : str
+    {static} -__field_name(field : object) : str
+    -__hours_flag(event : AuditEvent, owners : dict[str, str]) : list[Flag] | Flag
+    -__hours_flags(owners : dict[str, str]) : list[Flag]
+    +__init__(events : list[AuditEvent] | None = None, policy : AuditPolicy | None = None, broken_at : int = 0, now : datetime | None = None)
+    -__integrity_flag() : list[Flag] | Flag
+    {static} -__is_figure(value : object) : bool
+    {static} -__level(event : AuditEvent) : int
+    {static} -__local(event : AuditEvent) : datetime
+    {static} -__moment(text : str) : datetime
+    -__moved_name(change : dict) : str
+    {static} -__number(value : object) : str
+    -__other_flag(reference : str, edit : AuditEvent, owner : str, watched : list[dict]) : Flag
+    {static} -__owner(history : list[AuditEvent]) : str
+    {static} -__quote(value : object) : str
+    {static} -__repeat_flag(reference : str, owner : str, within : list[AuditEvent]) : Flag
+    {static} -__round(value : float) : int
+    -__shop_flag(reference : str, owner : str, before : AuditEvent, edit : AuditEvent, after : AuditEvent) : Flag
+    {static} -__short_day(day : date) : str
+    -__spike_flag(day : date, failures : dict[date, list[AuditEvent]]) : list[Flag] | Flag
+    -__spike_flags() : list[Flag]
+    {static} -__spike_meaning(events : list[AuditEvent]) : str
+    {static} -__verdict_label(event : AuditEvent) : str
+    -__watched(event : AuditEvent) : list[dict]
+    {static} +failure_kind(event : AuditEvent) : str
+    +flags() : list[Flag]
+  }
+  class AuditStats {
+    +SEVERITY_ORDER : tuple[str, ...] = ("high", "medium", "low") «const»
+    -__before_from : date = day_from - timedelta(days=self.__length)
+    -__before_to : date = day_from - timedelta(days=1)
+    -__day_from : date = fallback if day_from is None else day... {get}
+    -__day_to : date = fallback if day_to is None else day_to {get}
+    -__days : list[date] = []
+    -__events : list[AuditEvent] = []
+    -__flags : list[Flag] = []
+    -__length : int = 1 {get}
+    -__tickets : dict[str, FlagTicket] = {}
+    +actions : int «property»
+    +actions_before : int «property»
+    +failures : int «property»
+    +failures_before : int «property»
+    +has_previous : bool «property»
+    +in_progress : int «property»
+    +not_started : int «property»
+    +open_flags_in_range : int «property»
+    +to_handle : int «property»
+    --
+    -__count(first : date, last : date, failures_only : bool) : int
+    +__init__(events : list[AuditEvent] | None = None, flags : list[Flag] | None = None, tickets : dict[str, FlagTicket] | None = None, day_from : date | None = None, day_to : date | None = None, now : datetime | None = None)
+    -__open_in_range() : list[Flag]
+    -__status(flag : Flag) : str
+    +change_percent(now_count : int, before_count : int) : int | None
+    +failures_by_day() : list[tuple[date, dict[str, int]]]
+    +flags_by_type() : list[tuple[str, str, int, int]]
+    +severity_counts() : dict[str, int]
+    +type_severity() : dict[str, str]
   }
   class Benchmark {
     -__config : Config = Config(...)
@@ -1196,6 +1334,8 @@ package "Domain Model (app/model)" {
     +group : str «property»
     +label : str «property»
     +UNKNOWN : str = "unknown" «const»
+    +SAVE_STEP : str = "Saving the assessment" «const»
+    -__FLAG_STATES : dict[str, str] = {...} «const»
     --
     {static} -__count(value : object, noun : str) : str
     {static} -__good_time(text : str) : bool
@@ -1238,11 +1378,14 @@ package "Domain Model (app/model)" {
     -__preset : str = "7" {get}
     -__query : str = "" {get}
     -__sort : str = "desc" {get}
+    +FALSE_TEXTS : tuple[str, ...] = ("0", "off", "false", "no") «const»
+    +TRUE_TEXTS : tuple[str, ...] = ("1", "on", "true", "yes") «const»
+    -__flagged_only : bool = False {get}
     --
-    +__init__(preset : str = "7", date_from : str = "", date_to : str = "", groups : Iterable[str] | None = None, result : str = "all", actor : str = "", client_ref : str = "", query : str = "", sort : str = "desc", page : int = 1)
+    +__init__(preset : str = "7", date_from : str = "", date_to : str = "", groups : Iterable[str] | None = None, result : str = "all", actor : str = "", client_ref : str = "", query : str = "", sort : str = "desc", page : int = 1, flagged_only : bool = False)
     +chips() : list[tuple[str, str]]
     {static} +from_query(args : Mapping, now : datetime | None = None) : AuditFilter
-    +matches(event : AuditEvent, now : datetime) : bool
+    +matches(event : AuditEvent, now : datetime, flagged : Collection[int] | None = None) : bool
     +page_count(total : int) : int
     +page_for(total : int) : int
     +page_of(events : list[AuditEvent]) : list[AuditEvent]
@@ -1266,8 +1409,39 @@ package "Domain Model (app/model)" {
     -__officers : int = 0 {get}
     -__total : int = 0 {get}
     -__unreadable : int = 0 {get}
+    -__flagged : frozenset[int] = frozenset(flagged) {get}
+    -__flags_ok : bool = True {get}
+    -__flags_skipped : int = 0 {get}
+    -__open_flags : int | None = 0 {get}
     --
-    +__init__(events : list[AuditEvent] | None = None, total : int = 0, unreadable : int = 0, everything : int = 0, officers : int = 0, failed : int = 0)
+    +__init__(events : list[AuditEvent] | None = None, total : int = 0, unreadable : int = 0, everything : int = 0, officers : int = 0, failed : int = 0, open_flags : int | None = 0, flagged : tuple[int, ...] | list[int] | set[int] | frozenset[int] = (), flags_ok : bool = True, flags_skipped : int = 0)
+  }
+  class AuditPolicy {
+    +ALLOWED_FIELDS : tuple[str, ...] = (...) «const»
+    +DEFAULT_WATCHED_FIELDS : tuple[str, ...] = (...) «const»
+    +KEYS : tuple[str, ...] = (...) «const»
+    +MAX_FIELD_LENGTH : int = 80 «const»
+    +MAX_JUMP_LEVELS : int = 3 «const»
+    -__TIME_PATTERN : str = "^([01]\\d|2[0-3]):[0-5]\\d$" «const»
+    -__jump_levels : int = 2 {get}
+    -__repeat_assessments : int = 3 {get}
+    -__spike_baseline_days : int = 14 {get}
+    -__spike_min : int = 3 {get}
+    -__spike_multiplier : float = 3 {get}
+    -__watched_fields : tuple[str, ...] = DEFAULT_WATCHED_FIELDS {get}
+    -__window_days : int = 30 {get}
+    -__work_end : str = "20:00" {get}
+    -__work_start : str = "08:00" {get}
+    +work_end_minutes : int «property»
+    +work_start_minutes : int «property»
+    --
+    {static} -__check_count(name : str, value : object, low : int, high : int | None = None) : None
+    +__init__(watched_fields : tuple[str, ...] | list[str] = DEFAULT_WATCHED_FIELDS, window_days : int = 30, repeat_assessments : int = 3, jump_levels : int = 2, work_start : str = "08:00", work_end : str = "20:00", spike_multiplier : float = 3, spike_min : int = 3, spike_baseline_days : int = 14)
+    {static} -__inside(field : str, parent : str) : bool
+    {static} -__minutes(name : str, value : object, allow_24 : bool) : int
+    {static} +from_dict(data : dict) : AuditPolicy
+    +to_dict() : dict
+    +watching(field : object) : str
   }
   class Band {
     -__cautious : float = 0.0 {get}
@@ -1456,6 +1630,59 @@ package "Domain Model (app/model)" {
     +to_dict() : dict
     +to_scan_dict() : dict
   }
+  class Flag {
+    +KINDS : tuple[str, ...] = (...) «const»
+    +MAX_CLIENT_REF : int = 40 «const»
+    +MAX_HEADLINE : int = 300 «const»
+    +MAX_MEANING : int = 800 «const»
+    +MAX_OWNER : int = 80 «const»
+    +NAMES : dict[str, str] = {...} «const»
+    +SEVERITIES : tuple[str, ...] = ("high", "medium", "low") «const»
+    +SEVERITY_NAMES : dict[str, str] = {...} «const»
+    -__ID_PATTERN : str = "^F-[A-Z]{3}(-[A-Z0-9]+(-[A-Z0-9]+)*)... «const»
+    -__broken_at : int = 0 {get}
+    -__changes : tuple[dict, ...] = () {get}
+    -__client_ref : str = "" {get}
+    -__day : str = "" {get}
+    -__flag_id : str = "F-SHO-1" {get}
+    -__headline : str = "Flag" {get}
+    -__kind : str = "shop" {get}
+    -__meaning : str = "" {get}
+    -__owner : str = "" {get}
+    -__raised_at : str = "2026-01-01T00:00:00Z" {get}
+    -__sequences : tuple[int, ...] = (1,) {get}
+    -__severity : str = "high" {get}
+    -__usual : float = 0 {get}
+    +name : str «property»
+    +severity_name : str «property»
+    --
+    {static} -__check_time(text : str) : None
+    +__init__(flag_id : str = "F-SHO-1", kind : str = "shop", severity : str = "high", client_ref : str = "", headline : str = "Flag", meaning : str = "", sequences : tuple[int, ...] | list[int] = (1,), raised_at : str = "2026-01-01T00:00:00Z", owner : str = "", changes : tuple[dict, ...] | list[dict] = (), day : str = "", usual : float = 0, broken_at : int = 0)
+    {static} -__parse_day(text : str) : date | None
+    {static} +make_id(kind : str, client_ref : str, sequence : int) : str
+  }
+  class FlagTicket {
+    +NOTE_MAX : int = 500 «const»
+    +NOTE_MIN : int = 5 «const»
+    +OPENED_NOTE : str = "Opened automatically by the rule." «const»
+    +OUTCOMES : dict[str, str] = {...} «const»
+    +STATUSES : dict[str, str] = {...} «const»
+    +WAITING_ON : tuple[str, ...] = (...) «const»
+    -__assignee : str = "" {get}
+    -__flag : Flag = Flag() if flag is None else flag {get}
+    -__history : list[dict] = [...] {get}
+    -__outcome : str = "" {get}
+    -__skipped : int = 0
+    -__status : str = "open" {get}
+    -__waiting_on : str = "" {get}
+    +skipped_count : int «property»
+    +status_name : str «property»
+    --
+    -__apply(event : AuditEvent) : None
+    +__init__(flag : Flag | None = None, events : list[AuditEvent] | None = None)
+    +check_update(status : str, note : str, waiting_on : str = "", outcome : str = "") : list[str]
+    +update_details(actor : str, status : str, note : str, waiting_on : str = "", outcome : str = "") : dict
+  }
   class Investment {
     -__asset_type : str = "" {get}
     -__country : str = "" {get}
@@ -1504,6 +1731,51 @@ package "Domain Model (app/model)" {
     {static} -__signs(weight : str, fired : list[str] | None, allowed : list[str]) : list[str]
     +fired() : list[str]
     +to_dict() : dict
+  }
+  class OverviewPage {
+    +DEFAULT_PRESET : str = "7" «const»
+    +DEFAULT_TAB : str = "handle" «const»
+    +PAGE_SIZE : int = 6 «const»
+    +PRESETS : tuple[str, ...] = ("today", "7", "30", "90") «const»
+    +SEVERITIES : tuple[str, ...] = ("high", "medium", "low") «const»
+    +TABS : tuple[str, ...] = (...) «const»
+    +TAB_NAMES : dict[str, str] = {...} «const»
+    -__actions : int = 0 {get}
+    -__actions_change : int | None = None {get}
+    -__actions_diff : int = 0 {get}
+    -__broken_at : int = 0 {get}
+    -__day_from : date = date(1970, 1, 1) {get}
+    -__day_to : date = date(1970, 1, 1) {get}
+    -__entries : int = 0 {get}
+    -__evidence : dict[str, list[AuditEvent]] = {}
+    -__failures : int = 0 {get}
+    -__failures_by_day : list[tuple[str, dict[str, int]]] = [] {get}
+    -__failures_change : int | None = None {get}
+    -__failures_diff : int = 0 {get}
+    -__flags_by_type : list[tuple[str, str, int, int]] = [] {get}
+    -__flags_skipped : int = 0 {get}
+    -__has_previous : bool = False {get}
+    -__in_progress : int = 0 {get}
+    -__not_started : int = 0 {get}
+    -__page : int = 1 {get}
+    -__page_count : int = 1 {get}
+    -__preset : str = "7" {get}
+    -__rows : list[FlagTicket] = [] {get}
+    -__severity_counts : dict[str, int] = None {get}
+    -__tab : str = "handle" {get}
+    -__tab_counts : dict[str, int] = None {get}
+    -__to_handle : int = 0 {get}
+    -__type_severity : dict[str, str] = {} {get}
+    -__unreadable : int = 0 {get}
+    +intact : bool «property»
+    +open_flags : int «property»
+    --
+    {static} -__check_count(name : str, value : object, low : int) : None
+    {static} -__check_counts(name : str, counts : object, keys : tuple[str, ...]) : None
+    {static} -__check_days(days : object) : None
+    {static} -__check_types(entries : object) : None
+    +__init__(preset : str = "7", day_from : date = date(1970, 1, 1), day_to : date = date(1970, 1, 1), to_handle : int = 0, not_started : int = 0, in_progress : int = 0, actions : int = 0, actions_change : int | None = None, failures : int = 0, failures_change : int | None = None, broken_at : int = 0, failures_by_day : list[tuple[str, dict[str, int]]] | None = None, flags_by_type : list[tuple[str, str, int, int]] | None = None, severity_counts : dict[str, int] | None = None, tab : str = "handle", tab_counts : dict[str, int] | None = None, rows : list[FlagTicket] | None = None, page : int = 1, page_count : int = 1, unreadable : int = 0, type_severity : dict[str, str] | None = None, entries : int = 0, evidence : dict[str, list[AuditEvent]] | None = None, flags_skipped : int = 0, has_previous : bool = False, actions_diff : int = 0, failures_diff : int = 0)
+    +evidence(flag_id : str) : list[AuditEvent]
   }
   class ResearchReport {
     -__report_id : str = "" {get}
@@ -1610,6 +1882,7 @@ package "Domain Model (app/model)" {
 
 AIService -- ResponseCache : caches in
 App *-- "1" AssessmentRunner
+App *-- "1" AuditPolicy
 App *-- "1" AuditRepository
 App *-- "1" CaseBuilder
 App *-- "1" CaseFiles
@@ -1629,12 +1902,17 @@ App ..> Account : uses
 App ..> AuditChain : uses
 App ..> AuditEvent : uses
 App ..> AuditFilter : uses
+App ..> AuditInsights : uses
 App ..> AuditPage : uses
+App ..> AuditStats : creates
 App ..> CaseReader : creates
 App ..> ClientRecord : uses
 App ..> Declaration : uses
 App ..> DocumentRecordBuilder : creates
+App ..> Flag : uses
+App ..> FlagTicket : creates
 App ..> MongoRepository : creates
+App ..> OverviewPage : creates
 App ..> RecordDiff : uses
 App ..> Verdict : uses
 App ..> WebApp : creates
@@ -1652,9 +1930,18 @@ AssetPath ..> Band : uses
 AssetPath ..> CaseTimeline : creates
 AuditChain *-- "0..*" AuditEvent
 AuditFilter ..> AuditEvent : uses
-AuditPage *-- "0..*" AuditEvent
+AuditInsights ..> AuditFilter : uses
+AuditInsights ..> Flag : creates
+AuditInsights o-- "0..*" AuditEvent
+AuditInsights o-- "1" AuditPolicy
+AuditPage o-- "0..*" AuditEvent
 AuditRepository --|> JsonRepository
 AuditRepository ..> AuditEvent : uses
+AuditStats ..> AuditFilter : uses
+AuditStats ..> AuditInsights : uses
+AuditStats o-- "0..*" AuditEvent
+AuditStats o-- "0..*" Flag
+AuditStats o-- "0..*" FlagTicket
 Benchmark -- Config : reads names
 Benchmark --|> RiskAnalysis
 Benchmark ..> CaseTimeline : creates
@@ -1683,6 +1970,7 @@ CloudSync -- DatabaseRepository : remote
 CloudSync -- Repository : local
 Config o-- "0..*" Account
 ConfigReader ..> Account : uses
+ConfigReader ..> AuditPolicy : uses
 CounterpartyUnnamed --|> Indicator
 CrimeScan *-- "5" Indicator
 CrimeScan --|> RiskAnalysis
@@ -1703,6 +1991,8 @@ DocumentRecordBuilder ..> ClientRecord : creates
 DocumentStore *-- "1" DocumentReaderFactory
 DocumentStore ..> DocumentReader : uses
 ExcelReader --|> DocumentReader
+FlagTicket ..> AuditEvent : uses
+FlagTicket o-- "1" Flag
 Forecast *-- "1" FuturePaths
 Forecast *-- "1" MarketModel
 Forecast *-- "1" OnboardingAssessor
@@ -1735,6 +2025,8 @@ OnboardingAssessor ..> AssetPath : uses
 OnboardingAssessor ..> Band : uses
 OnboardingAssessor ..> CaseTimeline : creates
 OnboardingAssessor ..> ClaimedSource : uses
+OverviewPage o-- "0..*" AuditEvent
+OverviewPage o-- "0..*" FlagTicket
 PayCalibrator -- CareerSavings : adjusts
 PayCalibrator ..> CaseTimeline : creates
 PdfReader --|> DocumentReader
@@ -1775,6 +2067,9 @@ WebApp ..> AuditEvent : uses
 WebApp ..> AuditFilter : uses
 WebApp ..> AuditPage : uses
 WebApp ..> ClientRecord : uses
+WebApp ..> Flag : uses
+WebApp ..> FlagTicket : uses
+WebApp ..> OverviewPage : uses
 WebApp ..> TrailFilter : uses
 WebApp ..> Typology : uses
 WordReader --|> DocumentReader

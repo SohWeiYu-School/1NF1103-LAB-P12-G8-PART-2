@@ -183,3 +183,33 @@ def test_an_account_without_a_password_hash_is_a_problem(tmp_path):
 def test_a_plain_text_password_in_the_accounts_file_is_refused(tmp_path):
     problems = _config_with_accounts(tmp_path, [ADMIN, {**OFFICER, "password_hash": "officer123"}]).problems()
     assert len(problems) == 1 and "account 2 is not valid" in problems[0] and "plain password" in problems[0]
+
+
+def _config_with_audit(tmp_path, audit):
+    import shutil
+    folder = tmp_path / "config"
+    shutil.copytree("config", folder)
+    policy = json.loads((folder / "policy.json").read_text())
+    if audit is None:
+        policy.pop("audit", None)
+    else:
+        policy["audit"] = audit
+    (folder / "policy.json").write_text(json.dumps(policy))
+    return ConfigReader(str(folder))
+
+
+def test_a_missing_audit_section_means_the_defaults_and_is_not_a_problem(tmp_path):
+    assert _config_with_audit(tmp_path, None).problems() == []
+
+
+def test_an_audit_setting_that_cannot_be_right_is_reported_with_the_reason(tmp_path):
+    problems = _config_with_audit(tmp_path, {"window_days": 0}).problems()
+    assert len(problems) == 1 and problems[0].startswith("config/policy.json 'audit': window_days must be")
+
+
+def test_an_unknown_audit_setting_is_reported(tmp_path):
+    assert any("Unknown audit setting: wndow" in p for p in _config_with_audit(tmp_path, {"wndow": 1}).problems())
+
+
+def test_an_audit_section_that_is_not_an_object_is_reported(tmp_path):
+    assert any("'audit'" in p and "object" in p for p in _config_with_audit(tmp_path, ["x"]).problems())

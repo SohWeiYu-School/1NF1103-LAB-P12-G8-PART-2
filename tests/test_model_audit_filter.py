@@ -78,7 +78,7 @@ def test_a_bad_preset_falls_back_to_7_days_and_says_what_is_allowed(value):
 def test_a_bad_group_is_ignored_and_the_good_ones_are_kept():
     f = AuditFilter.from_query(MultiDict([("group", "Client"), ("group", "Everything")]), NOW)
     assert f.groups == ("Client",)
-    assert f.problems() == ["'group' must be one of Sign-in, Client, Documents, Assessment, System; ignoring that value."]
+    assert f.problems() == ["'group' must be one of Sign-in, Client, Documents, Assessment, System, Flag updates; ignoring that value."]
     assert AuditFilter.from_query({"group": "Everything"}, NOW).all_groups() is True
 
 
@@ -254,3 +254,61 @@ def test_parse_day_is_strict():
     assert AuditFilter.parse_day("2026-11-15").isoformat() == "2026-11-15"
     for bad in ("2026-1-5", "15-11-2026", "2026-02-30", "", None, "２０２６-11-15"):
         assert AuditFilter.parse_day(bad) is None
+
+
+# ---------- "Flagged only" ----------
+
+def test_flagged_only_is_off_by_default_and_must_be_true_or_false():
+    assert AuditFilter().flagged_only is False
+    assert AuditFilter(flagged_only=True).flagged_only is True
+    for bad in ("yes", 1, None):
+        with pytest.raises(ValueError, match="flagged_only"):
+            AuditFilter(flagged_only=bad)
+
+
+def test_flagged_only_keeps_only_the_entries_behind_a_flag():
+    flagged_event = AuditEvent(sequence=5, at="2026-11-16T10:00:00Z", action="client_edited", client_ref="C-1")
+    other = AuditEvent(sequence=6, at="2026-11-16T10:00:00Z", action="client_edited", client_ref="C-1")
+    f = AuditFilter(flagged_only=True)
+    assert f.matches(flagged_event, NOW, {5, 9}) is True
+    assert f.matches(other, NOW, {5, 9}) is False
+    assert f.matches(flagged_event, NOW, set()) is False
+    assert AuditFilter().matches(other, NOW) is True                       # off: the set is not needed
+    assert AuditFilter().matches(other, NOW, {5}) is True                  # and not used
+
+
+def test_flagged_only_without_the_flagged_entries_is_refused_not_ignored():
+    with pytest.raises(ValueError, match="flagged"):
+        AuditFilter(flagged_only=True).matches(_event(), NOW)
+
+
+def test_flagged_only_still_has_to_pass_the_other_filters():
+    event = AuditEvent(sequence=5, at="2026-11-16T10:00:00Z", actor="Shareen", action="client_edited")
+    assert AuditFilter(flagged_only=True, actor="Adrian").matches(event, NOW, {5}) is False
+    assert AuditFilter(flagged_only=True, actor="Shareen").matches(event, NOW, {5}) is True
+
+
+@pytest.mark.parametrize("text", ["1", "on", "TRUE", " yes "])
+def test_flagged_in_the_address_turns_it_on(text):
+    f = AuditFilter.from_query({"flagged": text}, NOW)
+    assert f.flagged_only is True and f.problems() == []
+
+
+@pytest.mark.parametrize("text", ["0", "off", "false", "No"])
+def test_flagged_in_the_address_can_say_no(text):
+    f = AuditFilter.from_query({"flagged": text}, NOW)
+    assert f.flagged_only is False and f.problems() == []
+
+
+def test_a_bad_flagged_value_falls_back_to_all_events_and_says_so():
+    f = AuditFilter.from_query({"flagged": "maybe"}, NOW)
+    assert f.flagged_only is False and f.problems() == ["'flagged' must be 1 or 0; showing all events."]
+    assert AuditFilter.from_query({"flagged": ["1"]}, NOW).problems() != []      # not text
+
+
+def test_flagged_only_is_in_the_query_and_the_chips_and_survives_a_round_trip():
+    f = AuditFilter(result="ok", flagged_only=True)
+    assert f.to_query() == {"result": "ok", "flagged": "1"}
+    assert f.chips() == [("result", "OK only"), ("flagged", "Flagged only")]
+    assert AuditFilter.from_query(f.to_query(), NOW).to_query() == f.to_query()
+    assert "flagged" not in AuditFilter().to_query()

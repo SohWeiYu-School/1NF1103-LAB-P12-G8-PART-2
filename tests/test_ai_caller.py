@@ -10,9 +10,9 @@ SCHEMA = {"type": "object", "properties": {"answer": {"type": "string"}}}
 class _FakeOpenAI:
     """Stands in for OpenAI(): records each request and returns a fixed reply."""
 
-    def __init__(self, reply='{"answer": "yes"}', error=None, refuse_temperature=False):
+    def __init__(self, reply='{"answer": "yes"}', error=None):
         self.requests = []
-        self.reply, self.error, self.refuse_temperature = reply, error, refuse_temperature
+        self.reply, self.error = reply, error
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._chat))
         self.responses = SimpleNamespace(create=self._search)
 
@@ -20,8 +20,6 @@ class _FakeOpenAI:
         self.requests.append(request)
         if self.error:
             raise self.error
-        if self.refuse_temperature and "temperature" in request:
-            raise ValueError("Unsupported value: 'temperature' does not support 0")
 
     def _chat(self, **request):
         self._check(request)
@@ -38,7 +36,7 @@ def test_openai_caller_returns_the_reply_text():
     assert openai_caller(client)("Question?", SCHEMA, options) == '{"answer": "yes"}'
     request = client.requests[0]
     assert request["model"] == "gpt-test"
-    assert request["temperature"] == 0
+    assert "temperature" not in request                    # each model answers at its own default
     assert request["messages"] == [{"role": "user", "content": "Question?"}]
     assert request["response_format"]["json_schema"]["schema"] == SCHEMA
     assert options["answered_by"] == "gpt-test"
@@ -55,10 +53,13 @@ def test_a_connection_failure_gives_none_not_a_crash():
     assert openai_caller(client)("Question?", SCHEMA, {}) is None
 
 
-def test_a_model_that_refuses_temperature_zero_is_asked_again_without_it():
-    client = _FakeOpenAI(refuse_temperature=True)
-    assert openai_caller(client)("Question?", SCHEMA, {}) == '{"answer": "yes"}'
-    assert "temperature" in client.requests[0] and "temperature" not in client.requests[1]
+def test_each_question_is_sent_once_with_no_temperature():
+    """No temperature is set (some models, such as gpt-6-luna, refuse anything but their default), so
+    a question costs one request, not a refused one and a second try."""
+    client = _FakeOpenAI()
+    openai_caller(client)("Question?", SCHEMA, {})
+    openai_caller(client)("Find reports", SCHEMA, {"web_search": True})
+    assert len(client.requests) == 2 and all("temperature" not in request for request in client.requests)
 
 
 def test_a_web_search_question_can_be_limited_to_given_sites():

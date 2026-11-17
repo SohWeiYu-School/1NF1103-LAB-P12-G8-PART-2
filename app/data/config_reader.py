@@ -5,6 +5,7 @@ import logging
 import os
 
 from app.model.account import Account
+from app.model.audit_policy import AuditPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,11 @@ class ConfigReader:
             if not isinstance(limits.get("enabled", True), bool):
                 problems.append("config/policy.json 'assessment_rate_limit.enabled' must be true or false "
                                 f"(got {limits.get('enabled')!r})")
+        if "audit" in policy:         # an absent section means the defaults, so only a present one is checked
+            try:
+                AuditPolicy.from_dict(policy["audit"])
+            except ValueError as error:
+                problems.append(f"config/policy.json 'audit': {error}")
         return problems
 
     @staticmethod

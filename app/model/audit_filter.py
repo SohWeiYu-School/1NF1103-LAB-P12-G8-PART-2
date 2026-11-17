@@ -1,6 +1,6 @@
 """AuditFilter: which audit events to show, and which page of them."""
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from datetime import date, datetime, timedelta, timezone
 
 from app.model.audit_event import AuditEvent
@@ -18,6 +18,8 @@ class AuditFilter:
     DEFAULT_PRESET: str = "7"
     RESULT_CHOICES: tuple[str, ...] = ("all", "ok", "failed")
     SORT_CHOICES: tuple[str, ...] = ("desc", "asc")                    # newest first, oldest first
+    TRUE_TEXTS: tuple[str, ...] = ("1", "on", "true", "yes")       # a ticked checkbox sends "on"
+    FALSE_TEXTS: tuple[str, ...] = ("0", "off", "false", "no")
     PAGE_SIZE: int = 25
     MAX_QUERY: int = 80
     MAX_ACTOR: int = AuditEvent.MAX_ACTOR
@@ -31,9 +33,11 @@ class AuditFilter:
 
     def __init__(self, preset: str = "7", date_from: str = "", date_to: str = "",
                  groups: Iterable[str] | None = None, result: str = "all", actor: str = "",
-                 client_ref: str = "", query: str = "", sort: str = "desc", page: int = 1) -> None:
+                 client_ref: str = "", query: str = "", sort: str = "desc", page: int = 1,
+                 flagged_only: bool = False) -> None:
         """Raises ValueError, saying what is wrong and what is allowed, for any impossible value. groups
-        is None for every group. A custom range with a missing date is allowed and means all dates (the
+        is None for every group. flagged_only keeps only the events behind a flag (matches() is then told
+        which events those are). A custom range with a missing date is allowed and means all dates (the
         web address route turns that into a problem line); a start after the end is not."""
         if preset not in AuditFilter.PRESETS:
             raise ValueError(f"The preset must be one of {', '.join(AuditFilter.PRESETS)} (got {preset!r}).")
@@ -59,6 +63,8 @@ class AuditFilter:
             raise ValueError(f"The search text must be printable text of at most {AuditFilter.MAX_QUERY} characters.")
         if isinstance(page, bool) or not isinstance(page, int) or page < 1:
             raise ValueError(f"The page must be a whole number, 1 or more (got {page!r}).")
+        if not isinstance(flagged_only, bool):
+            raise ValueError(f"flagged_only must be True or False (got {flagged_only!r}).")
         self.__preset: str = preset
         self.__date_from: str = date_from.strip() if preset == "custom" else ""
         self.__date_to: str = date_to.strip() if preset == "custom" else ""
@@ -70,6 +76,7 @@ class AuditFilter:
         self.__query: str = query
         self.__sort: str = sort
         self.__page: int = page
+        self.__flagged_only: bool = flagged_only
         self.__problems: list[str] = []
 
     @staticmethod
@@ -158,6 +165,10 @@ class AuditFilter:
     @property
     def page(self) -> int:
         return self.__page
+
+    @property
+    def flagged_only(self) -> bool:
+        return self.__flagged_only
 
     def all_groups(self) -> bool:
         """True if every group is chosen (the default)."""
@@ -308,18 +319,32 @@ class AuditFilter:
                 page = int(text)
             else:
                 problems.append("'page' must be a whole number, 1 or more; showing page 1.")
+        flagged_only = False
+        text = given("flagged")
+        if text is not None:
+            if text.lower() in AuditFilter.TRUE_TEXTS:
+                flagged_only = True
+            elif text.lower() not in AuditFilter.FALSE_TEXTS:
+                problems.append("'flagged' must be 1 or 0; showing all events.")
         # A start after the end cannot be built; it is kept for the page's date boxes and ignored when matching.
         audit_filter = AuditFilter(preset, "" if ignored else date_from, "" if ignored else date_to,
-                                   groups or None, result, actor, client_ref, query, sort, page)
+                                   groups or None, result, actor, client_ref, query, sort, page, flagged_only)
         if ignored and preset == "custom":
             audit_filter.__date_from, audit_filter.__date_to = date_from, date_to
         audit_filter.__dates_ignored = ignored
         audit_filter.__problems = problems
         return audit_filter
 
-    def matches(self, event: AuditEvent, now: datetime) -> bool:
+    def matches(self, event: AuditEvent, now: datetime, flagged: Collection[int] | None = None) -> bool:
         """True if the event passes every active filter. now (passed in, so the answer is repeatable)
-        must carry a timezone (ValueError if it does not)."""
+        must carry a timezone (ValueError if it does not). flagged is the set of entry numbers that are
+        behind a flag; only the model's caller can know it. It is needed when flagged_only is on (ValueError
+        if it is missing, so "flagged only" never quietly shows everything) and ignored otherwise."""
+        if self.__flagged_only:
+            if flagged is None:
+                raise ValueError("The flagged entries must be given when only flagged events are wanted.")
+            if event.sequence not in flagged:
+                return False
         days = self.day_range(now)
         if days is not None and not days[0] <= AuditFilter.event_day(event) <= days[1]:
             return False
@@ -382,6 +407,8 @@ class AuditFilter:
             query["result"] = self.__result
         if self.__sort != "desc":
             query["sort"] = self.__sort
+        if self.__flagged_only:
+            query["flagged"] = "1"
         if self.__page > 1:
             query["page"] = str(self.__page)
         return query
@@ -398,6 +425,8 @@ class AuditFilter:
             chips.append(("client_ref", f"Client: {self.__client_ref.upper()}"))
         if self.__result != "all":
             chips.append(("result", "Failed only" if self.__result == "failed" else "OK only"))
+        if self.__flagged_only:
+            chips.append(("flagged", "Flagged only"))
         if self.__query:
             chips.append(("q", f"Search: “{self.__query}”"))
         return chips
