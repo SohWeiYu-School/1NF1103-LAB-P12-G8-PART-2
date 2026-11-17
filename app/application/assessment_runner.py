@@ -19,6 +19,7 @@ from app.logic.crime_scan import CrimeScan
 from app.logic.document_evidence import DocumentEvidence
 from app.logic.forecast import Forecast
 from app.logic.verdict_engine import VerdictEngine
+from app.model.audit_event import AuditEvent
 from app.model.config import Config
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ class AssessmentRunner:
         "Comparing with peers in the same economy",
         "Testing every story",
         "Deciding the verdict",
-        "Saving the assessment",
+        AuditEvent.SAVE_STEP,
     )
     # Which numbered step each stage of the forecast is shown as.
     FORECAST_STEP: dict[str, int] = {"step0_declaration": 6, "call1_markets": 7, "call2_earnings": 8,

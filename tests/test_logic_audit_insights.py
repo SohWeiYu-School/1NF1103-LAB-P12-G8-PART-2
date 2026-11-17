@@ -515,3 +515,28 @@ def test_an_edit_inside_a_watched_dict_counts_and_is_named_under_its_parent():
     assert len(flag.changes) == 2
     assert "asset composition (cash) went 10 → 90" in flag.meaning
     assert "asset composition (property) went 90 → 10" in flag.meaning
+
+
+def test_an_assessment_that_stopped_while_saving_is_a_save_failure_not_an_ai_failure():
+    saving = AuditEvent(action="assessment_failed", result="failed", details={"step": AuditEvent.SAVE_STEP})
+    other = AuditEvent(action="assessment_failed", result="failed", details={"step": "Crime scan"})
+    assert AuditInsights.failure_kind(saving) == "Save failed"
+    assert AuditInsights.failure_kind(other) == "AI step not run"
+
+
+def test_an_assessment_that_finished_with_a_step_not_run_counts_as_an_ai_failure():
+    assert AuditInsights.failure_kind(AuditEvent(action="assessment_run", result="ok",
+                                                 details={"not_run": ["Crime scan"]})) == "AI step not run"
+    assert AuditInsights.failure_kind(AuditEvent(action="assessment_run", result="ok", details={"not_run": []})) == ""
+    assert AuditInsights.failure_kind(AuditEvent(action="assessment_run", result="ok", details={})) == ""
+
+
+def test_the_spike_meaning_says_each_kind_truthfully():
+    log = Log()
+    log.add("assessment_failed", BASE, result="failed", step=AuditEvent.SAVE_STEP)
+    log.add("assessment_run", BASE + timedelta(minutes=1), outcome="RISKY", not_run=["Crime scan"])
+    log.add("assessment_failed", BASE + timedelta(minutes=2), result="failed", step="Crime scan")
+    (flag,) = _of(_flags(log), "spike")
+    assert flag.meaning == ("1 assessment stopped because the AI service did not answer, and 1 assessment finished "
+                            "with a step that did not run, and 1 save failed. Cases assessed that day may be "
+                            "missing steps.")

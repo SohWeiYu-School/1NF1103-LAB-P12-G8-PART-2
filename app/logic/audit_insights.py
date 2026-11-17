@@ -65,8 +65,12 @@ class AuditInsights:
     @staticmethod
     def failure_kind(event: AuditEvent) -> str:
         """What kind of failure an event records: "AI step not run", "Save failed", "Read failed" or
-        "Sync failed"; "" if the event is not a failure."""
+        "Sync failed"; "" if the event is not a failure. An assessment that stopped while saving is a save
+        failure; one that stopped at any other step, or finished with a step that did not run, is an
+        AI step not run."""
         if event.action == "assessment_failed":
+            return "Save failed" if event.details.get("step") == AuditEvent.SAVE_STEP else "AI step not run"
+        if event.action == "assessment_run" and event.result == "ok" and event.details.get("not_run"):
             return "AI step not run"
         if event.action == "data_unavailable":
             return "Read failed"
@@ -303,12 +307,17 @@ class AuditInsights:
     def __spike_meaning(events: list[AuditEvent]) -> str:
         """What the day's failures were, by kind, and what that may mean."""
         counts = {kind: 0 for kind in AuditInsights.FAILURE_KINDS}
+        finished = 0                                   # assessments that finished with a step not run
         for event in events:
             counts[AuditInsights.failure_kind(event)] += 1
+            finished += event.action == "assessment_run"
+        stopped = counts["AI step not run"] - finished
         parts = []
-        if counts["AI step not run"]:
-            parts.append(f"{AuditInsights.__amount(counts['AI step not run'], 'assessment')} stopped because the "
+        if stopped:
+            parts.append(f"{AuditInsights.__amount(stopped, 'assessment')} stopped because the "
                          "AI service did not answer")
+        if finished:
+            parts.append(f"{AuditInsights.__amount(finished, 'assessment')} finished with a step that did not run")
         if counts["Read failed"]:
             parts.append(f"the database could not be read {AuditInsights.__amount(counts['Read failed'], 'time')}")
         if counts["Save failed"]:

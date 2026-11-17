@@ -537,7 +537,7 @@ class App:
             # that was not saved.
             logger.error("App.save_assessment: the assessment for %s was not saved", verdict.client_ref)
             self.__record("assessment_failed", actor, verdict.client_ref, "failed",
-                          {"step": "Saving the assessment", "assessment_id": verdict.assessment_id})
+                          {"step": AuditEvent.SAVE_STEP, "assessment_id": verdict.assessment_id})
             return None
         previous_outcome = record.review_status.outcome if record is not None else ""
         run_details = {"assessment_id": verdict.assessment_id, "outcome": verdict.outcome,

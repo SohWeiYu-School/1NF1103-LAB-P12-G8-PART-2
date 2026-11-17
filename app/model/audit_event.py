@@ -24,6 +24,7 @@ class AuditEvent:
     """
 
     TERMINAL: str = "terminal"
+    SAVE_STEP: str = "Saving the assessment"  # the step named when an assessment could not be saved (details["step"])
     UNKNOWN: str = "unknown"                 # the actor of a failed sign-in whose name matched no account
     GENESIS: str = "0" * 64                  # the "previous hash" of the first entry
     RESULTS: tuple[str, ...] = ("ok", "failed")
