@@ -1320,7 +1320,9 @@ class App:
             tickets = {flag.flag_id: FlagTicket(flag, updates) for flag in flags}
         except (ValueError, TypeError, KeyError, AttributeError) as error:
             logger.error("App.%s: the flags could not be worked out from the audit log: %r", caller, error)
+            self.__audit_note.to_handle = None
             raise ValueError(App.FLAGS_UNAVAILABLE) from error
+        self.__audit_note.to_handle = sum(1 for ticket in tickets.values() if ticket.status != "resolved")
         if insights.skipped:
             logger.error("App.%s: %d flag(s) found by the rules could not be built and are left out",
                          caller, insights.skipped)
@@ -1334,6 +1336,13 @@ class App:
         self.__check_actor(actor)
         self.__audit_note.read_failed = False
         self.__audit_note.actor = actor
+        self.__audit_note.to_handle = None
+
+    def flags_to_handle(self) -> int | None:
+        """How many flags were still to handle the last time this request (thread) worked the flags out, so a
+        page that has just done so can show the header badge without reading the log again. None if no flags
+        were worked out since begin_request(), or they could not be (never a made-up 0)."""
+        return getattr(self.__audit_note, "to_handle", None)
 
     def __read_failed(self, what: str, actor: str = "") -> None:
         """Write one "database unreadable" line (it feeds the "Read failed" bar of the Overview), at most

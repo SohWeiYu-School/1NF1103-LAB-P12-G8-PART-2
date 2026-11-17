@@ -2165,12 +2165,14 @@ def test_the_overview_header_has_a_badge_with_the_flags_to_handle_and_none_for_z
     assert re.search(r'Overview<span class="nav-count" title="5 flags not resolved yet">5</span>', page)
 
 
-def test_a_header_badge_that_cannot_be_worked_out_is_left_out_and_logged(web, tmp_path, caplog):
+def test_a_header_badge_that_cannot_be_worked_out_shows_an_exclamation_mark_and_is_logged(web, tmp_path, caplog):
     application, _, browser = _admin_web(web)
     application.clients().save(sample_case())
     break_audit(tmp_path)
     text = browser.get("/admin/clients").get_data(as_text=True)
-    assert 'class="nav-count"' not in text and "header badge cannot be worked out" in caplog.text
+    assert 'class="nav-count" title="Flags can&#39;t be counted right now">!</span>' in text or \
+        "Flags can't be counted right now" in html.unescape(text)
+    assert 'class="nav-count" title="0' not in text and "header badge cannot be worked out" in caplog.text
 
 
 def test_a_bad_range_tab_or_page_is_explained_and_the_defaults_are_used(flagged_web):
@@ -2450,3 +2452,16 @@ def test_a_failed_read_during_a_web_request_is_recorded_for_the_signed_in_office
     events = application.audit_log(AuditFilter("custom")).events
     seen = [event.actor for event in events if event.action == "data_unavailable"]
     assert seen == [account_with_role(application).name] * 2       # two requests failed to read: one line each
+
+
+def test_the_flag_page_and_the_client_flags_give_the_badge_without_reading_the_log_again(flagged_web, monkeypatch):
+    application, _, browser = flagged_web
+    application.clients().save(sample_case() | {"client_ref": "SOW-1"})
+    flag_id = _flag_ids(browser)[0]
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("the log was read a second time just for the badge")
+    monkeypatch.setattr(application, "audit_log", refuse)
+    badge = r'Overview<span class="nav-count" title="5 flags not resolved yet">5</span>'
+    assert re.search(badge, browser.get(f"/admin/flags/{flag_id}").get_data(as_text=True))
+    assert re.search(badge, browser.get("/admin/clients/SOW-1").get_data(as_text=True))

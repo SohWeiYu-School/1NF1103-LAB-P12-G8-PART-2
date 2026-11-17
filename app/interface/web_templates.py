@@ -352,7 +352,7 @@ legend{font-weight:600;padding:0 6px}
   {% if portal == 'admin' %}
   <nav class="main">
     {% set open_count = open_flags() %}
-    <a href="{{ url_for('admin_home') }}"{% if here in ('admin_home', 'admin_flag') %} aria-current="page"{% endif %}>Overview{% if open_count %}<span class="nav-count" title="{{ open_count }} flag{{ '' if open_count == 1 else 's' }} not resolved yet">{{ open_count }}</span>{% endif %}</a>
+    <a href="{{ url_for('admin_home') }}"{% if here in ('admin_home', 'admin_flag') %} aria-current="page"{% endif %}>Overview{% if open_count %}<span class="nav-count" title="{{ open_count }} flag{{ '' if open_count == 1 else 's' }} not resolved yet">{{ open_count }}</span>{% elif open_count is none %}<span class="nav-count" title="Flags can't be counted right now">!</span>{% endif %}</a>
     <a href="{{ url_for('audit_log_view') }}"{% if here == 'audit_log_view' or here == 'audit_verify' %} aria-current="page"{% endif %}>Activity log</a>
     <a href="{{ url_for('admin_clients') }}"{% if here in ('admin_clients', 'admin_view_client', 'admin_view_assessment') %} aria-current="page"{% endif %}>Clients</a>
   </nav>

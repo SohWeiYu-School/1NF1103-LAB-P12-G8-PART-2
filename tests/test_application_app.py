@@ -1903,3 +1903,12 @@ def test_begin_request_refuses_a_name_that_is_not_an_account_and_keeps_a_pending
         app.begin_request(None)
     app.begin_request(App.TERMINAL)
     assert app.audit_write_failed() is False
+
+
+def test_flags_to_handle_is_known_only_after_the_flags_were_worked_out_in_this_request(flagged):
+    flagged.begin_request(ADMIN)
+    assert flagged.flags_to_handle() is None
+    flagged.client_flags("SOW-1", FLAG_NOW)
+    assert isinstance(flagged.flags_to_handle(), int) and flagged.flags_to_handle() > 0
+    flagged.begin_request(ADMIN)
+    assert flagged.flags_to_handle() is None

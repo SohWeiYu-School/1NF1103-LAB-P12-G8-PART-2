@@ -315,8 +315,12 @@ class WebApp:
     def open_flag_count(self) -> int | None:
         """The number on the admin header's Overview badge: the flags still to handle. A page that has worked it
         out already leaves it in g; any other admin page asks App once. None when it cannot be worked out (the
-        header then shows no badge, never a made-up 0); the reason is logged."""
+        header then shows a "!" badge, never a made-up 0); the reason is logged."""
         if "open_flags" not in g:
+            seen = self.__app.flags_to_handle()           # a page that just worked the flags out: no second read
+            if seen is not None:
+                g.open_flags = seen
+                return seen
             try:
                 g.open_flags = self.__app.audit_log(AuditFilter(), datetime.now(timezone.utc)).open_flags
             except ValueError as error:
