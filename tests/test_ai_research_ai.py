@@ -169,3 +169,34 @@ def test_a_saved_reply_is_reused_for_the_same_question_even_with_the_fields_adde
     second = _Search([_report()])
     assert ResearchAI("fake", second, "gpt-test", 0.0).run(source) == first
     assert second.prompts == []
+
+
+def _saved_research():
+    saved = {}
+    source = {"case": CASE, "domains": DOMAINS, "saved_replies": saved}
+    ResearchAI("fake", _Search([_report(), _report("Second")]), "gpt-test", 0.0).run(source)
+    return saved, source
+
+
+def _damage(saved, change):
+    change(saved["research"]["reply"])
+
+
+def test_a_saved_reply_with_damaged_added_fields_is_asked_again():
+    damages = {
+        "source_without_url": lambda reply: reply.update(api_sources=[{"title": "no url"}]),
+        "sources_not_a_list": lambda reply: reply.update(api_sources="x"),
+        "source_url_not_text": lambda reply: reply.update(api_sources=[{"url": 5}]),
+        "time_not_text": lambda reply: reply.update(retrieved_at=5),
+        "model_not_text": lambda reply: reply.update(model=["x"]),
+        "id_missing": lambda reply: reply["reports"][0].pop("report_id"),
+        "id_not_text": lambda reply: reply["reports"][0].update(report_id=1),
+        "ids_out_of_order": lambda reply: reply["reports"].reverse(),
+    }
+    for name, change in damages.items():
+        saved, source = _saved_research()
+        _damage(saved, change)
+        again = _Search([_report()])
+        result = ResearchAI("fake", again, "gpt-test", 0.0).run(source)
+        assert len(again.prompts) == 1, name
+        assert result["reports"][0]["report_id"] == "R1", name
