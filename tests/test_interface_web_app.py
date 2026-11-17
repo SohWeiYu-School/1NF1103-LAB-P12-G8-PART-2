@@ -2368,7 +2368,12 @@ def test_the_kpi_cards_say_no_earlier_data_or_give_the_change_and_the_range_befo
     lines = [("signed_in", at(d), "Shareen", "", "ok", {}) for d in (1, 2, 3, 4, 9, 10, 14)]
     seed_audit(application_folder(application), lines)
     page = browser.get("/admin").get_data(as_text=True)
-    assert 'class="pill good">+' in page and "vs previous 7 days" in page and "No earlier data" in page   # failures: none before
+    assert 'class="pill good">+' in page and "vs previous 7 days" in page
+    assert "No earlier data" not in page and 'class="pill flat">No change</span>' in page      # covered, failures 0 before and now
+    seed_audit(application_folder(application), [("data_unavailable", at(2), "Adrian", "", "failed", {"what": "x"}),
+                                                 ("data_unavailable", at(3), "Adrian", "", "failed", {"what": "x"})])
+    page = browser.get("/admin").get_data(as_text=True)
+    assert 'class="pill bad">+2</span>' in page and "No earlier data" not in page            # before was 0: the plain number
 
 
 def test_a_part_of_a_watched_field_is_named_under_its_parent(web):

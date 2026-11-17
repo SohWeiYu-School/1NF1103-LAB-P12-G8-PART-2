@@ -93,3 +93,13 @@ def test_the_size_of_the_log_and_the_entries_behind_each_row_are_kept_and_checke
                 {"rows": [_ticket(3)], "evidence": {"F-HOU-SOW-1-3": entry}}, {"evidence": "x"}):
         with pytest.raises(ValueError):
             OverviewPage(**bad)
+
+
+def test_a_page_says_whether_the_earlier_range_is_covered_and_keeps_the_plain_differences():
+    page = OverviewPage()
+    assert page.has_previous is False and page.actions_diff == 0 and page.failures_diff == 0
+    page = OverviewPage(has_previous=True, actions_diff=-3, failures_diff=2)
+    assert page.has_previous and page.actions_diff == -3 and page.failures_diff == 2
+    for kwargs in ({"has_previous": "yes"}, {"actions_diff": 1.5}, {"failures_diff": True}):
+        with pytest.raises(ValueError):
+            OverviewPage(**kwargs)

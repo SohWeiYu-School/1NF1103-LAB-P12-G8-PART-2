@@ -35,7 +35,8 @@ class OverviewPage:
                  tab_counts: dict[str, int] | None = None, rows: list[FlagTicket] | None = None,
                  page: int = 1, page_count: int = 1, unreadable: int = 0,
                  type_severity: dict[str, str] | None = None, entries: int = 0,
-                 evidence: dict[str, list[AuditEvent]] | None = None, flags_skipped: int = 0) -> None:
+                 evidence: dict[str, list[AuditEvent]] | None = None, flags_skipped: int = 0,
+                 has_previous: bool = False, actions_diff: int = 0, failures_diff: int = 0) -> None:
         """Raises ValueError, saying what is wrong and what is allowed, for any impossible value."""
         failures_by_day = [] if failures_by_day is None else failures_by_day
         flags_by_type = [] if flags_by_type is None else flags_by_type
@@ -57,6 +58,11 @@ class OverviewPage:
                             ("actions", actions), ("failures", failures), ("broken_at", broken_at),
                             ("unreadable", unreadable), ("flags_skipped", flags_skipped)):
             OverviewPage.__check_count(name, value, 0)
+        if not isinstance(has_previous, bool):
+            raise ValueError("has_previous must be True or False.")
+        for name, value in (("actions_diff", actions_diff), ("failures_diff", failures_diff)):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"The {name} must be a whole number (got {value!r}).")
         for name, value in (("actions_change", actions_change), ("failures_change", failures_change)):
             if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
                 raise ValueError(f"The {name} must be a whole number or None (got {value!r}).")
@@ -106,6 +112,9 @@ class OverviewPage:
         self.__page_count: int = page_count
         self.__unreadable: int = unreadable
         self.__flags_skipped: int = flags_skipped
+        self.__has_previous: bool = has_previous
+        self.__actions_diff: int = actions_diff
+        self.__failures_diff: int = failures_diff
         self.__type_severity: dict[str, str] = dict(type_severity)
 
     @staticmethod
@@ -153,6 +162,22 @@ class OverviewPage:
             OverviewPage.__check_count("flag percent", percent, 0)
             if percent > 100:
                 raise ValueError("A flag percent cannot be more than 100.")
+
+    @property
+    def has_previous(self) -> bool:
+        """True if the log covers the earlier range, so the changes below mean something. When False the page
+        says "No earlier data"; when True and the earlier count was 0 the change is shown as the plain
+        difference (actions_diff, failures_diff) because a percent of 0 is meaningless."""
+        return self.__has_previous
+
+    @property
+    def actions_diff(self) -> int:
+        """Actions in the range minus actions in the earlier range."""
+        return self.__actions_diff
+
+    @property
+    def failures_diff(self) -> int:
+        return self.__failures_diff
 
     @property
     def flags_skipped(self) -> int:

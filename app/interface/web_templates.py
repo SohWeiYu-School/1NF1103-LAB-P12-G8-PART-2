@@ -1379,6 +1379,12 @@ FLAG_PARTS = """{% macro icon(name) -%}
 {% for c in changes %}<div class="dl"><span class="muted">{{ c.get('field')|flag_field }}</span><span class="diff"><span class="b">{{ c.get('before')|shown }}</span>&rarr;<span class="a">{{ c.get('after')|shown }}</span></span></div>{% endfor %}
 {%- endmacro %}
 
+{% macro change_pill(has_previous, percent, diff, bad_up) -%}
+{% if not has_previous %}<span class="pill flat">No earlier data</span>
+{%- elif diff == 0 and percent is none %}<span class="pill flat">No change</span>
+{%- else %}{% set kind = 'flat' if diff == 0 else ('bad' if (diff > 0) == bad_up else 'good') %}<span class="pill {{ kind }}">{{ '+' if diff > 0 else ('&minus;' if diff < 0 else '&plusmn;')|safe }}{% if percent is none %}{{ diff|abs }}{% else %}{{ percent|abs }}%{% endif %}</span>{% endif %}
+{%- endmacro %}
+
 {% macro status_pill(key, name) -%}<span class="st {{ key }}">{{ name }}</span>{%- endmacro %}
 
 {% macro detail(pic) %}
@@ -1421,7 +1427,7 @@ FLAG_PARTS = """{% macro icon(name) -%}
 """
 
 OVERVIEW = """{% extends "base.html" %}
-{% from "flag_parts.html" import icon, status_pill %}
+{% from "flag_parts.html" import icon, status_pill, change_pill %}
 {% block title %}Overview — Orbit{% endblock %}
 {% block content %}
 {% if error %}
@@ -1443,9 +1449,9 @@ OVERVIEW = """{% extends "base.html" %}
   <div class="kpis">
     <div class="panel kpi feature"><div class="kt"><span class="kic">{{ icon('flag') }}</span><span class="pill">{{ view.not_started }} not started</span></div>
       <span class="kl">Flags to handle</span><div class="kval"><span class="v">{{ view.to_handle }}</span><span class="ctx">{{ view.in_progress }} in progress</span></div></div>
-    <div class="panel kpi"><div class="kt"><span class="kic">{{ icon('activity') }}</span>{% if view.actions_change is not none %}<span class="pill {{ 'flat' if view.actions_change == 0 else ('good' if view.actions_change > 0 else 'bad') }}">{{ '+' if view.actions_change > 0 else ('&minus;' if view.actions_change < 0 else '&plusmn;')|safe }}{{ view.actions_change|abs }}%</span>{% else %}<span class="pill flat">No earlier data</span>{% endif %}</div>
+    <div class="panel kpi"><div class="kt"><span class="kic">{{ icon('activity') }}</span>{{ change_pill(view.has_previous, view.actions_change, view.actions_diff, false) }}</div>
       <span class="kl">Actions</span><div class="kval"><span class="v">{{ '{:,}'.format(view.actions) }}</span><span class="ctx">vs previous {{ days }} day{{ '' if days == 1 else 's' }}</span></div></div>
-    <div class="panel kpi"><div class="kt"><span class="kic">{{ icon('alert') }}</span>{% if view.failures_change is not none %}<span class="pill {{ 'flat' if view.failures_change == 0 else ('bad' if view.failures_change > 0 else 'good') }}">{{ '+' if view.failures_change > 0 else ('&minus;' if view.failures_change < 0 else '&plusmn;')|safe }}{{ view.failures_change|abs }}%</span>{% else %}<span class="pill flat">No earlier data</span>{% endif %}</div>
+    <div class="panel kpi"><div class="kt"><span class="kic">{{ icon('alert') }}</span>{{ change_pill(view.has_previous, view.failures_change, view.failures_diff, true) }}</div>
       <span class="kl">Failures</span><div class="kval"><span class="v">{{ view.failures }}</span><span class="ctx">vs previous {{ days }} day{{ '' if days == 1 else 's' }}</span></div></div>
     <div class="panel kpi"><div class="kt"><span class="kic" style="color:var({{ '--ok' if view.intact else '--bad' }})">{{ icon('shield' if view.intact else 'shieldx') }}</span><span class="pill {{ 'good' if view.intact else 'bad' }}">{{ 'Intact' if view.intact else 'Broken' }}</span></div>
       <span class="kl">Log integrity</span><div class="kval"><span class="v" style="color:var({{ '--ok' if view.intact else '--bad' }})">{{ '&check;'|safe if view.intact else '#' ~ view.broken_at }}</span><span class="ctx">{{ ('{:,}'.format(view.entries) ~ ' entries verified') if view.intact else 'entry changed outside the app' }} &middot; <form method="post" action="{{ url_for('audit_verify') }}"><button class="link-btn" type="submit">Check again</button></form></span></div></div>

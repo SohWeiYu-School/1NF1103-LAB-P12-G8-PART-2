@@ -1143,7 +1143,8 @@ class App:
             stats.change_percent(stats.failures, stats.failures_before), broken_at,
             [(day.isoformat(), kinds) for day, kinds in stats.failures_by_day()], stats.flags_by_type(),
             stats.severity_counts(), tab, counts, on_page, page, page_count, unreadable, stats.type_severity(),
-            len(readable) + unreadable, evidence, skipped)
+            len(readable) + unreadable, evidence, skipped, stats.has_previous,
+            stats.actions - stats.actions_before, stats.failures - stats.failures_before)
 
     def flag(self, flag_id: str, now: datetime | None = None) -> FlagTicket | None:
         """The ticket (the flag, its status and its history) for a flag id, or None if the rules find no
