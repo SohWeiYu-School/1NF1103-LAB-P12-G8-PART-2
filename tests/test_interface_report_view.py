@@ -210,3 +210,23 @@ def test_show_client_list_has_a_row_for_every_client(capsys):
     shown = capsys.readouterr().out
     assert "CL-1" in shown and "Ada Tan" in shown and "Banking" in shown
     assert "CL-2" in shown and "Ben Lim" in shown and "Shipping" in shown
+
+
+def test_a_report_with_parts_that_did_not_run_says_it_is_incomplete_above_the_verdict():
+    verdict = _report()
+    verdict.report = {**verdict.report, "header": {**verdict.report["header"],
+                                                   "incomplete": ["The forecast", "The peer benchmark"]}}
+    text = _view().format_verdict_report(verdict)
+    assert "INCOMPLETE ASSESSMENT" in text
+    assert "Did not run: The forecast; The peer benchmark." in " ".join(text.split())
+    assert text.index("INCOMPLETE ASSESSMENT") < text.index("VERDICT:")
+
+
+def test_a_complete_or_older_report_has_no_incomplete_warning():
+    verdict = _report()
+    assert "INCOMPLETE ASSESSMENT" not in _view().format_verdict_report(verdict)
+    header = {key: value for key, value in verdict.report["header"].items() if key != "incomplete"}
+    verdict.report = {**verdict.report, "header": header}           # saved before the field existed
+    assert "INCOMPLETE ASSESSMENT" not in _view().format_verdict_report(verdict)
+    verdict.report = {**verdict.report, "header": {**header, "incomplete": "damaged"}}
+    assert "INCOMPLETE ASSESSMENT" not in _view().format_verdict_report(verdict)

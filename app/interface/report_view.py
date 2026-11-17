@@ -114,11 +114,21 @@ class ReportView:
         head = report["header"]
         symbols = {entry["mark"]: entry["symbol"] for entry in report["legend"]}
         rule = "\u2550" * self.__width
-        lines = [rule, f"  COMBINED ASSESSMENT  {head['client_ref']}  {head['name']}  ({head['assessed_on']})", rule,
-                 f"  VERDICT:      {head['verdict_label']}",
-                 f"  Next step:    {head['next_step']}",
-                 f"  Next review:  {head['next_review_date']}",
-                 f"  Policy:       {head['policy_version']}", ""]
+        lines = [rule, f"  COMBINED ASSESSMENT  {head['client_ref']}  {head['name']}  ({head['assessed_on']})", rule]
+        incomplete = head.get("incomplete")             # a report saved before this field existed has none
+        missing = [str(part) for part in incomplete] if isinstance(incomplete, list) else []
+        if missing:
+            lines.append("  ! INCOMPLETE ASSESSMENT")
+            lines += textwrap.wrap("Did not run: " + "; ".join(missing) + ".", self.__width - 2,
+                                   initial_indent="    ", subsequent_indent="    ")
+            lines += textwrap.wrap("This verdict rests only on the parts that ran. A person must check what is "
+                                   "missing before relying on it.", self.__width - 2,
+                                   initial_indent="    ", subsequent_indent="    ")
+            lines.append("")
+        lines += [f"  VERDICT:      {head['verdict_label']}",
+                  f"  Next step:    {head['next_step']}",
+                  f"  Next review:  {head['next_review_date']}",
+                  f"  Policy:       {head['policy_version']}", ""]
         lines += textwrap.wrap(head["summary"], self.__width - 2, initial_indent="  ", subsequent_indent="  ")
         lines += ["", "  " + "   ".join(f"{e['symbol']} {e['meaning']}" for e in report["legend"])]
 
