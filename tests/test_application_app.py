@@ -7,6 +7,7 @@ import pytest
 
 from app.application.app import App
 from app.application.assessment_runner import AssessmentRunner
+from app.logic.audit_insights import AuditInsights
 from app.model.account import Account
 from app.model.audit_event import AuditEvent
 from app.model.audit_filter import AuditFilter
@@ -1908,6 +1909,44 @@ def test_flags_that_could_not_be_built_are_logged_and_counted_on_the_pages(tmp_p
     assert app.audit_log(AuditFilter()).flags_skipped == 2
     assert app.audit_overview().flags_skipped == 2
     assert "2 flag(s) found by the rules could not be built" in caplog.text
+
+
+class _CountingRules:
+    """The real flag rules, counting how many times they are run."""
+    runs = 0
+
+    def __init__(self, *args, **kwargs) -> None:
+        _CountingRules.runs += 1
+        self.__real = AuditInsights(*args, **kwargs)
+        self.skipped = self.__real.skipped
+
+    def flags(self):
+        return self.__real.flags()
+
+
+def test_the_open_flag_count_is_kept_until_the_log_changes(tmp_path, monkeypatch):
+    _CountingRules.runs = 0
+    app = _app_with_rules(tmp_path, monkeypatch, _CountingRules)
+    seed_audit(tmp_path, NIGHT_OWNER)
+    assert app.open_flag_count(FLAG_NOW) == 2 and _CountingRules.runs == 1
+    assert app.open_flag_count(FLAG_NOW) == 2 and _CountingRules.runs == 1        # same log: no second run
+    app.update_flag("F-HOU-SOW-1-3", ADMIN, "resolved", "Planned night work.", outcome="legit", now=FLAG_NOW)
+    assert app.open_flag_count(FLAG_NOW) == 1                                      # a new line: worked out again
+    runs = _CountingRules.runs
+    assert runs > 1 and app.open_flag_count(FLAG_NOW) == 1 and _CountingRules.runs == runs
+
+
+def test_an_open_flag_count_that_cannot_be_worked_out_is_none_not_zero(tmp_path, monkeypatch, caplog):
+    app = _app_with_rules(tmp_path, monkeypatch, _FailingRules)
+    seed_audit(tmp_path, NIGHT_OWNER)
+    assert app.open_flag_count(FLAG_NOW) is None and "the open flags cannot be counted" in caplog.text
+    assert app.open_flag_count(FLAG_NOW) is None                                   # a failure is never kept
+    break_audit(tmp_path)
+    assert app.open_flag_count(FLAG_NOW) is None
+
+
+def test_an_empty_log_has_no_open_flags(app):
+    assert app.open_flag_count() == 0
 
 
 def test_a_read_failure_line_names_the_actor_the_request_began_with_and_each_request_gets_its_own_line(app, tmp_path):

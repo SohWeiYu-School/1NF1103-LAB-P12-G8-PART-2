@@ -2172,7 +2172,7 @@ def test_a_header_badge_that_cannot_be_worked_out_shows_an_exclamation_mark_and_
     text = browser.get("/admin/clients").get_data(as_text=True)
     assert 'class="nav-count" title="Flags can&#39;t be counted right now">!</span>' in text or \
         "Flags can't be counted right now" in html.unescape(text)
-    assert 'class="nav-count" title="0' not in text and "header badge cannot be worked out" in caplog.text
+    assert 'class="nav-count" title="0' not in text and "the open flags cannot be counted" in caplog.text
 
 
 def test_a_bad_range_tab_or_page_is_explained_and_the_defaults_are_used(flagged_web):

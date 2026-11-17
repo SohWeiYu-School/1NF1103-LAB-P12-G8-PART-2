@@ -174,6 +174,9 @@ class App:
                                                         key=self.__audit_key)
         # Whether the last audit line of this thread could not be written (each web request has its own thread).
         self.__audit_note: threading.local = threading.local()
+        # The open-flag count with the fingerprint of the log it was worked out from (rows, last row's hash).
+        self.__flag_count_lock: threading.Lock = threading.Lock()
+        self.__flag_count: tuple[tuple[int, str], int] | None = None
         self.__recent_refusals: dict[tuple[str, str], float] = {}     # (actor, what) -> when it was last written
         self.__refusal_lock: threading.Lock = threading.Lock()
         # Document ids are paths from the folder that holds the data folder ("data/documents/...").
@@ -1348,6 +1351,29 @@ class App:
         self.__audit_note.read_failed = False
         self.__audit_note.actor = actor
         self.__audit_note.to_handle = None
+
+    def open_flag_count(self, now: datetime | None = None) -> int | None:
+        """How many flags are still to handle, for the admin header badge. The log is read once; if it has the
+        same number of rows and the same last row as when the count was last worked out, that count is returned
+        without checking the chain or running the rules again (any new line, such as a flag update, changes the
+        fingerprint). None when it cannot be worked out (never a made-up 0); the reason is logged. Raises
+        ValueError if now has no timezone."""
+        now = App.__checked_now(now)
+        try:
+            rows = self.__audit_rows("open_flag_count")
+            fingerprint = (len(rows), str(rows[-1].get("hash", "")) if rows and isinstance(rows[-1], dict) else "")
+            with self.__flag_count_lock:
+                if self.__flag_count is not None and self.__flag_count[0] == fingerprint:
+                    return self.__flag_count[1]
+            events, _, broken_at = self.__events_of(rows, "open_flag_count", False)
+            _, tickets, _ = self.__work_out_flags("open_flag_count", events, broken_at, now)
+        except ValueError as error:                 # already logged where it happened
+            logger.error("App.open_flag_count: the open flags cannot be counted: %s", error)
+            return None
+        count = sum(1 for ticket in tickets.values() if ticket.status != "resolved")
+        with self.__flag_count_lock:
+            self.__flag_count = (fingerprint, count)
+        return count
 
     def flags_to_handle(self) -> int | None:
         """How many flags were still to handle the last time this request (thread) worked the flags out, so a

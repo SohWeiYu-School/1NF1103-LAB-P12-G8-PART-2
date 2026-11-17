@@ -321,11 +321,7 @@ class WebApp:
             if seen is not None:
                 g.open_flags = seen
                 return seen
-            try:
-                g.open_flags = self.__app.audit_log(AuditFilter(), datetime.now(timezone.utc)).open_flags
-            except ValueError as error:
-                logger.error("WebApp.open_flag_count: the header badge cannot be worked out: %s", error)
-                g.open_flags = None
+            g.open_flags = self.__app.open_flag_count(datetime.now(timezone.utc))   # App keeps it until the log changes
         return g.open_flags
 
     @staticmethod
