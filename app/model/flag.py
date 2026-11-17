@@ -13,7 +13,7 @@ class Flag:
     a log entry, e.g. F-SHO-SOW-1-484 or F-INT-303. It is made by make_id(). The constructor checks the
     id's shape and that its kind prefix matches the kind; it does not insist on which entry number the
     rule chose, because the rules pick the entry that keeps the id stable (the first failure of a spike
-    day, the last run of a burst of assessments).
+    day, the first run of a burst of assessments).
     """
 
     KINDS: tuple[str, ...] = ("shop", "other", "repeat", "hours", "spike", "integrity")

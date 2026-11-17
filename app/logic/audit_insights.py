@@ -224,18 +224,21 @@ class AuditInsights:
                     (before.sequence, edit.sequence, after.sequence), after.at, owner, watched)
 
     def __repeat_flags(self, reference: str, owner: str, runs: list[AuditEvent]) -> list[Flag]:
-        """One flag per burst: the last run of a window holding more than repeat_assessments runs."""
+        """One flag per burst. A burst starts with a run and takes in every later run within window_days of
+        that first run; the next run after that starts a new burst. A burst of more than repeat_assessments
+        runs is flagged, with the id of its first run, so the id stays the same while the burst grows."""
         window = timedelta(days=self.__policy.window_days)
+        bursts: list[list[AuditEvent]] = []
+        for run in runs:
+            if bursts and AuditInsights.__moment(run.at) - AuditInsights.__moment(bursts[-1][0].at) <= window:
+                bursts[-1].append(run)
+            else:
+                bursts.append([run])
         found: list[Flag] = []
-        for position, run in enumerate(runs):
-            within = [other for other in runs[:position + 1]
-                      if AuditInsights.__moment(run.at) - AuditInsights.__moment(other.at) <= window]
+        for within in bursts:
             if len(within) <= self.__policy.repeat_assessments:
                 continue
-            ends_burst = (position == len(runs) - 1
-                          or AuditInsights.__moment(runs[position + 1].at) - AuditInsights.__moment(within[0].at) > window)
-            if not ends_burst:
-                continue
+            run = within[-1]
             labels = [AuditInsights.__verdict_label(other) for other in within]
             days = max(1, AuditInsights.__round((AuditInsights.__moment(run.at)
                                                  - AuditInsights.__moment(within[0].at)).total_seconds() / 86400))
@@ -243,7 +246,7 @@ class AuditInsights:
                     if len(set(labels)) == 1 else "The result changed between runs.")
             meaning = (f"Results: {', '.join(labels)}. {same} Repeated runs can also be a way of hoping for a "
                        "better answer.")
-            found.append(Flag(Flag.make_id("repeat", reference, run.sequence), "repeat", "medium", reference,
+            found.append(Flag(Flag.make_id("repeat", reference, within[0].sequence), "repeat", "medium", reference,
                               f"Assessed {len(within)} times in {AuditInsights.__amount(days, 'day')}", meaning,
                               tuple(other.sequence for other in within), run.at, owner))
         return found

@@ -224,10 +224,10 @@ def _runs(count, step=timedelta(days=1), outcomes=("RISKY",)) -> Log:
     return log
 
 
-def test_four_assessments_in_the_window_raise_one_medium_flag_with_the_last_run_in_the_id():
+def test_four_assessments_in_the_window_raise_one_medium_flag_with_the_first_run_in_the_id():
     log = _runs(4)
     (flag,) = _of(_flags(log), "repeat")
-    assert (flag.severity, flag.sequences, flag.flag_id) == ("medium", (2, 3, 4, 5), "F-REP-SOW-1-5")
+    assert (flag.severity, flag.sequences, flag.flag_id) == ("medium", (2, 3, 4, 5), "F-REP-SOW-1-2")
     assert flag.headline == "Assessed 4 times in 3 days"
     assert flag.meaning == ("Results: Risky, Risky, Risky, Risky. Nothing changed between runs, so re-running is "
                             "not moving the case forward. Repeated runs can also be a way of hoping for a "
@@ -279,6 +279,17 @@ def test_runs_of_different_clients_are_counted_apart_and_failed_runs_do_not_coun
         log.assess(BASE + timedelta(days=number), "RISKY", client="SOW-2")
     log.assess(BASE + timedelta(days=3), "RISKY", result="failed")
     assert _of(_flags(log), "repeat") == []
+
+
+def test_a_growing_burst_keeps_the_same_flag_id():
+    ids = {_of(_flags(_runs(count)), "repeat")[0].flag_id for count in (4, 5, 8)}
+    assert ids == {"F-REP-SOW-1-2"}
+
+
+def test_runs_every_10_days_make_one_flag_per_burst_not_one_per_run():
+    flags = _of(_flags(_runs(9, step=timedelta(days=10))), "repeat")
+    # bursts start at day 0, 40 and 80: runs 0-3 (30 days), 4-7, and run 8 alone
+    assert [(flag.flag_id, len(flag.sequences)) for flag in flags] == [("F-REP-SOW-1-6", 4), ("F-REP-SOW-1-2", 4)]
 
 
 # ---------- hours: after-hours activity ----------
