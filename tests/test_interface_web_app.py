@@ -1086,17 +1086,18 @@ def test_the_right_name_and_password_sign_an_officer_in_records_it_and_goes_home
     assert (event.action, event.actor) == ("signed_in", officer.name)
 
 
-def test_the_admin_signs_in_at_admin_and_lands_on_the_activity_log_with_the_dark_header(tmp_path, monkeypatch):
+def test_the_admin_signs_in_at_admin_and_lands_on_the_overview_with_the_dark_header(tmp_path, monkeypatch):
     application, _, browser = _anonymous(tmp_path, monkeypatch)
     admin = account_with_role(application, "admin")
     reply = _post_sign_in(browser, admin.name, "admin123", "/admin/signin")
-    assert reply.status_code == 302 and reply.headers["Location"].endswith("/admin/log")
+    assert reply.status_code == 302 and reply.headers["Location"].endswith("/admin")
     with browser.session_transaction() as session:
         assert dict(session) == {"admin": admin.email}
     page = browser.get("/admin/log").get_data(as_text=True)
     assert 'class="top admin"' in page and 'class="portal-tag"' in page and "System admin" in page
     assert "Activity log" in page and "New client" not in page and "Sync to Cloud" not in page
-    assert browser.get("/admin").headers["Location"].endswith("/admin/log")
+    overview = browser.get("/admin")
+    assert overview.status_code == 200 and "<h1>Overview</h1>" in overview.get_data(as_text=True)
 
 
 def test_empty_or_wrong_sign_ins_show_the_message_and_sign_nobody_in(tmp_path, monkeypatch):
@@ -1419,7 +1420,7 @@ def test_the_page_head_filter_bar_and_headline_follow_the_mockup(web):
                  "<th>Action</th>", "<th>Client</th>", "<th>What happened</th>"):
         assert text in page, text
     assert 'aria-pressed="true">7 days<' in page and 'aria-pressed="true">Newest first<' in page
-    assert "In the last 7 days: <strong>1 event</strong> by 1 officer; <strong>1 failed</strong>." in page
+    assert "In the last 7 days: <strong>1 event</strong> by 1 officer; <strong>1 failed</strong>; no open flags." in page
     assert "Showing 1&ndash;1 of 1" in page and "Page 1 of 1" in page and "Clear all" not in page
     for group, colour in WebApp.GROUP_COLOURS.items():
         assert f'<span class="dot" style="background:var({colour})"></span>{group}' in page
@@ -2095,3 +2096,254 @@ def test_no_page_template_holds_a_stray_control_character():
     for name, text in TEMPLATES.items():
         assert not [c for c in text if ord(c) < 32 and c not in "\n\r\t"], name
     assert "\\25BE" in TEMPLATES["base.html"] and "\\25B8" in TEMPLATES["base.html"]
+
+
+# ----- the admin Overview, the flag page and the flag hints (audit Phase 2) ------------------------------------
+
+from tests.audit_files import audit_path, seed_audit
+
+WATCHED = [{"field": "claims.declared_net_worth", "before": 2000000, "after": 3500000}]
+ALL_RULES = [
+    ("client_created", "2026-11-01T02:00:00Z", "Shareen", "SOW-1", "ok", {}),                      # 1
+    ("assessment_run", "2026-11-02T02:00:00Z", "Shareen", "SOW-1", "ok",
+     {"outcome": "RISKY", "assessment_id": "A-1"}),                                                # 2
+    ("client_edited", "2026-11-02T03:00:00Z", "Adrian", "SOW-1", "ok", {"changes": WATCHED}),      # 3 other (high)
+    ("assessment_run", "2026-11-02T03:05:00Z", "Adrian", "SOW-1", "ok",
+     {"outcome": "PASSED", "assessment_id": "A-2"}),                                               # 4 shop
+    ("assessment_run", "2026-11-03T02:00:00Z", "Shareen", "SOW-1", "ok",
+     {"outcome": "PASSED", "assessment_id": "A-3"}),                                               # 5
+    ("assessment_run", "2026-11-04T02:00:00Z", "Shareen", "SOW-1", "ok",
+     {"outcome": "PASSED", "assessment_id": "A-4"}),                                               # 6 repeat (4 runs)
+    ("assessment_run", "2026-11-05T16:30:00Z", "Shareen", "SOW-1", "ok",
+     {"outcome": "PASSED", "assessment_id": "A-5"}),                                               # 7 hours (00:30 SGT)
+    ("assessment_failed", "2026-11-06T02:00:00Z", "Shareen", "SOW-1", "failed", {"step": "Crime scan"}),
+    ("assessment_failed", "2026-11-06T02:10:00Z", "Shareen", "SOW-1", "failed", {"step": "Crime scan"}),
+    ("data_unavailable", "2026-11-06T02:20:00Z", "Adrian", "", "failed", {"what": "client records"}),   # 8-10 spike
+]
+
+
+@pytest.fixture
+def flagged_web(web):
+    application, site, browser = _admin_web(web)
+    seed_audit(application_folder(application), ALL_RULES)
+    return application, site, browser
+
+
+def application_folder(application):
+    return application_folder.tmp
+
+
+@pytest.fixture(autouse=True)
+def _remember_folder(tmp_path):
+    application_folder.tmp = tmp_path
+
+
+def _flag_ids(browser):
+    text = browser.get("/admin?range=90&tab=all").get_data(as_text=True)
+    return re.findall(r'href="/admin/flags/([^"]+)" style', text)
+
+
+def test_the_overview_shows_the_numbers_the_chart_and_every_flag_as_a_row(flagged_web):
+    _, _, browser = flagged_web
+    page = browser.get("/admin?range=90&tab=all")
+    text = page.get_data(as_text=True)
+    assert page.status_code == 200 and "<h1>Overview</h1>" in text and "Flags to handle" in text
+    for kind in ("Verdict jump after edit", "Edited by non-owner", "Repeated assessments", "After-hours activity",
+                 "Failure spike"):
+        assert kind in text
+    assert "Failures over time" in text and "Show the numbers" in text and "Chart can't load" in text
+    assert "chart.umd.min.js" in text and 'id="chart-data"' in text and "Log integrity" in text and "Intact" in text
+    assert "Each flag is a ticket." in text and "All<b>" in text
+    assert len(_flag_ids(browser)) == 5
+
+
+def test_the_overview_header_has_a_badge_with_the_flags_to_handle_and_none_for_zero(web):
+    application, _, browser = _admin_web(web)
+    assert 'class="nav-count"' not in browser.get("/admin").get_data(as_text=True)      # no flags: no badge
+    seed_audit(application_folder(application), ALL_RULES)
+    page = browser.get("/admin/clients").get_data(as_text=True)
+    assert re.search(r'Overview<span class="nav-count" title="5 flags not resolved yet">5</span>', page)
+
+
+def test_a_header_badge_that_cannot_be_worked_out_is_left_out_and_logged(web, tmp_path, caplog):
+    application, _, browser = _admin_web(web)
+    application.clients().save(sample_case())
+    break_audit(tmp_path)
+    text = browser.get("/admin/clients").get_data(as_text=True)
+    assert 'class="nav-count"' not in text and "header badge cannot be worked out" in caplog.text
+
+
+def test_a_bad_range_tab_or_page_is_explained_and_the_defaults_are_used(flagged_web):
+    _, _, browser = flagged_web
+    text = html.unescape(browser.get("/admin?range=5&tab=nope&page=x").get_data(as_text=True))
+    assert "'range' must be one of today, 7, 30 or 90" in text and "'tab' must be one of" in text
+    assert "'page' must be a whole number" in text and "Flags to handle" in text
+
+
+def test_the_overview_pages_through_six_flags_at_a_time(web):
+    application, _, browser = _admin_web(web)
+    lines = [("client_created", "2026-11-01T02:00:00Z", "Shareen", "SOW-1", "ok", {})]
+    lines += [("assessment_run", f"2026-11-{day:02d}T16:30:00Z", "Shareen", "SOW-1", "ok",
+               {"outcome": "PASSED", "assessment_id": f"A-{day}"}) for day in range(2, 10)]      # 8 after-hours flags and one repeat flag
+    seed_audit(application_folder(application), lines)
+    first = browser.get("/admin?range=90&tab=all").get_data(as_text=True)
+    assert "Showing 1&ndash;6 of 9" in first and "Page 1 of 2" in first and "page=2" in first
+    second = browser.get("/admin?range=90&tab=all&page=2").get_data(as_text=True)
+    assert "Showing 7&ndash;9 of 9" in second and "Page 2 of 2" in second
+
+
+def test_an_unreadable_log_gives_the_plain_message_not_an_empty_dashboard(web, tmp_path):
+    _, _, browser = _admin_web(web)
+    break_audit(tmp_path)
+    text = browser.get("/admin").get_data(as_text=True)
+    assert html.escape(App.AUDIT_UNAVAILABLE, quote=False).replace("'", "&#39;") in text or App.AUDIT_UNAVAILABLE in html.unescape(text)
+    assert "Flags to handle" not in text and "Log integrity" not in text
+    flag = browser.get("/admin/flags/F-X-1")
+    assert App.AUDIT_UNAVAILABLE in html.unescape(flag.get_data(as_text=True))
+
+
+def test_a_changed_log_shows_broken_and_the_check_again_button(flagged_web):
+    application, _, browser = flagged_web
+    path = audit_path(application_folder(application))
+    rows = json.loads(open(path, encoding="utf-8").read())
+    rows[4]["actor"] = "Someone else"
+    open(path, "w", encoding="utf-8").write(json.dumps(rows))
+    text = browser.get("/admin?range=90&tab=all").get_data(as_text=True)
+    assert "Broken" in text and "#5" in text and "entry changed outside the app" in text
+    assert 'action="/admin/log/verify"' in text and "Check again" in text and "Log changed outside app" in text
+    ids = _flag_ids(browser)
+    page = browser.get("/admin/flags/F-INT-5").get_data(as_text=True)
+    assert "F-INT-5" in ids and "Entry <span class=\"n\">#5</span>" in page and "can't be trusted" in page
+
+
+def test_every_kind_of_flag_has_its_own_page_with_the_picture_for_it(flagged_web):
+    _, _, browser = flagged_web
+    pictures = {"F-SHO-": 'class="flow"', "F-OTH-": 'class="flow two"', "F-REP-": 'class="runs"',
+                "F-HOU-": 'class="clock"', "F-SPI-": "Show all 3"}
+    ids = _flag_ids(browser)
+    for prefix, marker in pictures.items():
+        flag_id = next(i for i in ids if i.startswith(prefix))
+        page = browser.get(f"/admin/flags/{flag_id}")
+        text = page.get_data(as_text=True)
+        assert page.status_code == 200 and marker in text, flag_id
+        assert "Update this flag" in text and "Opened automatically by the rule." in text and "What happened" in text
+        assert "&larr; All flags" in text and 'maxlength="500"' in text and "Add note" in text
+    shop = browser.get("/admin/flags/" + next(i for i in ids if i.startswith("F-SHO-"))).get_data(as_text=True)
+    assert 'href="/admin/assessment/A-1"' in shop and "Declared net worth" in shop and "full history" in shop
+    assert "behind this flag" in shop and "flagged=1" in shop and "client_ref=SOW-1" in shop
+
+
+def test_a_flag_that_does_not_exist_says_so_with_a_404(flagged_web):
+    _, _, browser = flagged_web
+    page = browser.get("/admin/flags/F-SHO-SOW-1-999")
+    assert page.status_code == 404 and "That flag no longer exists." in page.get_data(as_text=True)
+    assert browser.post("/admin/flags/F-SHO-SOW-1-999", data={"status": "review", "note": "Looking at it now."}
+                        ).status_code == 404
+
+
+def test_updating_a_flag_saves_it_in_the_log_and_shows_the_toast(flagged_web):
+    application, _, browser = flagged_web
+    flag_id = next(i for i in _flag_ids(browser) if i.startswith("F-HOU-"))
+    reply = browser.post(f"/admin/flags/{flag_id}", data={"status": "review", "note": "  Asking Shareen about it. "})
+    assert reply.status_code == 302 and reply.headers["Location"].endswith(f"/admin/flags/{flag_id}")
+    page = browser.get(reply.headers["Location"]).get_data(as_text=True)
+    assert re.search(rf'class="toast" role="status">{flag_id} is now In review\. Saved in the audit log as entry #\d+\.', page)
+    assert "Asking Shareen about it." in page and "Orbit Admin" in page and "added a note" not in page
+    line = _events(application)[-1]
+    assert (line.action, line.actor) == ("flag_updated", "Orbit Admin") and line.details["to"] == "review"
+    again = browser.post(f"/admin/flags/{flag_id}", data={"status": "review", "note": "Still waiting for a reply."})
+    toast = browser.get(again.headers["Location"]).get_data(as_text=True)
+    assert "Note added. Saved in the audit log as entry #" in toast
+
+
+def test_a_following_up_and_a_resolving_update_take_their_extra_choice(flagged_web):
+    _, _, browser = flagged_web
+    flag_id = next(i for i in _flag_ids(browser) if i.startswith("F-HOU-"))
+    bad = browser.post(f"/admin/flags/{flag_id}", data={"status": "followup", "note": "Asked IT about it."})
+    text = html.unescape(bad.get_data(as_text=True))
+    assert bad.status_code == 200 and "Choose who you are waiting on." in text and "Asked IT about it." in text
+    assert '<option value="followup" data-name="Following up" selected>' in text
+    assert '<label class="field" for="t-wait" id="wait-block">' in text           # shown again, not hidden
+    ok = browser.post(f"/admin/flags/{flag_id}", data={"status": "followup", "note": "Asked IT about it.",
+                                                       "waiting_on": "IT support"})
+    assert ok.status_code == 302
+    resolve = browser.post(f"/admin/flags/{flag_id}", data={"status": "resolved", "note": "It was planned work."})
+    assert "Choose an outcome before resolving." in resolve.get_data(as_text=True)
+    done = browser.post(f"/admin/flags/{flag_id}", data={"status": "resolved", "note": "It was planned work.",
+                                                         "outcome": "legit"})
+    assert done.status_code == 302
+    page = browser.get(f"/admin/flags/{flag_id}").get_data(as_text=True)
+    assert "waiting on IT support" in page and "No issue: the activity was legitimate" in page
+    assert "Reopen flag" in page and "Resolved (current)" in page
+
+
+def test_an_update_with_a_short_or_long_note_or_a_made_up_status_is_refused_and_keeps_what_was_typed(flagged_web):
+    application, _, browser = flagged_web
+    flag_id = next(i for i in _flag_ids(browser) if i.startswith("F-HOU-"))
+    before = len(_events(application))
+    for data, message in (({"status": "review", "note": "no"}, "at least 5 characters"),
+                          ({"status": "review", "note": "x" * 600}, "500 characters or fewer"),
+                          ({"status": "bogus", "note": "A fine long note."}, "Choose a status")):
+        reply = browser.post(f"/admin/flags/{flag_id}", data=data)
+        text = reply.get_data(as_text=True)
+        assert reply.status_code == 200 and message in text and 'class="err"' in text
+        assert data["note"][:50] in text
+    assert len(_events(application)) == before                                       # nothing was written
+
+
+def test_an_update_that_cannot_be_written_says_it_was_not_saved_and_keeps_the_form(flagged_web, tmp_path):
+    application, _, browser = flagged_web
+    flag_id = next(i for i in _flag_ids(browser) if i.startswith("F-HOU-"))
+    folder = tmp_path / "local database"
+    import stat
+    folder.chmod(stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        reply = browser.post(f"/admin/flags/{flag_id}", data={"status": "review", "note": "Asking about it now."})
+    finally:
+        folder.chmod(stat.S_IRWXU)
+    text = html.unescape(reply.get_data(as_text=True))
+    assert App.FLAG_NOT_SAVED in text and "Asking about it now." in text and 'class="toast"' not in text
+
+
+def test_an_officer_cannot_open_or_update_a_flag(web):
+    application, _, browser = web                              # signed in as an officer only
+    assert browser.get("/admin/flags/F-HOU-SOW-1-3").status_code in (302, 403)
+    reply = browser.post("/admin/flags/F-HOU-SOW-1-3", data={"status": "review", "note": "Trying this out."})
+    assert reply.status_code in (302, 403)
+    assert not [e for e in _events(application) if e.action == "flag_updated"]
+
+
+def test_the_log_can_show_flagged_entries_only_marks_their_rows_and_counts_open_flags(flagged_web):
+    _, _, browser = flagged_web
+    page = browser.get("/admin/log?preset=custom&from=2026-11-01&to=2026-11-10").get_data(as_text=True)
+    assert 'name="flagged" value="1"' in page and "Flagged only</label>" in page
+    assert "5 open flags" in page and 'tr class="ev flagged"' in page and 'class="flag-ic"' in page
+    only = browser.get("/admin/log?preset=custom&from=2026-11-01&to=2026-11-10&flagged=1").get_data(as_text=True)
+    assert "checked>Flagged only" in only and 'tr class="ev"' not in only and ">Flagged only<" in only
+
+
+def test_the_admin_client_page_says_why_the_client_is_flagged_and_marks_those_entries(flagged_web):
+    application, _, browser = flagged_web
+    application.clients().save(sample_case() | {"client_ref": "SOW-1"})
+    page = browser.get("/admin/clients/SOW-1").get_data(as_text=True)
+    assert "Why this client is flagged" in page and "What the rule picked up, and the data behind it." in page
+    assert page.count("Open ticket") == 4 and 'class="tl flagged"' in page and 'class="why-letter">A<' in page
+    assert re.search(r'href="/admin/flags/F-SHO-SOW-1-\d+"', page)
+
+
+def test_the_officer_client_page_has_no_flag_box_and_no_marked_entries(flagged_web):
+    application, _, browser = flagged_web
+    application.clients().save(sample_case() | {"client_ref": "SOW-1"})
+    sign_in(browser, application)
+    page = browser.get("/client/SOW-1").get_data(as_text=True)
+    assert "Why this client is flagged" not in page and 'class="tl flagged"' not in page
+
+
+def test_flags_that_cannot_be_worked_out_say_so_on_the_client_page(flagged_web, monkeypatch):
+    application, _, browser = flagged_web
+    application.clients().save(sample_case() | {"client_ref": "SOW-1"})
+    def broken(*args, **kwargs):
+        raise ValueError(App.FLAGS_UNAVAILABLE)
+    monkeypatch.setattr(application, "client_flags", broken)
+    page = browser.get("/admin/clients/SOW-1")
+    assert page.status_code == 200 and App.FLAGS_UNAVAILABLE in page.get_data(as_text=True)

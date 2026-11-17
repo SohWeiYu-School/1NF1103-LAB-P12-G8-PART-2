@@ -147,6 +147,179 @@ details.info .kv{margin-top:6px}
 @media (max-width:520px){ .client-head{grid-template-columns:1fr} .kv{grid-template-columns:1fr} .tl{grid-template-columns:44px 18px 1fr;padding-inline:12px} .tl .rail{left:calc(12px + 44px + 10px + 8px)} }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
+/* ===== Audit Phase 2: copied from the mockup (docs/plans/mockup-v21.html) ===== */
+[hidden]:not([hidden=until-found i]){display:none!important}
+:root{--info:#1d4f7a; --info-soft:#e8f1f8; --g-review:#8e5bb5; --f1:#2a78d6;--f2:#eb6834;--f3:#1baf7a;--f4:#eda100}
+.nav-count{display:inline-block;min-width:18px;padding:0 5px;margin-left:5px;border-radius:9px;background:#f8d4d4;color:#7f1414;font-size:.72rem;font-weight:700;text-align:center}
+.sev{font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-radius:4px;padding:2px 7px}
+.sev.alert{background:var(--bad-soft);color:var(--bad)} .sev.warning{background:var(--warn-soft);color:var(--warn)} .sev.info{background:var(--info-soft);color:var(--info)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpi{padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+.kpi .v{font-size:1.65rem;font-weight:600;letter-spacing:-.01em;font-variant-numeric:tabular-nums;line-height:1.2}
+.kpi{padding:16px 18px;gap:6px}
+.kpi .v{font-size:1.9rem}
+.chart-card{padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.chart-box{position:relative;height:220px}
+.meaning{background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:.87rem;display:flex;gap:10px}
+.meaning .ic{flex:none;width:20px;height:20px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700;font-size:.75rem}
+.meaning .lbl{display:block;font-weight:600;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:1px}
+details.numbers summary{cursor:pointer;color:var(--accent);font-size:.84rem}
+.offline{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:10px 12px;font-size:.87rem}
+.sub{margin:2px 0 0;font-size:.88rem}
+.dash{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:16px;align-items:stretch}
+.vhead{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.vhead h2{margin:0}.vhead .sub{margin:2px 0 0;color:var(--muted);font-size:.84rem}
+.hero{text-align:right;line-height:1.1}.hero .n{font-size:1.9rem;font-weight:600;color:var(--ink)}.hero .l{display:block;font-size:.78rem;color:var(--muted);white-space:nowrap}
+.vlegend{display:flex;flex-wrap:wrap;gap:6px 18px;margin:0;padding:0;list-style:none;font-size:.82rem;color:var(--muted)}
+.vlegend li{display:inline-flex;align-items:center;gap:7px}.vlegend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.vlegend b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.vlegend li.zero{opacity:.55}
+.sevbar{display:flex;gap:2px;height:10px;border-radius:5px;overflow:hidden;background:var(--surface-2)}
+.sevbar span{display:block;height:100%}
+.sevkey{display:flex;gap:16px;flex-wrap:wrap;font-size:.82rem;color:var(--muted);margin:0;padding:0;list-style:none}
+.sevkey li{display:inline-flex;align-items:center;gap:6px}.sevkey i{width:10px;height:10px;border-radius:50%}.sevkey b{color:var(--ink);font-weight:600}
+@media (max-width:900px){ .dash{grid-template-columns:1fr} }
+table.mini{width:auto;min-width:100%}
+table.mini th,table.mini td{padding:5px 10px;font-size:.84rem;background:var(--surface)}
+.kv dd .scroll-x{border:1px solid var(--line);border-radius:6px}
+.fd{display:flex;flex-direction:column;gap:10px}
+.rule{font-size:.8rem;color:var(--muted)} .rule b{color:var(--ink);font-weight:600}
+.flow{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1.4fr) auto minmax(0,1fr);gap:8px;align-items:stretch}
+.flow.two{grid-template-columns:minmax(0,1fr) auto minmax(0,1.6fr)}
+.flow .arrow{align-self:center;color:var(--muted);font-size:1.1rem}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:5px;min-width:0;font-size:.88rem;align-items:flex-start}
+.card .lab{font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
+.card .dl{display:flex;flex-direction:column}
+.card .dl .muted{font-size:.76rem}
+.person{display:flex;gap:8px;align-items:center}
+.person small{display:block;color:var(--muted);font-size:.74rem;line-height:1.3}
+.person b{display:block;line-height:1.3}
+.who-bar{display:flex;gap:24px;flex-wrap:wrap;padding:8px 12px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+.who-bar small{display:block;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
+.runs{display:flex;gap:8px;flex-wrap:wrap}
+.run{text-decoration:none;color:var(--ink);min-width:120px}
+a.run:hover{border-color:var(--accent)}
+.clock{position:relative;height:22px;width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:5px;margin-top:16px}
+.clock .work{position:absolute;top:0;bottom:0;background:var(--ok-soft)}
+.clock .mark{position:absolute;top:-4px;bottom:-4px;width:3px;background:var(--bad);border-radius:2px}
+.clock .mark i{position:absolute;bottom:100%;left:50%;transform:translateX(-60%);font-style:normal;font-size:.72rem;font-weight:700;color:var(--bad);white-space:nowrap}
+.clock-l{position:relative;height:14px;width:100%;font-size:.7rem;color:var(--muted)}
+.clock-l span{position:absolute;transform:translateX(-50%)}
+.clock-l span:first-child{transform:none}
+.clock-l span:last-child{transform:translateX(-100%)}
+.bigstat{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+.bigstat .n{font-size:1.6rem;font-weight:600;font-variant-numeric:tabular-nums}
+.pillc{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:2px 10px;font-size:.8rem}
+@media (max-width:700px){ .flow,.flow.two{grid-template-columns:1fr} .flow .arrow{transform:rotate(90deg);justify-self:center} }
+.sec-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;padding:16px 20px 12px}
+table.flags-t{table-layout:fixed}
+table.flags-t tbody tr{height:72px}
+table.flags-t td{padding-block:8px!important}
+table.flags-t .st{flex-wrap:nowrap}
+.st.review,.st.open,.st.followup,.st.resolved{flex-direction:row;margin:0;padding:2px 9px;border:1px solid transparent}
+table.flags-t td{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+table.flags-t tr.filler td{border-bottom-color:transparent}
+.flags-empty td{text-align:center;color:var(--muted);white-space:normal!important}
+table.flags-t td{vertical-align:middle;padding-block:12px}
+table.flags-t th:first-child,table.flags-t td:first-child{padding-left:20px}
+tr.ev[data-sev="alert"] td:first-child{box-shadow:inset 4px 0 0 var(--bad)}
+tr.ev[data-sev="warning"] td:first-child{box-shadow:inset 4px 0 0 var(--warn)}
+tr.ev[data-sev="info"] td:first-child{box-shadow:inset 4px 0 0 var(--info)}
+.integrity-note{margin:0}
+.pill{font-size:.76rem;font-weight:600;border-radius:999px;padding:3px 10px;white-space:nowrap}
+.pill.good{background:#dcf5e7;color:#14632f}.pill.bad{background:#fde3e3;color:#9b1c1c}.pill.flat{background:#eef1f5;color:var(--muted)}
+.flag-ic{color:var(--bad);font-weight:700}
+.st{display:inline-flex;align-items:center;gap:5px;font-size:.76rem;font-weight:600;border-radius:12px;padding:2px 9px;white-space:nowrap;border:1px solid transparent}
+.st::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.st.open{background:#fdecec;color:#a61b1b}.st.review{background:#e8f1f8;color:#1d4f7a}.st.followup{background:#fdf3dc;color:#8a5a00}.st.resolved{background:#e6f4ea;color:#1e6b34}
+.assignee{display:block;font-size:.76rem;color:var(--muted);margin-top:3px}
+.ticket{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;align-items:start}
+.ticket .side{position:sticky;top:76px;display:flex;flex-direction:column;gap:16px}
+.ticket h3{font-size:.95rem;margin:0}
+.meta-row{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;margin-top:10px;font-size:.86rem;color:var(--muted)}
+.meta-row b{color:var(--ink);font-weight:600}
+.evid{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.evid a{display:flex;justify-content:space-between;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;text-decoration:none;color:var(--ink)}
+.evid a:hover{border-color:var(--accent);background:var(--accent-soft)}
+.upd label.field{display:flex;flex-direction:column;gap:4px}
+.upd select,.upd textarea{width:100%;border:1px solid var(--line-strong);border-radius:6px;padding:8px 10px;background:var(--surface);font:inherit}
+.upd textarea{min-height:92px;resize:vertical}
+.radios{display:flex;flex-direction:column;gap:4px}.radios label{display:flex;gap:8px;align-items:flex-start;font-size:.88rem;cursor:pointer;margin:0;color:var(--ink)}
+.radios input{width:auto;margin:3px 0 0}
+.thist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.thist li{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.thist li:first-child{border-top:0}
+.thist .note{margin:4px 0 0;font-size:.88rem;background:var(--surface-2);border-radius:6px;padding:6px 9px}
+.thist small{color:var(--muted)}
+.qtabs{display:flex;gap:4px;flex-wrap:wrap}
+.qtabs a{border:1px solid var(--line-strong);background:var(--surface);border-radius:16px;padding:4px 12px;font-size:.84rem;cursor:pointer;text-decoration:none;color:var(--ink)}
+.qtabs a[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.qtabs b{font-weight:700;margin-left:4px}
+@media (max-width:980px){.ticket{grid-template-columns:1fr}.ticket .side{position:static}}
+.why-item{display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;padding:12px 14px;border-radius:8px;background:var(--surface-2);border-left:4px solid var(--info)}
+.why-item.alert{border-left-color:var(--bad)} .why-item.warning{border-left-color:var(--warn)}
+.why-letter{width:26px;height:26px;border-radius:50%;background:var(--surface);border:1px solid var(--line-strong);display:grid;place-items:center;font-weight:700;font-size:.8rem}
+.tl.flagged .body{background:var(--bad-soft);border-radius:8px;padding:8px 10px;margin-left:-10px}
+tr.ev.flagged{background:var(--bad-soft)}
+tr.ev.flagged td:first-child{box-shadow:inset 4px 0 0 var(--bad)}
+.check{display:inline-flex;gap:6px;align-items:center;cursor:pointer;min-height:34px;font-size:.9rem;margin:0;color:var(--ink)}
+.check input{width:auto;margin:0}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:50;font-size:.88rem;box-shadow:0 8px 24px rgba(0,0,0,.2);max-width:calc(100% - 32px);animation:toast-out .4s ease 6s forwards}
+@keyframes toast-out{to{opacity:0;visibility:hidden}}
+.seg a{display:inline-flex;align-items:center;border:0;background:var(--surface);color:var(--ink);padding:6px 10px;cursor:pointer;font-size:.85rem;border-right:1px solid var(--line);text-decoration:none}
+.seg a:last-child{border-right:0}
+.seg a[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+@media (max-width:860px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (max-width:520px){ .kpis{grid-template-columns:1fr 1fr} }
+
+/* Admin overview: soft-card style */
+body.admin-portal{background:#eef1f6}
+.ov{gap:20px!important}
+.ov .panel{border:0;border-radius:18px;box-shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px rgba(16,24,40,.06)}
+.ov-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ov-head h1{margin:0;font-size:1.75rem;letter-spacing:-.02em}
+.ov-head .date{color:var(--muted);font-size:.9rem;margin-top:2px}
+.ov .seg{border:0;background:#fff;border-radius:999px;padding:4px;gap:2px;box-shadow:0 1px 2px rgba(16,24,40,.06)}
+.ov .seg button,.ov .seg a{border:0;border-radius:999px;padding:6px 14px;background:transparent;color:var(--muted)}
+.ov .seg button[aria-pressed="true"],.ov .seg a[aria-pressed="true"]{background:var(--accent);color:#fff}
+.ov .kpis{gap:16px}
+.ov .kpi{padding:18px 20px;gap:0;min-height:150px}
+.kt{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:auto}
+.kic{width:42px;height:42px;border-radius:12px;background:#f1f4f8;display:grid;place-items:center;color:var(--ink)}
+.kic svg{width:20px;height:20px}
+.kl{font-size:.88rem;color:var(--ink);margin-top:14px;font-weight:500}
+.kval{display:flex;align-items:baseline;gap:10px;margin-top:2px}
+.kval .v{font-size:2.1rem!important;font-weight:650;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:normal!important}
+.kval .ctx{font-size:.8rem;color:var(--muted);line-height:1.25;max-width:16ch}
+.kval .ctx form{display:inline;margin:0}
+.kval .ctx .link-btn{color:var(--accent);font-size:.8rem;padding:0}
+.ov .kpi.feature{background:linear-gradient(135deg,#1d4f7a,#2b6aa3);color:#fff}
+.ov .kpi.feature .kic{background:rgba(255,255,255,.95);color:#1d4f7a}
+.ov .kpi.feature .kl,.ov .kpi.feature .v{color:#fff}
+.ov .kpi.feature .ctx{color:rgba(255,255,255,.8)}
+.ov .kpi.feature .pill{background:rgba(255,255,255,.18);color:#fff}
+.ov .chart-card,.ov .dash>.panel{padding:22px 24px}
+.ov .vhead h2{font-size:1.15rem;letter-spacing:-.01em}
+.ov .vlegend i{border-radius:50%}
+.ov .meaning{border-radius:12px;background:#f5f7fa}
+.ftypes2{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+.ftypes2 li{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:4px 12px;align-items:center}
+.ftypes2 .fic{grid-column:1;grid-row:1/3;width:36px;height:36px;border-radius:10px;display:grid;place-items:center}
+.ftypes2 .fic svg{width:18px;height:18px}
+.ftypes2 .fic.alert{background:#fde3e3;color:#9b1c1c}.ftypes2 .fic.warning{background:#fdf0d5;color:#8a4b06}.ftypes2 .fic.info{background:#eef1f5;color:#4b5866}
+.ftypes2 .nm{grid-column:2;grid-row:1;text-align:left;font-size:.9rem;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ftypes2 .nm small{display:block;font-weight:400;color:var(--muted);font-size:.75rem}
+.ftypes2 .ct{grid-column:3;grid-row:1/3;display:flex;align-items:center;gap:10px}
+.ftypes2 .ct b{font-size:1rem;font-variant-numeric:tabular-nums;min-width:1.2em;text-align:right}
+.ftypes2 .trk{grid-column:2;grid-row:2;height:4px;border-radius:2px;background:#eef1f5}
+.ftypes2 .trk span{display:block;height:100%;border-radius:2px;background:var(--accent)}
+.ov .sevbar{height:8px;border-radius:999px;gap:3px;background:transparent}
+.ov .sevbar span{border-radius:999px}
+.ov .qtabs a{border-radius:999px;border-color:transparent;background:#f1f4f8}
+.ov .qtabs a[aria-pressed="true"]{background:var(--accent);color:#fff}
+.ov table.flags-t th{background:transparent;border-bottom:1px solid var(--line)}
+@media (max-width:860px){.ov .kpi{min-height:0}}
+
 /* The pages that are not redesigned keep their own classes (zero specificity, so the classes above win). */
 :where(button,.button){font:inherit;background:var(--accent);color:#fff;border:0;border-radius:5px;padding:7px 16px;cursor:pointer;text-decoration:none;display:inline-block;font-size:.9rem}
 button.secondary,.button.secondary{background:#fff;color:var(--accent);border:1px solid var(--accent)}
@@ -174,11 +347,13 @@ legend{font-weight:600;padding:0 6px}
 </head>
 <body{% if portal == 'admin' %} class="admin-portal"{% endif %}>
 <header class="top{% if portal == 'admin' %} admin{% endif %}"><div class="wrap">
-  <a class="brand" href="{{ url_for('audit_log_view' if portal == 'admin' else 'home') }}"><span class="brand-mark">O</span>Orbit{% if portal == 'admin' %} <span class="portal-tag">Admin</span>{% endif %}</a>
+  <a class="brand" href="{{ url_for('admin_home' if portal == 'admin' else 'home') }}"><span class="brand-mark">O</span>Orbit{% if portal == 'admin' %} <span class="portal-tag">Admin</span>{% endif %}</a>
   {% if account %}
   {% set here = request.endpoint %}
   {% if portal == 'admin' %}
   <nav class="main">
+    {% set open_count = open_flags() %}
+    <a href="{{ url_for('admin_home') }}"{% if here in ('admin_home', 'admin_flag') %} aria-current="page"{% endif %}>Overview{% if open_count %}<span class="nav-count" title="{{ open_count }} flag{{ '' if open_count == 1 else 's' }} not resolved yet">{{ open_count }}</span>{% endif %}</a>
     <a href="{{ url_for('audit_log_view') }}"{% if here == 'audit_log_view' or here == 'audit_verify' %} aria-current="page"{% endif %}>Activity log</a>
     <a href="{{ url_for('admin_clients') }}"{% if here in ('admin_clients', 'admin_view_client', 'admin_view_assessment') %} aria-current="page"{% endif %}>Clients</a>
   </nav>
@@ -203,7 +378,7 @@ legend{font-weight:600;padding:0 6px}
   {% endif %}
 </div></header>
 <main class="wrap">
-  {% for category, message in get_flashed_messages(with_categories=true)|unique(case_sensitive=True) %}<div class="msg{% if category in ('success', 'warning') %} msg-{{ category }}{% endif %}">{{ message }}</div>{% endfor %}
+  {% for category, message in get_flashed_messages(with_categories=true)|unique(case_sensitive=True) %}{% if category == 'toast' %}<div class="toast" role="status">{{ message }}</div>{% else %}<div class="msg{% if category in ('success', 'warning') %} msg-{{ category }}{% endif %}">{{ message }}</div>{% endif %}{% endfor %}
   {% block content %}{% endblock %}
 </main>
 </body>
@@ -440,6 +615,7 @@ FORM = """{% extends "base.html" %}
  
 VIEW = """{% extends "base.html" %}
 {% from "audit_rows.html" import info, short %}
+{% from "flag_parts.html" import detail, status_pill %}
 {% block content %}
 <div class="stack" style="margin-bottom:16px">
   <a href="{{ link('home') }}" class="muted" style="text-decoration:none">&larr; All clients</a>
@@ -464,6 +640,15 @@ VIEW = """{% extends "base.html" %}
     </div>
     {% endif %}
   </div></section>
+  {% if flags_error %}<div class="problem" role="alert">{{ flags_error }}</div>{% endif %}
+  {% if flag_boxes %}
+  <section class="panel panel-pad stack why" style="gap:12px"><div><h2>Why this client is flagged</h2><p class="muted sub">What the rule picked up, and the data behind it.</p></div>
+    {% for box in flag_boxes %}{% set f = box.ticket.flag %}
+    <div class="why-item {{ box.css }}"><span class="why-letter">{{ 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[loop.index0] if loop.index0 < 26 else '&bull;'|safe }}</span><div style="min-width:0"><div class="row" style="gap:8px"><span class="sev {{ box.css }}">{{ f.severity_name }}</span>{{ status_pill(box.ticket.status, box.ticket.status_name) }}<strong>{{ f.headline }}</strong><a class="btn secondary sm" href="{{ url_for('admin_flag', flag_id=f.flag_id) }}" style="margin-left:auto">Open ticket &rarr;</a></div>
+      {{ detail(box.pic) }}</div></div>
+    {% endfor %}
+  </section>
+  {% endif %}
 </div>
 
 {% if problems %}
@@ -551,7 +736,7 @@ VIEW = """{% extends "base.html" %}
     {% for day, events in history %}
     <li class="day-label">{{ day }}</li>
     {% for e in events %}
-    <li class="tl"><span class="rail"></span><time title="{{ e.at.replace('T', ' ').replace('Z', ' UTC') }}">{{ e.at|sgt_hm }}</time><span class="node" style="color:var({{ GROUP_COLOURS[e.group] }})"></span>
+    <li class="tl{{ ' flagged' if e.sequence in flagged_sequences else '' }}"><span class="rail"></span><time title="{{ e.at.replace('T', ' ').replace('Z', ' UTC') }}">{{ e.at|sgt_hm }}</time><span class="node" style="color:var({{ GROUP_COLOURS[e.group] }})"></span>
       <div class="body">
         <div class="line"><strong>{% if e.action == 'assessment_run' and e.details.get('assessment_id') %}<a href="{{ link('view_assessment', assessment_id=e.details.get('assessment_id')) }}">{{ e.label }}</a>{% else %}{{ e.label }}{% endif %}</strong>
           <span class="short">{{ short(e) }}</span>{% if e.result == 'failed' %}<span class="res-fail">Failed</span>{% endif %}<span class="by muted">{{ e.actor }}</span></div>
@@ -1028,6 +1213,7 @@ AUDIT = """{% extends "base.html" %}
     <div class="f-row">
       <label class="field" for="f-client" style="width:130px"><span>Client</span><input id="f-client" name="client_ref" maxlength="40" placeholder="C-0007" value="{{ audit_filter.client_ref }}"></label>
       <label class="field" for="f-q" style="flex:1; min-width:180px"><span>Search</span><input id="f-q" name="q" type="search" maxlength="80" placeholder="Name, file, field, officer…" value="{{ audit_filter.query }}"></label>
+      <label class="check" for="f-flagged" style="margin-bottom:0"><input type="checkbox" id="f-flagged" name="flagged" value="1"{{ ' checked' if audit_filter.flagged_only else '' }}>Flagged only</label>
       <button class="btn sm" type="submit" style="margin-bottom:2px">Apply</button>
     </div>
     {% for problem in audit_filter.problems() %}<div class="problem" role="alert">{{ problem }}</div>{% endfor %}
@@ -1042,7 +1228,7 @@ AUDIT = """{% extends "base.html" %}
 
 <div class="stack" style="margin-top:16px">
 {% if log and log.unreadable and not error %}<div class="problem" role="alert">{{ log.unreadable }} {{ 'entry' if log.unreadable == 1 else 'entries' }} in the audit log can't be read. Use Verify log to see which.</div>{% endif %}
-{% if log %}<p class="summary">{{ period }}: <strong>{{ log.total }} event{{ '' if log.total == 1 else 's' }}</strong> by {{ log.officers }} officer{{ '' if log.officers == 1 else 's' }}; <strong>{{ log.failed }} failed</strong>.</p>{% endif %}
+{% if log %}<p class="summary">{{ period }}: <strong>{{ log.total }} event{{ '' if log.total == 1 else 's' }}</strong> by {{ log.officers }} officer{{ '' if log.officers == 1 else 's' }}; <strong>{{ log.failed }} failed</strong>; {% if log.open_flags %}<a href="{{ url_for('admin_home') }}"><strong>{{ log.open_flags }} open flag{{ '' if log.open_flags == 1 else 's' }}</strong></a>{% else %}no open flags{% endif %}.</p>{% endif %}
 <section class="panel">
   {% if error %}
     <p class="muted" style="padding:20px 22px; margin:0">{{ error }}</p>
@@ -1051,10 +1237,10 @@ AUDIT = """{% extends "base.html" %}
     <thead><tr><th>Time (SGT)</th><th>Officer</th><th>Action</th><th>Client</th><th>What happened</th></tr></thead>
     <tbody>
     {% for e in log.events %}
-    <tr class="ev">
+    <tr class="ev{{ ' flagged' if e.sequence in log.flagged else '' }}">
       <td class="num" title="{{ e.at.replace('T', ' ').replace('Z', ' UTC') }}" style="white-space:nowrap">{{ e.at|sgt_day }} <span class="muted">{{ e.at|sgt_hm }}</span></td>
       <td style="white-space:nowrap"><span class="pill"><span class="avatar" style="width:22px;height:22px;font-size:.62rem" aria-hidden="true">{{ e.actor|initials }}</span>{{ e.actor }}</span></td>
-      <td style="white-space:nowrap"><span class="pill"><span class="dot" style="background:var({{ GROUP_COLOURS[e.group] }})"></span>{{ e.label }}</span></td>
+      <td style="white-space:nowrap"><span class="pill"><span class="dot" style="background:var({{ GROUP_COLOURS[e.group] }})"></span>{{ e.label }}</span>{% if e.sequence in log.flagged %} <span class="flag-ic" title="Behind a flag that is not resolved yet" aria-label="Behind a flag that is not resolved yet">&#9873;</span>{% endif %}</td>
       <td>{% if e.client_ref %}<a class="mono" href="{{ link('view_client', client_ref=e.client_ref) }}">{{ e.client_ref }}</a>{% else %}<span class="muted">&mdash;</span>{% endif %}</td>
       <td style="min-width:260px">
         <span class="row" style="gap:8px">{{ short(e) }}{% if e.result == 'failed' %}<span class="res-fail">Failed</span>{% endif %}{% if e.event_id in broken_ids %}<span class="badge badge-warn">Changed outside the app</span>{% endif %}</span>
@@ -1080,7 +1266,7 @@ AUDIT = """{% extends "base.html" %}
 (function () {
   var form = document.getElementById('filters');
   form.addEventListener('change', function (event) {
-    if (event.target.matches('select, input[type=date]')) { form.submit(); }
+    if (event.target.matches('select, input[type=date], input[name=flagged]')) { form.submit(); }
   });
   var groups = document.getElementById('f-groups'), before = groups.querySelectorAll('input:checked').length;
   groups.addEventListener('toggle', function () {
@@ -1158,8 +1344,276 @@ FORBIDDEN = """{% extends "base.html" %}
 {% endblock %}
 """
 
+FLAG_PARTS = """{% macro icon(name) -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{%- if name == 'activity' %}<path d="M3 12h4l3-8 4 16 3-8h4"/>
+{%- elif name == 'alert' %}<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4"/><path d="M12 17h.01"/>
+{%- elif name == 'shield' %}<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3z"/><path d="m9 12 2 2 4-4"/>
+{%- elif name == 'shieldx' %}<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3z"/><path d="m10 10 4 4M14 10l-4 4"/>
+{%- elif name == 'shop' %}<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>
+{%- elif name == 'other' %}<circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 11l4-4M19 7h2v2"/>
+{%- elif name == 'repeat' %}<path d="M4 12a8 8 0 0 1 14-5.3L20 9"/><path d="M20 4v5h-5"/><path d="M20 12a8 8 0 0 1-14 5.3L4 15"/><path d="M4 20v-5h5"/>
+{%- elif name == 'hours' %}<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>
+{%- elif name == 'spike' %}<path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/>
+{%- elif name == 'integrity' %}<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3z"/><path d="M12 9v4"/><path d="M12 16h.01"/>
+{%- else %}<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>
+{%- endif %}</svg>
+{%- endmacro %}
+
+{% macro badge(e) -%}
+{%- set o = e.details.get('outcome') -%}
+{%- if o %}<span class="badge b-{{ o }}">{{ o.replace('_', ' ').capitalize() }}</span>{% else %}<span class="muted">Assessment saved</span>{% endif -%}
+{%- endmacro %}
+
+{% macro alink(e) -%}
+{%- set aid = e.details.get('assessment_id') -%}
+{%- if aid %}<a href="{{ link('view_assessment', assessment_id=aid) }}" class="mono small">{{ aid }}</a>{% endif -%}
+{%- endmacro %}
+
+{% macro person(name, role, sub) -%}
+<span class="person"><span class="avatar">{{ name|initials }}</span><span><small>{{ role }}</small><b>{{ name }}</b>{% if sub %}<small>{{ sub }}</small>{% endif %}</span></span>
+{%- endmacro %}
+
+{% macro diffs(changes) -%}
+{% for c in changes %}<div class="dl"><span class="muted">{{ c.get('field')|flag_field }}</span><span class="diff"><span class="b">{{ c.get('before')|shown }}</span>&rarr;<span class="a">{{ c.get('after')|shown }}</span></span></div>{% endfor %}
+{%- endmacro %}
+
+{% macro status_pill(key, name) -%}<span class="st {{ key }}">{{ name }}</span>{%- endmacro %}
+
+{% macro detail(pic) %}
+{% set f = pic.flag %}
+<div class="fd"><span class="rule">Rule &middot; <b>{{ pic.rule }}</b></span>
+  <div class="who-bar">
+  {% if f.client_ref %}<span><small>Client</small><b>{{ pic.client_name or f.client_ref }}</b>{% if pic.client_name %} <span class="mono small muted">{{ f.client_ref }}</span>{% endif %}</span>{% if f.owner %}<span><small>Owner officer</small><b>{{ f.owner }}</b></span>{% endif %}
+  {% else %}<span><small>Client</small><b>None</b> <span class="muted small">(affects the whole system)</span></span>{% endif %}
+  </div>
+  {% if f.kind == 'integrity' %}
+  <div class="card"><div class="bigstat"><span>Entry <span class="n">#{{ f.broken_at }}</span></span><span class="muted">{{ pic.entries - f.broken_at }} {{ 'entry' if pic.entries - f.broken_at == 1 else 'entries' }} after it can't be trusted</span></div><span class="small muted">Edited or deleted directly in the file, so the app can't tell which officer did it.</span></div>
+  {% elif not pic.complete %}
+  <div class="problem" role="alert">Some of the log entries behind this flag can't be read, so the picture is incomplete.</div>
+  {% elif f.kind == 'shop' %}
+  {% set a, e, b = pic.ordered %}
+  <div class="flow"><div class="card"><span class="lab">Before</span>{{ badge(a) }}{{ person(a.actor, 'Assessed by', a.at|sgt_when) }}{{ alink(a) }}</div><span class="arrow">&rarr;</span>
+    <div class="card"><span class="lab">Edit</span>{{ diffs(f.changes) }}{{ person(e.actor, 'Edited by', e.at|sgt_when) }}</div><span class="arrow">&rarr;</span>
+    <div class="card"><span class="lab">After</span>{{ badge(b) }}{{ person(b.actor, 'Assessed by', b.at|sgt_when) }}{{ alink(b) }}</div></div>
+  {% elif f.kind == 'other' %}
+  {% set e = pic.ordered[0] %}
+  <div class="flow two"><div class="card"><span class="lab">Owner officer</span>{{ person(f.owner, 'Created the client', pic.created.at|sgt_when if pic.created else '') }}</div><span class="arrow">&rarr;</span>
+    <div class="card"><span class="lab">Edit by another officer</span>{{ person(e.actor, 'Edited by', e.at|sgt_when) }}{{ diffs(f.changes) }}</div></div>
+  {% elif f.kind == 'repeat' %}
+  <div class="runs">{% for e in pic.ordered %}{% set aid = e.details.get('assessment_id') %}<{{ 'a' if aid else 'div' }} class="card run"{% if aid %} href="{{ link('view_assessment', assessment_id=aid) }}"{% endif %}><span class="lab">Run {{ loop.index }} &middot; {{ e.at|sgt_when(false) }}</span>{{ badge(e) }}{{ person(e.actor, 'Assessed by', '') }}</{{ 'a' if aid else 'div' }}>{% endfor %}</div>
+  {% elif f.kind == 'hours' %}
+  {% set e = pic.ordered[0] %}
+  <div class="card" style="gap:8px">{{ person(e.actor, 'Edited by' if e.action == 'client_edited' else 'Assessed by', e.at|sgt_when) }}
+    <div class="clock" role="img" aria-label="Done at {{ pic.clock.time }}; working hours {{ pic.rule_hours }}"><span class="work" style="left:{{ pic.clock.work_left }}%;width:{{ pic.clock.work_width }}%"></span><span class="mark" style="left:calc({{ pic.clock.at }}% - 1px)"><i>{{ pic.clock.time }}</i></span></div>
+    <div class="clock-l">{% for left, text in pic.clock.ticks %}<span style="left:{{ left }}%">{{ text }}</span>{% endfor %}</div>
+    {% if e.action == 'client_edited' %}<span class="lab">What changed</span>{{ diffs(e.details.get('changes', [])) }}{% else %}<div>{{ badge(e) }} {{ alink(e) }}</div>{% endif %}</div>
+  {% elif f.kind == 'spike' %}
+  <div class="card"><div class="bigstat"><span><span class="n">{{ pic.ordered|length }}</span> failures</span><span class="muted">{{ f.day|day_when }} &middot; usual {{ f.usual|plain_number }} a day</span></div>
+    <div class="row" style="gap:6px">{% for kind, count in pic.kinds %}<span class="pillc">{{ kind }} <b>{{ count }}</b></span>{% endfor %}</div>
+    <details class="numbers"><summary>Show all {{ pic.ordered|length }}</summary><div class="scroll-x" style="margin-top:6px"><table class="mini"><thead><tr><th>Time</th><th>Client</th><th>Officer</th><th>What failed</th></tr></thead><tbody>
+      {% for e in pic.ordered %}<tr><td class="num">{{ e.at|sgt_hm }}</td><td>{% if e.client_ref %}<a class="mono" href="{{ link('view_client', client_ref=e.client_ref) }}">{{ e.client_ref }}</a>{% else %}&mdash;{% endif %}</td><td>{{ e.actor }}</td><td>{{ pic.what[e.sequence] }}</td></tr>{% endfor %}
+    </tbody></table></div></details></div>
+  {% endif %}
+</div>
+{% endmacro %}
+"""
+
+OVERVIEW = """{% extends "base.html" %}
+{% from "flag_parts.html" import icon, status_pill %}
+{% block title %}Overview — Orbit{% endblock %}
+{% block content %}
+{% if error %}
+<div class="stack ov">
+  <div class="ov-head"><div><h1>Overview</h1><div class="date">{{ today_long }}</div></div></div>
+  <section class="panel"><p class="muted" style="padding:20px 22px; margin:0" role="alert">{{ error }}</p></section>
+</div>
+{% else %}
+{% set days = (view.day_to - view.day_from).days + 1 %}
+<div class="stack ov">
+  <div class="ov-head"><div><h1>Overview</h1><div class="date">{{ today_long }}</div></div>
+    <div class="seg" role="group" aria-label="Date range">
+      {% for value, text in ranges %}<a href="{{ url_for('admin_home', range=value, tab=view.tab) }}" aria-pressed="{{ 'true' if view.preset == value else 'false' }}">{{ text }}</a>{% endfor %}
+    </div></div>
+  {% for problem in problems %}<div class="problem" role="alert">{{ problem }}</div>{% endfor %}
+  {% if view.unreadable %}<div class="problem" role="alert">{{ view.unreadable }} log {{ 'entry' if view.unreadable == 1 else 'entries' }} could not be read, so the numbers below may be missing {{ 'it' if view.unreadable == 1 else 'them' }}. Use Verify log on the Activity log page to see which.</div>{% endif %}
+  {% if not view.intact %}<div class="problem" role="alert">Entry #{{ view.broken_at }} was changed outside the app, so the numbers from that entry on can't be trusted.</div>{% endif %}
+  <div class="kpis">
+    <div class="panel kpi feature"><div class="kt"><span class="kic">{{ icon('flag') }}</span><span class="pill">{{ view.not_started }} not started</span></div>
+      <span class="kl">Flags to handle</span><div class="kval"><span class="v">{{ view.to_handle }}</span><span class="ctx">{{ view.in_progress }} in progress</span></div></div>
+    <div class="panel kpi"><div class="kt"><span class="kic">{{ icon('activity') }}</span>{% if view.actions_change is not none %}<span class="pill {{ 'flat' if view.actions_change == 0 else ('good' if view.actions_change > 0 else 'bad') }}">{{ '+' if view.actions_change > 0 else ('&minus;' if view.actions_change < 0 else '&plusmn;')|safe }}{{ view.actions_change|abs }}%</span>{% endif %}</div>
+      <span class="kl">Actions</span><div class="kval"><span class="v">{{ '{:,}'.format(view.actions) }}</span>{% if view.actions_change is not none %}<span class="ctx">vs previous {{ days }} day{{ '' if days == 1 else 's' }}</span>{% endif %}</div></div>
+    <div class="panel kpi"><div class="kt"><span class="kic">{{ icon('alert') }}</span>{% if view.failures_change is not none %}<span class="pill {{ 'flat' if view.failures_change == 0 else ('bad' if view.failures_change > 0 else 'good') }}">{{ '+' if view.failures_change > 0 else ('&minus;' if view.failures_change < 0 else '&plusmn;')|safe }}{{ view.failures_change|abs }}%</span>{% endif %}</div>
+      <span class="kl">Failures</span><div class="kval"><span class="v">{{ view.failures }}</span>{% if view.failures_change is not none %}<span class="ctx">vs previous {{ days }} day{{ '' if days == 1 else 's' }}</span>{% endif %}</div></div>
+    <div class="panel kpi"><div class="kt"><span class="kic" style="color:var({{ '--ok' if view.intact else '--bad' }})">{{ icon('shield' if view.intact else 'shieldx') }}</span><span class="pill {{ 'good' if view.intact else 'bad' }}">{{ 'Intact' if view.intact else 'Broken' }}</span></div>
+      <span class="kl">Log integrity</span><div class="kval"><span class="v" style="color:var({{ '--ok' if view.intact else '--bad' }})">{{ '&check;'|safe if view.intact else '#' ~ view.broken_at }}</span><span class="ctx">{{ ('{:,}'.format(view.entries) ~ ' entries verified') if view.intact else 'entry changed outside the app' }} &middot; <form method="post" action="{{ url_for('audit_verify') }}"><button class="link-btn" type="submit">Check again</button></form></span></div></div>
+  </div>
+  <div class="dash">
+    <section class="panel chart-card" style="gap:14px">
+      <div class="vhead"><div><h2>Failures over time</h2><p class="sub">Each bar is one {{ chart.unit }}: AI steps, saves, reads and syncs that didn't work</p></div>
+        <div class="hero"><span class="n">{{ view.failures }}</span><span class="l">failure{{ '' if view.failures == 1 else 's' }} in this range</span></div></div>
+      <ul class="vlegend" aria-label="Failure kinds">{% for kind in chart.kinds %}<li class="{{ '' if chart.totals[kind] else 'zero' }}"><i style="background:var(--f{{ loop.index }})"></i>{{ kind }} <b>{{ chart.totals[kind] }}</b></li>{% endfor %}</ul>
+      <div class="offline" id="chart-offline" role="alert">Chart can't load. The table below has the same numbers.</div>
+      <div class="chart-box" id="chart-box" style="height:240px" hidden><canvas id="c-hl" role="img" aria-label="Failures over time, one bar per {{ chart.unit }}"></canvas></div>
+      <div class="meaning"><span class="ic">i</span><div><span class="lbl">What this means</span>{{ chart.caption }}</div></div>
+      <details class="numbers" id="chart-numbers" open><summary>Show the numbers</summary><div class="scroll-x" style="margin-top:8px"><table>
+        <thead><tr><th>{{ chart.unit|capitalize }}</th>{% for kind in chart.kinds %}<th>{{ kind }}</th>{% endfor %}<th>Total</th></tr></thead>
+        <tbody>{% for long in chart.longs %}{% set i = loop.index0 %}<tr><td>{{ long }}</td>{% for kind in chart.kinds %}<td class="num">{{ chart.data[kind][i] }}</td>{% endfor %}<td class="num">{{ chart.sums[i] }}</td></tr>{% endfor %}</tbody></table></div></details>
+      <script type="application/json" id="chart-data">{{ chart.json|tojson }}</script>
+    </section>
+    <section class="panel panel-pad stack" style="gap:14px; min-width:0">
+      <div class="vhead"><div><h2>Flags by type</h2><p class="sub">Not resolved, raised in this range</p></div>
+        <div class="hero"><span class="n">{{ open_in_range }}</span><span class="l">open flag{{ '' if open_in_range == 1 else 's' }}</span></div></div>
+      {% if open_in_range %}
+      <div class="stack" style="gap:8px"><div class="sevbar" role="img" aria-label="By priority: {% for key, name, count, colour in severities %}{{ name }} {{ count }}{{ ', ' if not loop.last }}{% endfor %}">{% for key, name, count, colour in severities if count %}<span style="width:{{ count / open_in_range * 100 }}%; background:{{ colour }}" title="{{ name }}: {{ count }}"></span>{% endfor %}</div>
+        <ul class="sevkey">{% for key, name, count, colour in severities %}<li><i style="background:{{ colour }}"></i>{{ name }} <b>{{ count }}</b></li>{% endfor %}</ul></div>
+      <ul class="ftypes2">{% for t in types %}<li><span class="fic {{ t.css }}" title="{{ t.priority }} priority">{{ icon(t.kind) }}</span><span class="nm">{{ t.name }}<small>{{ t.priority }} priority</small></span><span class="ct"><b>{{ t.count }}</b><span class="pill flat">{{ t.percent }}%</span></span><span class="trk"><span style="width:{{ t.count / types[0].count * 100 }}%"></span></span></li>{% endfor %}</ul>
+      {% else %}<p class="muted" style="margin:0">No open flags in this range.</p>{% endif %}
+    </section>
+  </div>
+  <section class="panel" style="min-width:0">
+    <div class="sec-head"><div><h2>Flags</h2><p class="muted small" style="margin:2px 0 0">Each flag is a ticket. Click a row to investigate it and update its status. Flags stay here until resolved, whatever the date range.</p></div></div>
+    <div class="panel-pad" style="padding-top:0; padding-bottom:10px"><div class="qtabs" role="group" aria-label="Show flags">{% for key, text in tabs %}<a href="{{ url_for('admin_home', range=view.preset, tab=key) }}" aria-pressed="{{ 'true' if view.tab == key else 'false' }}">{{ text }}<b>{{ view.tab_counts[key] }}</b></a>{% endfor %}</div></div>
+    <div class="scroll-x"><table class="flags-t"><thead><tr><th style="width:96px">Priority</th><th style="width:20%">Type</th><th style="width:14%">Client</th><th>Detail</th><th style="width:140px">Status</th><th style="width:100px">Raised</th></tr></thead>
+      <tbody>
+      {% for row in rows %}{% set f = row.ticket.flag %}
+      <tr class="ev" data-href="{{ url_for('admin_flag', flag_id=f.flag_id) }}" data-sev="{{ row.css }}">
+        <td><span class="sev {{ row.css }}">{{ f.severity_name }}</span></td>
+        <td><strong><a href="{{ url_for('admin_flag', flag_id=f.flag_id) }}" style="color:inherit; text-decoration:none">{{ f.name }}</a></strong><span class="assignee mono">{{ f.flag_id }}</span></td>
+        <td style="white-space:nowrap">{% if f.client_ref %}{{ row.client or f.client_ref }}{% else %}<span class="muted">System</span>{% endif %}</td>
+        <td>{{ row.detail }}</td>
+        <td>{{ status_pill(row.ticket.status, row.ticket.status_name) }}</td>
+        <td class="num muted" style="white-space:nowrap">{{ f.raised_at|sgt_day }}<span class="assignee">{{ f.raised_at|sgt_ago }}</span></td></tr>
+      {% endfor %}
+      {% if rows %}{% for n in range(page_size - rows|length) %}<tr class="filler" aria-hidden="true"><td colspan="6"></td></tr>{% endfor %}
+      {% else %}<tr class="flags-empty"><td colspan="6" style="height:{{ page_size * 72 }}px">{{ 'Nothing resolved yet. Open a flag and set it to Resolved with a note.' if view.tab == 'resolved' else 'No flags here.' }}</td></tr>{% endif %}
+      </tbody></table></div>
+    <div class="pager" style="border-top:1px solid var(--line)"><span class="muted">{% if shown_total %}Showing {{ (view.page - 1) * page_size + 1 }}&ndash;{{ [view.page * page_size, shown_total]|min }} of {{ shown_total }}{% else %}0 flags{% endif %}</span>
+      <span class="row">
+        {% if view.page > 1 %}<a class="btn secondary sm" href="{{ url_for('admin_home', range=view.preset, tab=view.tab, page=view.page - 1) }}">&larr; Prev</a>{% else %}<span class="btn secondary sm" aria-disabled="true">&larr; Prev</span>{% endif %}
+        <span class="num">Page {{ view.page }} of {{ view.page_count }}</span>
+        {% if view.page < view.page_count %}<a class="btn secondary sm" href="{{ url_for('admin_home', range=view.preset, tab=view.tab, page=view.page + 1) }}">Next &rarr;</a>{% else %}<span class="btn secondary sm" aria-disabled="true">Next &rarr;</span>{% endif %}
+      </span></div></section>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+(function () {
+  document.querySelectorAll('tr.ev[data-href]').forEach(function (row) {
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', function (event) {
+      if (!event.target.closest('a')) { window.location = row.dataset.href; }
+    });
+  });
+  var box = document.getElementById('chart-box'), note = document.getElementById('chart-offline'),
+      numbers = document.getElementById('chart-numbers');
+  if (!window.Chart || !box) { return; }
+  note.hidden = true; box.hidden = false; numbers.open = false;
+  var cfg = JSON.parse(document.getElementById('chart-data').textContent);
+  var style = getComputedStyle(document.documentElement);
+  function css(name) { return style.getPropertyValue(name).trim(); }
+  Chart.defaults.font.family = css('--font') || 'system-ui';
+  Chart.defaults.color = css('--muted');
+  var colours = [css('--f1'), css('--f2'), css('--f3'), css('--f4')];
+  var topIndex = cfg.labels.map(function (_, j) {
+    var top = -1;
+    cfg.kinds.forEach(function (kind, i) { if (cfg.data[kind][j]) { top = i; } });
+    return top;
+  });
+  new Chart(document.getElementById('c-hl'), {
+    type: 'bar',
+    data: { labels: cfg.labels, datasets: cfg.kinds.map(function (kind, i) {
+      return { label: kind, data: cfg.data[kind], backgroundColor: colours[i], borderColor: css('--surface'),
+        borderWidth: { top: 2, bottom: 0, left: 0, right: 0 }, borderSkipped: false,
+        borderRadius: function (c) { return topIndex[c.dataIndex] === i ? { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 } : 0; },
+        maxBarThickness: 22, categoryPercentage: .7, barPercentage: .9 };
+    }) },
+    options: { responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false },
+        tooltip: { backgroundColor: '#151a21', titleColor: '#fff', bodyColor: '#e6e9ee', footerColor: '#fff', cornerRadius: 12,
+          padding: 12, boxPadding: 6, usePointStyle: true, caretSize: 6,
+          filter: function (item) { return item.raw > 0; },
+          callbacks: { title: function (items) { return cfg.longs[items[0].dataIndex]; },
+            labelPointStyle: function () { return { pointStyle: 'circle', rotation: 0 }; },
+            footer: function (items) {
+              var j = items[0].dataIndex, total = 0;
+              cfg.kinds.forEach(function (kind) { total += cfg.data[kind][j]; });
+              return total ? 'Total ' + total : 'No failures';
+            } } } },
+      scales: { x: { stacked: true, grid: { display: false }, border: { color: css('--line') },
+          ticks: { color: css('--muted'), maxRotation: 0, autoSkip: true, maxTicksLimit: 7, font: { size: 11 } } },
+        y: { stacked: true, beginAtZero: true, grace: '10%', grid: { color: css('--line'), lineWidth: 1 }, border: { display: false },
+          ticks: { precision: 0, color: css('--muted'), font: { size: 11 }, maxTicksLimit: 5 } } } }
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}
+"""
+
+FLAG = """{% extends "base.html" %}
+{% from "flag_parts.html" import detail, status_pill, badge, alink %}
+{% block title %}{{ ticket.flag.flag_id ~ ' — ' if ticket }}Flag — Orbit{% endblock %}
+{% block content %}
+<div class="stack">
+  <a href="{{ url_for('admin_home') }}" class="muted" style="text-decoration:none">&larr; All flags</a>
+  {% if error %}
+  <div class="panel empty" role="alert">{{ error }}</div>
+  {% elif not ticket %}
+  <div class="panel empty">{{ gone }}</div>
+  {% else %}
+  {% set f = ticket.flag %}
+  {% set draft = draft_status or ticket.status %}
+  <div class="ticket"><div class="stack" style="min-width:0">
+    <section class="panel panel-pad"><div class="eyebrow mono">{{ f.flag_id }} &middot; {{ f.name }}</div><h1 style="margin-top:4px">{{ f.headline }}</h1>
+      <div class="meta-row"><span class="sev {{ sev_css }}">{{ f.severity_name }}</span>{{ status_pill(ticket.status, ticket.status_name) }}<span>Raised <b>{{ f.raised_at|sgt_day }} {{ f.raised_at|sgt_hm }}</b> ({{ f.raised_at|sgt_ago }})</span></div></section>
+    <section class="panel panel-pad stack" style="gap:10px"><h2>What happened</h2>{{ detail(pic) }}{% if f.meaning %}<p class="muted" style="margin:0; font-size:.9rem">{{ f.meaning }}</p>{% endif %}</section>
+    {% if evidence %}<section class="panel panel-pad stack" style="gap:10px"><h2>Evidence</h2><ul class="evid">{% for item in evidence %}<li><a href="{{ item.href }}"><span>{{ item.text }}</span>{% if item.badge %}<span>{{ badge(item.badge) }}</span>{% else %}<span class="muted{{ ' mono' if item.mono }}">{{ item.side }}</span>{% endif %}</a></li>{% endfor %}</ul></section>{% endif %}
+  </div>
+  <aside class="side">
+    <form class="panel panel-pad stack upd" id="ticket-form" method="post" action="{{ url_for('admin_flag', flag_id=f.flag_id) }}" style="gap:12px" novalidate data-current="{{ ticket.status }}">
+      <h2>Update this flag</h2>
+      <label class="field" for="t-status"><span class="eyebrow">Status</span><select id="t-status" name="status">{% for key, name in statuses %}<option value="{{ key }}" data-name="{{ name }}"{{ ' selected' if draft == key }}>{{ name }}{{ ' (current)' if key == ticket.status }}</option>{% endfor %}</select></label>
+      <label class="field" for="t-wait" id="wait-block"{{ '' if draft == 'followup' else ' hidden' }}><span class="eyebrow">Waiting on</span><select id="t-wait" name="waiting_on"><option value="">Choose&hellip;</option>{% for who in waiting_on_choices %}<option{{ ' selected' if draft_wait == who }}>{{ who }}</option>{% endfor %}</select></label>
+      <fieldset id="outcome-block" style="border:0; padding:0; margin:0"{{ '' if draft == 'resolved' and ticket.status != 'resolved' else ' hidden' }}><legend class="eyebrow" style="margin-bottom:6px">Outcome</legend><div class="radios">{% for key, name in outcomes %}<label><input type="radio" name="outcome" value="{{ key }}"{{ ' checked' if draft_outcome == key }}><span>{{ name }}</span></label>{% endfor %}</div></fieldset>
+      <label class="field" for="t-note"><span class="eyebrow" id="note-label">{{ 'Note' if draft == ticket.status else 'Why' }} (required)</span><textarea id="t-note" name="note" maxlength="500" placeholder="{{ 'What you found and why it can be closed' if draft == 'resolved' else ('What you asked, and whom' if draft == 'followup' else 'What you are doing next') }}">{{ draft_note }}</textarea></label>
+      {% for message in errors %}<div class="err" role="alert">{{ message }}</div>{% endfor %}
+      <button class="btn" type="submit" id="t-save" style="justify-content:center">{{ 'Add note' if draft == ticket.status else ('Reopen flag' if ticket.status == 'resolved' else 'Save: ' ~ statuses_by_key[draft]) }}</button>
+      <p class="muted small" style="margin:0">Every update is saved in the audit log, so it can't be quietly changed later.</p>
+    </form>
+    <section class="panel panel-pad stack" style="gap:6px"><h2>Activity</h2><ul class="thist">
+      {% for h in history %}<li><span class="avatar">{{ '&#9881;'|safe if h.by == 'System' else h.by|initials }}</span><div><div class="row" style="gap:6px"><b>{{ h.by }}</b>{% if h.get('from') and h['from'] != h['to'] %}{{ status_pill(h['from'], statuses_by_key[h['from']]) }}&rarr;{{ status_pill(h['to'], statuses_by_key[h['to']]) }}{% elif h.get('from') %}<small>added a note</small>{% else %}<small>opened the flag</small>{% endif %}</div>
+        <small>{{ h.at|sgt_day }} {{ h.at|sgt_hm }}{% if h.get('waiting_on') %} &middot; waiting on {{ h.waiting_on }}{% endif %}</small>{% if h.get('outcome') %}<div style="margin-top:4px; font-size:.86rem"><b>Outcome:</b> {{ outcomes_by_key.get(h.outcome, h.outcome) }}</div>{% endif %}{% if h.note %}<p class="note">{{ h.note }}</p>{% endif %}</div></li>{% endfor %}
+    </ul></section>
+  </aside></div>
+  <script>
+  (function () {
+    var form = document.getElementById('ticket-form'), select = document.getElementById('t-status');
+    var wait = document.getElementById('wait-block'), outcome = document.getElementById('outcome-block');
+    var label = document.getElementById('note-label'), note = document.getElementById('t-note'), save = document.getElementById('t-save');
+    var current = form.dataset.current;
+    function update() {
+      var draft = select.value, name = select.options[select.selectedIndex].dataset.name;
+      wait.hidden = draft !== 'followup';
+      outcome.hidden = !(draft === 'resolved' && current !== 'resolved');
+      label.textContent = (draft === current ? 'Note' : 'Why') + ' (required)';
+      note.placeholder = draft === 'resolved' ? 'What you found and why it can be closed'
+        : (draft === 'followup' ? 'What you asked, and whom' : 'What you are doing next');
+      save.textContent = draft === current ? 'Add note' : (current === 'resolved' ? 'Reopen flag' : 'Save: ' + name);
+    }
+    select.addEventListener('change', update);
+  })();
+  </script>
+  {% endif %}
+</div>
+{% endblock %}
+"""
+
 TEMPLATES: dict[str, str] = {
     "audit_rows.html": AUDIT_ROWS,
+    "flag_parts.html": FLAG_PARTS,
+    "overview.html": OVERVIEW,
+    "flag.html": FLAG,
     "audit.html": AUDIT,
     "signin.html": SIGNIN,
     "forbidden.html": FORBIDDEN,
