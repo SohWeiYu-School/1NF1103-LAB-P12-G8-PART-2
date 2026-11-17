@@ -2258,6 +2258,19 @@ def test_updating_a_flag_saves_it_in_the_log_and_shows_the_toast(flagged_web):
     assert "Note added. Saved in the audit log as entry #" in toast
 
 
+def test_an_update_whose_line_cannot_be_read_back_gets_a_plain_toast(flagged_web, monkeypatch):
+    """Saved, but the new line could not be read back (entry 0): the page can't tell whether the status moved,
+    so it says only that the update was saved, never a wrong "Note added"."""
+    application, _, browser = flagged_web
+    flag_id = next(i for i in _flag_ids(browser) if i.startswith("F-HOU-"))
+    ticket = application.flag(flag_id)
+    monkeypatch.setattr(application, "update_flag", lambda *args, **kwargs: (ticket, [], 0))
+    reply = browser.post(f"/admin/flags/{flag_id}", data={"status": "review", "note": "Asking Shareen about it."})
+    page = browser.get(reply.headers["Location"]).get_data(as_text=True)
+    assert 'class="toast" role="status">Your update was saved in the audit log.' in page
+    assert "Note added" not in page
+
+
 def test_a_following_up_and_a_resolving_update_take_their_extra_choice(flagged_web):
     _, _, browser = flagged_web
     flag_id = next(i for i in _flag_ids(browser) if i.startswith("F-HOU-"))

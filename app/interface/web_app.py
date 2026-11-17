@@ -684,11 +684,12 @@ class WebApp:
             return self.__show_flag(flag_id, draft, problems)
         if sequence:
             last = ticket.history[-1]
-            moved, where = last["from"] != last["to"], f" as entry #{sequence}"
+            name = FlagTicket.STATUSES[draft["status"].strip()]
+            text = (f"{ticket.flag.flag_id} is now {name}" if last["from"] != last["to"] else "Note added") \
+                + f". Saved in the audit log as entry #{sequence}."
         else:
-            moved, where = ticket.status != draft["status"].strip(), ""
-        name = FlagTicket.STATUSES[draft["status"].strip()]
-        text = (f"{ticket.flag.flag_id} is now {name}" if moved else "Note added") + f". Saved in the audit log{where}."
+            # Written, but the new line could not be read back: whether the status moved is not known here.
+            text = "Your update was saved in the audit log."
         flash(text, "toast")
         return redirect(url_for("admin_flag", flag_id=ticket.flag.flag_id))
 
