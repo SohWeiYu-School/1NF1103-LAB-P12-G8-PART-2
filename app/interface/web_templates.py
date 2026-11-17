@@ -620,12 +620,9 @@ VIEW = """{% extends "base.html" %}
 <div class="stack" style="margin-bottom:16px">
   <a href="{{ link('home') }}" class="muted" style="text-decoration:none">&larr; All clients</a>
   {% set outcome = record.get('outcome') or '' %}
-  {# The newest active assessment: its report says whether the latest verdict is incomplete. #}
-  {% set newest = namespace(a=none) %}
-  {% for a in assessments or [] %}
-  {% set state = archive_states[loop.index0] if archive_states and loop.index0 < archive_states|length else 'active' %}
-  {% if state == 'active' and (newest.a is none or (a.get('assessed_at') or '') > (newest.a.get('assessed_at') or '')) %}{% set newest.a = a %}{% endif %}
-  {% endfor %}
+  {# The badge shows the client record's outcome, which comes from the newest assessment (archiving does not change
+     it). The tag reads that same assessment, and only when its outcome is the badge's, so it never describes another. #}
+  {% set tag_report = latest.get('report') if latest is mapping and latest.get('outcome') == outcome else none %}
   <section class="panel panel-pad"><div class="client-head">
     <div>
       <div class="eyebrow mono">{{ record.get('client_ref', '') }}</div>
@@ -633,7 +630,7 @@ VIEW = """{% extends "base.html" %}
       <div class="facts">
         <div><span>Nationality</span>{{ record.get('nationality') or '—' }}</div>
         <div><span>Occupation</span>{{ (record.get('career') or {}).get('occupation') or '—' }}</div>
-        <div><span>Latest verdict</span>{% if outcome %}<span class="badge b-{{ outcome }}">{{ outcome.replace('_', ' ').capitalize() }}</span>{% if newest.a %}{{ incomplete(newest.a.get('report')) }}{% endif %}{% if record.get('last_assessed_on') %} <span class="muted">{{ record.get('last_assessed_on') }}</span>{% endif %}{% else %}Not assessed{% endif %}</div>
+        <div><span>Latest verdict</span>{% if outcome %}<span class="badge b-{{ outcome }}">{{ outcome.replace('_', ' ').capitalize() }}</span>{% if tag_report %}{{ incomplete(tag_report) }}{% endif %}{% if record.get('last_assessed_on') %} <span class="muted">{{ record.get('last_assessed_on') }}</span>{% endif %}{% else %}Not assessed{% endif %}</div>
       </div>
     </div>
     {% if account.is_admin() %}<span class="ro-pill">Read-only</span>

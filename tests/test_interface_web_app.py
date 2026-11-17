@@ -2580,10 +2580,40 @@ def test_an_older_report_is_tagged_from_its_could_not_run_section(web):
     assert "(incomplete)</span>" in client.get("/assessments").get_data(as_text=True)
 
 
-def test_an_archived_assessment_does_not_tag_the_latest_verdict(web):
+def _assessment(application, assessment_id, outcome, when, incomplete):
+    header = {"verdict": outcome, "verdict_label": outcome.replace("_", " "), "incomplete": incomplete}
+    assert application.assessments().save({
+        "assessment_id": assessment_id, "client_ref": sample_case()["client_ref"], "kind": "onboarding",
+        "outcome": outcome, "assessed_at": when,
+        "report": {"header": header, "sections": [], "evidence": [], "evidence_titles": [], "legend": []}})
+
+
+def _latest_verdict(page):
+    return page.split("Latest verdict</span>", 1)[1].split("</div>", 1)[0]
+
+
+def test_the_latest_verdict_tag_follows_the_badge_not_an_older_active_assessment(web):
     application, _, client = web
-    _saved_report(application, ["The forecast"])
-    ref = _client_with_outcome(application)
+    ref = _client_with_outcome(application, "PASSED")
+    _assessment(application, "A1", "MANUAL_REVIEW", "2026-11-10T10:00:00+00:00", ["The forecast"])
+    _assessment(application, "A2", "PASSED", "2026-11-17T10:00:00+00:00", [])
+    client.post("/assessment/A2/archive")             # the badge still shows A2's PASSED: archiving keeps the record
+    page = client.get(f"/client/{ref}").get_data(as_text=True)
+    assert "(incomplete)" not in _latest_verdict(page)    # never "Passed (incomplete)"
+    assert "(incomplete)</span>" in page                  # A1's own history row is still tagged
+
+
+def test_an_archived_newest_incomplete_assessment_still_tags_the_badge_it_gave(web):
+    application, _, client = web
+    ref = _client_with_outcome(application, "MANUAL_REVIEW")
+    _assessment(application, "A1", "MANUAL_REVIEW", "2026-11-17T10:00:00+00:00", ["The forecast"])
     client.post("/assessment/A1/archive")
     page = client.get(f"/client/{ref}").get_data(as_text=True)
-    assert "(incomplete)" not in page
+    assert "(incomplete)</span>" in _latest_verdict(page)
+
+
+def test_no_latest_verdict_tag_when_the_record_outcome_is_not_the_newest_assessments(web):
+    application, _, client = web
+    ref = _client_with_outcome(application, "RISKY")     # saving the newest outcome on the client failed
+    _assessment(application, "A1", "MANUAL_REVIEW", "2026-11-17T10:00:00+00:00", ["The forecast"])
+    assert "(incomplete)" not in _latest_verdict(client.get(f"/client/{ref}").get_data(as_text=True))

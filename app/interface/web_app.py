@@ -1462,8 +1462,11 @@ class WebApp:
         show_archived = request.args.get("archived") == "1"
         archive_states: list[str] = []           # one state per shown assessment, in the same order
         archived_count = 0
+        latest: dict | None = None               # the newest assessment, archived or not: the one the badge comes from
         try:
             everything = self.__app.client_assessments(client_ref, include_archived=True)
+            dated = [a for a in everything if isinstance(a, dict) and isinstance(a.get("assessed_at"), str)]
+            latest = max(dated, key=lambda a: a["assessed_at"], default=None)
             # The state is worked out per record, not per id: old records may share a missing id.
             rows = [(a, App.archive_state(a)) for a in everything]
             archived_count = sum(1 for _, state in rows if state != App.ARCHIVE_ACTIVE)
@@ -1497,7 +1500,7 @@ class WebApp:
                                trail_whens=list(TrailFilter.WHEN_LABELS.items()),
                                today=AuditFilter.singapore_day(now).isoformat(),
                                values=self.values_from_record(saved), SECTIONS=WebApp.SECTIONS,
-                               assessments=assessments, problems=record.problems(),
+                               assessments=assessments, latest=latest, problems=record.problems(),
                                show_archived=show_archived, archived_count=archived_count,
                                archive_states=archive_states, max_reason=App.MAX_ARCHIVE_REASON)
 
