@@ -73,6 +73,7 @@ def test_combine_keeps_the_id_time_notes_and_what_did_not_run(parts):
     assert verdict.explanation["policy_version"] == POLICY["policy_version"]
     could_not_run = next(s for s in verdict.report["sections"] if s["title"] == "Could not run")
     assert [item["text"] for item in could_not_run["items"]] == ["The peer benchmark"]
+    assert verdict.report["header"]["incomplete"] == ["The peer benchmark"]
     assert "Warnings from the run" in verdict.report["evidence_titles"]
 
 
@@ -129,7 +130,7 @@ def test_the_report_lists_the_verdict_for_the_screen(parts):
     details = verdict.details()
     assert report["header"] == {key: details[key] for key in (
         "client_ref", "name", "assessed_on", "verdict", "verdict_label", "next_step", "next_review_date",
-        "summary", "policy_version")}
+        "summary", "policy_version")} | {"incomplete": []}
     assert report["evidence"] == details["evidence"]
     assert report["evidence_titles"] == [part["title"] for part in details["evidence"]]
     why = report["sections"][0]

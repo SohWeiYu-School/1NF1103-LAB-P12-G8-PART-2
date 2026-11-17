@@ -572,7 +572,10 @@ class VerdictEngine:
                        "assessed_on": data["assessed_on"], "verdict": data["verdict"],
                        "verdict_label": data["verdict_label"], "next_step": data["next_step"],
                        "next_review_date": data["next_review_date"], "summary": data["summary"],
-                       "policy_version": data["policy_version"]},
+                       "policy_version": data["policy_version"],
+                       # The parts that did not run: both front ends show an "Incomplete assessment" warning
+                       # above the verdict when this is not empty, because the verdict rests only on the rest.
+                       "incomplete": list(data["not_run"])},
             "sections": sections,
             "evidence": data["evidence"],
             "evidence_titles": [part["title"] for part in data["evidence"]],
