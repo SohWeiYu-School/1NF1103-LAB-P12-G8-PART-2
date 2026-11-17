@@ -2113,13 +2113,13 @@ def test_a_filter_with_no_match_says_no_history_matches_not_no_history_yet(app, 
     _history_client(app)
     _seed_history(tmp_path)
     out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "2", "4", "1", "0", "0")   # Documents, all time
-    assert "No history matches." in out and "No history yet." not in out
+    assert "Nothing matches these filters." in out and "No history recorded yet." not in out
 
 
 def test_a_client_with_no_audit_lines_has_no_history_yet(app, monkeypatch, capsys):
     _history_client(app)
     out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "1", "0", "0")
-    assert "No history yet." in out and "No history matches." not in out
+    assert "No history recorded yet." in out and "Nothing matches" not in out
 
 
 def test_a_bad_custom_date_shows_the_models_message_and_asks_again(app, tmp_path, monkeypatch, capsys):
@@ -2140,7 +2140,7 @@ def test_entries_of_the_log_that_cannot_be_read_are_counted_in_the_history(app, 
     path = tmp_path / "local database" / "audit_log.json"
     path.write_text(json.dumps(json.loads(path.read_text(encoding="utf-8")) + [{"action": "bogus"}]), encoding="utf-8")
     out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "1", "0", "0")
-    assert "1 entry of the log could not be read and may be missing." in out
+    assert "1 entry in the audit log can't be read, so this history may be incomplete." in out
     assert "Edited client" in out
 
 

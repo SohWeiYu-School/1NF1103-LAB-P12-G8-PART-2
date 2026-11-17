@@ -324,28 +324,74 @@ def test_a_clients_history_is_grouped_by_singapore_day_newest_first():
               _event("client_created", "2026-11-15T01:00:00Z", "Orbit Officer")]
     text = _view().format_client_history(events)
     assert text.index("17 November 2026") < text.index("16 November 2026") < text.index("15 November 2026")
-    assert "01:30  Assessment saved for client CL-1: PASSED  |  by Orbit Officer  |  OK" in text
-    assert "14:02  Edited client CL-1 (2 fields changed)  |  by terminal  |  OK" in text
-    assert "No history" not in text and "could not be read" not in text
+    assert "01:30  Assessment saved for client CL-1: PASSED  |  by Orbit Officer" in text
+    assert "14:02  Edited client CL-1 (2 fields changed)  |  by terminal" in text
+    assert "No history" not in text and "Nothing matches" not in text and "incomplete" not in text
 
 
 def test_a_failed_event_is_shown_as_failed():
-    assert "FAILED" in _view().format_client_history([_event("assessment_failed", result="failed")])
+    text = _view().format_client_history([_event("assessment_failed", result="failed")])
+    assert text.count("failed") == 1 and "FAILED" not in text and "|  OK" not in text
 
 
 def test_a_history_says_when_entries_of_the_log_could_not_be_read():
     one = _view().format_client_history([_event()], 1, 1)
-    assert "1 entry of the log could not be read and may be missing." in one
+    assert "1 entry in the audit log can't be read, so this history may be incomplete." in one
     many = _view().format_client_history([_event()], 1, 3)
-    assert "3 entries of the log could not be read and may be missing." in many
-    assert "3 entries of the log" in _view().format_client_history([], 0, 3)       # even with nothing else to show
+    assert "3 entries in the audit log can't be read, so this history may be incomplete." in many
+    assert "3 entries in the audit log" in _view().format_client_history([], 0, 3)       # even with nothing else to show
 
 
 def test_a_history_tells_no_history_yet_from_no_match():
-    assert _view().format_client_history([], 0) == "No history yet."
-    assert _view().format_client_history([], 4) == "No history matches."
+    assert _view().format_client_history([], 0) == "No history recorded yet."
+    assert _view().format_client_history([], 4) == 'Nothing matches these filters. Try "All" or "All time".'
 
 
 def test_showing_a_history_prints_it(capsys):
     _view().show_client_history([_event()])
     assert "Edited client CL-1" in capsys.readouterr().out
+
+
+# ----- damaged saved records never stop the list ------------------------------------------------
+
+@pytest.mark.parametrize("sections", [None, 5, "text", {"a": 1}])
+def test_a_damaged_sections_value_never_crashes_the_list_and_adds_no_tag(sections):
+    record = _combined(sections=None)
+    record["report"] = {"header": {"verdict": "PASSED"}, "sections": sections}
+    assert "(incomplete)" not in _view().format_assessment_list([record])
+
+
+@pytest.mark.parametrize("items", [None, 5, "text", {"a": 1}])
+def test_a_damaged_items_value_never_crashes_the_list_and_adds_no_tag(items):
+    record = _combined(sections=[{"title": "Could not run", "items": items}])
+    assert "(incomplete)" not in _view().format_assessment_list([record])
+
+
+@pytest.mark.parametrize("sections, items", [(None, None), (5, None), ("x", None), ([{"title": "Could not run", "items": None}], None)])
+def test_a_damaged_report_does_not_crash_the_verdict_report_either(sections, items):
+    verdict = _report()
+    header = {key: value for key, value in verdict.report["header"].items() if key != "incomplete"}
+    verdict.report = {**verdict.report, "header": header, "sections": sections}
+    # the report body needs its sections, so only the "what did not run" part is checked
+    assert ReportView._ReportView__missing_parts(verdict.report) == []
+
+
+@pytest.mark.parametrize("change", [
+    {"verdict": "damaged"}, {"verdict": {"assessed_on": None, "verdict": "PASSED"}},
+    {"verdict": {"assessed_on": 5, "verdict": "PASSED"}}, {"kind": None}, {"client_ref": 7}, {"client_ref": None},
+    {"verdict": ["x"]}, {"verdict": None, "assessment": "bad"}])
+def test_a_damaged_saved_record_shows_question_marks_and_is_logged_without_stopping_the_list(change, caplog):
+    good = {"client_ref": "SOW-2", "kind": "onboarding", "assessment": {"assessed_on": "2026-09-25", "outcome": "PASSED"}}
+    bad = {**_combined(), **change}
+    lines = _view().format_assessment_list([bad, good]).splitlines()
+    assert len(lines) == 3 and "SOW-2" in lines[2] and "PASSED" in lines[2]
+    assert "?" in lines[1] and "damaged" in caplog.text
+
+
+def test_a_saved_record_without_its_reference_or_kind_is_shown_with_question_marks():
+    lines = _view().format_assessment_list([{"assessment": {"assessed_on": "2026-09-25", "outcome": "PASSED"}}])
+    assert lines.splitlines()[1].startswith("?")
+
+
+def test_a_row_that_is_not_a_record_is_shown_as_unknown():
+    assert len(_view().format_assessment_list(["junk", None]).splitlines()) == 3

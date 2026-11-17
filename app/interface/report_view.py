@@ -122,8 +122,10 @@ class ReportView:
         head = report.get("header")
         incomplete = head.get("incomplete") if isinstance(head, dict) else None
         if incomplete is None:
-            incomplete = [item.get("text") for part in report.get("sections", []) if isinstance(part, dict)
-                          and part.get("title") == "Could not run" for item in part.get("items", [])
+            sections = report.get("sections")
+            incomplete = [item.get("text") for part in (sections if isinstance(sections, list) else [])
+                          if isinstance(part, dict) and part.get("title") == "Could not run"
+                          for item in (part["items"] if isinstance(part.get("items"), list) else [])
                           if isinstance(item, dict)]
         missing = [part for part in incomplete if isinstance(part, str) and part.strip()] \
             if isinstance(incomplete, list) else []
@@ -274,25 +276,25 @@ class ReportView:
     def format_client_history(self, events: list[AuditEvent], total: int | None = None,
                               unreadable: int = 0) -> str:
         """One client's audit trail as text: events (newest first, already filtered) grouped by Singapore
-        day, one line each with the time, what happened, who did it and the result. total is how many events
+        day, one line each with the time, what happened (a failure is marked in the text) and who did it. total is how many events
         the client has before filtering (default: len(events)), so "No history yet." (none at all) is told
         apart from "No history matches." (the filter hides them all). unreadable is how many rows of the log
         could not be read, so the trail may be incomplete."""
         total = len(events) if total is None else total
         lines: list[str] = []
         if not events:
-            lines.append("No history yet." if total == 0 else "No history matches.")
+            lines.append("No history recorded yet." if total == 0
+                         else "Nothing matches these filters. Try \"All\" or \"All time\".")
         else:
             lines.append("History (times are Singapore time)")
             for label, day_events in ReportView.__by_day(events):
                 lines += ["", f"  {label}"]
                 for event in day_events:
                     moment = ReportView.__singapore_time(event)
-                    lines.append(f"    {moment:%H:%M}  {event.summary()}  |  by {event.actor}  |  "
-                                 f"{'FAILED' if event.result == 'failed' else 'OK'}")
+                    lines.append(f"    {moment:%H:%M}  {event.summary()}  |  by {event.actor}")
         if unreadable:
-            lines += ["", f"{unreadable} {'entry' if unreadable == 1 else 'entries'} of the log could not be "
-                          "read and may be missing."]
+            lines += ["", f"{unreadable} {'entry' if unreadable == 1 else 'entries'} in the audit log can't be "
+                          "read, so this history may be incomplete."]
         return "\n".join(lines)
 
     def show_client_history(self, events: list[AuditEvent], total: int | None = None, unreadable: int = 0) -> None:
@@ -490,18 +492,39 @@ class ReportView:
         lines = [f"{'Client':<16} {'Kind':<20} {'Date':<12} Outcome"]
         for position, record in enumerate(records):
             state = states[position] if position < len(states) else ""
-            verdict = record.get("verdict")
-            assessment = record.get("assessment") or {}
-            if verdict:                                   # the combined assessment: its one verdict
-                date, outcome = verdict.get("assessed_on", ""), verdict.get("verdict")
-            else:
-                date = assessment.get("assessed_on", "")
-                outcome = assessment.get("outcome")
-            incomplete = " (incomplete)" if ReportView.__missing_parts(record.get("report")) else ""
-            lines.append(f"{record['client_ref']:<16} {record['kind']:<20} {date:<12} "
-                         f"{ReportView.OUTCOME_LABELS.get(outcome, '?')}{incomplete}"
-                         f"{ReportView.ARCHIVE_MARKS.get(state, '')}")
+            lines.append(self.__list_line(record, state))
         return "\n".join(lines)
+
+    @staticmethod
+    def __text_or_unknown(value: object) -> str:
+        """value if it is non-empty text, else "?"."""
+        return value if isinstance(value, str) and value.strip() else "?"
+
+    @staticmethod
+    def __list_line(record: object, state: str) -> str:
+        """One line of the assessment list. A damaged saved record shows "?" for what cannot be read (and is
+        logged once); it never stops the list."""
+        if not isinstance(record, dict):
+            logger.warning("ReportView: a saved assessment is not a record and is shown as '?': %r", record)
+            record = {}
+        verdict = record.get("verdict")
+        assessment = record.get("assessment")
+        source, key = (verdict, "verdict") if verdict else (assessment, "outcome")
+        if not isinstance(source, dict):
+            source = {}
+        date, outcome = source.get("assessed_on"), source.get(key)
+        unreadable = [name for name, value in (("client_ref", record.get("client_ref")), ("kind", record.get("kind")),
+                                               ("date", date)) if not isinstance(value, str)]
+        if unreadable or (verdict and not isinstance(verdict, dict)) or (assessment and not verdict
+                                                                          and not isinstance(assessment, dict)):
+            logger.warning("ReportView: a saved assessment is damaged (%s) and is shown with '?': %r",
+                           ", ".join(unreadable) or "verdict", record.get("assessment_id"))
+        date_text = date if isinstance(date, str) else "?"
+        incomplete = " (incomplete)" if ReportView.__missing_parts(record.get("report")) else ""
+        label = ReportView.OUTCOME_LABELS.get(outcome, "?") if isinstance(outcome, str) else "?"
+        return (f"{ReportView.__text_or_unknown(record.get('client_ref')):<16} "
+                f"{ReportView.__text_or_unknown(record.get('kind')):<20} {date_text:<12} "
+                f"{label}{incomplete}{ReportView.ARCHIVE_MARKS.get(state, '')}")
 
     def show_onboarding(self, assessment: dict) -> None:
         """A forecast-only report (assessments saved before the combined verdict)."""
