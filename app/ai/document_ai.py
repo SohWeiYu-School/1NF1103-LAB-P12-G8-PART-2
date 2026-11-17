@@ -13,8 +13,9 @@ class DocumentAI(AIService):
     """Pulls client details out of uploaded documents (text, images and scanned PDFs).
 
     Nothing is decided here: the officer reviews every pre-filled value before it is saved.
-    source is {"documents": [what the document readers returned]}. The same documents
-    always give the same reading, because the saved answer is keyed on their contents.
+    source is {"documents": [what the document readers returned]}. A saved reading is
+    reused only for the same, unchanged client (see AssessmentRunner), so the same documents
+    give the same reading.
     """
 
     PROMPT_NAME: str = "document_extract"
