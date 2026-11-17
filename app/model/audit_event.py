@@ -263,7 +263,9 @@ class AuditEvent:
             text = "Access refused" + (f": {what}" if isinstance(what, str) and what else "")
         elif action == "data_unavailable":
             what = details.get("what")
-            text = "Database unreadable" + (f": {what}" if isinstance(what, str) and what else "")
+            names = {"client records": "client database", "assessments": "assessment database"}
+            text = "The " + (names.get(what, what) if isinstance(what, str) and what else "database") \
+                + " could not be read"
         elif action == "flag_updated":
             flag = AuditEvent.__plain(details.get("flag_id"))
             before, after = details.get("from"), details.get("to")
