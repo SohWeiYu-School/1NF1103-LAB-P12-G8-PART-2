@@ -2501,7 +2501,7 @@ def test_the_chart_script_is_pinned_with_its_published_hash(flagged_web):
 
 # ----- incomplete assessment warning --------------------------------------------------------
 
-def _saved_report(application, incomplete):
+def _saved_report(application, incomplete, sections=None):
     """Save one assessment whose report header lists `incomplete` (left out when None)."""
     application.clients().save(sample_case())
     header = {"client_ref": sample_case()["client_ref"], "name": "Test", "assessed_on": "2026-11-17",
@@ -2512,7 +2512,7 @@ def _saved_report(application, incomplete):
     assert application.assessments().save({
         "assessment_id": "A1", "client_ref": sample_case()["client_ref"], "kind": "onboarding",
         "outcome": "MANUAL_REVIEW", "assessed_at": "2026-11-17T10:30:00+00:00",
-        "report": {"header": header, "sections": [], "evidence": [], "evidence_titles": [], "legend": []}})
+        "report": {"header": header, "sections": sections or [], "evidence": [], "evidence_titles": [], "legend": []}})
 
 
 def test_an_assessment_with_parts_that_did_not_run_shows_incomplete_above_the_verdict(web):
@@ -2524,9 +2524,18 @@ def test_an_assessment_with_parts_that_did_not_run_shows_incomplete_above_the_ve
     assert page.index("Incomplete assessment.") < page.index("MANUAL REVIEW</div>")
 
 
-@pytest.mark.parametrize("incomplete", [[], None, "damaged"])
+@pytest.mark.parametrize("incomplete", [[], None, "damaged", {"The forecast": 1}, [""], [None, 3]])
 def test_a_complete_older_or_damaged_report_shows_no_incomplete_warning(web, incomplete):
     application, _, client = web
     _saved_report(application, incomplete)
     page = client.get("/assessment/A1").get_data(as_text=True)
     assert "Incomplete assessment." not in page and "MANUAL REVIEW" in page
+
+
+def test_an_older_saved_assessment_is_incomplete_when_it_lists_parts_that_could_not_run(web):
+    application, _, client = web
+    _saved_report(application, None, [{"title": "Could not run", "items": [
+        {"mark": "skip", "text": "The forecast", "sub": []}, {"mark": "skip", "text": "The peer benchmark", "sub": []}]}])
+    page = client.get("/assessment/A1").get_data(as_text=True)
+    assert "Incomplete assessment." in page and "2 parts did not run" in page
+    assert "<li>The forecast</li>" in page and "<li>The peer benchmark</li>" in page

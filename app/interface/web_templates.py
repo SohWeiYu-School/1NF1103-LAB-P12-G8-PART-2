@@ -852,7 +852,11 @@ ASSESS_RESULT = """{% extends "base.html" %}
 {% if report %}
 {% set h = report['header'] %}
 {% set colour = COLORS.get(h['verdict'], '#333') %}
-{% set incomplete = h.get('incomplete') if h.get('incomplete') is sequence and h.get('incomplete') is not string else [] %}
+{# What did not run. A report saved before "incomplete" existed lists it only in its "Could not run" section.
+   Only non-empty text counts, so a damaged saved value never shows an empty or odd warning. #}
+{% set found = namespace(parts=h.get('incomplete')) %}
+{% if found.parts is none %}{% set found.parts = [] %}{% for part in report.get('sections', []) if part is mapping and part.get('title') == 'Could not run' %}{% for item in part.get('items') or [] if item is mapping %}{% set found.parts = found.parts + [item.get('text')] %}{% endfor %}{% endfor %}{% endif %}
+{% set incomplete = (found.parts if found.parts is iterable and found.parts is not string and found.parts is not mapping else []) | select('string') | reject('equalto', '') | list %}
 {% if incomplete %}
 <div class="problem" role="alert" style="margin-bottom:14px; font-size:.92rem; padding:12px 16px">
   <strong>Incomplete assessment.</strong> {{ incomplete|length }} {{ 'part' if incomplete|length == 1 else 'parts' }} did not run:
