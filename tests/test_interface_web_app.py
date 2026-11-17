@@ -2497,3 +2497,36 @@ def test_the_chart_script_is_pinned_with_its_published_hash(flagged_web):
     assert 'integrity="sha384-bs/nf9FbdNouRbMiFcrcZfLXYPKiPaGVGplVbv7dLGECccEXDW+S3zjqSKR5ZEaD ' in tag
     assert "sha512-CQBWl4fJHWbryGE+Pc7UAxWMUMNMWzWxF4SQo9CgkJIN1kx6djDQZjh3Y8SZ1d+6I+1zze6Z7kHXO7q3UyZAWw==" in tag
     assert 'crossorigin="anonymous"' in tag
+
+
+# ----- incomplete assessment warning --------------------------------------------------------
+
+def _saved_report(application, incomplete):
+    """Save one assessment whose report header lists `incomplete` (left out when None)."""
+    application.clients().save(sample_case())
+    header = {"client_ref": sample_case()["client_ref"], "name": "Test", "assessed_on": "2026-11-17",
+              "verdict": "MANUAL_REVIEW", "verdict_label": "MANUAL REVIEW", "next_step": "Queued.",
+              "next_review_date": "2027-11-17", "summary": "A summary.", "policy_version": "v1"}
+    if incomplete is not None:
+        header["incomplete"] = incomplete
+    assert application.assessments().save({
+        "assessment_id": "A1", "client_ref": sample_case()["client_ref"], "kind": "onboarding",
+        "outcome": "MANUAL_REVIEW", "assessed_at": "2026-11-17T10:30:00+00:00",
+        "report": {"header": header, "sections": [], "evidence": [], "evidence_titles": [], "legend": []}})
+
+
+def test_an_assessment_with_parts_that_did_not_run_shows_incomplete_above_the_verdict(web):
+    application, _, client = web
+    _saved_report(application, ["The forecast", "The peer benchmark"])
+    page = client.get("/assessment/A1").get_data(as_text=True)
+    assert "Incomplete assessment." in page and "2 parts did not run" in page
+    assert "<li>The forecast</li>" in page and "<li>The peer benchmark</li>" in page
+    assert page.index("Incomplete assessment.") < page.index("MANUAL REVIEW</div>")
+
+
+@pytest.mark.parametrize("incomplete", [[], None, "damaged"])
+def test_a_complete_older_or_damaged_report_shows_no_incomplete_warning(web, incomplete):
+    application, _, client = web
+    _saved_report(application, incomplete)
+    page = client.get("/assessment/A1").get_data(as_text=True)
+    assert "Incomplete assessment." not in page and "MANUAL REVIEW" in page

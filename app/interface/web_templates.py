@@ -852,6 +852,14 @@ ASSESS_RESULT = """{% extends "base.html" %}
 {% if report %}
 {% set h = report['header'] %}
 {% set colour = COLORS.get(h['verdict'], '#333') %}
+{% set incomplete = h.get('incomplete') if h.get('incomplete') is sequence and h.get('incomplete') is not string else [] %}
+{% if incomplete %}
+<div class="problem" role="alert" style="margin-bottom:14px; font-size:.92rem; padding:12px 16px">
+  <strong>Incomplete assessment.</strong> {{ incomplete|length }} {{ 'part' if incomplete|length == 1 else 'parts' }} did not run:
+  <ul style="margin:6px 0; padding-left:20px">{% for part in incomplete %}<li>{{ part }}</li>{% endfor %}</ul>
+  This verdict rests only on the parts that ran. A person must check what is missing before relying on it.
+</div>
+{% endif %}
 <div class="panel" style="border-left:6px solid {{ colour }}">
   <div class="muted" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.06em">Verdict</div>
   <div style="font-size:1.7rem; font-weight:700; color:{{ colour }}; margin:2px 0 10px">{{ h['verdict_label'] }}</div>
