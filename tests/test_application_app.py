@@ -1589,6 +1589,7 @@ def test_the_overview_counts_the_range_and_the_flags(flagged):
     assert page.intact and page.actions_change is None and page.failures_change is None   # no earlier data
     assert page.severity_counts == {"high": 1, "medium": 0, "low": 1}
     assert [kind for kind, _, _, _ in page.flags_by_type] == ["other", "hours"]
+    assert page.type_severity == {"other": "high", "hours": "low"}
     assert [ticket.flag.flag_id for ticket in page.rows] == ["F-OTH-SOW-1-2", "F-HOU-SOW-1-3"]    # high before low
     assert (page.tab, page.page, page.page_count) == ("handle", 1, 1)
     assert page.tab_counts == {"handle": 2, "open": 2, "review": 0, "followup": 0, "resolved": 0, "all": 2}

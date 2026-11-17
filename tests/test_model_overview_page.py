@@ -30,7 +30,7 @@ def test_the_values_are_kept():
     types = [("hours", "After-hours activity", 2, 100)]
     page = OverviewPage("30", date(2026, 10, 17), date(2026, 11, 15), 5, 3, 2, 120, 79, 6, -50, 303, days, types,
                         {"high": 1, "medium": 1, "low": 0}, "review", {**dict.fromkeys(OverviewPage.TABS, 1)},
-                        [_ticket(1), _ticket(2)], 2, 3, 4)
+                        [_ticket(1), _ticket(2)], 2, 3, 4, {"hours": "low"})
     assert (page.preset, page.day_from, page.day_to) == ("30", date(2026, 10, 17), date(2026, 11, 15))
     assert (page.to_handle, page.not_started, page.in_progress) == (5, 3, 2)
     assert (page.actions, page.actions_change, page.failures, page.failures_change) == (120, 79, 6, -50)
@@ -38,6 +38,7 @@ def test_the_values_are_kept():
     assert page.failures_by_day == days and page.flags_by_type == types
     assert (page.tab, page.page, page.page_count, page.unreadable) == ("review", 2, 3, 4)
     assert [row.flag.flag_id for row in page.rows] == ["F-HOU-SOW-1-1", "F-HOU-SOW-1-2"]
+    assert page.type_severity == {"hours": "low"}
 
 
 def test_what_comes_back_is_a_copy():
@@ -64,6 +65,9 @@ def test_what_comes_back_is_a_copy():
     {"flags_by_type": "x"}, {"flags_by_type": [("hours", "After hours", 1)]},
     {"flags_by_type": [("bogus", "x", 1, 10)]}, {"flags_by_type": [("hours", "", 1, 10)]},
     {"flags_by_type": [("hours", "x", 0, 10)]}, {"flags_by_type": [("hours", "x", 1, 101)]},
+    {"type_severity": "x"}, {"type_severity": {"hours": "low"}},
+    {"flags_by_type": [("hours", "x", 1, 10)], "type_severity": {"hours": "urgent"}},
+    {"flags_by_type": [("hours", "x", 1, 10)], "type_severity": {"hours": "low", "spike": "low"}},
     {"severity_counts": {"high": 1}}, {"severity_counts": {"high": 1, "medium": 0, "low": -1}},
     {"tab_counts": {"handle": 1}}, {"tab_counts": "x"},
     {"rows": ["x"]}, {"rows": "x"}, {"rows": [_ticket(n) for n in range(1, 8)]},

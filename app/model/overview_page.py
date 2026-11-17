@@ -32,13 +32,15 @@ class OverviewPage:
                  flags_by_type: list[tuple[str, str, int, int]] | None = None,
                  severity_counts: dict[str, int] | None = None, tab: str = "handle",
                  tab_counts: dict[str, int] | None = None, rows: list[FlagTicket] | None = None,
-                 page: int = 1, page_count: int = 1, unreadable: int = 0) -> None:
+                 page: int = 1, page_count: int = 1, unreadable: int = 0,
+                 type_severity: dict[str, str] | None = None) -> None:
         """Raises ValueError, saying what is wrong and what is allowed, for any impossible value."""
         failures_by_day = [] if failures_by_day is None else failures_by_day
         flags_by_type = [] if flags_by_type is None else flags_by_type
         severity_counts = {name: 0 for name in OverviewPage.SEVERITIES} if severity_counts is None else severity_counts
         tab_counts = {name: 0 for name in OverviewPage.TABS} if tab_counts is None else tab_counts
         rows = [] if rows is None else rows
+        type_severity = {} if type_severity is None else type_severity
         if preset not in OverviewPage.PRESETS:
             raise ValueError(f"The range must be one of {', '.join(OverviewPage.PRESETS)} (got {preset!r}).")
         if tab not in OverviewPage.TABS:
@@ -63,6 +65,10 @@ class OverviewPage:
             raise ValueError(f"The page ({page}) cannot be past the last page ({page_count}).")
         OverviewPage.__check_days(failures_by_day)
         OverviewPage.__check_types(flags_by_type)
+        if (not isinstance(type_severity, dict) or set(type_severity) != {entry[0] for entry in flags_by_type}
+                or any(value not in OverviewPage.SEVERITIES for value in type_severity.values())):
+            raise ValueError("The type severity must give the priority (high, medium or low) of each kind "
+                             "in the flags by type, and of no other kind.")
         OverviewPage.__check_counts("severity_counts", severity_counts, OverviewPage.SEVERITIES)
         OverviewPage.__check_counts("tab_counts", tab_counts, OverviewPage.TABS)
         if not isinstance(rows, list) or not all(isinstance(row, FlagTicket) for row in rows):
@@ -89,6 +95,7 @@ class OverviewPage:
         self.__page: int = page
         self.__page_count: int = page_count
         self.__unreadable: int = unreadable
+        self.__type_severity: dict[str, str] = dict(type_severity)
 
     @staticmethod
     def __check_count(name: str, value: object, low: int) -> None:
@@ -227,3 +234,8 @@ class OverviewPage:
     def unreadable(self) -> int:
         """How many log lines could not be read, so the numbers may be missing them."""
         return self.__unreadable
+
+    @property
+    def type_severity(self) -> dict[str, str]:
+        """The priority ("high", "medium" or "low") of each kind in flags_by_type."""
+        return dict(self.__type_severity)
