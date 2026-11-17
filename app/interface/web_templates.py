@@ -1227,7 +1227,9 @@ AUDIT = """{% extends "base.html" %}
 
 <div class="stack" style="margin-top:16px">
 {% if log and log.unreadable and not error %}<div class="problem" role="alert">{{ log.unreadable }} {{ 'entry' if log.unreadable == 1 else 'entries' }} in the audit log can't be read. Use Verify log to see which.</div>{% endif %}
-{% if log %}<p class="summary">{{ period }}: <strong>{{ log.total }} event{{ '' if log.total == 1 else 's' }}</strong> by {{ log.officers }} officer{{ '' if log.officers == 1 else 's' }}; <strong>{{ log.failed }} failed</strong>; {% if log.open_flags %}<a href="{{ url_for('admin_home') }}"><strong>{{ log.open_flags }} open flag{{ '' if log.open_flags == 1 else 's' }}</strong></a>{% else %}no open flags{% endif %}.</p>{% endif %}
+{% if log and not log.flags_ok and not error %}<div class="problem" role="alert">The flags could not be worked out right now. The events below are still complete.</div>{% endif %}
+{% if log and log.flags_skipped and not error %}<div class="problem" role="alert">{{ log.flags_skipped }} {{ 'flag' if log.flags_skipped == 1 else 'flags' }} could not be worked out, so {{ 'it is' if log.flags_skipped == 1 else 'they are' }} not marked or counted here.</div>{% endif %}
+{% if log %}<p class="summary">{{ period }}: <strong>{{ log.total }} event{{ '' if log.total == 1 else 's' }}</strong> by {{ log.officers }} officer{{ '' if log.officers == 1 else 's' }}; <strong>{{ log.failed }} failed</strong>; {% if not log.flags_ok %}flags unknown{% elif log.open_flags %}<a href="{{ url_for('admin_home') }}"><strong>{{ log.open_flags }} open flag{{ '' if log.open_flags == 1 else 's' }}</strong></a>{% else %}no open flags{% endif %}.</p>{% endif %}
 <section class="panel">
   {% if error %}
     <p class="muted" style="padding:20px 22px; margin:0">{{ error }}</p>
@@ -1436,6 +1438,7 @@ OVERVIEW = """{% extends "base.html" %}
     </div></div>
   {% for problem in problems %}<div class="problem" role="alert">{{ problem }}</div>{% endfor %}
   {% if view.unreadable %}<div class="problem" role="alert">{{ view.unreadable }} log {{ 'entry' if view.unreadable == 1 else 'entries' }} could not be read, so the numbers below may be missing {{ 'it' if view.unreadable == 1 else 'them' }}. Use Verify log on the Activity log page to see which.</div>{% endif %}
+  {% if view.flags_skipped %}<div class="problem" role="alert">{{ view.flags_skipped }} {{ 'flag' if view.flags_skipped == 1 else 'flags' }} could not be worked out, so {{ 'it is' if view.flags_skipped == 1 else 'they are' }} left out of the numbers and the table below.</div>{% endif %}
   {% if not view.intact %}<div class="problem" role="alert">Entry #{{ view.broken_at }} was changed outside the app, so the numbers from that entry on can't be trusted.</div>{% endif %}
   <div class="kpis">
     <div class="panel kpi feature"><div class="kt"><span class="kic">{{ icon('flag') }}</span><span class="pill">{{ view.not_started }} not started</span></div>

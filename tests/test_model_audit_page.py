@@ -49,3 +49,18 @@ def test_the_flagged_entries_of_the_page_are_kept_and_must_belong_to_it():
     for bad in ([9], [True], "3", [None]):
         with pytest.raises(ValueError, match="flagged"):
             AuditPage(events, 2, 0, 2, 0, 0, 1, bad)
+
+
+def test_a_page_whose_flags_could_not_be_worked_out_has_no_open_flag_count():
+    page = AuditPage([_event()], 1, 0, 1, 1, 0, None, (), False, 0)
+    assert page.flags_ok is False and page.open_flags is None and page.flagged == frozenset()
+    assert AuditPage().flags_ok is True and AuditPage().flags_skipped == 0
+    assert AuditPage(flags_skipped=2).flags_skipped == 2
+
+
+@pytest.mark.parametrize("kwargs", [{"flags_ok": False, "open_flags": 0}, {"flags_ok": False, "open_flags": None, "flagged": [1],
+                                                                          "events": [AuditEvent(sequence=1, actor="A", action="signed_in")], "total": 1, "everything": 1},
+                                    {"open_flags": None}, {"flags_ok": "no"}, {"flags_skipped": -1}])
+def test_the_flags_state_must_fit_together(kwargs):
+    with pytest.raises(ValueError):
+        AuditPage(**kwargs)

@@ -9,18 +9,29 @@ class AuditPage:
     an empty log from a filter that matches nothing), and, over every match (not only this page), how many
     different people did them and how many failed. open_flags is how many flags are still to handle (whatever the
     filter), for the "N open flags" part of the summary line. flagged names the events of this page that are
-    behind a flag that is not resolved, so the page can mark their rows."""
+    behind a flag that is not resolved, so the page can mark their rows.
+
+    The log does not depend on the flag rules: when they could not be worked out flags_ok is False, open_flags
+    is None (not a made-up 0) and nothing is flagged. flags_skipped is how many flags the rules found but
+    could not build (they are left out of the counts)."""
 
     def __init__(self, events: list[AuditEvent] | None = None, total: int = 0, unreadable: int = 0,
-                 everything: int = 0, officers: int = 0, failed: int = 0, open_flags: int = 0,
-                 flagged: tuple[int, ...] | list[int] | set[int] | frozenset[int] = ()) -> None:
+                 everything: int = 0, officers: int = 0, failed: int = 0, open_flags: int | None = 0,
+                 flagged: tuple[int, ...] | list[int] | set[int] | frozenset[int] = (), flags_ok: bool = True,
+                 flags_skipped: int = 0) -> None:
         """Raises ValueError for events that are not AuditEvents, a count that is not a whole number, 0 or more,
         or a flagged number that is not the entry number of one of the page's events."""
         events = [] if events is None else events
         if not isinstance(events, list) or not all(isinstance(event, AuditEvent) for event in events):
             raise ValueError("The page's events must be a list of AuditEvent objects.")
         counts = {"total": total, "unreadable": unreadable, "everything": everything,
-                  "officers": officers, "failed": failed, "open_flags": open_flags}
+                  "officers": officers, "failed": failed, "flags_skipped": flags_skipped}
+        if not isinstance(flags_ok, bool):
+            raise ValueError("flags_ok must be True or False.")
+        if flags_ok:
+            counts["open_flags"] = open_flags
+        elif open_flags is not None or flagged:
+            raise ValueError("When the flags could not be worked out there is no open flag count and no flagged entry.")
         for name, value in counts.items():
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 raise ValueError(f"The {name} count must be a whole number, 0 or more (got {value!r}).")
@@ -40,7 +51,9 @@ class AuditPage:
         self.__everything: int = everything
         self.__officers: int = officers
         self.__failed: int = failed
-        self.__open_flags: int = open_flags
+        self.__open_flags: int | None = open_flags
+        self.__flags_ok: bool = flags_ok
+        self.__flags_skipped: int = flags_skipped
 
     @property
     def events(self) -> list[AuditEvent]:
@@ -67,8 +80,17 @@ class AuditPage:
         return self.__failed
 
     @property
-    def open_flags(self) -> int:
+    def open_flags(self) -> int | None:
+        """The flags still to handle; None when the flag rules could not be worked out."""
         return self.__open_flags
+
+    @property
+    def flags_ok(self) -> bool:
+        return self.__flags_ok
+
+    @property
+    def flags_skipped(self) -> int:
+        return self.__flags_skipped
 
     @property
     def flagged(self) -> frozenset[int]:

@@ -35,7 +35,7 @@ class OverviewPage:
                  tab_counts: dict[str, int] | None = None, rows: list[FlagTicket] | None = None,
                  page: int = 1, page_count: int = 1, unreadable: int = 0,
                  type_severity: dict[str, str] | None = None, entries: int = 0,
-                 evidence: dict[str, list[AuditEvent]] | None = None) -> None:
+                 evidence: dict[str, list[AuditEvent]] | None = None, flags_skipped: int = 0) -> None:
         """Raises ValueError, saying what is wrong and what is allowed, for any impossible value."""
         failures_by_day = [] if failures_by_day is None else failures_by_day
         flags_by_type = [] if flags_by_type is None else flags_by_type
@@ -55,7 +55,7 @@ class OverviewPage:
             raise ValueError("The range must not end before it starts.")
         for name, value in (("to_handle", to_handle), ("not_started", not_started), ("in_progress", in_progress),
                             ("actions", actions), ("failures", failures), ("broken_at", broken_at),
-                            ("unreadable", unreadable)):
+                            ("unreadable", unreadable), ("flags_skipped", flags_skipped)):
             OverviewPage.__check_count(name, value, 0)
         for name, value in (("actions_change", actions_change), ("failures_change", failures_change)):
             if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
@@ -105,6 +105,7 @@ class OverviewPage:
         self.__page: int = page
         self.__page_count: int = page_count
         self.__unreadable: int = unreadable
+        self.__flags_skipped: int = flags_skipped
         self.__type_severity: dict[str, str] = dict(type_severity)
 
     @staticmethod
@@ -152,6 +153,11 @@ class OverviewPage:
             OverviewPage.__check_count("flag percent", percent, 0)
             if percent > 100:
                 raise ValueError("A flag percent cannot be more than 100.")
+
+    @property
+    def flags_skipped(self) -> int:
+        """How many flags the rules found but could not build; they are left out of every number here."""
+        return self.__flags_skipped
 
     @property
     def preset(self) -> str:

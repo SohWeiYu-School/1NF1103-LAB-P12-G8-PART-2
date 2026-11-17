@@ -1071,13 +1071,22 @@ class App:
         (so a page can tell an empty log from a filter that matches nothing), how many different people and
         failures there are among the matches, and how many flags are still to handle (open_flags, whatever
         the filter; flagged says which events on the page are behind one). "Flagged only" keeps the events behind a flag that is not resolved. An empty log gives
-        an empty page. Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read, ValueError(FLAGS_UNAVAILABLE)
-        if the flags cannot be worked out, and ValueError if audit_filter is not an AuditFilter or now has
-        no timezone."""
+        an empty page. If the flag rules fail the events are still returned, with open_flags None, nothing
+        flagged and flags_ok False (the log does not depend on the rules); only "flagged only" cannot be
+        answered then. flags_skipped counts flags that could not be built. Raises ValueError(AUDIT_UNAVAILABLE)
+        if the log cannot be read, ValueError(FLAGS_UNAVAILABLE) if "flagged only" is asked and the flags cannot
+        be worked out, and ValueError if audit_filter is not an AuditFilter or now has no timezone."""
         if not isinstance(audit_filter, AuditFilter):
             raise ValueError("The audit log needs an AuditFilter.")
         now = App.__checked_now(now)
-        readable, unreadable, _, flags, tickets = self.__flag_view("audit_log", now, False)
+        readable, unreadable, broken_at = self.__read_log("audit_log", False)
+        flags_ok, skipped = True, 0
+        try:
+            flags, tickets, skipped = self.__work_out_flags("audit_log", readable, broken_at, now)
+        except ValueError:                          # already logged; the events do not depend on the rules
+            if audit_filter.flagged_only:
+                raise
+            flags, tickets, flags_ok = [], {}, False
         unresolved = [flag for flag in flags if tickets[flag.flag_id].status != "resolved"]
         flagged = {sequence for flag in unresolved for sequence in flag.sequences}
         events = [event for event in readable if audit_filter.matches(event, now, flagged)]
@@ -1087,8 +1096,9 @@ class App:
         return AuditPage(shown, len(events), unreadable, len(readable),
                          len({event.actor.casefold() for event in events
                               if event.actor not in (AuditEvent.TERMINAL, AuditEvent.UNKNOWN)}),
-                         sum(1 for event in events if event.result == "failed"), len(unresolved),
-                         {event.sequence for event in shown if event.sequence in flagged})
+                         sum(1 for event in events if event.result == "failed"),
+                         len(unresolved) if flags_ok else None,
+                         {event.sequence for event in shown if event.sequence in flagged}, flags_ok, skipped)
 
     def audit_overview(self, preset: str = OverviewPage.DEFAULT_PRESET, tab: str = OverviewPage.DEFAULT_TAB,
                        page: int = 1, now: datetime | None = None) -> OverviewPage:
@@ -1108,7 +1118,8 @@ class App:
         if isinstance(page, bool) or not isinstance(page, int) or page < 1:
             raise ValueError(f"The page must be a whole number, 1 or more (got {page!r}).")
         now = App.__checked_now(now)
-        readable, unreadable, broken_at, flags, tickets = self.__flag_view("audit_overview", now, True)
+        readable, unreadable, broken_at = self.__read_log("audit_overview", True)
+        flags, tickets, skipped = self.__work_out_flags("audit_overview", readable, broken_at, now)
         today = AuditFilter.singapore_day(now)
         day_to = today
         day_from = today - timedelta(days=1 if preset == "today" else int(preset)) + timedelta(days=1)
@@ -1132,7 +1143,7 @@ class App:
             stats.change_percent(stats.failures, stats.failures_before), broken_at,
             [(day.isoformat(), kinds) for day, kinds in stats.failures_by_day()], stats.flags_by_type(),
             stats.severity_counts(), tab, counts, on_page, page, page_count, unreadable, stats.type_severity(),
-            len(readable) + unreadable, evidence)
+            len(readable) + unreadable, evidence, skipped)
 
     def flag(self, flag_id: str, now: datetime | None = None) -> FlagTicket | None:
         """The ticket (the flag, its status and its history) for a flag id, or None if the rules find no
@@ -1276,6 +1287,13 @@ class App:
         entry is taken as 0 and the missing key is logged (start() already refuses to run without a key).
         Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read, ValueError(FLAGS_UNAVAILABLE) if the
         rules fail."""
+        events, unreadable, broken_at = self.__read_log(caller, strict)
+        flags, tickets, _ = self.__work_out_flags(caller, events, broken_at, now)
+        return events, unreadable, broken_at, flags, tickets
+
+    def __read_log(self, caller: str, strict: bool) -> tuple[list[AuditEvent], int, int]:
+        """(the readable events, how many rows cannot be read, the first broken entry or 0). See __flag_view
+        for strict. Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read."""
         rows = self.__audit_rows(caller)
         events, unreadable = App.__audit_events(rows, caller)
         broken_at = 0
@@ -1286,14 +1304,24 @@ class App:
         elif rows:
             breaks = AuditChain(rows, self.__audit_key).breaks()
             broken_at = breaks[0] if breaks else 0
+        return events, unreadable, broken_at
+
+    def __work_out_flags(self, caller: str, events: list[AuditEvent], broken_at: int, now: datetime
+                         ) -> tuple[list[Flag], dict[str, FlagTicket], int]:
+        """(the flags newest first, a ticket per flag id, how many flags the rules found but could not build).
+        The ones that could not be built are logged here. Raises ValueError(FLAGS_UNAVAILABLE) if the rules fail."""
         try:
-            flags = AuditInsights(events, self.__audit_policy, broken_at, now).flags()
+            insights = AuditInsights(events, self.__audit_policy, broken_at, now)
+            flags = insights.flags()
             updates = [event for event in events if event.action == "flag_updated"]
             tickets = {flag.flag_id: FlagTicket(flag, updates) for flag in flags}
         except (ValueError, TypeError, KeyError, AttributeError) as error:
             logger.error("App.%s: the flags could not be worked out from the audit log: %r", caller, error)
             raise ValueError(App.FLAGS_UNAVAILABLE) from error
-        return events, unreadable, broken_at, flags, tickets
+        if insights.skipped:
+            logger.error("App.%s: %d flag(s) found by the rules could not be built and are left out",
+                         caller, insights.skipped)
+        return flags, tickets, insights.skipped
 
     def __read_failed(self, what: str, actor: str = UNKNOWN) -> None:
         """Write one "database unreadable" line (it feeds the "Read failed" bar of the Overview), at most

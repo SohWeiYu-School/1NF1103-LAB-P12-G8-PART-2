@@ -1836,3 +1836,44 @@ def test_the_read_failures_are_the_read_failed_bar_of_the_overview(app, tmp_path
         app.all_clients()
     page = app.audit_overview()
     assert page.failures == 1 and page.failures_by_day[-1][1]["Read failed"] == 1
+
+
+class _FailingRules:
+    """Stands in for AuditInsights when the flag rules cannot run."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def flags(self):
+        raise ValueError("made-up rule failure")
+
+
+class _SkippingRules:
+    """Stands in for AuditInsights when the rules found flags that could not be built."""
+    skipped = 2
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def flags(self):
+        return []
+
+
+def test_the_log_still_shows_its_events_when_the_flag_rules_fail(app, monkeypatch, caplog):
+    app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    monkeypatch.setattr("app.application.app.AuditInsights", _FailingRules)
+    log = app.audit_log(AuditFilter())
+    assert log.total == 1 and log.flags_ok is False and log.open_flags is None and log.flagged == frozenset()
+    assert "the flags could not be worked out" in caplog.text and "made-up rule failure" in caplog.text
+    with pytest.raises(ValueError, match="flags could not be worked out"):
+        app.audit_log(AuditFilter(flagged_only=True))
+    with pytest.raises(ValueError, match="flags could not be worked out"):
+        app.audit_overview()
+
+
+def test_flags_that_could_not_be_built_are_logged_and_counted_on_the_pages(app, monkeypatch, caplog):
+    app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    monkeypatch.setattr("app.application.app.AuditInsights", _SkippingRules)
+    assert app.audit_log(AuditFilter()).flags_skipped == 2
+    assert app.audit_overview().flags_skipped == 2
+    assert "2 flag(s) found by the rules could not be built" in caplog.text

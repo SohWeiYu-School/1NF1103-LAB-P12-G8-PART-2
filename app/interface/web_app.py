@@ -138,7 +138,8 @@ class WebApp:
         "sow_declaration": "SoW story"}
     FAILURE_KINDS: tuple[str, ...] = ("AI step not run", "Save failed", "Read failed", "Sync failed")
     WEEKDAYS: tuple[str, ...] = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-    SAFE_FLAG_ERRORS: tuple[str, ...] = (App.AUDIT_UNAVAILABLE, App.AUDIT_KEY_MISSING, App.FLAGS_UNAVAILABLE)
+    SAFE_FLAG_ERRORS: tuple[str, ...] = (App.AUDIT_UNAVAILABLE, App.AUDIT_KEY_MISSING, App.FLAGS_UNAVAILABLE,
+                                          App.FLAG_ADMIN_ONLY)
     MAX_FORM_TEXT: int = 1000                    # a longer note is cut, then refused by the model as too long
     PROFILE_IN_CAREER: tuple[str, ...] = ("career.age", "career.country_of_residence")   # saved under "career", shown as Client
     SINGAPORE: timezone = timezone(timedelta(hours=8))      # Singapore has no daylight saving: a fixed offset is exact
@@ -812,8 +813,8 @@ class WebApp:
         error = ""
         try:
             log = self.__app.audit_log(audit_filter, now)
-        except ValueError:
-            error = App.AUDIT_UNAVAILABLE
+        except ValueError as problem:
+            error = WebApp.__shown_error(problem)        # the real kind of problem: log, flags or key
         g.open_flags = log.open_flags if log is not None else None      # the header badge: no second read
         query = audit_filter.to_query()
         chips = [(text, url_for("audit_log_view", **{k: v for k, v in query.items() if k not in (key, "page")}))
