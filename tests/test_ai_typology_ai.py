@@ -110,3 +110,13 @@ def test_a_saved_reply_is_reused_for_the_same_question_even_with_the_model_field
     second = _Caller()
     assert TypologyAI("fake", second, "gpt-test", 0.0).run(source) == first
     assert second.prompts == []
+
+
+def test_a_saved_reply_whose_model_field_is_not_text_is_asked_again():
+    saved = {}
+    source = {"case": CASE, "research": fake_ai.research(), "categories": CATEGORIES, "saved_replies": saved}
+    TypologyAI("fake", _Caller(_reply()), "gpt-test", 0.0).run(source)
+    saved["typology"]["reply"]["model"] = 5
+    again = _Caller(_reply())
+    assert TypologyAI("fake", again, "gpt-test", 0.0).run(source)["model"] == "gpt-test"
+    assert len(again.prompts) == 1

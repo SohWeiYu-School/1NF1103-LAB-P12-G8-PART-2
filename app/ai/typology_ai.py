@@ -69,8 +69,11 @@ class TypologyAI(AIService):
         data["model"] = (options or {}).get("answered_by") or self._model
         return data
 
-    def _reply_as_asked(self, data: dict) -> dict:
-        """The saved reply without the "model" field that _post_process added."""
+    def _reply_as_asked(self, data: dict) -> dict | None:
+        """The saved reply without the "model" field that _post_process added. None if "model" is
+        there but is not text."""
+        if "model" in data and not isinstance(data["model"], str):
+            return None
         return {key: value for key, value in data.items() if key != "model"}
 
     def __build_typology_reports(self, research: dict) -> list:
