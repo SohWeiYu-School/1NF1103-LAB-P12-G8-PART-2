@@ -3,9 +3,12 @@
 import logging
 import os
 import textwrap
+from datetime import datetime, timezone
 from typing import Any
 
 from app.interface.console_ui import ConsoleUI
+from app.model.audit_event import AuditEvent
+from app.model.audit_filter import AuditFilter
 from app.model.client_record import ClientRecord
 from app.model.typology import Typology
 from app.model.verdict import Verdict
@@ -109,6 +112,25 @@ class ReportView:
         lines.append(div)
         return lines
 
+    @staticmethod
+    def __missing_parts(report: object) -> list[str]:
+        """The parts of a saved combined report that did not run (the same list the verdict report and the
+        assessment list use). A report saved before "incomplete" existed lists them only in its "Could not run"
+        section. Only non-empty text counts; a damaged list is logged as a warning and what is usable is kept."""
+        if not isinstance(report, dict):
+            return []
+        head = report.get("header")
+        incomplete = head.get("incomplete") if isinstance(head, dict) else None
+        if incomplete is None:
+            incomplete = [item.get("text") for part in report.get("sections", []) if isinstance(part, dict)
+                          and part.get("title") == "Could not run" for item in part.get("items", [])
+                          if isinstance(item, dict)]
+        missing = [part for part in incomplete if isinstance(part, str) and part.strip()] \
+            if isinstance(incomplete, list) else []
+        if not isinstance(incomplete, list) or len(missing) < len(incomplete):
+            logger.warning("ReportView: the saved report's list of parts that did not run is damaged: %r", incomplete)
+        return missing
+
     def format_verdict_report(self, verdict: Verdict, crime_result: dict | None = None,
                               typologies: list[Typology] | None = None) -> str:
         """The combined assessment as text: the same header, sections and evidence the web app shows
@@ -118,16 +140,7 @@ class ReportView:
         symbols = {entry["mark"]: entry["symbol"] for entry in report["legend"]}
         rule = "\u2550" * self.__width
         lines = [rule, f"  COMBINED ASSESSMENT  {head['client_ref']}  {head['name']}  ({head['assessed_on']})", rule]
-        # What did not run. A report saved before "incomplete" existed lists it only in its "Could not run" section.
-        incomplete = head.get("incomplete")
-        if incomplete is None:
-            incomplete = [item.get("text") for part in report.get("sections", []) if isinstance(part, dict)
-                          and part.get("title") == "Could not run" for item in part.get("items", [])
-                          if isinstance(item, dict)]
-        missing = [part for part in incomplete if isinstance(part, str) and part.strip()] \
-            if isinstance(incomplete, list) else []
-        if not isinstance(incomplete, list) or len(missing) < len(incomplete):
-            logger.warning("ReportView: the saved report's list of parts that did not run is damaged: %r", incomplete)
+        missing = ReportView.__missing_parts(report)
         if missing:
             lines.append("  ! INCOMPLETE ASSESSMENT")
             lines += textwrap.wrap("Did not run: " + "; ".join(missing) + ".", self.__width - 2,
@@ -204,21 +217,87 @@ class ReportView:
         self.__ui.show(title)
         self.__ui.show("=" * 60)
 
-    def show_client_list(self, records: list[dict]) -> None:
-        """Print a compact table of all saved clients."""
+    def show_client_list(self, records: list[dict], activity: dict[str, AuditEvent] | None = None,
+                         activity_note: str = "") -> None:
+        """Print a compact table of all saved clients. activity (App.last_activity(): client reference in
+        lower case -> its newest audit event) adds a "Last activity" column; a client with none shows a dash.
+        activity_note, if given, says why the column is missing (the audit log could not be read)."""
         if not records:
             self.__ui.show("\n  No clients saved yet.\n")
+            if activity_note:
+                self.__ui.show_error(activity_note)
             return
-        W = 68
+        W = 68 if activity is None else 100
         self.__ui.show("\n" + "─" * W)
-        self.__ui.show(f"  {'#':<4}{'Reference':<18}{'Name':<28}Industry")
+        heading = f"  {'#':<4}{'Reference':<18}{'Name':<28}"
+        self.__ui.show(heading + ("Industry" if activity is None else f"{'Industry':<20}Last activity"))
         self.__ui.show("─" * W)
         for i, r in enumerate(records, start=1):
             ref      = r.get("client_ref", "—")
             name     = r.get("name") or r.get("client_profile", {}).get("full_name", "—")
             industry = r.get("career", {}).get("industry") or r.get("client_profile", {}).get("industry", "—")
-            self.__ui.show(f"  {i:<4}{ref:<18}{name:<28}{industry}")
+            if activity is None:
+                self.__ui.show(f"  {i:<4}{ref:<18}{name:<28}{industry}")
+            else:
+                last = ReportView.__last_activity_text(activity.get(str(ref).casefold()))
+                self.__ui.show(f"  {i:<4}{ref:<18}{name:<28}{str(industry):<20}{last}")
         self.__ui.show("─" * W + "\n")
+        if activity_note:
+            self.__ui.show_error(activity_note)
+
+    @staticmethod
+    def __singapore_time(event: AuditEvent) -> datetime:
+        """The moment of an audit event as Singapore time (the audit log keeps UTC)."""
+        return datetime.strptime(event.at, AuditEvent.TIME_FORMAT).replace(tzinfo=timezone.utc) \
+            .astimezone(AuditFilter.SINGAPORE)
+
+    @staticmethod
+    def __last_activity_text(event: AuditEvent | None) -> str:
+        """"16 Nov 14:02  Client edited" for the newest event of a client; a dash if there is none."""
+        if event is None:
+            return "—"
+        moment = ReportView.__singapore_time(event)
+        return f"{moment.day} {moment:%b %H:%M}  {event.label}" + (" (failed)" if event.result == "failed" else "")
+
+    @staticmethod
+    def __by_day(events: list[AuditEvent]) -> list[tuple[str, list[AuditEvent]]]:
+        """Events (newest first) grouped by Singapore day, each day labelled "15 November 2026"."""
+        days: list[tuple[str, list[AuditEvent]]] = []
+        for event in events:
+            day = AuditFilter.event_day(event)
+            label = f"{day.day} {day:%B %Y}"
+            if not days or days[-1][0] != label:
+                days.append((label, []))
+            days[-1][1].append(event)
+        return days
+
+    def format_client_history(self, events: list[AuditEvent], total: int | None = None,
+                              unreadable: int = 0) -> str:
+        """One client's audit trail as text: events (newest first, already filtered) grouped by Singapore
+        day, one line each with the time, what happened, who did it and the result. total is how many events
+        the client has before filtering (default: len(events)), so "No history yet." (none at all) is told
+        apart from "No history matches." (the filter hides them all). unreadable is how many rows of the log
+        could not be read, so the trail may be incomplete."""
+        total = len(events) if total is None else total
+        lines: list[str] = []
+        if not events:
+            lines.append("No history yet." if total == 0 else "No history matches.")
+        else:
+            lines.append("History (times are Singapore time)")
+            for label, day_events in ReportView.__by_day(events):
+                lines += ["", f"  {label}"]
+                for event in day_events:
+                    moment = ReportView.__singapore_time(event)
+                    lines.append(f"    {moment:%H:%M}  {event.summary()}  |  by {event.actor}  |  "
+                                 f"{'FAILED' if event.result == 'failed' else 'OK'}")
+        if unreadable:
+            lines += ["", f"{unreadable} {'entry' if unreadable == 1 else 'entries'} of the log could not be "
+                          "read and may be missing."]
+        return "\n".join(lines)
+
+    def show_client_history(self, events: list[AuditEvent], total: int | None = None, unreadable: int = 0) -> None:
+        """Show format_client_history on the console."""
+        self.__ui.show("\n" + self.format_client_history(events, total, unreadable) + "\n")
 
     def display_client_record(self, record: ClientRecord) -> None:
         """Display all information collected for the client."""
@@ -418,8 +497,9 @@ class ReportView:
             else:
                 date = assessment.get("assessed_on", "")
                 outcome = assessment.get("outcome")
+            incomplete = " (incomplete)" if ReportView.__missing_parts(record.get("report")) else ""
             lines.append(f"{record['client_ref']:<16} {record['kind']:<20} {date:<12} "
-                         f"{ReportView.OUTCOME_LABELS.get(outcome, '?')}"
+                         f"{ReportView.OUTCOME_LABELS.get(outcome, '?')}{incomplete}"
                          f"{ReportView.ARCHIVE_MARKS.get(state, '')}")
         return "\n".join(lines)
 
