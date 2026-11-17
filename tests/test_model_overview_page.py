@@ -79,3 +79,17 @@ def test_an_impossible_value_is_refused(kwargs):
 
 def test_a_full_page_of_six_is_allowed():
     assert len(OverviewPage(rows=[_ticket(n) for n in range(1, 7)]).rows) == OverviewPage.PAGE_SIZE
+
+
+def test_the_size_of_the_log_and_the_entries_behind_each_row_are_kept_and_checked():
+    from app.model.audit_event import AuditEvent
+    entry = AuditEvent(sequence=3, action="assessment_run")
+    page = OverviewPage(rows=[_ticket(3)], entries=9, evidence={"F-HOU-SOW-1-3": [entry]})
+    assert page.entries == 9 and page.evidence("F-HOU-SOW-1-3") == [entry] and page.evidence("F-X") == []
+    page.evidence("F-HOU-SOW-1-3").clear()
+    assert len(page.evidence("F-HOU-SOW-1-3")) == 1                      # a copy
+    for bad in ({"entries": -1}, {"entries": True}, {"evidence": {"F-HOU-SOW-1-3": [entry]}},
+                {"rows": [_ticket(3)], "evidence": {"F-HOU-SOW-1-3": ["x"]}},
+                {"rows": [_ticket(3)], "evidence": {"F-HOU-SOW-1-3": entry}}, {"evidence": "x"}):
+        with pytest.raises(ValueError):
+            OverviewPage(**bad)

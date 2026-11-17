@@ -1123,13 +1123,16 @@ class App:
         page_count = max(1, -(-len(shown) // OverviewPage.PAGE_SIZE))
         page = min(page, page_count)
         start = (page - 1) * OverviewPage.PAGE_SIZE
+        on_page = shown[start:start + OverviewPage.PAGE_SIZE]
+        evidence = {ticket.flag.flag_id: [event for event in readable if event.sequence in ticket.flag.sequences]
+                    for ticket in on_page}
         return OverviewPage(
             preset, day_from, day_to, stats.to_handle, stats.not_started, stats.in_progress, stats.actions,
             stats.change_percent(stats.actions, stats.actions_before), stats.failures,
             stats.change_percent(stats.failures, stats.failures_before), broken_at,
             [(day.isoformat(), kinds) for day, kinds in stats.failures_by_day()], stats.flags_by_type(),
-            stats.severity_counts(), tab, counts, shown[start:start + OverviewPage.PAGE_SIZE], page, page_count,
-            unreadable, stats.type_severity())
+            stats.severity_counts(), tab, counts, on_page, page, page_count, unreadable, stats.type_severity(),
+            len(readable) + unreadable, evidence)
 
     def flag(self, flag_id: str, now: datetime | None = None) -> FlagTicket | None:
         """The ticket (the flag, its status and its history) for a flag id, or None if the rules find no

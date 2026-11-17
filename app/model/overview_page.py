@@ -2,6 +2,7 @@
 
 from datetime import date, datetime
 
+from app.model.audit_event import AuditEvent
 from app.model.flag import Flag
 from app.model.flag_ticket import FlagTicket
 
@@ -33,7 +34,8 @@ class OverviewPage:
                  severity_counts: dict[str, int] | None = None, tab: str = "handle",
                  tab_counts: dict[str, int] | None = None, rows: list[FlagTicket] | None = None,
                  page: int = 1, page_count: int = 1, unreadable: int = 0,
-                 type_severity: dict[str, str] | None = None) -> None:
+                 type_severity: dict[str, str] | None = None, entries: int = 0,
+                 evidence: dict[str, list[AuditEvent]] | None = None) -> None:
         """Raises ValueError, saying what is wrong and what is allowed, for any impossible value."""
         failures_by_day = [] if failures_by_day is None else failures_by_day
         flags_by_type = [] if flags_by_type is None else flags_by_type
@@ -41,6 +43,7 @@ class OverviewPage:
         tab_counts = {name: 0 for name in OverviewPage.TABS} if tab_counts is None else tab_counts
         rows = [] if rows is None else rows
         type_severity = {} if type_severity is None else type_severity
+        evidence = {} if evidence is None else evidence
         if preset not in OverviewPage.PRESETS:
             raise ValueError(f"The range must be one of {', '.join(OverviewPage.PRESETS)} (got {preset!r}).")
         if tab not in OverviewPage.TABS:
@@ -91,7 +94,14 @@ class OverviewPage:
         self.__severity_counts: dict[str, int] = dict(severity_counts)
         self.__tab: str = tab
         self.__tab_counts: dict[str, int] = dict(tab_counts)
+        OverviewPage.__check_count("entries", entries, 0)
+        if (not isinstance(evidence, dict) or set(evidence) - {row.flag.flag_id for row in rows}
+                or any(not isinstance(found, list) or any(not isinstance(event, AuditEvent) for event in found)
+                       for found in evidence.values())):
+            raise ValueError("The evidence must be a list of audit events for each flag on the page, and only those.")
         self.__rows: list[FlagTicket] = list(rows)
+        self.__entries: int = entries
+        self.__evidence: dict[str, list[AuditEvent]] = {flag_id: list(found) for flag_id, found in evidence.items()}
         self.__page: int = page
         self.__page_count: int = page_count
         self.__unreadable: int = unreadable
@@ -239,3 +249,12 @@ class OverviewPage:
     def type_severity(self) -> dict[str, str]:
         """The priority ("high", "medium" or "low") of each kind in flags_by_type."""
         return dict(self.__type_severity)
+
+    @property
+    def entries(self) -> int:
+        """How many entries the whole log holds (the ones that cannot be read included)."""
+        return self.__entries
+
+    def evidence(self, flag_id: str) -> list[AuditEvent]:
+        """The log entries behind one of the flags on this page, in entry order ([] for any other id)."""
+        return list(self.__evidence.get(flag_id, []))
