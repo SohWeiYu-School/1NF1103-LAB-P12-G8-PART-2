@@ -434,8 +434,8 @@ class WebApp:
             ai_text = (f"{ai} were AI steps that did not run, so those assessments" if ai > 1
                        else "1 was an AI step that did not run, so that assessment")
             rest = total - biggest
-            caption = (f"<b>{biggest} failure{'' if biggest == 1 else 's'} {where}</b> (a usual {unit} has "
-                       f"{usual:g}). " + (f"{ai_text} may be missing evidence and should be re-run." if ai
+            compare = f" (a usual {unit} has {usual:g})" if len(sums) > 1 else ""     # one bar: nothing to compare with
+            caption = (f"<b>{biggest} failure{'' if biggest == 1 else 's'} {where}</b>{compare}. " + (f"{ai_text} may be missing evidence and should be re-run." if ai
                                           else "None were AI steps.")
                        + (f" {rest} other failure{'' if rest == 1 else 's'} in the rest of the range." if rest
                           else ""))

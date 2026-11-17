@@ -7,7 +7,7 @@ import json
 import re
 import shutil
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import flask
 import pytest
@@ -2422,3 +2422,20 @@ def test_the_pages_say_how_many_flags_could_not_be_worked_out(flagged_web, monke
     monkeypatch.setattr("app.application.app.AuditInsights", _SkippingRules)
     assert "2 flags could not be worked out" in browser.get("/admin").get_data(as_text=True)
     assert "2 flags could not be worked out" in browser.get("/admin/log?preset=custom").get_data(as_text=True)
+
+
+def test_the_today_chart_caption_has_nothing_to_compare_with_but_a_longer_range_says_what_is_usual(web):
+    application, _, browser = _admin_web(web)
+    now = datetime.now(timezone.utc)
+    lines = [("data_unavailable", (now - timedelta(days=d)).strftime("%Y-%m-%dT%H:%M:%SZ"), "Adrian", "", "failed",
+              {"what": "x"}) for d in (0, 0, 2)]
+    seed_audit(application_folder(application), lines)
+    today = html.unescape(browser.get("/admin?range=today").get_data(as_text=True))
+    assert "2 failures on" in today and "a usual" not in today
+    week = html.unescape(browser.get("/admin?range=7").get_data(as_text=True))
+    assert "(a usual day has" in week
+
+
+def test_the_admin_only_message_is_safe_to_show_and_an_unknown_error_is_not():
+    assert WebApp._WebApp__shown_error(ValueError(App.FLAG_ADMIN_ONLY)) == App.FLAG_ADMIN_ONLY
+    assert WebApp._WebApp__shown_error(ValueError("secret detail")) == App.AUDIT_UNAVAILABLE
