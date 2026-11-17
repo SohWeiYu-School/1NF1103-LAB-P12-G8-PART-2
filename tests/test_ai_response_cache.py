@@ -118,3 +118,19 @@ def test_the_fingerprint_changes_when_the_documents_change(tmp_path):
     assert cache.fingerprint(CASE, []) != base
     error = {"file_name": "a.pdf", "kind": "error", "error": "could not be read"}
     assert cache.fingerprint(CASE, [error, DOCUMENTS[1]]) != base
+
+
+def test_saves_of_the_same_client_at_the_same_time_each_use_their_own_temporary_file(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    cache = ResponseCache(str(tmp_path))
+
+    def save(number):
+        return [cache.save_client_replies("SOW-1", f"f{number}", {"n": {"reply": {"a": number}}})
+                for _ in range(40)]
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = [ok for outcome in pool.map(save, range(8)) for ok in outcome]
+    assert all(results)
+    assert os.listdir(tmp_path / "clients") == ["SOW-1.json"]
+    fingerprint = next(number for number in range(8) if cache.load_client_replies("SOW-1", f"f{number}"))
+    assert cache.load_client_replies("SOW-1", f"f{fingerprint}") == {"n": {"reply": {"a": fingerprint}}}

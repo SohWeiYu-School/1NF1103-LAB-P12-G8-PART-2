@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -63,18 +64,21 @@ class ResponseCache:
         temporary file first, then swapped in, so a crash half way cannot leave a damaged file.
         False (and a warning in the log) if it could not be written. Raises ValueError for a bad client_ref."""
         path = self.__client_path(client_ref)
-        temporary = path + ".tmp"
+        temporary = None
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(temporary, "w", encoding="utf-8") as handle:
-                json.dump({"fingerprint": fingerprint, "replies": replies}, handle, indent=2, ensure_ascii=False)
+            # A temporary file of its own for every save, so two saves of the same client cannot meet
+            handle, temporary = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
+            with os.fdopen(handle, "w", encoding="utf-8") as stream:
+                json.dump({"fingerprint": fingerprint, "replies": replies}, stream, indent=2, ensure_ascii=False)
             os.replace(temporary, path)
         except (OSError, TypeError, ValueError) as error:
             logger.warning("ResponseCache.save_client_replies: could not write %s: %s", path, error)
-            try:
-                os.remove(temporary)
-            except OSError:
-                pass
+            if temporary is not None:
+                try:
+                    os.remove(temporary)
+                except OSError:
+                    pass
             return False
         return True
 
