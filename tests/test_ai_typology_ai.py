@@ -30,7 +30,7 @@ def _reply(count=1, category="TRADE_BASED_ML"):
 
 
 def _run(caller, research=None, **limits):
-    service = TypologyAI("fake", caller, "gpt-test", 0.0, None, **limits)
+    service = TypologyAI("fake", caller, "gpt-test", 0.0, **limits)
     source = {"case": CASE, "research": fake_ai.research() if research is None else research,
               "categories": CATEGORIES}
     return service.run(source), service.warnings()
@@ -100,3 +100,23 @@ def test_two_malformed_replies_give_none():
 def test_no_connection_gives_none():
     result, _ = _run(_Caller(None, None))
     assert result is None
+
+
+def test_a_saved_reply_is_reused_for_the_same_question_even_with_the_model_field_added():
+    saved = {}
+    source = {"case": CASE, "research": fake_ai.research(), "categories": CATEGORIES, "saved_replies": saved}
+    first = TypologyAI("fake", _Caller(_reply()), "gpt-test", 0.0).run(source)
+    assert first["model"] == "gpt-test"
+    second = _Caller()
+    assert TypologyAI("fake", second, "gpt-test", 0.0).run(source) == first
+    assert second.prompts == []
+
+
+def test_a_saved_reply_whose_model_field_is_not_text_is_asked_again():
+    saved = {}
+    source = {"case": CASE, "research": fake_ai.research(), "categories": CATEGORIES, "saved_replies": saved}
+    TypologyAI("fake", _Caller(_reply()), "gpt-test", 0.0).run(source)
+    saved["typology"]["reply"]["model"] = 5
+    again = _Caller(_reply())
+    assert TypologyAI("fake", again, "gpt-test", 0.0).run(source)["model"] == "gpt-test"
+    assert len(again.prompts) == 1

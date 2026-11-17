@@ -5,7 +5,6 @@ import json
 import pytest
 
 from app.ai.ai_service import AIService
-from app.ai.response_cache import ResponseCache
 
 SCHEMA = {"type": "object", "required": ["answer"], "additionalProperties": False,
           "properties": {"answer": {"type": "string"}}}
@@ -106,14 +105,106 @@ def test_a_service_with_no_caller_gives_none():
     assert _Question("fake", None).run(SOURCE) is None
 
 
-def test_a_good_answer_is_saved_and_reused_without_asking_again(tmp_path):
-    cache = ResponseCache(str(tmp_path))
+def _with(saved, source=SOURCE):
+    return {**source, "saved_replies": saved}
+
+
+class _QuestionV2(_Question):
+    def _load_prompt(self, name: str) -> str:
+        return "# prompt_version: v2\nAnswer about {payload_json}"
+
+
+def test_a_good_answer_is_kept_in_the_saved_replies_and_reused_without_asking_again():
+    saved = {}
     first = _Replies(GOOD)
-    assert _Question("fake", first, "gpt-test", 0.0, cache).run(SOURCE) == {"answer": "yes"}
+    assert _Question("fake", first, "gpt-test").run(_with(saved)) == {"answer": "yes"}
+    assert saved["test_question"]["reply"] == {"answer": "yes"}
     second = _Replies()
-    reused = _Question("fake", second, "gpt-test", 0.0, cache).run(SOURCE)
-    assert reused["answer"] == "yes"
+    assert _Question("fake", second, "gpt-test").run(_with(saved)) == {"answer": "yes"}
     assert second.prompts == []
+
+
+class _Stamped(_Question):
+    """A child that adds a field after the reply and takes it off again to check the schema."""
+
+    def _post_process(self, data, options=None):
+        return {**data, "stamp": "x"}
+
+    def _reply_as_asked(self, data):
+        return {key: value for key, value in data.items() if key != "stamp"}
+
+
+def test_a_reply_with_a_field_added_after_the_ask_is_reused_when_the_child_takes_it_off_to_check():
+    saved = {}
+    first = _Stamped("fake", _Replies(GOOD), "gpt-test").run(_with(saved))
+    assert first == {"answer": "yes", "stamp": "x"}
+    second = _Replies()
+    assert _Stamped("fake", second, "gpt-test").run(_with(saved)) == first
+    assert second.prompts == []
+
+
+def test_a_child_that_finds_the_added_field_damaged_makes_the_saved_reply_unusable():
+    class _Strict(_Stamped):
+        def _reply_as_asked(self, data):
+            return None if data.get("stamp") != "x" else super()._reply_as_asked(data)
+
+    saved = {}
+    _Strict("fake", _Replies(GOOD), "gpt-test").run(_with(saved))
+    saved["test_question"]["reply"]["stamp"] = 5
+    again = _Replies(GOOD)
+    assert _Strict("fake", again, "gpt-test").run(_with(saved))["stamp"] == "x"
+    assert len(again.prompts) == 1
+
+
+def test_the_default_reply_as_asked_returns_the_data_unchanged():
+    data = {"answer": "yes"}
+    assert _Question("fake", None)._reply_as_asked(data) == data
+
+
+def test_without_saved_replies_the_ai_is_always_asked():
+    first, second = _Replies(GOOD), _Replies(GOOD)
+    _Question("fake", first, "gpt-test").run(SOURCE)
+    _Question("fake", second, "gpt-test").run(SOURCE)
+    _Question("fake", _Replies(GOOD), "gpt-test").run(_with(None))
+    assert len(first.prompts) == 1 and len(second.prompts) == 1
+
+
+def test_a_reused_reply_is_a_copy_the_caller_cannot_change():
+    saved = {}
+    _Question("fake", _Replies(GOOD), "gpt-test").run(_with(saved))
+    reused = _Question("fake", _Replies(), "gpt-test").run(_with(saved))
+    reused["answer"] = "changed"
+    assert saved["test_question"]["reply"] == {"answer": "yes"}
+
+
+def test_a_different_payload_model_or_prompt_version_asks_again():
+    for service_class, model, source in ((_Question, "gpt-test", {"industry": "Banking"}),
+                                         (_Question, "other-model", SOURCE),
+                                         (_QuestionV2, "gpt-test", SOURCE)):
+        saved = {}
+        _Question("fake", _Replies(GOOD), "gpt-test").run(_with(saved))
+        caller = _Replies(json.dumps({"answer": "no"}))
+        assert service_class("fake", caller, model).run(_with(saved, source)) == {"answer": "no"}
+        assert len(caller.prompts) == 1
+        assert saved["test_question"]["reply"] == {"answer": "no"}      # the new answer replaces the old one
+
+
+def test_a_saved_reply_that_breaks_the_schema_is_asked_again(caplog):
+    saved = {}
+    _Question("fake", _Replies(GOOD), "gpt-test").run(_with(saved))
+    saved["test_question"]["reply"] = {"wrong": "field"}
+    caller = _Replies(GOOD)
+    with caplog.at_level("WARNING"):
+        assert _Question("fake", caller, "gpt-test").run(_with(saved)) == {"answer": "yes"}
+    assert len(caller.prompts) == 1
+    assert "no longer follows the schema" in caplog.text
+
+
+def test_a_damaged_saved_entry_is_asked_again():
+    for entry in ("text", {"question": "x"}, {"question": "x", "reply": "text"}, None):
+        caller = _Replies(GOOD)
+        assert _Question("fake", caller, "gpt-test").run(_with({"test_question": entry})) == {"answer": "yes"}
+        assert len(caller.prompts) == 1
 
 
 class _FallbackReplies(_Replies):
@@ -124,37 +215,32 @@ class _FallbackReplies(_Replies):
         return super().__call__(prompt, schema, options)
 
 
-def test_an_answer_from_a_fallback_model_is_used_but_not_saved(tmp_path):
-    cache = ResponseCache(str(tmp_path))
-    assert _Question("fake", _FallbackReplies(GOOD), "gpt-test", 0.0, cache).run(SOURCE) == {"answer": "yes"}
+def test_an_answer_from_a_fallback_model_is_used_but_not_saved():
+    saved = {}
+    assert _Question("fake", _FallbackReplies(GOOD), "gpt-test").run(_with(saved)) == {"answer": "yes"}
+    assert saved == {}
     later = _Replies(json.dumps({"answer": "from the main model"}))
-    assert _Question("fake", later, "gpt-test", 0.0, cache).run(SOURCE) == {"answer": "from the main model"}
+    assert _Question("fake", later, "gpt-test").run(_with(saved)) == {"answer": "from the main model"}
     assert len(later.prompts) == 1                       # asked again: the fallback's answer was not kept
 
 
-def test_an_answer_from_the_services_own_model_is_saved(tmp_path):
-    cache = ResponseCache(str(tmp_path))
+def test_an_answer_from_the_services_own_model_is_saved():
     class _OwnModel(_Replies):
         def __call__(self, prompt, schema, options):
             options["answered_by"] = "gpt-test"
             return super().__call__(prompt, schema, options)
-    _Question("fake", _OwnModel(GOOD), "gpt-test", 0.0, cache).run(SOURCE)
+    saved = {}
+    _Question("fake", _OwnModel(GOOD), "gpt-test").run(_with(saved))
     later = _Replies()
-    assert _Question("fake", later, "gpt-test", 0.0, cache).run(SOURCE)["answer"] == "yes"
+    assert _Question("fake", later, "gpt-test").run(_with(saved))["answer"] == "yes"
     assert later.prompts == []                           # reused from the saved answer
 
 
-def test_a_different_payload_is_not_answered_from_the_saved_answer(tmp_path):
-    cache = ResponseCache(str(tmp_path))
-    _Question("fake", _Replies(GOOD), "gpt-test", 0.0, cache).run(SOURCE)
-    caller = _Replies(json.dumps({"answer": "no"}))
-    assert _Question("fake", caller, "gpt-test", 0.0, cache).run({"industry": "Banking"}) == {"answer": "no"}
-
-
-def test_a_failed_run_saves_nothing(tmp_path):
-    cache = ResponseCache(str(tmp_path))
-    _Question("fake", _Replies(None, None), "gpt-test", 0.0, cache).run(SOURCE)
-    assert _Question("fake", _Replies(GOOD), "gpt-test", 0.0, cache).run(SOURCE) == {"answer": "yes"}
+def test_a_failed_run_saves_nothing():
+    saved = {}
+    _Question("fake", _Replies(None, None), "gpt-test").run(_with(saved))
+    assert saved == {}
+    assert _Question("fake", _Replies(GOOD), "gpt-test").run(_with(saved)) == {"answer": "yes"}
 
 
 def test_redact_names_replaces_the_name_and_mr_style_references():

@@ -5,7 +5,6 @@ import logging
 from typing import Callable
 
 from app.ai.ai_service import AIService
-from app.ai.response_cache import ResponseCache
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +23,8 @@ class TypologyAI(AIService):
     REPORT_FIELDS: list[str] = ["report_id", "organisation", "title", "year", "summary", "excerpts"]
 
     def __init__(self, provider: str = "", ai_caller: Callable | None = None, model: str = "", temperature: float = 0.0,
-                 response_cache: ResponseCache | None = None, max_patterns: int = 5) -> None:
-        super().__init__(provider, ai_caller, model, temperature, response_cache)
+                 max_patterns: int = 5) -> None:
+        super().__init__(provider, ai_caller, model, temperature)
         self.__max_patterns: int = max_patterns
 
     def _payload(self, source: dict) -> dict:
@@ -69,6 +68,13 @@ class TypologyAI(AIService):
     def _post_process(self, data: dict, options: dict | None = None) -> dict:
         data["model"] = (options or {}).get("answered_by") or self._model
         return data
+
+    def _reply_as_asked(self, data: dict) -> dict | None:
+        """The saved reply without the "model" field that _post_process added. None if "model" is
+        there but is not text."""
+        if "model" in data and not isinstance(data["model"], str):
+            return None
+        return {key: value for key, value in data.items() if key != "model"}
 
     def __build_typology_reports(self, research: dict) -> list:
         """Only the safe fields of each report. The links stay behind."""

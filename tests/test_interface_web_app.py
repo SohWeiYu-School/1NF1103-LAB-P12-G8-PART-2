@@ -2497,3 +2497,105 @@ def test_the_chart_script_is_pinned_with_its_published_hash(flagged_web):
     assert 'integrity="sha384-bs/nf9FbdNouRbMiFcrcZfLXYPKiPaGVGplVbv7dLGECccEXDW+S3zjqSKR5ZEaD ' in tag
     assert "sha512-CQBWl4fJHWbryGE+Pc7UAxWMUMNMWzWxF4SQo9CgkJIN1kx6djDQZjh3Y8SZ1d+6I+1zze6Z7kHXO7q3UyZAWw==" in tag
     assert 'crossorigin="anonymous"' in tag
+
+
+# ----- incomplete assessment warning --------------------------------------------------------
+
+def _saved_report(application, incomplete, sections=None):
+    """Save one assessment whose report header lists `incomplete` (left out when None)."""
+    application.clients().save(sample_case())
+    header = {"client_ref": sample_case()["client_ref"], "name": "Test", "assessed_on": "2026-11-17",
+              "verdict": "MANUAL_REVIEW", "verdict_label": "MANUAL REVIEW", "next_step": "Queued.",
+              "next_review_date": "2027-11-17", "summary": "A summary.", "policy_version": "v1"}
+    if incomplete is not None:
+        header["incomplete"] = incomplete
+    assert application.assessments().save({
+        "assessment_id": "A1", "client_ref": sample_case()["client_ref"], "kind": "onboarding",
+        "outcome": "MANUAL_REVIEW", "assessed_at": "2026-11-17T10:30:00+00:00",
+        "report": {"header": header, "sections": sections or [], "evidence": [], "evidence_titles": [], "legend": []}})
+
+
+def test_an_assessment_with_parts_that_did_not_run_shows_incomplete_above_the_verdict(web):
+    application, _, client = web
+    _saved_report(application, ["The forecast", "The peer benchmark"])
+    page = client.get("/assessment/A1").get_data(as_text=True)
+    assert "Incomplete assessment." in page and "2 parts did not run" in page
+    assert "<li>The forecast</li>" in page and "<li>The peer benchmark</li>" in page
+    assert page.index("Incomplete assessment.") < page.index("MANUAL REVIEW</div>")
+
+
+@pytest.mark.parametrize("incomplete", [[], None, "damaged", {"The forecast": 1}, [""], [None, 3]])
+def test_a_complete_older_or_damaged_report_shows_no_incomplete_warning(web, incomplete):
+    application, _, client = web
+    _saved_report(application, incomplete)
+    page = client.get("/assessment/A1").get_data(as_text=True)
+    assert "Incomplete assessment." not in page and "MANUAL REVIEW" in page
+
+
+def test_an_older_saved_assessment_is_incomplete_when_it_lists_parts_that_could_not_run(web):
+    application, _, client = web
+    _saved_report(application, None, [{"title": "Could not run", "items": [
+        {"mark": "skip", "text": "The forecast", "sub": []}, {"mark": "skip", "text": "The peer benchmark", "sub": []}]}])
+    page = client.get("/assessment/A1").get_data(as_text=True)
+    assert "Incomplete assessment." in page and "2 parts did not run" in page
+    assert "<li>The forecast</li>" in page and "<li>The peer benchmark</li>" in page
+
+
+# ----- "(incomplete)" tag next to an outcome --------------------------------------------------
+
+def _client_with_outcome(application, outcome="MANUAL_REVIEW"):
+    record = {**sample_case(), "outcome": outcome, "last_assessed_on": "2026-11-17"}
+    application.clients().save(record)
+    return record["client_ref"]
+
+
+def test_the_client_page_tags_an_incomplete_history_row(web):
+    application, _, client = web
+    _saved_report(application, ["The forecast"])
+    ref = _client_with_outcome(application)
+    page = client.get(f"/client/{ref}").get_data(as_text=True)
+    assert page.count("(incomplete)</span>") == 1                  # the history row only, never the Latest verdict
+    assert 'title="Did not run: The forecast"' in page
+
+
+def test_the_assessments_list_tags_an_incomplete_outcome(web):
+    application, _, client = web
+    _saved_report(application, ["The forecast", "The peer benchmark"])
+    page = client.get("/assessments").get_data(as_text=True)
+    assert "(incomplete)</span>" in page and 'title="Did not run: The forecast; The peer benchmark"' in page
+
+
+@pytest.mark.parametrize("incomplete", [[], "damaged", [""]])
+def test_a_complete_or_damaged_report_gets_no_incomplete_tag(web, incomplete):
+    application, _, client = web
+    _saved_report(application, incomplete)
+    ref = _client_with_outcome(application)
+    assert "(incomplete)" not in client.get(f"/client/{ref}").get_data(as_text=True)
+    assert "(incomplete)" not in client.get("/assessments").get_data(as_text=True)
+
+
+def test_an_older_report_is_tagged_from_its_could_not_run_section(web):
+    application, _, client = web
+    _saved_report(application, None, [{"title": "Could not run", "items": [{"mark": "skip", "text": "The forecast", "sub": []}]}])
+    assert "(incomplete)</span>" in client.get("/assessments").get_data(as_text=True)
+
+
+def _assessment(application, assessment_id, outcome, when, incomplete):
+    header = {"verdict": outcome, "verdict_label": outcome.replace("_", " "), "incomplete": incomplete}
+    assert application.assessments().save({
+        "assessment_id": assessment_id, "client_ref": sample_case()["client_ref"], "kind": "onboarding",
+        "outcome": outcome, "assessed_at": when,
+        "report": {"header": header, "sections": [], "evidence": [], "evidence_titles": [], "legend": []}})
+
+
+def _latest_verdict(page):
+    return page.split("Latest verdict</span>", 1)[1].split("</div>", 1)[0]
+
+
+def test_the_latest_verdict_badge_never_has_an_incomplete_tag(web):
+    application, _, client = web
+    ref = _client_with_outcome(application, "MANUAL_REVIEW")
+    _assessment(application, "A1", "MANUAL_REVIEW", "2026-11-17T10:00:00+00:00", ["The forecast"])
+    page = client.get(f"/client/{ref}").get_data(as_text=True)
+    assert "(incomplete)" not in _latest_verdict(page)        # the tag belongs to the assessment's own row
+    assert "(incomplete)</span>" in page

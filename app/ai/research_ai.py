@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from app.ai.ai_service import AIService
-from app.ai.response_cache import ResponseCache
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +24,8 @@ class ResearchAI(AIService):
     ATTEMPTS: int = 1
 
     def __init__(self, provider: str = "", ai_caller: Callable | None = None, model: str = "", temperature: float = 0.0,
-                 response_cache: ResponseCache | None = None, max_reports: int = 8, max_excerpts: int = 5) -> None:
-        super().__init__(provider, ai_caller, model, temperature, response_cache)
+                 max_reports: int = 8, max_excerpts: int = 5) -> None:
+        super().__init__(provider, ai_caller, model, temperature)
         self.__max_reports: int = max_reports
         self.__max_excerpts: int = max_excerpts
 
@@ -70,6 +69,27 @@ class ResearchAI(AIService):
                          or (self._model if answered_by_openai
                              else os.getenv("GEMINI_SEARCH_MODEL", "gemini-3.8-flash")))
         return data
+
+    def _reply_as_asked(self, data: dict) -> dict | None:
+        """The saved reply without what _post_process added: the pages the search opened, the time,
+        the model and each report's id. None if one of those is missing or wrong (the api_sources
+        must be a list of {"url": text, ...}, the time and model text when present, and the report
+        ids R1, R2, ... in order), because the rest of the app relies on them."""
+        sources = data.get("api_sources")
+        if not isinstance(sources, list) or not all(
+                isinstance(source, dict) and isinstance(source.get("url"), str) for source in sources):
+            return None
+        if any(key in data and not isinstance(data[key], str) for key in ("retrieved_at", "model")):
+            return None
+        asked = {key: value for key, value in data.items() if key not in ("api_sources", "retrieved_at", "model")}
+        reports = asked.get("reports")
+        if isinstance(reports, list):
+            for number, report in enumerate(reports, 1):
+                if isinstance(report, dict) and report.get("report_id") != f"R{number}":
+                    return None
+            asked["reports"] = [{key: value for key, value in report.items() if key != "report_id"}
+                                if isinstance(report, dict) else report for report in reports]
+        return asked
 
     def __trim_reports(self, data: dict) -> dict:
         """Keep at most max_reports reports and max_excerpts excerpts each. Year text becomes a number."""

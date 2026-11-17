@@ -2,6 +2,7 @@
 
 import copy
 
+from app.ai.response_cache import ResponseCache
 from app.application.assessment_runner import AssessmentRunner
 from app.data.document_store import DocumentStore
 from app.model.config import Config
@@ -254,7 +255,7 @@ def _forecast_stop_reason(tmp_path, forecast_caller):
     cache = ResponseCache(str(tmp_path / "cache"))
     runner = AssessmentRunner(CONFIG, fake_services.FixedAI(fake_ai.research()), fake_services.FixedAI(fake_ai.typologies()),
                               fake_services.FixedAI(fake_ai.benchmark()), fake_services.FixedAI(None),
-                              fake_services.forecast_ai(cache, forecast_caller),
+                              fake_services.forecast_ai(forecast_caller),
                               DocumentStore("data/documents", root=str(tmp_path)), cache)
     reasons = []
     result = runner.run(sample_case(), on_failure=lambda step, reason: reasons.append((step, reason)) or True)
@@ -289,10 +290,249 @@ def test_a_verdict_that_cannot_be_worked_out_is_reported_in_plain_words(tmp_path
     runner = AssessmentRunner(Config(policy, fake_services.CONFIG.vocabulary),
                               fake_services.FixedAI(fake_ai.research()), fake_services.FixedAI(fake_ai.typologies()),
                               fake_services.FixedAI(fake_ai.benchmark()), fake_services.FixedAI(None),
-                              fake_services.forecast_ai(cache), DocumentStore("data/documents", root=str(tmp_path)),
+                              fake_services.forecast_ai(), DocumentStore("data/documents", root=str(tmp_path)),
                               cache)
     case = sample_case()
     fake_services.save_forecast_replies(cache, case)
     failures = []
     assert runner.run(case, on_failure=lambda step, reason: failures.append((step, reason)) or True) is None
     assert failures[-1] == ("Deciding the verdict", "the verdict could not be worked out")
+
+
+# ----- saved replies belong to one client, and only while the client is unchanged ---------------
+
+def _services_with(tmp_path, call):
+    """A runner whose research, typology, benchmark, document and forecast services are the REAL
+    ones, asking the made-up caller `call` (which counts every question). The saved replies live in
+    tmp_path/cache. Returns (runner, cache). Each call is a new runner: a new run of the app."""
+    from app.ai.benchmark_ai import BenchmarkAI
+    from app.ai.document_ai import DocumentAI
+    from app.ai.research_ai import ResearchAI
+    from app.ai.response_cache import ResponseCache
+    from app.ai.typology_ai import TypologyAI
+    from tests.logic_fixtures import CONFIG
+    cache = ResponseCache(str(tmp_path / "cache"))
+    built = AssessmentRunner(CONFIG, ResearchAI("fake", call, "fake-model", 0.0, 8, 5),
+                             TypologyAI("fake", call, "fake-model", 0.0, 5), BenchmarkAI("fake", call, "fake-model", 0.0),
+                             DocumentAI("fake", call, "fake-model", 0.0), fake_services.forecast_ai(),
+                             DocumentStore("data/documents", root=str(tmp_path)), cache)
+    return built, cache
+
+
+def _document(tmp_path, text="payslip: salary 9000"):
+    path = tmp_path / "payslip.txt"
+    path.write_text(text, encoding="utf-8")
+    return [{"file_name": "payslip.txt", "file_path": str(path)}]
+
+
+def _reading() -> dict:
+    import json
+    import os
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "documents", "marcus_lim_expected_extract.json"), encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _assess(tmp_path, case, files=None, call=None, saved_forecast=True, on_failure=None):
+    """One run of the app on this case. The forecast can only be answered from its saved replies.
+    Returns (result, call): call.asked lists every question the AI was asked."""
+    call = call or fake_ai.caller(documents_reply=_reading())
+    built, cache = _services_with(tmp_path, call)
+    if saved_forecast:
+        documents = fake_services.DocumentStore("data/documents", root=str(tmp_path)).read_all(files) if files else []
+        if cache.load_client_replies(case["client_ref"], cache.fingerprint(case, documents)) == {}:
+            fake_services.save_forecast_replies(cache, case, documents)
+    result = built.run(case, files=files, on_failure=on_failure or (lambda step, reason: True))
+    return result, call
+
+
+def _asked(call) -> list[str]:
+    return [key for key, _ in call.asked]
+
+
+def test_an_unchanged_client_is_not_asked_again_at_any_step(tmp_path):
+    case, files = sample_case(), _document(tmp_path)
+    first, call = _assess(tmp_path, case, files)
+    assert sorted(_asked(call)) == ["expected_wealth", "jobs", "reports", "sector_typologies"]
+    assert first["verdict"].not_run == []
+    second, again = _assess(tmp_path, case, files)
+    assert again.asked == []                                   # no AI call at all
+    assert second["verdict"].outcome == first["verdict"].outcome
+    assert second["verdict"].not_run == []
+
+
+def test_a_run_a_day_later_still_counts_as_the_same_client(tmp_path):
+    case = sample_case()
+    _assess(tmp_path, case)
+    _, again = _assess(tmp_path, {**case, "current_date": "2026-09-25"})
+    assert again.asked == []
+
+
+def test_a_one_letter_change_asks_every_step_again(tmp_path):
+    case, files = sample_case(), _document(tmp_path)
+    _assess(tmp_path, case, files)
+    changed = {**case, "name": case["name"] + "x"}
+    result, call = _assess(tmp_path, changed, files, saved_forecast=False)
+    asked = _asked(call)
+    for step in ("jobs", "reports", "sector_typologies", "expected_wealth"):
+        assert step in asked
+    assert "The forecast" in result["verdict"].not_run
+
+
+def test_a_changed_declaration_with_the_ai_down_does_not_reuse_the_old_forecast(tmp_path):
+    """The bug: the forecast's saved replies were filed under the client's reference only, so a client
+    whose declaration was rewritten still got the AI's reading of the OLD declaration, even with the AI down."""
+    case = sample_case()
+    first, _ = _assess(tmp_path, case)
+    assert first["verdict"].not_run == []
+    rewritten = {**case, "sow_declaration": "I won the lottery in 2022 and bought shares."}
+    result, call = _assess(tmp_path, rewritten, call=fake_ai.caller(None, None, None), saved_forecast=False)
+    verdict = result["verdict"]
+    assert "The forecast" in verdict.not_run
+    assert any(step.startswith("The crime scan") for step in verdict.not_run)
+    assert verdict.outcome != "PASSED"
+    assert result["forecast"] is None and result["crime_result"] is None
+
+
+def test_a_changed_document_asks_every_step_again(tmp_path):
+    case = sample_case()
+    _assess(tmp_path, case, _document(tmp_path))
+    result, call = _assess(tmp_path, case, _document(tmp_path, "payslip: salary 9001"), saved_forecast=False)
+    asked = _asked(call)
+    for step in ("jobs", "reports", "sector_typologies", "expected_wealth"):
+        assert step in asked
+    assert "The forecast" in result["verdict"].not_run
+
+
+def test_two_clients_with_the_same_industry_and_documents_share_nothing(tmp_path):
+    first = sample_case()
+    second = {**first, "client_ref": "SOW-OTHER"}
+    files = _document(tmp_path)
+    _assess(tmp_path, first, files)
+    result, call = _assess(tmp_path, second, files, saved_forecast=False)
+    asked = _asked(call)
+    for step in ("jobs", "reports", "sector_typologies", "expected_wealth"):
+        assert step in asked
+    assert "The forecast" in result["verdict"].not_run
+    assert sorted(path.name for path in (tmp_path / "cache" / "clients").iterdir()) == ["SOW-2026-0142.json",
+                                                                                         "SOW-OTHER.json"]
+
+
+def test_a_run_that_stops_half_way_keeps_what_finished_and_the_next_run_carries_on(tmp_path):
+    case, files = sample_case(), _document(tmp_path)
+    stopped, call = _assess(tmp_path, case, files, call=fake_ai.caller(documents_reply=_reading(), research_reply=None),
+                            on_failure=lambda step, reason: False)
+    assert stopped is None                                     # the research failed and the caller stopped the run
+    assert _asked(call).count("jobs") == 1
+    assert (tmp_path / "cache" / "clients" / f"{case['client_ref']}.json").is_file()      # saved although it stopped
+    _, again = _assess(tmp_path, case, files)
+    asked = _asked(again)
+    assert "jobs" not in asked                                 # the documents were already read
+    assert "reports" in asked                                  # the research is asked again
+
+
+def test_each_step_gets_the_clients_saved_replies_and_the_replies_are_saved_together(tmp_path):
+    import json
+    case = sample_case()
+    _assess(tmp_path, case)
+    with open(tmp_path / "cache" / "clients" / f"{case['client_ref']}.json", encoding="utf-8") as handle:
+        saved = json.load(handle)
+    assert set(saved["replies"]) == {"research", "typology", "benchmark", "forecast"}
+    assert saved["fingerprint"] == ResponseCache(str(tmp_path / "cache")).fingerprint(case, [])
+    assert "step0_declaration" in saved["replies"]["forecast"]
+
+
+def test_a_client_ref_that_is_not_safe_as_a_file_name_runs_without_saving(tmp_path, caplog):
+    case = {**sample_case(), "client_ref": "../escape"}
+    with caplog.at_level("WARNING"):
+        result, call = _assess(tmp_path, case, saved_forecast=False)
+    assert result is not None
+    assert "reports" in _asked(call)
+    assert "not used for client" in caplog.text
+    assert not (tmp_path / "cache").exists() and not (tmp_path / "escape.json").exists()
+
+
+def test_a_save_that_fails_does_not_change_the_assessment(tmp_path, caplog):
+    case = sample_case()
+    blocker = tmp_path / "cache"
+    blocker.write_text("a file, not a folder", encoding="utf-8")        # the folder cannot be made
+    with caplog.at_level("WARNING"):
+        result, _ = _assess(tmp_path, case, saved_forecast=False)
+    assert result is not None and "could not write" in caplog.text
+
+
+def _forecast_runner(tmp_path, forecast_caller=None):
+    from tests.logic_fixtures import CONFIG
+    cache = ResponseCache(str(tmp_path / "cache"))
+    built = AssessmentRunner(CONFIG, fake_services.FixedAI(fake_ai.research()),
+                             fake_services.FixedAI(fake_ai.typologies()),
+                             fake_services.FixedAI(fake_ai.benchmark()), fake_services.FixedAI(None),
+                             fake_services.forecast_ai(forecast_caller),
+                             DocumentStore("data/documents", root=str(tmp_path)), cache)
+    return built, cache
+
+
+def _saved_file(tmp_path, case):
+    import json
+    with open(tmp_path / "cache" / "clients" / f"{case['client_ref']}.json", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def test_saved_forecast_pieces_that_are_not_text_are_dropped_and_asked_again(tmp_path, caplog):
+    case = sample_case()
+    built, cache = _forecast_runner(tmp_path)
+    replies = fake_ai.forecast_replies(case)
+    damaged = {**replies, "step0_declaration": 5, "call1_markets.list": "", "call2_earnings.future_pay": None}
+    cache.save_client_replies(case["client_ref"], cache.fingerprint(case, []), {"forecast": damaged})
+    with caplog.at_level("WARNING"):
+        result = built.run(case, on_failure=lambda step, reason: True)     # must not raise
+    assert result is not None and "3 saved forecast piece(s)" in caplog.text
+    assert "The forecast" in result["verdict"].not_run                     # no AI to ask again, honestly reported
+    assert set(_saved_file(tmp_path, case)["replies"]["forecast"]) >= {"call1_markets.series.ECO_SG"}
+    assert all(isinstance(name, str) and isinstance(reply, str) and reply
+               for name, reply in _saved_file(tmp_path, case)["replies"]["forecast"].items())
+
+
+def test_a_saved_forecast_that_is_not_a_set_of_pieces_counts_as_nothing_saved(tmp_path, caplog):
+    case = sample_case()
+    built, cache = _forecast_runner(tmp_path)
+    cache.save_client_replies(case["client_ref"], cache.fingerprint(case, []), {"forecast": ["not", "a", "dict"]})
+    with caplog.at_level("WARNING"):
+        result = built.run(case, on_failure=lambda step, reason: True)
+    assert result is not None and "not a set of pieces" in caplog.text
+    assert "The forecast" in result["verdict"].not_run
+
+
+def test_a_case_the_fingerprint_cannot_read_still_runs_without_saving(tmp_path, caplog):
+    case = sample_case()
+    case = {**case, "claims": {**case.get("claims", {}), 1: "x"}}
+    built, _ = _forecast_runner(tmp_path)
+    with caplog.at_level("WARNING"):
+        result = built.run(case, on_failure=lambda step, reason: True)     # must not raise
+    assert result is not None and "saved replies are not used" in caplog.text
+    assert not (tmp_path / "cache").exists()
+
+
+def test_a_stopped_forecast_keeps_the_pieces_after_the_stop_and_the_next_run_asks_only_the_missing_one(tmp_path):
+    case = sample_case()
+    replies = fake_ai.forecast_replies(case)
+    stop_at, good = "call2_earnings.position.2", replies["call2_earnings.position.2"]
+    built, cache = _forecast_runner(tmp_path)
+    cache.save_client_replies(case["client_ref"], cache.fingerprint(case, []),
+                              {"forecast": {**replies, stop_at: "not json"}})
+    first = built.run(case, on_failure=lambda step, reason: True)          # no AI: stops at the damaged piece
+    assert "The forecast" in first["verdict"].not_run
+    kept = _saved_file(tmp_path, case)["replies"]["forecast"]
+    assert kept["step0_declaration"] == replies["step0_declaration"]       # earlier pieces are still saved
+    assert kept["call3_types.behaviour.T1"] == replies["call3_types.behaviour.T1"]   # and the ones after the stop
+
+    asked = []
+
+    def caller(prompt, schema=None, options=None):
+        asked.append(prompt)
+        return good
+    again, _ = _forecast_runner(tmp_path, caller)
+    result = again.run(case, on_failure=lambda step, reason: True)
+    assert len(asked) == 1                                                  # only the missing piece was asked
+    assert result["forecast"] is not None and "The forecast" not in result["verdict"].not_run
+    assert _saved_file(tmp_path, case)["replies"]["forecast"][stop_at] == good

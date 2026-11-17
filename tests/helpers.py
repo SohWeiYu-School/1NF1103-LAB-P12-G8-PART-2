@@ -2,7 +2,7 @@
 helpers.py - shared helpers for the golden and cross-check tests.
 
 The real AI replies are read from the local cache where the system saves them
-(data/cache/forecasting/<client_ref>.json, written when you run the system on a case).
+(data/cache/clients/<client_ref>.json, written when you run the system on a case).
 
 Only sample files in the forecasting format (career_history, investments, claims) are
 used. data/sample also holds client records in the New Client form's format
@@ -40,10 +40,17 @@ def load_case(case_id: str) -> dict:
 
 
 def saved_replies(case_id: str) -> dict:
-    """The real AI replies saved for this case, or skip the test if there are none."""
+    """The real forecast replies saved for this case, or skip the test if there are none.
+    The client's file is read as it is (the fingerprint is not checked): these tests replay
+    whatever the last real run saved."""
     client_ref = load_case(case_id)["client_ref"]
-    cache = ResponseCache(os.getenv("CACHE_DIR") or os.path.join(ROOT_DIR, "data", "cache"))
-    replies = cache.load_raw_replies(client_ref)
+    folder = os.getenv("CACHE_DIR") or os.path.join(ROOT_DIR, "data", "cache")
+    path = os.path.join(folder, ResponseCache.CLIENT_FOLDER, f"{client_ref}.json")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            replies = json.load(handle)["replies"]["forecast"]
+    except (OSError, ValueError, KeyError, TypeError):
+        replies = {}
     if not replies:
         pytest.skip(f"no saved AI replies for {client_ref} in the database yet - run the system on "
                     f"{case_id} first (python main.py --case data/sample/{case_id}.json)")
@@ -54,7 +61,7 @@ def run_from_saved(case_id: str) -> dict:
     """Rebuild the forecast from the saved replies. No API calls. Returns {"case", "forecast"}."""
     case = load_case(case_id)
     replies = saved_replies(case_id)
-    service = ForecastAI("saved", None, "", 0.0, None, 4, POLICY["forecasting"], VOCABULARY)
+    service = ForecastAI("saved", None, "", 0.0, 4, POLICY["forecasting"], VOCABULARY)
     run = service.run({"record": case, "cache": replies})
     assert run["ok"], (f"the saved replies for {case_id} are incomplete (stopped at {run['failed_step']}) - "
                        f"run the system on {case_id} again so it finishes")

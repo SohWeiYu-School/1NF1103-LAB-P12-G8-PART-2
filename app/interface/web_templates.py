@@ -615,6 +615,7 @@ FORM = """{% extends "base.html" %}
 VIEW = """{% extends "base.html" %}
 {% from "audit_rows.html" import info, short %}
 {% from "flag_parts.html" import detail, status_pill %}
+{% from "incomplete.html" import incomplete %}
 {% block content %}
 <div class="stack" style="margin-bottom:16px">
   <a href="{{ link('home') }}" class="muted" style="text-decoration:none">&larr; All clients</a>
@@ -673,7 +674,7 @@ VIEW = """{% extends "base.html" %}
       {% set when = a.get('assessed_at', '')|sgt %}
       {% if when != a.get('assessed_at', '') and ' ' in when %}<td>{{ when.rsplit(' ', 1)[0] }}</td><td>{{ when.rsplit(' ', 1)[1] }} SGT</td>
       {% else %}<td>{{ when }}</td><td></td>{% endif %}
-      <td>{{ (a.get('outcome') or (a.get('assessment') or {}).get('outcome') or '—').replace('_', ' ') }}{% if state == 'archived' %}{% set last = (a.get('archive_log') or [])[-1] %} (archived) &middot; {{ ('by ' ~ last.get('by')) if last.get('by') else 'Not recorded (before sign-in existed)' }}{% elif state == 'unreadable' %} (archive state unreadable){% endif %}</td>
+      <td>{{ (a.get('outcome') or (a.get('assessment') or {}).get('outcome') or '—').replace('_', ' ') }}{{ incomplete(a.get('report')) }}{% if state == 'archived' %}{% set last = (a.get('archive_log') or [])[-1] %} (archived) &middot; {{ ('by ' ~ last.get('by')) if last.get('by') else 'Not recorded (before sign-in existed)' }}{% elif state == 'unreadable' %} (archive state unreadable){% endif %}</td>
       <td>
         {% if a.get('assessment_id') %}
         <a href="{{ link('view_assessment', assessment_id=a.get('assessment_id')) }}">View</a>
@@ -812,6 +813,7 @@ VIEW = """{% extends "base.html" %}
 """
  
 ASSESS_RESULT = """{% extends "base.html" %}
+{% from "incomplete.html" import incomplete %}
 {% set COLORS = {"PASSED": "#1a7a3f", "MANUAL_REVIEW": "#b45309", "RISKY": "#c2410c", "SERIOUS_RISK": "#b91c1c"} %}
 {% set MARK_COLORS = {"fail": "#b91c1c", "explained": "#1d4f7a", "weak": "#b45309", "pass": "#1a7a3f", "skip": "#616e7c", "info": "#616e7c"} %}
 {% block title %}Assessment — {{ record.get('name', '') }}{% endblock %}
@@ -852,6 +854,7 @@ ASSESS_RESULT = """{% extends "base.html" %}
 {% if report %}
 {% set h = report['header'] %}
 {% set colour = COLORS.get(h['verdict'], '#333') %}
+{{ incomplete(report, 'banner') }}
 <div class="panel" style="border-left:6px solid {{ colour }}">
   <div class="muted" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.06em">Verdict</div>
   <div style="font-size:1.7rem; font-weight:700; color:{{ colour }}; margin:2px 0 10px">{{ h['verdict_label'] }}</div>
@@ -979,6 +982,7 @@ ASSESS_RESULT = """{% extends "base.html" %}
 """
 
 ASSESSMENTS = """{% extends "base.html" %}
+{% from "incomplete.html" import incomplete %}
 {% block content %}
 <h1>Saved Assessments</h1>
 <div class="actions" style="margin-bottom:16px">
@@ -1006,7 +1010,7 @@ ASSESSMENTS = """{% extends "base.html" %}
       <td>{{ a.get('client_ref', '') }}</td>
       <td>{{ (a.get('assessed_at') or a.get('assessment', {}).get('assessed_on', ''))[:10] }}</td>
       <td>{{ 'combined assessment' if a.get('verdict') else a.get('kind', 'crime scan + benchmark') }}</td>
-      <td>{{ outcome.replace('_', ' ') if outcome else '—' }}</td>
+      <td>{{ outcome.replace('_', ' ') if outcome else '—' }}{{ incomplete(a.get('report')) }}</td>
       <td style="display:flex; gap:10px">
         <a href="{{ url_for('view_client', client_ref=a.get('client_ref', '')) }}">Open client</a>
         {% if a.get('assessment_id') %}
@@ -1617,7 +1621,30 @@ FLAG = """{% extends "base.html" %}
 {% endblock %}
 """
 
+INCOMPLETE = """{#- The parts of a saved assessment that did not run, shown as a warning box above the verdict
+   (kind="banner") or a short "(incomplete)" tag next to an outcome in a list (kind="tag"). The one place
+   the pages work this out. A report saved before header["incomplete"] existed lists the parts only in its
+   "Could not run" section; only non-empty text counts, so a damaged saved value shows nothing odd. -#}
+{% macro incomplete(report, kind='tag') -%}
+{%- set h = report.get('header') if report is mapping and report.get('header') is mapping else {} -%}
+{%- set found = namespace(parts=h.get('incomplete')) -%}
+{%- if found.parts is none and report is mapping -%}{%- set found.parts = [] -%}
+{%- for part in report.get('sections') or [] if part is mapping and part.get('title') == 'Could not run' -%}
+{%- for item in part.get('items') or [] if item is mapping %}{% set found.parts = found.parts + [item.get('text')] %}{% endfor -%}
+{%- endfor -%}{%- endif -%}
+{%- set parts = (found.parts if found.parts is iterable and found.parts is not string and found.parts is not mapping else []) | select('string') | reject('equalto', '') | list -%}
+{%- if parts and kind == 'banner' %}
+<div class="problem" role="alert" style="margin-bottom:14px; font-size:.92rem; padding:12px 16px">
+  <strong>Incomplete assessment.</strong> {{ parts|length }} {{ 'part' if parts|length == 1 else 'parts' }} did not run:
+  <ul style="margin:6px 0; padding-left:20px">{% for part in parts %}<li>{{ part }}</li>{% endfor %}</ul>
+  This verdict rests only on the parts that ran. A person must check what is missing before relying on it.
+</div>
+{%- elif parts %} <span class="muted" title="Did not run: {{ parts|join('; ') }}">(incomplete)</span>{%- endif -%}
+{%- endmacro %}
+"""
+
 TEMPLATES: dict[str, str] = {
+    "incomplete.html": INCOMPLETE,
     "audit_rows.html": AUDIT_ROWS,
     "flag_parts.html": FLAG_PARTS,
     "overview.html": OVERVIEW,

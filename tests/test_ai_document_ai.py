@@ -5,7 +5,6 @@ import json
 import os
 
 from app.ai.document_ai import DocumentAI
-from app.ai.response_cache import ResponseCache
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 with open(os.path.join(TESTS_DIR, "documents", "marcus_lim_expected_extract.json"), encoding="utf-8") as _handle:
@@ -27,8 +26,8 @@ class _Caller:
         return self.replies.pop(0)
 
 
-def _service(caller, cache=None, **limits):
-    return DocumentAI("fake", caller, "gpt-test", 0.0, cache, **limits)
+def _service(caller, **limits):
+    return DocumentAI("fake", caller, "gpt-test", 0.0, **limits)
 
 
 def test_the_reading_is_returned():
@@ -94,18 +93,26 @@ def test_no_usable_reply_gives_none_but_still_reports_unreadable_files():
     assert service.warnings() == ["bad.exe: this file type can't be read"]
 
 
-def test_the_same_documents_are_read_once_and_the_reading_reused(tmp_path):
-    cache = ResponseCache(str(tmp_path))
-    assert _service(_Caller(json.dumps(READING)), cache).run({"documents": [CV, PHOTO]}) == READING
+def test_the_same_documents_are_read_once_and_the_reading_reused():
+    saved = {}
+    source = {"documents": [CV, PHOTO], "saved_replies": saved}
+    assert _service(_Caller(json.dumps(READING))).run(source) == READING
     second = _Caller()
-    assert _service(second, cache).run({"documents": [CV, PHOTO]}) == READING
+    assert _service(second).run(source) == READING
     assert second.prompts == []
 
 
-def test_changed_document_content_is_read_again(tmp_path):
-    cache = ResponseCache(str(tmp_path))
-    _service(_Caller(json.dumps(READING)), cache).run({"documents": [CV]})
+def test_without_saved_replies_the_documents_are_always_read_by_the_ai():
+    first, second = _Caller(json.dumps(READING)), _Caller(json.dumps(READING))
+    _service(first).run({"documents": [CV]})
+    _service(second).run({"documents": [CV]})
+    assert len(first.prompts) == 1 and len(second.prompts) == 1
+
+
+def test_changed_document_content_is_read_again():
+    saved = {}
+    _service(_Caller(json.dumps(READING))).run({"documents": [CV], "saved_replies": saved})
     changed = {**CV, "text": "A different CV"}
     caller = _Caller(json.dumps(READING))
-    _service(caller, cache).run({"documents": [changed]})
+    _service(caller).run({"documents": [changed], "saved_replies": saved})
     assert len(caller.prompts) == 1

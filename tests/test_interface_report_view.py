@@ -210,3 +210,40 @@ def test_show_client_list_has_a_row_for_every_client(capsys):
     shown = capsys.readouterr().out
     assert "CL-1" in shown and "Ada Tan" in shown and "Banking" in shown
     assert "CL-2" in shown and "Ben Lim" in shown and "Shipping" in shown
+
+
+def test_a_report_with_parts_that_did_not_run_says_it_is_incomplete_above_the_verdict():
+    verdict = _report()
+    verdict.report = {**verdict.report, "header": {**verdict.report["header"],
+                                                   "incomplete": ["The forecast", "The peer benchmark"]}}
+    text = _view().format_verdict_report(verdict)
+    assert "INCOMPLETE ASSESSMENT" in text
+    assert "Did not run: The forecast; The peer benchmark." in " ".join(text.split())
+    assert text.index("INCOMPLETE ASSESSMENT") < text.index("VERDICT:")
+
+
+def test_a_complete_or_older_report_has_no_incomplete_warning():
+    verdict = _report()
+    assert "INCOMPLETE ASSESSMENT" not in _view().format_verdict_report(verdict)
+    header = {key: value for key, value in verdict.report["header"].items() if key != "incomplete"}
+    verdict.report = {**verdict.report, "header": header}           # saved before the field existed
+    assert "INCOMPLETE ASSESSMENT" not in _view().format_verdict_report(verdict)
+    verdict.report = {**verdict.report, "header": {**header, "incomplete": "damaged"}}
+    assert "INCOMPLETE ASSESSMENT" not in _view().format_verdict_report(verdict)
+
+
+def test_a_report_saved_before_the_field_existed_is_incomplete_when_it_lists_parts_that_could_not_run():
+    verdict = _report()
+    header = {key: value for key, value in verdict.report["header"].items() if key != "incomplete"}
+    could_not_run = {"title": "Could not run", "items": [{"mark": "skip", "text": "The forecast", "sub": []}]}
+    verdict.report = {**verdict.report, "header": header, "sections": verdict.report["sections"] + [could_not_run]}
+    text = " ".join(_view().format_verdict_report(verdict).split())
+    assert "INCOMPLETE ASSESSMENT" in text and "Did not run: The forecast." in text
+
+
+@pytest.mark.parametrize("damaged", [{"The forecast": 1}, [""], [None], [3]])
+def test_a_damaged_list_of_parts_that_did_not_run_is_logged_and_shows_no_empty_warning(damaged, caplog):
+    verdict = _report()
+    verdict.report = {**verdict.report, "header": {**verdict.report["header"], "incomplete": damaged}}
+    assert "INCOMPLETE ASSESSMENT" not in _view().format_verdict_report(verdict)
+    assert "damaged" in caplog.text
