@@ -12,11 +12,11 @@ they are rebuilt from the diagram (see the end of this file).
 | AI Manager | `03_ai.png` | The 7 classes of `app/ai` |
 | Logic: risk checks | `04a_logic_risk.png` | `RiskAnalysis`, `CrimeScan`, `Benchmark`, `DocumentEvidence`, `Indicator` and its 5 children, `VerdictEngine` |
 | Logic: forecast | `04b_logic_forecast.png` | `Forecast`, `FuturePaths`, `AssetPath`, `CareerSavings`, `MarketModel`, `CaseTimeline`, `PayCalibrator`, `OnboardingAssessor` |
-| Logic: helpers | `04c_logic_helpers.png` | `CaseReader`, `DocumentRecordBuilder`, `RecordDiff`, `AuditChain`, `Formatter` |
+| Logic: helpers | `04c_logic_helpers.png` | `CaseReader`, `DocumentRecordBuilder`, `RecordDiff`, `AuditChain`, `AuditInsights`, `AuditStats`, `Formatter` |
 | Data Manager | `05_data.png` | The 18 classes of `app/data` |
 | Model: client record | `06a_model_client.png` | `ClientRecord`, `ClientProfile`, `Job`, `Investment`, `Claims`, `Declaration`, `ClaimedSource`, `ReviewStatus` |
 | Model: results and config | `06b_model_results.png` | `Verdict`, `Check`, `MatchResult`, `Typology`, `ResearchReport`, `Band`, `Config`, `Account` |
-| Model: audit | `06c_model_audit.png` | `AuditEvent`, `AuditFilter`, `AuditPage`, `TrailFilter` |
+| Model: audit | `06c_model_audit.png` | `AuditEvent`, `AuditFilter`, `AuditPage`, `TrailFilter`, `AuditPolicy`, `Flag`, `FlagTicket`, `OverviewPage` |
 
 Every class is an own class (full box) on exactly one tab. Every relationship that touches a tab's own classes is drawn on
 that tab, so each relationship appears on at least one tab (on two when its ends are on different tabs).
