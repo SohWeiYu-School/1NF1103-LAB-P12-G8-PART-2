@@ -194,7 +194,7 @@ class App:
             CloudSync(self.__assessments, MongoRepository(App.ASSESSMENT_COLLECTION, "assessment_id", uri),
                       state_path)]
 
-        # AI Manager: every service is handed the same caller and the same cache
+        # AI Manager: every service is handed the same caller; the cache is used by the AssessmentRunner
         self.__ai_caller: Callable | None = ai_caller
         cache_folder = os.getenv("CACHE_DIR") or os.path.join(data_folder, "cache")
         self.__response_cache: ResponseCache = ResponseCache(
