@@ -354,6 +354,7 @@ class App:
 
     def run_menu(self) -> None:
         """Show the main menu until the officer chooses to leave."""
+        self.begin_request(App.TERMINAL)
         try:
             self.__ui.show_message(f"{len(self.__assessments.load())} saved assessment(s) loaded.")
         except (OSError, ValueError) as error:
@@ -361,6 +362,7 @@ class App:
             self.__read_failed("assessments", App.TERMINAL)
             self.__ui.show_error(App.ASSESSMENTS_UNAVAILABLE)
         while True:
+            self.begin_request(App.TERMINAL)         # each pass of the menu is a new request
             choice = self.__ui.show_app_menu()
             if choice == "1":
                 record = self.__client_form.create_new_client(save_fn=functools.partial(self.save_client, new_client=True),
@@ -1324,12 +1326,23 @@ class App:
                          caller, insights.skipped)
         return flags, tickets, insights.skipped
 
-    def __read_failed(self, what: str, actor: str = UNKNOWN) -> None:
+    def begin_request(self, actor: str) -> None:
+        """A new request starts on this thread (one web request, or one pass of the terminal menu): the
+        "database unreadable" line may be written once again, and a read that fails during the request is
+        recorded as done by actor (the signed-in name, or TERMINAL, or UNKNOWN when nobody is signed in).
+        Raises ValueError if actor is neither TERMINAL, UNKNOWN nor a configured account name."""
+        self.__check_actor(actor)
+        self.__audit_note.read_failed = False
+        self.__audit_note.actor = actor
+
+    def __read_failed(self, what: str, actor: str = "") -> None:
         """Write one "database unreadable" line (it feeds the "Read failed" bar of the Overview), at most
-        once for each request (thread). Never raises, and leaves audit_write_failed() as it was: the line is
-        about a read that failed, not about an action that was kept."""
+        once for each request (thread). The actor is the one given, else the one begin_request() remembered,
+        else UNKNOWN. Never raises, and leaves audit_write_failed() as it was: the line is about a read that
+        failed, not about an action that was kept."""
         if getattr(self.__audit_note, "read_failed", False):
             return
+        actor = actor or getattr(self.__audit_note, "actor", "") or App.UNKNOWN
         self.__audit_note.read_failed = True
         failed_before = bool(getattr(self.__audit_note, "failed", False))
         try:
@@ -1375,6 +1388,11 @@ class App:
         self.__audit_note.failed = False
         self.__audit_note.outcome_failed = False
         self.__audit_note.read_failed = False
+        self.__check_actor(actor)
+
+    def __check_actor(self, actor: str) -> None:
+        """Raises ValueError (a programming error) if actor is neither TERMINAL, UNKNOWN nor a configured
+        account name."""
         known = isinstance(actor, str) and (actor in (App.TERMINAL, App.UNKNOWN)
                                             or any(account.name == actor for account in self.__config.accounts))
         if not known:

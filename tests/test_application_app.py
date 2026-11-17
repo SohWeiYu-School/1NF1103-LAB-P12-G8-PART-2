@@ -1877,3 +1877,29 @@ def test_flags_that_could_not_be_built_are_logged_and_counted_on_the_pages(app, 
     assert app.audit_log(AuditFilter()).flags_skipped == 2
     assert app.audit_overview().flags_skipped == 2
     assert "2 flag(s) found by the rules could not be built" in caplog.text
+
+
+def test_a_read_failure_line_names_the_actor_the_request_began_with_and_each_request_gets_its_own_line(app, tmp_path):
+    _damage(tmp_path, "sow_cases.json")
+    app.begin_request("Shareen")
+    with pytest.raises(ValueError, match="client database"):
+        app.all_clients()
+    with pytest.raises(ValueError, match="client database"):
+        app.find_client("C-1")                                  # same request: no second line
+    app.begin_request("Adrian")
+    with pytest.raises(ValueError, match="client database"):
+        app.all_clients()
+    app.begin_request(App.UNKNOWN)
+    with pytest.raises(ValueError, match="client database"):
+        app.all_clients()
+    lines = [event for event in _events(app) if event.action == "data_unavailable"]
+    assert [event.actor for event in lines] == ["Shareen", "Adrian", App.UNKNOWN]
+
+
+def test_begin_request_refuses_a_name_that_is_not_an_account_and_keeps_a_pending_audit_failure(app):
+    with pytest.raises(ValueError, match="actor"):
+        app.begin_request("Nobody Here")
+    with pytest.raises(ValueError, match="actor"):
+        app.begin_request(None)
+    app.begin_request(App.TERMINAL)
+    assert app.audit_write_failed() is False

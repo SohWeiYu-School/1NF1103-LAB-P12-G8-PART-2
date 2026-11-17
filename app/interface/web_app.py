@@ -292,9 +292,11 @@ class WebApp:
         """Runs before every route. Nobody signed in at this portal: go to its sign-in page (the progress poll
         gets a 401). An officer who opens an admin page is refused (403, and the refusal is recorded)."""
         endpoint = request.endpoint
+        current = self.__current()
+        self.__app.begin_request(current.name if current is not None else App.UNKNOWN)   # who a failed read is recorded for
         if endpoint in ("signin", "admin_signin", "static"):
             return None
-        if self.__current() is not None:
+        if current is not None:
             return None
         if self.__portal() == App.ADMIN_PORTAL:
             officer = self.__session_account(WebApp.OFFICER_KEY)

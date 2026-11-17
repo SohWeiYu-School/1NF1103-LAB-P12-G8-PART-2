@@ -2439,3 +2439,14 @@ def test_the_today_chart_caption_has_nothing_to_compare_with_but_a_longer_range_
 def test_the_admin_only_message_is_safe_to_show_and_an_unknown_error_is_not():
     assert WebApp._WebApp__shown_error(ValueError(App.FLAG_ADMIN_ONLY)) == App.FLAG_ADMIN_ONLY
     assert WebApp._WebApp__shown_error(ValueError("secret detail")) == App.AUDIT_UNAVAILABLE
+
+
+def test_a_failed_read_during_a_web_request_is_recorded_for_the_signed_in_officer(web, tmp_path):
+    from app.model.audit_filter import AuditFilter
+    application, _, browser = web
+    _damage(tmp_path, "sow_cases.json")
+    browser.get("/")
+    browser.get("/")
+    events = application.audit_log(AuditFilter("custom")).events
+    seen = [event.actor for event in events if event.action == "data_unavailable"]
+    assert seen == [account_with_role(application).name] * 2       # two requests failed to read: one line each
