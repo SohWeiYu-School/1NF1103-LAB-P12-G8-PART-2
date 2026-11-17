@@ -1692,7 +1692,7 @@ def test_a_log_without_a_key_cannot_be_checked_so_the_overview_says_so(tmp_path,
 
 def test_when_the_log_cannot_be_read_the_flag_methods_say_so_not_empty(flagged, tmp_path):
     break_audit(tmp_path)
-    for call in (lambda: flagged.audit_overview(now=FLAG_NOW), lambda: flagged.flag("F-OTH-SOW-1-2"),
+    for call in (lambda: flagged.audit_overview(now=FLAG_NOW), lambda: flagged.flag("F-OTH-SOW-1-2"), lambda: flagged.flag_evidence("F-OTH-SOW-1-2"),
                  lambda: flagged.client_flags("SOW-1"),
                  lambda: flagged.update_flag("F-OTH-SOW-1-2", ADMIN, "review", "Asked Adrian why."),
                  lambda: flagged.audit_log(AuditFilter())):
@@ -1706,6 +1706,16 @@ def test_a_flag_is_found_by_its_id_or_is_none(flagged):
     assert flagged.flag("F-OTH-SOW-1-99", FLAG_NOW) is None and flagged.flag("", FLAG_NOW) is None
     with pytest.raises(ValueError):
         flagged.flag(None)
+
+
+def test_the_flag_evidence_is_the_ticket_the_entries_behind_it_and_the_size_of_the_log(flagged, tmp_path):
+    ticket, entries, size = flagged.flag_evidence(" F-OTH-SOW-1-2 ", FLAG_NOW)
+    assert ticket.flag.flag_id == "F-OTH-SOW-1-2" and [e.sequence for e in entries] == [2] and size == 3
+    assert flagged.flag_evidence("F-OTH-SOW-1-99", FLAG_NOW) == (None, [], 0)
+    with pytest.raises(ValueError, match="must be text"):
+        flagged.flag_evidence(None)
+    _add_unreadable_rows(tmp_path, 2)
+    assert flagged.flag_evidence("F-HOU-SOW-1-3", FLAG_NOW)[2] == 5      # the unreadable rows still count
 
 
 def test_an_update_writes_one_line_in_the_log_and_gives_back_its_number(flagged, tmp_path):

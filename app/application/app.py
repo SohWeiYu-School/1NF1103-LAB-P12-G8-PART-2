@@ -1140,6 +1140,22 @@ class App:
         _, _, _, _, tickets = self.__flag_view("flag", App.__checked_now(now), False)
         return tickets.get(flag_id.strip())
 
+    def flag_evidence(self, flag_id: str, now: datetime | None = None
+                      ) -> tuple[FlagTicket | None, list[AuditEvent], int]:
+        """What the flag page needs, from one read of the log: (the ticket, the log entries behind the flag in
+        entry order, how many entries the whole log holds). Entries that cannot be read are left out of the
+        second part but counted in the third. (None, [], 0) when the rules find no flag with that id now.
+        Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read (never an empty answer),
+        ValueError(FLAGS_UNAVAILABLE) if the flags cannot be worked out, and ValueError if flag_id is not text."""
+        if not isinstance(flag_id, str):
+            raise ValueError("The flag id must be text.")
+        events, unreadable, _, _, tickets = self.__flag_view("flag_evidence", App.__checked_now(now), False)
+        ticket = tickets.get(flag_id.strip())
+        if ticket is None:
+            return None, [], 0
+        behind = set(ticket.flag.sequences)
+        return ticket, [event for event in events if event.sequence in behind], len(events) + unreadable
+
     def update_flag(self, flag_id: str, actor: str, status: str, note: str, waiting_on: str = "",
                     outcome: str = "", now: datetime | None = None) -> tuple[FlagTicket | None, list[str], int]:
         """An admin moves a flag to a status (or adds a note: the same status) and writes one "flag_updated"
