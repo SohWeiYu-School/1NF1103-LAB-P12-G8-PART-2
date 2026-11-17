@@ -414,11 +414,13 @@ class App:
                     self.__read_failed("client records", App.TERMINAL)
                     self.__ui.show_error(App.CLIENTS_UNAVAILABLE)
                     continue
-                try:
-                    activity, note = self.last_activity(), ""
-                except ValueError as error:            # the log was already logged; the client list still shows
-                    logger.error("App.run_menu: the last activity of the clients cannot be shown: %r", error)
-                    activity, note = None, App.AUDIT_UNAVAILABLE
+                activity, note = None, ""
+                if clients:                            # with no clients there is nothing to show activity for
+                    try:
+                        activity = self.last_activity()
+                    except ValueError as error:        # the client list still shows, without the column
+                        logger.error("App.run_menu: the last activity of the clients cannot be shown: %r", error)
+                        note = f"{App.AUDIT_UNAVAILABLE} The last activity of each client cannot be shown."
                 self.__report_view.show_client_list(clients, activity, note)
                 self.__ui.read_answer("Press Enter to continue...")
             elif choice == "7":
@@ -997,9 +999,18 @@ class App:
                 first = self.__ui.ask_optional_text("From date (YYYY-MM-DD, Enter for no start)")
                 last = self.__ui.ask_optional_text("To date (YYYY-MM-DD, Enter for no end)")
             try:
-                return TrailFilter(show, when, first, last)
+                trail_filter = TrailFilter(show, when, first, last)
             except ValueError as error:
                 self.__ui.show_error(str(error))
+                continue
+            if when != "custom":
+                return trail_filter
+            if not first or not last:
+                self.__ui.show_error("Pick both a start and an end date.")
+            elif AuditFilter.parse_day(last) > AuditFilter.singapore_day(datetime.now(timezone.utc)):
+                self.__ui.show_error("The dates cannot be in the future.")
+            else:
+                return trail_filter
 
     def __show_trail(self, client_ref: str, trail_filter: TrailFilter) -> None:
         """Show the client's audit trail, newest first, through the filter. An audit log that cannot be read

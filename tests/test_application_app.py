@@ -290,6 +290,7 @@ def test_an_unreadable_audit_log_still_shows_the_client_list_without_the_column_
     assert sample_case()["client_ref"] in out
     assert App.AUDIT_UNAVAILABLE in out
     assert "Last activity" not in out and "No activity" not in out
+    assert f"{App.AUDIT_UNAVAILABLE} The last activity of each client cannot be shown." in out
     assert "the audit log cannot be read" in caplog.text
 
 
@@ -2130,7 +2131,7 @@ def test_a_bad_custom_date_shows_the_models_message_and_asks_again(app, tmp_path
     assert out.count("The dates must look like 2026-11-15") == 1
     assert "Showing: All, Pick dates… (2026-11-12 to 2026-11-12)" in out
     assert "12 November 2026" in out and "10 November 2026" not in out
-    out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "2", "1", "5", "2026-11-12", "2026-11-10", "", "", "0", "0")
+    out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "2", "1", "5", "2026-11-12", "2026-11-10", "2026-11-10", "2026-11-12", "0", "0")
     assert "The start date must be on or before the end date." in out
 
 
@@ -2290,3 +2291,29 @@ def test_menu_5_shows_the_incomplete_tag_for_a_saved_combined_assessment(app, mo
     assert app.assessments().save(records[0])
     out = _run_menu(app, monkeypatch, capsys, "5", "1", "0", "0")
     assert "(incomplete)" in out and saved["client_ref"] in out
+
+
+def test_with_no_clients_the_client_list_does_not_read_the_audit_log(app, tmp_path, monkeypatch, capsys):
+    _damage(tmp_path, "audit_log.json")
+    out = _run_menu(app, monkeypatch, capsys, "6", "", "0")
+    assert "No clients saved yet." in out
+    assert App.AUDIT_UNAVAILABLE not in out
+
+
+def test_a_custom_range_needs_both_dates_and_is_asked_again(app, tmp_path, monkeypatch, capsys):
+    _history_client(app)
+    _seed_history(tmp_path)
+    out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "2", "1", "5",
+                    "2026-11-12", "", "", "2026-11-12", "2026-11-10", "2026-11-12", "0", "0")
+    assert out.count("Pick both a start and an end date.") == 2
+    assert "Showing: All, Pick dates… (2026-11-10 to 2026-11-12)" in out
+    assert "(2026-11-12 to ...)" not in out
+
+
+def test_a_custom_range_ending_after_today_is_refused_and_asked_again(app, tmp_path, monkeypatch, capsys):
+    _history_client(app)
+    _seed_history(tmp_path)
+    out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "2", "1", "5",
+                    "2026-11-10", "2999-01-01", "2026-11-10", "2026-11-12", "0", "0")
+    assert out.count("The dates cannot be in the future.") == 1
+    assert "(2026-11-10 to 2026-11-12)" in out
