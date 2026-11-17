@@ -93,7 +93,7 @@ class AssessmentRunner:
     def run(self, case: dict, files: list[dict] | None = None,
             on_step: Callable[[int, str], None] | None = None,
             on_failure: Callable[[str, str], bool] | None = None) -> dict | None:
-        """Assess one case. Nothing is printed and nothing is saved here.
+        """Assess one case. Nothing is printed and nothing is shown here.
 
         files  the client record's saved documents (supporting_documents); every one is read.
         on_step(number, label)  is told each step in STEPS as it starts.
@@ -106,7 +106,50 @@ class AssessmentRunner:
         page gets their to_dict() layout. The typology reply itself is saved as it came.
         The Verdict is given a new assessment id and the time it was made here, because the
         VerdictEngine makes no ids and reads no clock.
+
+        Saved AI replies: the documents are read once, here, and fingerprinted together with the
+        case. The replies saved for this client are used only if the fingerprint is the same as
+        last time (the client is unchanged); any change means every AI step asks again. The
+        replies are saved when the run ends, even if it stopped half way, so the finished steps
+        are not paid for twice.
         """
+        ref = case["client_ref"]
+        if on_step is not None:
+            on_step(1, AssessmentRunner.STEPS[0])
+        documents = self.__document_store.read_all(files) if files else []
+        fingerprint, saved = self.__load_saved_replies(ref, case, documents)
+        try:
+            return self.__assess(case, files, documents, saved, on_step, on_failure)
+        finally:
+            self.__save_replies(ref, fingerprint, saved)
+
+    def __load_saved_replies(self, ref: str, case: dict, documents: list[dict]) -> tuple[str | None, dict]:
+        """(fingerprint, the client's saved replies). The fingerprint is None when saved replies cannot
+        be used for this client (no cache, or a client_ref that is not safe as a file name); the run
+        then asks the AI at every step and saves nothing."""
+        if self.__response_cache is None:
+            return None, {}
+        try:
+            fingerprint = self.__response_cache.fingerprint(case, documents)
+            return fingerprint, self.__response_cache.load_client_replies(ref, fingerprint)
+        except ValueError as error:
+            logger.warning("AssessmentRunner: saved replies are not used for client %r: %s", ref, error)
+            return None, {}
+
+    def __save_replies(self, ref: str, fingerprint: str | None, saved: dict) -> None:
+        """Save the client's replies. A failure is logged by the ResponseCache and does not change the
+        assessment: the saved replies only save the next run from asking the AI again."""
+        if self.__response_cache is None or fingerprint is None:
+            return
+        try:
+            self.__response_cache.save_client_replies(ref, fingerprint, saved)
+        except ValueError as error:
+            logger.warning("AssessmentRunner: replies for client %r were not saved: %s", ref, error)
+
+    def __assess(self, case: dict, files: list[dict] | None, documents: list[dict], saved: dict,
+                 on_step: Callable[[int, str], None] | None,
+                 on_failure: Callable[[str, str], bool] | None) -> dict | None:
+        """The steps of one assessment. Every AI step reads and writes its reply in saved."""
         def step(number: int) -> None:
             if on_step is not None:
                 on_step(number, AssessmentRunner.STEPS[number - 1])
@@ -121,15 +164,14 @@ class AssessmentRunner:
             return on_failure(what, reason) if on_failure is not None else True
 
         policy = self.__config.policy
-        ref = case["client_ref"]
         crime_input = self.__case_reader.crime_scan_input(case)
 
-        # 1. Documents: what every submitted document shows (compared later with what he declared)
-        step(1)
+        # 1. Documents: what every submitted document shows (compared later with what he declared).
+        # Step 1 was announced by run(), which read the documents.
         file_names = [str(document.get("file_name") or "document") for document in files or []]
         extracted = None
         if file_names:
-            extracted = self.__document_ai.run({"documents": self.__document_store.read_all(files)})
+            extracted = self.__document_ai.run({"documents": documents, "saved_replies": saved})
             notes += self.__document_ai.warnings()
             if extracted is None and not failed("Reading the submitted documents", "the AI gave no usable reading"):
                 return None
@@ -137,7 +179,8 @@ class AssessmentRunner:
 
         # 2-5. Crime scan context: what published reports say about his industry
         step(2)
-        research = self.__research_ai.run({"case": crime_input, "domains": policy.get("trusted_sources", [])})
+        research = self.__research_ai.run({"case": crime_input, "domains": policy.get("trusted_sources", []),
+                                           "saved_replies": saved})
         notes += self.__research_ai.warnings()
         if research is None and not failed(AssessmentRunner.RESEARCH_STEP, "the AI gave no usable research"):
             return None
@@ -149,7 +192,8 @@ class AssessmentRunner:
                 notes += self.__crime_scan.warnings()
         step(4)
         typology_response = self.__typology_ai.run({"case": crime_input, "research": research,
-                                                    "categories": self.__crime_categories()})
+                                                    "categories": self.__crime_categories(),
+                                                    "saved_replies": saved})
         notes += self.__typology_ai.warnings()
         step(5)
         typologies = None
@@ -166,11 +210,14 @@ class AssessmentRunner:
                 notes += self.__crime_scan.warnings()
 
         # 6-10. Forecast: the declaration is read once here, and the crime types are built from the typologies
+        forecast_saved = saved.get("forecast")
         run = self.__forecast_ai.run({
-            "record": case, "cache": self.__response_cache.load_raw_replies(ref),
+            "record": case, "cache": dict(forecast_saved) if isinstance(forecast_saved, dict) else {},
             "typologies": None if typologies is None else [typology.to_dict() for typology in typologies],
             "on_step": lambda stage: step(AssessmentRunner.FORECAST_STEP[stage])})
-        self.__response_cache.save_raw_replies(ref, run["results"])
+        saved["forecast"] = {**(forecast_saved if isinstance(forecast_saved, dict) else {}),
+                             **{name: result["raw"] for name, result in run["results"].items()
+                                if isinstance(result, dict) and result.get("raw")}}
         partial = run["partial"]
         forecast = run["forecast"] if run["ok"] else None
         stopped_at = None
@@ -198,7 +245,8 @@ class AssessmentRunner:
             notes.append(f"Peer benchmark skipped: {reason}.")
         else:
             bench_ai = self.__benchmark_ai.run({"client": bench_input,
-                                                "economy": self.__forecast.economy_brief(partial.get("markets"))})
+                                                "economy": self.__forecast.economy_brief(partial.get("markets")),
+                                                "saved_replies": saved})
             if bench_ai is not None:
                 try:
                     findings = self.__benchmark.run(case, {"benchmark_input": bench_input,

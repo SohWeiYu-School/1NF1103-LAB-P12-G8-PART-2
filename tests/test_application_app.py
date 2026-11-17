@@ -1066,6 +1066,23 @@ def test_reading_documents_is_recorded_with_counts_only(tmp_path, monkeypatch, c
     assert set(event.details) == {"documents", "fields"}
 
 
+def test_reading_documents_for_auto_fill_always_asks_the_ai(tmp_path, monkeypatch):
+    """Auto-fill gets no saved replies: the same documents are read by the AI every time, and nothing is
+    saved for any client."""
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "documents",
+                           "marcus_lim_expected_extract.json"), encoding="utf-8") as handle:
+        reading = json.load(handle)
+    caller = fake_ai.caller(documents_reply=reading)
+    app = App(caller, data_folder=str(tmp_path))
+    documents = [{"file_name": "cv.txt", "kind": "text", "text": "A CV"}]
+    assert app.read_documents(documents)[0] is not None
+    assert app.read_documents(documents)[0] is not None
+    assert [key for key, _ in caller.asked] == ["jobs", "jobs"]
+    assert not (tmp_path / "cache").exists()
+
+
 def test_reading_documents_that_gave_nothing_is_recorded_as_failed_and_reading_none_writes_nothing(app):
     assert app.read_documents([]) == (None, [])
     assert _actions(app) == []

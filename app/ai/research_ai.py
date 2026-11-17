@@ -70,6 +70,15 @@ class ResearchAI(AIService):
                              else os.getenv("GEMINI_SEARCH_MODEL", "gemini-3.8-flash")))
         return data
 
+    def _reply_as_asked(self, data: dict) -> dict:
+        """The saved reply without what _post_process added: the pages the search opened, the time,
+        the model and each report's id."""
+        asked = {key: value for key, value in data.items() if key not in ("api_sources", "retrieved_at", "model")}
+        if isinstance(asked.get("reports"), list):
+            asked["reports"] = [{key: value for key, value in report.items() if key != "report_id"}
+                                if isinstance(report, dict) else report for report in asked["reports"]]
+        return asked
+
     def __trim_reports(self, data: dict) -> dict:
         """Keep at most max_reports reports and max_excerpts excerpts each. Year text becomes a number."""
         reports = data.get("reports", [])

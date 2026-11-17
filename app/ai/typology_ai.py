@@ -69,6 +69,10 @@ class TypologyAI(AIService):
         data["model"] = (options or {}).get("answered_by") or self._model
         return data
 
+    def _reply_as_asked(self, data: dict) -> dict:
+        """The saved reply without the "model" field that _post_process added."""
+        return {key: value for key, value in data.items() if key != "model"}
+
     def __build_typology_reports(self, research: dict) -> list:
         """Only the safe fields of each report. The links stay behind."""
         return [{field: report[field] for field in TypologyAI.REPORT_FIELDS if field in report}

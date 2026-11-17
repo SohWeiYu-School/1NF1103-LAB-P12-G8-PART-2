@@ -112,6 +112,11 @@ class AIService(ABC):
         """Extra instructions for the AI caller (web search, attached documents, ...)."""
         return {}
 
+    def _reply_as_asked(self, data: dict) -> dict:
+        """A saved reply as the AI wrote it: without the fields _post_process added, which the schema
+        does not allow. Used to check a saved reply against the schema again. The parent changes nothing."""
+        return data
+
     def _prepare(self, data: dict) -> dict:
         """A change made to the reply before it is checked against the schema (for example,
         cutting an over-long list so the rest can still be used). The parent changes nothing."""
@@ -195,7 +200,7 @@ class AIService(ABC):
                         type(self).__name__)
             return None
         reply = copy.deepcopy(entry["reply"])
-        if not self.__validate_reply(reply, schema):
+        if not self.__validate_reply(self._reply_as_asked(copy.deepcopy(reply)), schema):
             logger.warning("%s: the saved reply no longer follows the schema, so the AI is asked again",
                            type(self).__name__)
             return None

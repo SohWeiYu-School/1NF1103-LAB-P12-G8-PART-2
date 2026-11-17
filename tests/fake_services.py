@@ -32,10 +32,14 @@ def forecast_ai(caller=None) -> ForecastAI:
     return ForecastAI("fake", caller, "fake", 0.0, 4, settings, VOCABULARY)
 
 
-def save_forecast_replies(cache: ResponseCache, case: dict, **options) -> None:
-    """Save the made-up forecast replies for this case, as if the AI had answered before."""
-    replies = fake_ai.forecast_replies(case, **options)
-    cache.save_raw_replies(case["client_ref"], {piece: {"raw": raw} for piece, raw in replies.items()})
+def save_forecast_replies(cache: ResponseCache, case: dict, documents: list[dict] | None = None,
+                          overrides: dict | None = None, **options) -> None:
+    """Save the made-up forecast replies for this case, as if the AI had answered before for this
+    same client. documents is what DocumentStore.read_all gives for its files (none by default);
+    overrides is {piece name: raw reply} that replaces the made-up reply of those pieces."""
+    replies = {**fake_ai.forecast_replies(case, **options), **(overrides or {})}
+    cache.save_client_replies(case["client_ref"], cache.fingerprint(case, documents or []),
+                              {"forecast": dict(replies)})
 
 
 def runner(tmp_path, research="default", typologies="default", benchmark="default", documents=None):

@@ -56,7 +56,9 @@ class Run:
         """Save made-up forecast replies for this client, as if the AI had answered before."""
         case, missing = CaseReader(self.app().today()).forecasting_case(record)
         assert missing == []
-        fake_services.save_forecast_replies(self.cache(), case, **options)
+        application = self.app()
+        documents = application.documents().read_all(record.get("supporting_documents") or [])
+        fake_services.save_forecast_replies(application.response_cache(), case, documents, **options)
         return case
 
     def cache(self) -> ResponseCache:
@@ -501,10 +503,8 @@ def test_the_bishan_reply_from_the_log_is_repaired_not_rejected(run):
 
 
 def test_one_asset_the_ai_cant_describe_doesnt_stop_the_forecast(run):
-    case = run.save_fake_forecast(client_record())
-    replies = run.cache().load_raw_replies(case["client_ref"])
-    replies["call2_earnings.asset.0"] = json.dumps({"asset_index": 0})          # unusable, and no API key
-    run.cache().save_raw_replies(case["client_ref"], {k: {"raw": v} for k, v in replies.items()})
+    unusable = {"call2_earnings.asset.0": json.dumps({"asset_index": 0})}       # unusable, and no API key
+    case = run.save_fake_forecast(client_record(), overrides=unusable)
     result = run(case)
     assert result["forecast"] is not None                                          # the forecast finished
     item = check(result["verdict"].details(), "forecast", "ASSET_NOT_MODELLED")
@@ -513,10 +513,8 @@ def test_one_asset_the_ai_cant_describe_doesnt_stop_the_forecast(run):
 
 
 def test_the_report_says_why_the_forecast_stopped(run):
-    case = run.save_fake_forecast(client_record())
-    replies = run.cache().load_raw_replies(case["client_ref"])
-    replies["call3_types.list"] = json.dumps({"person_types": []})                # unusable, and no API key
-    run.cache().save_raw_replies(case["client_ref"], {k: {"raw": v} for k, v in replies.items()})
+    unusable = {"call3_types.list": json.dumps({"person_types": []})}             # unusable, and no API key
+    case = run.save_fake_forecast(client_record(), overrides=unusable)
     verdict = run(case)["verdict"].details()
     item = check(verdict, "forecast", "FORECAST")
     assert "the list of person types" in item["detail"] and "the AI service is not available right now" in item["detail"]

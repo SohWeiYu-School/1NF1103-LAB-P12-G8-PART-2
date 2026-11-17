@@ -159,3 +159,13 @@ def test_a_report_with_no_link_is_a_malformed_reply():
     del report["url"]
     result, _ = _run(_Search([report]))
     assert result is None
+
+
+def test_a_saved_reply_is_reused_for_the_same_question_even_with_the_fields_added_after_the_reply():
+    saved = {}
+    source = {"case": CASE, "domains": DOMAINS, "saved_replies": saved}
+    first = ResearchAI("fake", _Search([_report()]), "gpt-test", 0.0).run(source)
+    assert first["reports"][0]["report_id"] == "R1" and first["model"] == "gpt-test"
+    second = _Search([_report()])
+    assert ResearchAI("fake", second, "gpt-test", 0.0).run(source) == first
+    assert second.prompts == []

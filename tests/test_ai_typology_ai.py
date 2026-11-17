@@ -100,3 +100,13 @@ def test_two_malformed_replies_give_none():
 def test_no_connection_gives_none():
     result, _ = _run(_Caller(None, None))
     assert result is None
+
+
+def test_a_saved_reply_is_reused_for_the_same_question_even_with_the_model_field_added():
+    saved = {}
+    source = {"case": CASE, "research": fake_ai.research(), "categories": CATEGORIES, "saved_replies": saved}
+    first = TypologyAI("fake", _Caller(_reply()), "gpt-test", 0.0).run(source)
+    assert first["model"] == "gpt-test"
+    second = _Caller()
+    assert TypologyAI("fake", second, "gpt-test", 0.0).run(source) == first
+    assert second.prompts == []
