@@ -18,7 +18,8 @@ class AuditInsights:
       shop      a watched field is edited, and the client's next assessment moves the verdict
                 jump_levels or more compared with the assessment before the edit (high)
       other     a client is edited by someone who is not the officer who created it (high if a watched
-                field changed, else medium)
+                field changed, else medium); skipped when the owner or the editor is the terminal or
+                unknown, because neither is a named officer
       repeat    more than repeat_assessments assessments of one client within window_days (medium)
       hours     an edit or assessment outside the working hours, Singapore time (low)
       spike     a day with at least spike_min failures and at least spike_multiplier times the median of
@@ -41,6 +42,7 @@ class AuditInsights:
     ACTION_NAMES: dict[str, str] = {"client_edited": "Edited client", "assessment_run": "Assessed"}
     FAILURE_KINDS: tuple[str, ...] = ("AI step not run", "Save failed", "Read failed", "Sync failed")
     __DAY: timedelta = timedelta(days=1)
+    __NO_ACCOUNT: frozenset[str] = frozenset((AuditEvent.TERMINAL, AuditEvent.UNKNOWN))   # not a named officer
 
     def __init__(self, events: list[AuditEvent] | None = None, policy: AuditPolicy | None = None,
                  broken_at: int = 0, now: datetime | None = None) -> None:
@@ -189,7 +191,8 @@ class AuditInsights:
                 watched = self.__watched(event)
                 if watched and last_assessment:
                     pending = event
-                if owner and event.actor != owner:
+                if (owner and event.actor != owner
+                        and AuditInsights.__NO_ACCOUNT.isdisjoint((owner, event.actor))):
                     found.append(self.__other_flag(reference, event, owner, watched))
             elif event.action == "assessment_run":
                 if (last_assessment and pending and AuditInsights.__level(event) >= 0

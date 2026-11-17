@@ -540,3 +540,19 @@ def test_the_spike_meaning_says_each_kind_truthfully():
     assert flag.meaning == ("1 assessment stopped because the AI service did not answer, and 1 assessment finished "
                             "with a step that did not run, and 1 save failed. Cases assessed that day may be "
                             "missing steps.")
+
+
+def test_the_non_owner_rule_is_skipped_when_the_editor_or_the_owner_is_the_terminal_or_unknown():
+    for owner, editor in ((AuditEvent.TERMINAL, "Adrian"), ("Adrian", AuditEvent.TERMINAL),
+                          (AuditEvent.UNKNOWN, "Adrian"), ("Adrian", AuditEvent.UNKNOWN)):
+        log = Log()
+        log.create(actor=owner)
+        log.edit(BASE + timedelta(hours=1), [EMPLOYER], actor=editor)
+        assert _of(_flags(log), "other") == [], (owner, editor)
+
+
+def test_the_non_owner_rule_still_fires_between_two_named_officers():
+    log = Log()
+    log.create(actor="Shareen")
+    log.edit(BASE + timedelta(hours=1), [EMPLOYER], actor="Adrian")
+    assert len(_of(_flags(log), "other")) == 1
