@@ -583,3 +583,50 @@ events); `uses` arrows `App` to `AuditPage`, `WebApp` to `AuditPage`, `WebApp` t
 `AuditFilter`. `App`, `WebApp` and `AuditFilter` grew, so the folders were re-packed (the Domain Model folder moved
 down), every line was re-routed and the labels were placed again.
 Scan 95 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.
+
+## Audit trail Phase 2 (17 Nov 2026): code changed, the diagram follows it
+
+Phase 2 (the Overview page, the six flag rules and the flag tickets) was built and approved first; the diagram now
+shows it. The checker found 77 differences. They are all in this section.
+
+**6 classes added** (their members came from the scan's stage 5):
+- `AuditPolicy` (app/model): the numbers the six flag rules use (watched fields, windows, work hours, spike limits),
+  each checked in its own setter; `from_dict()` / `to_dict()` read and write the config.
+- `Flag` (app/model): one flag the rules raised (id, kind, severity, client, headline, meaning, changes), checked by itself.
+- `FlagTicket` (app/model): a flag plus its status, assignee and history, rebuilt from the audit lines that update it.
+- `OverviewPage` (app/model): everything one Overview page shows (counts, charts, ticket rows, tab, paging).
+- `AuditInsights` (app/logic): runs the six rules over the audit lines and returns the flags. Pure.
+- `AuditStats` (app/logic): the Overview numbers (actions, failures, by day, flags by type). Pure.
+
+**Members added or changed on existing classes**
+- `App`: `__audit_policy`, `audit_policy`, `FLAG_*` / `FLAGS_UNAVAILABLE` messages; `audit_overview()`, `flag()`,
+  `flag_evidence()`, `update_flag()`, `client_flags()`, `flags_to_handle()`, `begin_request()` and private helpers.
+- `WebApp`: the Overview and flag page methods (`admin_flag()`, `open_flag_count()`, date and time helpers,
+  picture helpers) and constants; `admin_home()` now returns `str` (the page text), not `Response` (UML was wrong).
+  `AUDIT_ENDPOINTS` now also lists `admin_home` and `admin_flag` (UML value was out of date).
+- `AuditFilter`: `flagged_only`; `__init__` takes `flagged_only`; `matches()` takes `flagged` (the sequences of lines
+  that have a flag). `AuditPage`: `open_flags`, `flagged`, `flags_ok`, `flags_skipped` (and `__init__`). `AuditEvent`:
+  `SAVE_STEP`, `__FLAG_STATES`.
+- Starting values of six attributes (`AuditPolicy.__watched_fields`, `Flag.__sequences`, `OverviewPage.__day_from`,
+  `__day_to`, `__severity_counts`, `__tab_counts`) were written as the code's default, as the checker reads them.
+
+**Arrows added** (23 new, 1 changed; all confirmed by the checker):
+- Composition: `App *-- "1" AuditPolicy` (App creates it from the settings and keeps it).
+- Creates: `App` to `AuditInsights`, `AuditStats`, `OverviewPage`, `FlagTicket`; `AuditInsights` to `Flag`.
+- Uses: `App` to `Flag`; `AuditInsights` and `AuditStats` to `AuditFilter`; `AuditStats` to `AuditInsights`
+  (`failure_kind`, `FAILURE_KINDS`); `ConfigReader` to `AuditPolicy` (checks the policy with `from_dict`);
+  `FlagTicket` to `AuditEvent`; `WebApp` to `Flag`, `FlagTicket`, `OverviewPage`.
+- Aggregation (the class stores what it is GIVEN): `AuditInsights` to `AuditEvent` and `AuditPolicy`; `AuditStats` to
+  `AuditEvent`, `Flag`, `FlagTicket`; `FlagTicket` to `Flag`; `OverviewPage` to `FlagTicket` and `AuditEvent`.
+  `FlagTicket` to `Flag` was drawn as a plain line first; the diagram's convention for a stored, given object is
+  aggregation, so it is `o--`.
+- **Corrected:** `AuditPage *-- "0..*" AuditEvent` is now `o--`. Why: the page is handed its events and copies the
+  list; it does not create them (the checker said so, and the code at audit_page.py:47 agrees). The Phase 1 UI-rework
+  entry above drew it as a composition by mistake.
+- Not drawn, checked by hand (false name matches): `CrimeScan` to `Flag` (its own `flags()` returns text signs) and
+  `Forecast` to `FlagTicket` (`.rows()` there is `CareerSavings.rows`).
+
+**Layout:** `AuditInsights` and `AuditStats` sit at the right of the Logic folder (widened), `AuditPolicy`, `Flag`,
+`FlagTicket` and `OverviewPage` below the Domain Model's money classes (folder widened). `App` and `WebApp` grew, so
+the folders were re-packed, every line was re-routed and labels placed again. Scan 77 differences before, 0 after;
+round-trip PROBLEMS: 0; layout_check 0.
