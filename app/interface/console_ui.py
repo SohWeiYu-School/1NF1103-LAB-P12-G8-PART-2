@@ -18,6 +18,7 @@ class ConsoleUI:
     LETTERS: str = " '.-"                    # allowed besides letters: names, nationality, countries
     LABEL: str   = " '.-&/,()%#0123456789"     # job titles, industries, employers, asset descriptions
     MAX_EMPLOYEES: int = 10_000_000
+    MENU_CHOICES: tuple[str, ...] = ("1", "2", "3", "4", "5", "6", "7", "8", "0")
 
     def __init__(self, read: Callable[[str], str] | None = None,
                  write: Callable[[str], None] | None = None) -> None:
@@ -33,7 +34,7 @@ class ConsoleUI:
         self.__width: int = len(ConsoleUI.LINE)
 
     def show_app_menu(self) -> str:
-        """Display the unified main menu and return the user's choice (1-8)."""
+        """Display the unified main menu and return the user's choice: "1" to "8", or "0" to quit."""
         self.__write("\n========================================")
         self.__write("     ORBIT · SOURCE OF WEALTH SCREENING")
         self.__write("========================================")
@@ -44,12 +45,13 @@ class ConsoleUI:
         self.__write("5. List Saved Assessments")
         self.__write("6. View All Clients")
         self.__write("7. Manual Sync to Cloud Database")
-        self.__write("8. Quit")
+        self.__write("8. Client History (assessments, archive/restore, audit trail)")
+        self.__write("0. Quit")
         while True:
-            choice = self.__read("\nEnter your choice (1-8): ").strip()
-            if choice in ("1", "2", "3", "4", "5", "6", "7", "8"):
+            choice = self.__read("\nEnter your choice (0-8): ").strip()
+            if choice in ConsoleUI.MENU_CHOICES:
                 return choice
-            self.__write("Invalid choice. Please enter 1 to 8.")
+            self.__write("Invalid choice. Please enter a number from 1 to 8, or 0 to quit.")
 
     def show_message(self, text: str) -> None:
         #Print an informational message.
@@ -175,13 +177,14 @@ class ConsoleUI:
                 continue
             return amount
 
-    def ask_choice(self, question: str, options: list[str], allow_back: bool = False) -> int | None:
-        """Show a numbered list and return the index picked. With allow_back, 0 returns None."""
+    def ask_choice(self, question: str, options: list[str], allow_back: bool = False,
+                   back_label: str = "Back to the main menu") -> int | None:
+        """Show a numbered list and return the index picked. With allow_back, 0 (shown as back_label) returns None."""
         self.show(question)
         for number, option in enumerate(options, start=1):
             self.show(f"  {number}. {option}")
         if allow_back:
-            self.show("  0. Back to the main menu")
+            self.show(f"  0. {back_label}")
         number = self.ask_int("Choose a number", 0 if allow_back else 1, len(options))
         return None if number == 0 else number - 1
 
@@ -193,6 +196,10 @@ class ConsoleUI:
             if answer in ("n", "no"):
                 return False
             self.show_error("Please answer y or n.")
+
+    def ask_optional_text(self, question: str) -> str:
+        """Ask one question; a blank answer is allowed and comes back as an empty string."""
+        return self.read_answer(f"{question}: ").strip()
 
     def ask_year(self, question: str, minimum: int = 1940, maximum: int | None = None,
                  allow_blank: bool = False) -> int | None:

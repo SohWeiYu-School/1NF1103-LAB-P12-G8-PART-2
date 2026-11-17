@@ -413,12 +413,17 @@ class App:
                     self.__read_failed("client records", App.TERMINAL)
                     self.__ui.show_error(App.CLIENTS_UNAVAILABLE)
                     continue
-                self.__report_view.show_client_list(clients)
+                try:
+                    activity, note = self.last_activity(), ""
+                except ValueError as error:            # the log was already logged; the client list still shows
+                    logger.error("App.run_menu: the last activity of the clients cannot be shown: %r", error)
+                    activity, note = None, App.AUDIT_UNAVAILABLE
+                self.__report_view.show_client_list(clients, activity, note)
                 self.__ui.read_answer("Press Enter to continue...")
             elif choice == "7":
                 self.__ui.show_message("\n--- Synchronizing Local Data to Cloud Database ---")
                 self.__ui.show_sync_result(self.sync_to_cloud())
-            elif choice == "8":
+            elif choice == "0":
                 self.__ui.show_message("\nGoodbye.")
                 break
 

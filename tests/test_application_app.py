@@ -259,15 +259,42 @@ def test_a_damaged_saved_assessment_is_reported_not_shown_or_crashed(app, tmp_pa
 
 def test_the_menu_can_list_clients_and_leave(app, monkeypatch, capsys):
     app.clients().save(sample_case())
-    _answers(monkeypatch, "6", "", "8")
+    _answers(monkeypatch, "6", "", "0")
     app.run_menu()
     out = capsys.readouterr().out
     assert sample_case()["client_ref"] in out
     assert "Goodbye." in out
 
 
+def test_the_client_list_in_the_menu_shows_each_clients_last_activity(app, monkeypatch, capsys):
+    app.save_client(ClientRecord.from_dict(sample_case()), new_client=True)
+    app.clients().save({**sample_case(), "client_ref": "CL-QUIET"})
+    capsys.readouterr()
+    _answers(monkeypatch, "6", "", "0")
+    app.run_menu()
+    out = capsys.readouterr().out
+    assert "Last activity" in out
+    ref = sample_case()["client_ref"]
+    assert "Client created" in next(line for line in out.splitlines() if ref in line and "#" not in line)
+    assert next(line for line in out.splitlines() if "CL-QUIET" in line).rstrip().endswith("—")
+
+
+def test_an_unreadable_audit_log_still_shows_the_client_list_without_the_column_and_says_why(
+        app, tmp_path, monkeypatch, capsys, caplog):
+    app.clients().save(sample_case())
+    _damage(tmp_path, "audit_log.json")
+    capsys.readouterr()
+    _answers(monkeypatch, "6", "", "0")
+    app.run_menu()
+    out = capsys.readouterr().out
+    assert sample_case()["client_ref"] in out
+    assert App.AUDIT_UNAVAILABLE in out
+    assert "Last activity" not in out and "No activity" not in out
+    assert "the audit log cannot be read" in caplog.text
+
+
 def test_an_invalid_menu_choice_is_asked_again(app, monkeypatch, capsys):
-    _answers(monkeypatch, "99", "abc", "8")
+    _answers(monkeypatch, "99", "abc", "0")
     app.run_menu()
     assert "Goodbye." in capsys.readouterr().out
 
@@ -322,7 +349,7 @@ def test_save_client_reports_a_record_that_could_not_be_saved(app, monkeypatch):
 
 def test_the_menu_reports_a_client_that_cannot_be_read_and_carries_on(app, monkeypatch, capsys):
     app.clients().save(_broken_record())
-    _answers(monkeypatch, "4", sample_case()["client_ref"], "8")
+    _answers(monkeypatch, "4", sample_case()["client_ref"], "0")
     app.run_menu()
     out = capsys.readouterr().out
     assert "could not be loaded" in out
@@ -340,7 +367,7 @@ def test_a_new_client_is_made_from_a_folder_of_documents(tmp_path, monkeypatch, 
         reading = json.load(handle)
     app = App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))
     #       menu  folder  income of asset 3  save  back to the menu  leave
-    _answers(monkeypatch, "2", folder, "0", "1", "3", "8")
+    _answers(monkeypatch, "2", folder, "0", "1", "3", "0")
     app.run_menu()
     assert "Client saved. Reference: CL-" in capsys.readouterr().out
     saved = app.clients().load()
@@ -362,7 +389,7 @@ def test_an_impossible_value_in_the_reading_is_left_empty_named_and_asked_for_wh
     reading["client"].update(age=200, date_of_birth=None)
     app = App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))
     #       menu  folder  age (asked for)  income of asset 3  save  back to the menu  leave
-    _answers(monkeypatch, "2", folder, "45", "0", "1", "3", "8")
+    _answers(monkeypatch, "2", folder, "45", "0", "1", "3", "0")
     app.run_menu()
     out = capsys.readouterr().out
     assert "Age: the value read from the documents (200) is not possible" in out
@@ -387,7 +414,7 @@ def _documents_with_a_bad_end_year(tmp_path, monkeypatch):
 def test_a_dropped_optional_end_year_is_asked_for_and_the_answer_is_kept(tmp_path, monkeypatch, capsys):
     app, folder = _documents_with_a_bad_end_year(tmp_path, monkeypatch)
     #       menu  folder  income of asset 3  end year of job 1  save  back  leave
-    _answers(monkeypatch, "2", folder, "0", "2003", "1", "3", "8")
+    _answers(monkeypatch, "2", folder, "0", "2003", "1", "3", "0")
     app.run_menu()
     out = capsys.readouterr().out
     assert "end year: the value read from the documents (2200) is not possible" in out
@@ -401,7 +428,7 @@ def test_a_dropped_optional_end_year_is_asked_for_and_the_answer_is_kept(tmp_pat
 
 def test_enter_on_a_dropped_optional_field_leaves_it_empty_and_does_not_block_saving(tmp_path, monkeypatch, capsys):
     app, folder = _documents_with_a_bad_end_year(tmp_path, monkeypatch)
-    _answers(monkeypatch, "2", folder, "0", "", "1", "3", "8")
+    _answers(monkeypatch, "2", folder, "0", "", "1", "3", "0")
     app.run_menu()
     assert "Client saved. Reference: CL-" in capsys.readouterr().out
     assert app.clients().load()[0]["career_history"][0]["end_year"] is None
@@ -516,7 +543,7 @@ def _damage(tmp_path, name):
 
 def test_the_menu_tells_the_user_when_the_client_database_cannot_be_read(app, tmp_path, monkeypatch, capsys, caplog):
     path = _damage(tmp_path, "sow_cases.json")
-    _answers(monkeypatch, "6", "8")
+    _answers(monkeypatch, "6", "0")
     app.run_menu()
     out = capsys.readouterr().out
     assert App.CLIENTS_UNAVAILABLE in out
@@ -528,7 +555,7 @@ def test_the_menu_tells_the_user_when_the_client_database_cannot_be_read(app, tm
 
 def test_the_menu_tells_the_user_when_the_saved_assessments_cannot_be_read(app, tmp_path, monkeypatch, capsys):
     _damage(tmp_path, "ai_assessments.json")
-    _answers(monkeypatch, "5", "1", "8")
+    _answers(monkeypatch, "5", "1", "0")
     app.run_menu()
     out = capsys.readouterr().out
     assert out.count(App.ASSESSMENTS_UNAVAILABLE) == 2           # at start-up, and when listing
@@ -546,7 +573,7 @@ def test_find_client_raises_a_safe_message_when_the_database_cannot_be_read(app,
 
 def test_menu_find_client_shows_the_message_not_no_client_found(app, tmp_path, monkeypatch, capsys):
     _damage(tmp_path, "sow_cases.json")
-    _answers(monkeypatch, "4", "CL-1", "8")
+    _answers(monkeypatch, "4", "CL-1", "0")
     app.run_menu()
     out = capsys.readouterr().out
     assert App.CLIENTS_UNAVAILABLE in out and "No client found" not in out
@@ -1380,7 +1407,7 @@ def test_the_menu_flow_that_reads_documents_records_every_step(tmp_path, monkeyp
     with open(folder + "_expected_extract.json", encoding="utf-8") as handle:
         reading = json.load(handle)
     app = App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))
-    _answers(monkeypatch, "2", folder, "0", "1", "3", "8")
+    _answers(monkeypatch, "2", folder, "0", "1", "3", "0")
     app.run_menu()
     actions = _actions(app)
     assert actions[0] == "autofill_used" and actions[-1] == "client_created"

@@ -202,3 +202,37 @@ def test_the_main_menu_shows_the_product_name_orbit():
     shown = []
     ConsoleUI(read=_answers("1"), write=shown.append).show_app_menu()
     assert any("ORBIT" in line for line in shown)
+
+
+def test_the_main_menu_lists_client_history_and_quit_as_zero():
+    shown = []
+    ConsoleUI(read=_answers("0"), write=shown.append).show_app_menu()
+    assert any(line.startswith("8. Client History") for line in shown)
+    assert "0. Quit" in shown
+    assert not any(line.startswith("8. Quit") for line in shown)
+
+
+@pytest.mark.parametrize("choice", ["0", "1", "2", "3", "4", "5", "6", "7", "8"])
+def test_every_menu_choice_is_accepted(choice):
+    assert ConsoleUI(read=_answers(choice), write=lambda text: None).show_app_menu() == choice
+
+
+def test_a_menu_choice_outside_the_allowed_set_is_refused_with_the_allowed_ones():
+    shown = []
+    ask = _answers("9", "-1", "", "x", "08", " 3 ")
+    assert ConsoleUI(read=ask, write=shown.append).show_app_menu() == "3"
+    assert [line for line in shown if line.startswith("Invalid choice")] == \
+        ["Invalid choice. Please enter a number from 1 to 8, or 0 to quit."] * 5
+
+
+def test_ask_choice_can_name_its_back_option():
+    shown = []
+    ui = ConsoleUI(read=_answers("0"), write=shown.append)
+    assert ui.ask_choice("Which?", ["a", "b"], allow_back=True, back_label="Back to the client") is None
+    assert "  0. Back to the client" in shown
+
+
+def test_ask_optional_text_allows_a_blank_answer():
+    ui = ConsoleUI(read=_answers("  ", " 2026-11-01 "), write=lambda text: None)
+    assert ui.ask_optional_text("From") == ""
+    assert ui.ask_optional_text("From") == "2026-11-01"
