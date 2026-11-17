@@ -1779,6 +1779,7 @@ def test_the_log_can_show_only_the_entries_behind_open_flags_and_counts_them(fla
     assert (everything.total, everything.open_flags) == (3, 2)
     only = flagged.audit_log(AuditFilter(flagged_only=True), FLAG_NOW)
     assert [event.sequence for event in only.events] == [3, 2] and (only.total, only.open_flags) == (2, 2)
+    assert everything.flagged == frozenset({2, 3}) and only.flagged == frozenset({2, 3})
     flagged.update_flag("F-HOU-SOW-1-3", ADMIN, "resolved", "Planned night work.", outcome="legit", now=FLAG_NOW)
     after = flagged.audit_log(AuditFilter(flagged_only=True), FLAG_NOW)
     assert [event.sequence for event in after.events] == [2] and after.open_flags == 1

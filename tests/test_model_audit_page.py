@@ -40,3 +40,12 @@ def test_counts_that_do_not_fit_together_are_refused(kwargs):
 
 def test_the_open_flag_count_is_kept_and_does_not_depend_on_the_filter_counts():
     assert AuditPage([], 0, 0, 0, 0, 0, 7).open_flags == 7
+
+
+def test_the_flagged_entries_of_the_page_are_kept_and_must_belong_to_it():
+    events = [AuditEvent(sequence=2, action="signed_in"), AuditEvent(sequence=3, action="signed_in")]
+    assert AuditPage(events, 2, 0, 2, 0, 0, 1, [3]).flagged == frozenset({3})
+    assert AuditPage().flagged == frozenset()
+    for bad in ([9], [True], "3", [None]):
+        with pytest.raises(ValueError, match="flagged"):
+            AuditPage(events, 2, 0, 2, 0, 0, 1, bad)

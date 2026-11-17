@@ -1070,7 +1070,7 @@ class App:
         how many events match, how many rows cannot be read, how many readable events the whole log holds
         (so a page can tell an empty log from a filter that matches nothing), how many different people and
         failures there are among the matches, and how many flags are still to handle (open_flags, whatever
-        the filter). "Flagged only" keeps the events behind a flag that is not resolved. An empty log gives
+        the filter; flagged says which events on the page are behind one). "Flagged only" keeps the events behind a flag that is not resolved. An empty log gives
         an empty page. Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read, ValueError(FLAGS_UNAVAILABLE)
         if the flags cannot be worked out, and ValueError if audit_filter is not an AuditFilter or now has
         no timezone."""
@@ -1083,10 +1083,12 @@ class App:
         events = [event for event in readable if audit_filter.matches(event, now, flagged)]
         if audit_filter.sort == "desc":
             events.reverse()                       # the file is oldest first
-        return AuditPage(audit_filter.page_of(events), len(events), unreadable, len(readable),
+        shown = audit_filter.page_of(events)
+        return AuditPage(shown, len(events), unreadable, len(readable),
                          len({event.actor.casefold() for event in events
                               if event.actor not in (AuditEvent.TERMINAL, AuditEvent.UNKNOWN)}),
-                         sum(1 for event in events if event.result == "failed"), len(unresolved))
+                         sum(1 for event in events if event.result == "failed"), len(unresolved),
+                         {event.sequence for event in shown if event.sequence in flagged})
 
     def audit_overview(self, preset: str = OverviewPage.DEFAULT_PRESET, tab: str = OverviewPage.DEFAULT_TAB,
                        page: int = 1, now: datetime | None = None) -> OverviewPage:
