@@ -5,7 +5,6 @@ import logging
 from typing import Callable
 
 from app.ai.ai_service import AIService
-from app.ai.response_cache import ResponseCache
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +23,8 @@ class DocumentAI(AIService):
     READABLE_KINDS: tuple[str, ...] = ("text", "image", "pdf")
 
     def __init__(self, provider: str = "", ai_caller: Callable | None = None, model: str = "", temperature: float = 0.0,
-                 response_cache: ResponseCache | None = None, max_chars: int = 40_000) -> None:
-        super().__init__(provider, ai_caller, model, temperature, response_cache)
+                 max_chars: int = 40_000) -> None:
+        super().__init__(provider, ai_caller, model, temperature)
         self.__max_chars: int = max_chars
 
     def run(self, source: dict) -> dict | None:
@@ -38,9 +37,8 @@ class DocumentAI(AIService):
             notes.append(f"Only the first {DocumentAI.MAX_DOCUMENTS} documents were read.")
         data = None
         if readable:
-            data = super().run({"documents": readable[:DocumentAI.MAX_DOCUMENTS]})
-            if data is not None:
-                data.pop("_cache_path", None)
+            data = super().run({"documents": readable[:DocumentAI.MAX_DOCUMENTS],
+                                "saved_replies": source.get("saved_replies")})
         else:
             logger.warning("DocumentAI: none of the uploaded files could be read")
         self._warnings = notes

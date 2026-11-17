@@ -54,7 +54,7 @@ def run_from_saved(case_id: str) -> dict:
     """Rebuild the forecast from the saved replies. No API calls. Returns {"case", "forecast"}."""
     case = load_case(case_id)
     replies = saved_replies(case_id)
-    service = ForecastAI("saved", None, "", 0.0, None, 4, POLICY["forecasting"], VOCABULARY)
+    service = ForecastAI("saved", None, "", 0.0, 4, POLICY["forecasting"], VOCABULARY)
     run = service.run({"record": case, "cache": replies})
     assert run["ok"], (f"the saved replies for {case_id} are incomplete (stopped at {run['failed_step']}) - "
                        f"run the system on {case_id} again so it finishes")

@@ -48,7 +48,7 @@ class _Search:
 
 
 def _run(caller, case=CASE, **limits):
-    service = ResearchAI("fake", caller, "gpt-test", 0.0, None, **limits)
+    service = ResearchAI("fake", caller, "gpt-test", 0.0, **limits)
     return service.run({"case": case, "domains": DOMAINS}), service.warnings()
 
 

@@ -1,5 +1,7 @@
 """AIService: the generic way to ask an AI one kind of question."""
 
+import copy
+import hashlib
 import json
 import logging
 import os
@@ -8,8 +10,6 @@ from abc import ABC, abstractmethod
 from typing import Callable
 
 import jsonschema
-
-from app.ai.response_cache import ResponseCache
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,11 @@ class AIService(ABC):
     do with a good answer (_post_process).
 
     The AI brand is not chosen here. The service is handed an ai_caller function
-    (see app/ai/ai_caller.py) and a ResponseCache; it creates neither.
+    (see app/ai/ai_caller.py); it creates none.
+
+    Saved answers belong to one client and travel with the run: source["saved_replies"] is a
+    dict (or None) that the caller loaded for that client. The service reads its own step from
+    it and writes a good answer back into it; the caller saves the dict to disk.
     """
 
     PROMPT_NAME: str = ""     # app/prompts/<PROMPT_NAME>.txt
@@ -34,13 +38,11 @@ class AIService(ABC):
     ATTEMPTS: int = 2         # how many times the question is asked before giving up
 
     def __init__(self, provider: str = "", ai_caller: Callable[[str, dict, dict], str | None] | None = None,
-                 model: str = "", temperature: float = 0.0,
-                 response_cache: ResponseCache | None = None) -> None:
+                 model: str = "", temperature: float = 0.0) -> None:
         self._provider: str = provider
         self._model: str = model
         self._temperature: float = temperature
         self._ai_caller: Callable[[str, dict, dict], str | None] | None = ai_caller
-        self._response_cache: ResponseCache | None = response_cache
         self._warnings: list[str] = []
 
     def warnings(self) -> list[str]:
@@ -58,7 +60,8 @@ class AIService(ABC):
         version = self._prompt_version(template)
         cache_payload = self._cache_payload(source, payload)
 
-        cached = self._cached(cache_payload, version)
+        saved = source.get("saved_replies")
+        cached = self._cached(saved, cache_payload, version, schema)
         if cached is not None:
             return cached
 
@@ -77,7 +80,7 @@ class AIService(ABC):
                 logger.info("%s: answered by the fallback %s, so the answer is not saved for %s",
                             type(self).__name__, answered_by, self._model)
             else:
-                self._save(cache_payload, version, data)
+                self._save(saved, cache_payload, version, data)
             return data
         logger.error("%s: no usable answer after %d attempt(s)", type(self).__name__, self.ATTEMPTS)
         self._warnings = []
@@ -179,16 +182,37 @@ class AIService(ABC):
         """The prompt text without its '#' note lines, which are for people and are not sent."""
         return "\n".join(line for line in template.splitlines() if not line.startswith("#")).strip()
 
-    def _cached(self, cache_payload: dict, version: str) -> dict | None:
-        if self._response_cache is None:
+    def _cached(self, saved: dict | None, cache_payload: dict, version: str, schema: dict) -> dict | None:
+        """The reply saved for this step, if it answers this same question and still follows the schema.
+        A copy is returned, so the caller cannot change what is saved."""
+        if not isinstance(saved, dict):
             return None
-        return self._response_cache.get(self.PROMPT_NAME, cache_payload, self._model, version)
+        entry = saved.get(self.PROMPT_NAME)
+        if not isinstance(entry, dict) or not isinstance(entry.get("reply"), dict):
+            return None
+        if entry.get("question") != self.__question_print(cache_payload, version):
+            logger.info("%s: the saved reply answers a different question, so the AI is asked again",
+                        type(self).__name__)
+            return None
+        reply = copy.deepcopy(entry["reply"])
+        if not self.__validate_reply(reply, schema):
+            logger.warning("%s: the saved reply no longer follows the schema, so the AI is asked again",
+                           type(self).__name__)
+            return None
+        return reply
 
-    def _save(self, cache_payload: dict, version: str, data: dict) -> None:
-        if self._response_cache is None:
+    def _save(self, saved: dict | None, cache_payload: dict, version: str, data: dict) -> None:
+        """Keep a good answer in the client's saved replies (when the run has them)."""
+        if not isinstance(saved, dict):
             return
-        key = self._response_cache.key(self.PROMPT_NAME, cache_payload, self._model, version)
-        self._response_cache.put(self.PROMPT_NAME, key, data)
+        saved[self.PROMPT_NAME] = {"question": self.__question_print(cache_payload, version),
+                                   "reply": copy.deepcopy(data)}
+
+    def __question_print(self, cache_payload: dict, version: str) -> str:
+        """SHA-256 of the question: its kind, model, payload and prompt version."""
+        canonical = json.dumps({"kind": self.PROMPT_NAME, "model": self._model, "payload": cache_payload,
+                                "prompt_version": version}, sort_keys=True)
+        return hashlib.sha256(canonical.encode()).hexdigest()
 
     def __parse_reply(self, raw: str | None) -> dict | None:
         """The JSON object inside the reply (it may be wrapped in a ``` block), or None."""

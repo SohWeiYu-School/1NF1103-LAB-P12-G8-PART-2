@@ -30,7 +30,7 @@ def _reply(count=1, category="TRADE_BASED_ML"):
 
 
 def _run(caller, research=None, **limits):
-    service = TypologyAI("fake", caller, "gpt-test", 0.0, None, **limits)
+    service = TypologyAI("fake", caller, "gpt-test", 0.0, **limits)
     source = {"case": CASE, "research": fake_ai.research() if research is None else research,
               "categories": CATEGORIES}
     return service.run(source), service.warnings()

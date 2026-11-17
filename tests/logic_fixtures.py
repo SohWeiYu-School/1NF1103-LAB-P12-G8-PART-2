@@ -22,7 +22,7 @@ def sample_case() -> dict:
 
 def sample_forecast(case: dict, **options) -> dict:
     """The forecast the made-up replies give for this case (see fake_ai.forecast_replies)."""
-    service = ForecastAI("fake", None, "fake", 0.0, None, 4, POLICY["forecasting"], VOCABULARY)
+    service = ForecastAI("fake", None, "fake", 0.0, 4, POLICY["forecasting"], VOCABULARY)
     run = service.run({"record": case, "cache": fake_ai.forecast_replies(case, **options)})
     assert run["ok"], run["failed_error"]
     return run["forecast"]

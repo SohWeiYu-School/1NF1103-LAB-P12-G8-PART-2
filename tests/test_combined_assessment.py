@@ -248,7 +248,7 @@ def test_person_types_are_linked_to_typologies_by_id_or_category():
     data = {"person_types": [{"type_id": "T1", "category": "HONEST", "typology_id": None},
                              {"type_id": "T2", "category": "TRADE_BASED_ML", "typology_id": "made_up"},
                              {"type_id": "T3", "category": "TAX_EVASION", "typology_id": "bribes"}]}
-    linked = fake_services.forecast_ai(None)._link_typologies(data, researched)["person_types"]
+    linked = fake_services.forecast_ai()._link_typologies(data, researched)["person_types"]
     assert linked[1]["typology_id"] == "tbml"                  # unknown id -> linked by its category
     assert linked[2]["typology_id"] == "bribes"
     assert linked[2]["category"] == "BRIBERY_CORRUPTION"      # takes its typology's category
@@ -258,7 +258,7 @@ def test_person_types_request_gets_the_typologies():
     case, _ = CaseReader("2026-10-14").forecasting_case(client_record())
     replies = fake_ai.forecast_replies(case)
     with patch.object(ForecastAI, "_ask", autospec=True, side_effect=ForecastAI._ask) as spy:
-        run_result = fake_services.forecast_ai(None).run(
+        run_result = fake_services.forecast_ai().run(
             {"record": case, "cache": replies, "typologies": fake_ai.typologies()["sector_typologies"]})
     assert run_result["ok"]
     sent = next(c.args[4] for c in spy.call_args_list if c.args[1] == "call3_types.list")
@@ -277,7 +277,7 @@ def test_benchmark_sees_the_economy_but_never_his_figures():
         prompts.append(prompt)
         return json.dumps(fake_ai.benchmark())
 
-    assert BenchmarkAI("fake", caller, "fake", 0.0, None).run({"client": data, "economy": economy}) is not None
+    assert BenchmarkAI("fake", caller, "fake", 0.0).run({"client": data, "economy": economy}) is not None
     prompt = prompts[0]
     assert "Container shipping" in prompt and "-12.0" in prompt
     assert "16500000" not in prompt and "declared_net_worth" not in prompt
@@ -406,8 +406,9 @@ def test_document_reading_is_saved_and_reused(run):
         calls.append(prompt)
         return json.dumps(reading)
 
-    first = DocumentAI("fake", caller, "fake", 0.0, run.cache()).run({"documents": documents})
-    second = DocumentAI("fake", caller, "fake", 0.0, run.cache()).run({"documents": documents})
+    saved = {}
+    first = DocumentAI("fake", caller, "fake", 0.0).run({"documents": documents, "saved_replies": saved})
+    second = DocumentAI("fake", caller, "fake", 0.0).run({"documents": documents, "saved_replies": saved})
     assert len(calls) == 1 and first == second == reading
 
 
@@ -492,7 +493,7 @@ def test_the_bishan_reply_from_the_log_is_repaired_not_rejected(run):
                             for n, m in enumerate(sorted(markets))],
                  valuation_basis="Bishan property index")
     replies["call2_earnings.asset.0"] = json.dumps(reply)
-    result = fake_services.forecast_ai(None).run({"record": case, "cache": replies})
+    result = fake_services.forecast_ai().run({"record": case, "cache": replies})
     assert result["ok"] and result["results"]["call2_earnings.asset.0"]["from_cache"]   # passed after the repair
     repaired = result["forecast"]["earnings"]["assets"][0]
     assert len(repaired["exposures"]) == POLICY["forecasting"]["max_asset_exposures"]

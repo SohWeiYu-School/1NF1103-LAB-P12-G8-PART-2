@@ -254,7 +254,7 @@ def _forecast_stop_reason(tmp_path, forecast_caller):
     cache = ResponseCache(str(tmp_path / "cache"))
     runner = AssessmentRunner(CONFIG, fake_services.FixedAI(fake_ai.research()), fake_services.FixedAI(fake_ai.typologies()),
                               fake_services.FixedAI(fake_ai.benchmark()), fake_services.FixedAI(None),
-                              fake_services.forecast_ai(cache, forecast_caller),
+                              fake_services.forecast_ai(forecast_caller),
                               DocumentStore("data/documents", root=str(tmp_path)), cache)
     reasons = []
     result = runner.run(sample_case(), on_failure=lambda step, reason: reasons.append((step, reason)) or True)
@@ -289,7 +289,7 @@ def test_a_verdict_that_cannot_be_worked_out_is_reported_in_plain_words(tmp_path
     runner = AssessmentRunner(Config(policy, fake_services.CONFIG.vocabulary),
                               fake_services.FixedAI(fake_ai.research()), fake_services.FixedAI(fake_ai.typologies()),
                               fake_services.FixedAI(fake_ai.benchmark()), fake_services.FixedAI(None),
-                              fake_services.forecast_ai(cache), DocumentStore("data/documents", root=str(tmp_path)),
+                              fake_services.forecast_ai(), DocumentStore("data/documents", root=str(tmp_path)),
                               cache)
     case = sample_case()
     fake_services.save_forecast_replies(cache, case)

@@ -1503,10 +1503,10 @@ class App:
         return getattr(self.__ai_caller, "search_model_name", self.__ai_model)()
 
     def __create_document_ai(self) -> DocumentAI:
-        """The document reader. It gets no caller when the AI is unavailable, so it then uses
-        saved replies only."""
+        """The document reader. It gets no caller when the AI is unavailable, so it then
+        cannot answer."""
         caller = self.__ai_caller if self.ai_available() else None
-        return DocumentAI("ai", caller, self.__ai_model(), 0.0, self.__response_cache)
+        return DocumentAI("ai", caller, self.__ai_model(), 0.0)
 
     def __create_runner(self, policy: dict) -> AssessmentRunner:
         """The AssessmentRunner and the five AI services it is handed. App creates the services
@@ -1514,18 +1514,17 @@ class App:
         new-client screen also uses."""
         caller = self.__ai_caller if self.ai_available() else None
         model = self.__ai_model()
-        cache = self.__response_cache
         settings = self.forecast_settings()
         return AssessmentRunner(
             self.__config,
-            ResearchAI("ai", self.__ai_caller, self.__ai_search_model(), 0.0, cache, policy.get("research_max_reports", 8),
+            ResearchAI("ai", self.__ai_caller, self.__ai_search_model(), 0.0, policy.get("research_max_reports", 8),
                        policy.get("research_max_excerpts_per_report", 5)),
-            TypologyAI("ai", self.__ai_caller, model, 0.0, cache, policy.get("typology_max_patterns", 5)),
-            BenchmarkAI("ai", self.__ai_caller, model, 0.0, cache),
+            TypologyAI("ai", self.__ai_caller, model, 0.0, policy.get("typology_max_patterns", 5)),
+            BenchmarkAI("ai", self.__ai_caller, model, 0.0),
             self.__document_ai,
-            ForecastAI("ai", caller, model, 0.0, cache, CaseTimeline.FORECAST_YEARS, settings,
+            ForecastAI("ai", caller, model, 0.0, CaseTimeline.FORECAST_YEARS, settings,
                        self.__config.vocabulary),
-            self.__documents, cache)
+            self.__documents, self.__response_cache)
 
     def __handle_failure(self, step: str, error: str) -> bool:
         """Decide what happens when a step of an assessment fails. Returns True to carry on

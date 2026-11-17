@@ -40,7 +40,7 @@ class _Caller:
 
 
 def _service(caller=None, settings=SETTINGS):
-    return ForecastAI("fake", caller, "gpt-test", 0.0, None, 4, settings, VOCABULARY)
+    return ForecastAI("fake", caller, "gpt-test", 0.0, 4, settings, VOCABULARY)
 
 
 def test_the_stages_run_in_order(case):

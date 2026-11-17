@@ -3,7 +3,6 @@
 import json
 
 from app.ai.benchmark_ai import BenchmarkAI
-from app.ai.response_cache import ResponseCache
 from tests import fake_ai
 
 CLIENT = {"client_ref": "SOW-1", "occupation": "Chief Operating Officer", "industry": "Shipping", "age": 51,
@@ -21,8 +20,8 @@ class _Caller:
         return self.replies.pop(0)
 
 
-def _service(caller, cache=None):
-    return BenchmarkAI("fake", caller, "gpt-test", 0.0, cache)
+def _service(caller):
+    return BenchmarkAI("fake", caller, "gpt-test", 0.0)
 
 
 def test_the_allowlist_is_the_five_career_fields():
@@ -60,10 +59,15 @@ def test_no_connection_gives_none():
     assert _service(_Caller(None, None)).run({"client": CLIENT, "economy": None}) is None
 
 
-def test_the_same_career_in_a_different_economy_is_asked_again(tmp_path):
-    cache = ResponseCache(str(tmp_path))
-    _service(_Caller(json.dumps(fake_ai.benchmark())), cache).run({"client": CLIENT, "economy": ECONOMY})
+def test_the_same_career_in_a_different_economy_is_asked_again():
+    saved = {}
+    _service(_Caller(json.dumps(fake_ai.benchmark()))).run(
+        {"client": CLIENT, "economy": ECONOMY, "saved_replies": saved})
     reused = _Caller()
-    assert _service(reused, cache).run({"client": CLIENT, "economy": ECONOMY})["expected_wealth"] == 2_400_000
+    assert _service(reused).run(
+        {"client": CLIENT, "economy": ECONOMY, "saved_replies": saved})["expected_wealth"] == 2_400_000
+    assert reused.prompts == []
     again = _Caller(json.dumps(fake_ai.benchmark(expected_wealth=3_000_000)))
-    assert _service(again, cache).run({"client": CLIENT, "economy": None})["expected_wealth"] == 3_000_000
+    assert _service(again).run(
+        {"client": CLIENT, "economy": None, "saved_replies": saved})["expected_wealth"] == 3_000_000
+    assert len(again.prompts) == 1

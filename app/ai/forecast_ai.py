@@ -9,7 +9,6 @@ from typing import Any, Callable
 import jsonschema
 
 from app.ai.ai_service import AIService
-from app.ai.response_cache import ResponseCache
 from app.model.claimed_source import ClaimedSource
 from app.model.declaration import Declaration
 
@@ -39,9 +38,8 @@ class ForecastAI(AIService):
     REPORTING_CURRENCY: str = "SGD"
 
     def __init__(self, provider: str = "", ai_caller: Callable | None = None, model: str = "", temperature: float = 0.0,
-                 response_cache: ResponseCache | None = None, forecast_years: int = 4,
-                 settings: dict | None = None, vocabulary: dict | None = None) -> None:
-        super().__init__(provider, ai_caller, model, temperature, response_cache)
+                 forecast_years: int = 4, settings: dict | None = None, vocabulary: dict | None = None) -> None:
+        super().__init__(provider, ai_caller, model, temperature)
         self.__forecast_years: int = forecast_years
         self.__settings: dict = settings or {}
         self.__vocabulary: dict = vocabulary or {}

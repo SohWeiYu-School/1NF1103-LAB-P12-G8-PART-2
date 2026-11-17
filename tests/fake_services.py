@@ -25,11 +25,11 @@ class FixedAI:
         return list(self.__warnings)
 
 
-def forecast_ai(cache: ResponseCache, caller=None) -> ForecastAI:
-    """A real ForecastAI with no AI caller: it can only use the replies saved in the cache."""
+def forecast_ai(caller=None) -> ForecastAI:
+    """A real ForecastAI with no AI caller: it can only use the replies it is handed."""
     settings = {**POLICY["forecasting"], "retry_wait_seconds": 0,
                 "net_worth_documents": POLICY.get("breach_documents", {}).get("NET_WORTH")}
-    return ForecastAI("fake", caller, "fake", 0.0, cache, 4, settings, VOCABULARY)
+    return ForecastAI("fake", caller, "fake", 0.0, 4, settings, VOCABULARY)
 
 
 def save_forecast_replies(cache: ResponseCache, case: dict, **options) -> None:
@@ -49,6 +49,6 @@ def runner(tmp_path, research="default", typologies="default", benchmark="defaul
         "documents": FixedAI(documents),
     }
     built = AssessmentRunner(CONFIG, services["research"], services["typologies"], services["benchmark"],
-                             services["documents"], forecast_ai(cache),
+                             services["documents"], forecast_ai(),
                              DocumentStore("data/documents", root=str(tmp_path)), cache)
     return built, cache, services
