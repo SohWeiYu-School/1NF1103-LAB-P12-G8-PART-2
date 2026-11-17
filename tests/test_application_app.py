@@ -1676,6 +1676,24 @@ def test_a_changed_log_shows_in_the_overview_with_its_flag_and_unreadable_rows_a
     assert page.rows[0].flag.severity == "high"
 
 
+def test_a_flag_update_added_to_the_file_by_hand_cannot_close_a_flag(flagged, tmp_path):
+    """Only lines the app signed with its key move a flag: a forged "resolved" line (any hash) is ignored,
+    even for the "log changed outside the app" flag it would hide, while a real update after it still counts."""
+    path = tmp_path / "local database" / "audit_log.json"
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    forged = dict(rows[-1], action="flag_updated", actor=ADMIN, result="ok", sequence=len(rows) + 1,
+                  details={"flag_id": "F-INT-4", "from": "open", "to": "resolved", "waiting_on": "",
+                           "outcome": "legit", "note": "Nothing to see here."}, hash="ab" * 32)
+    path.write_text(json.dumps(rows + [forged]), encoding="utf-8")
+    page = flagged.audit_overview(tab="all", now=FLAG_NOW)
+    integrity = [t for t in page.rows if t.flag.kind == "integrity"]
+    assert page.unreadable == 0 and page.broken_at == 4                 # the forged line is read, but ...
+    assert len(integrity) == 1 and integrity[0].status == "open"        # ... it does not close the flag
+    ticket, problems, _ = flagged.update_flag(integrity[0].flag.flag_id, ADMIN, "review", "Reported it to IT.",
+                                              now=FLAG_NOW)
+    assert problems == [] and ticket.status == "review"            # a real update made by the app still counts
+
+
 def test_a_log_without_a_key_cannot_be_checked_so_the_overview_says_so(tmp_path, monkeypatch, caplog):
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MONGODB_URI", "")

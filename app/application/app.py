@@ -1316,7 +1316,10 @@ class App:
         try:
             insights = AuditInsights(events, self.__audit_policy, broken_at, now)
             flags = insights.flags()
-            updates = [event for event in events if event.action == "flag_updated"]
+            # Only updates the app itself signed count: a line added or changed in the file by hand has no
+            # valid hash, so it can never move a flag (not even close the "log changed outside the app" one).
+            updates = [event for event in events if event.action == "flag_updated"
+                       and (not self.__audit_key or event.hash_matches(self.__audit_key))]
             tickets = {flag.flag_id: FlagTicket(flag, updates) for flag in flags}
         except (ValueError, TypeError, KeyError, AttributeError) as error:
             logger.error("App.%s: the flags could not be worked out from the audit log: %r", caller, error)
