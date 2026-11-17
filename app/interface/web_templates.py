@@ -1503,7 +1503,7 @@ OVERVIEW = """{% extends "base.html" %}
         {% if view.page < view.page_count %}<a class="btn secondary sm" href="{{ url_for('admin_home', range=view.preset, tab=view.tab, page=view.page + 1) }}">Next &rarr;</a>{% else %}<span class="btn secondary sm" aria-disabled="true">Next &rarr;</span>{% endif %}
       </span></div></section>
 </div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha384-bs/nf9FbdNouRbMiFcrcZfLXYPKiPaGVGplVbv7dLGECccEXDW+S3zjqSKR5ZEaD sha512-CQBWl4fJHWbryGE+Pc7UAxWMUMNMWzWxF4SQo9CgkJIN1kx6djDQZjh3Y8SZ1d+6I+1zze6Z7kHXO7q3UyZAWw==" crossorigin="anonymous"></script>
 <script>
 (function () {
   document.querySelectorAll('tr.ev[data-href]').forEach(function (row) {

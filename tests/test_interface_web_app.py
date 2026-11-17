@@ -2465,3 +2465,12 @@ def test_the_flag_page_and_the_client_flags_give_the_badge_without_reading_the_l
     badge = r'Overview<span class="nav-count" title="5 flags not resolved yet">5</span>'
     assert re.search(badge, browser.get(f"/admin/flags/{flag_id}").get_data(as_text=True))
     assert re.search(badge, browser.get("/admin/clients/SOW-1").get_data(as_text=True))
+
+
+def test_the_chart_script_is_pinned_with_its_published_hash(flagged_web):
+    _, _, browser = flagged_web
+    page = browser.get("/admin").get_data(as_text=True)
+    tag = re.search(r'<script src="[^"]*Chart\.js/4\.4\.1/chart\.umd\.min\.js"[^>]*>', page).group(0)
+    assert 'integrity="sha384-bs/nf9FbdNouRbMiFcrcZfLXYPKiPaGVGplVbv7dLGECccEXDW+S3zjqSKR5ZEaD ' in tag
+    assert "sha512-CQBWl4fJHWbryGE+Pc7UAxWMUMNMWzWxF4SQo9CgkJIN1kx6djDQZjh3Y8SZ1d+6I+1zze6Z7kHXO7q3UyZAWw==" in tag
+    assert 'crossorigin="anonymous"' in tag
