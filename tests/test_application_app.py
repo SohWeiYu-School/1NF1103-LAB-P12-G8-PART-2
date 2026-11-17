@@ -607,6 +607,29 @@ def test_a_damaged_policy_is_logged_to_the_log_file_not_shown_on_the_terminal(tm
     assert log.count("Config file") == 1                              # and written once
 
 
+def test_the_log_file_starts_a_new_file_when_full_and_keeps_three_old_ones(tmp_path, monkeypatch):
+    import logging
+    root = _app_with_damaged_policy(tmp_path, monkeypatch)
+    root_logger = logging.getLogger()
+    saved_handlers, saved_level = root_logger.handlers[:], root_logger.level
+    root_logger.handlers = []                                  # a fresh process: nothing configured yet
+    try:
+        App(ai_caller=None, root=str(root), data_folder=str(tmp_path / "data"))
+        handler = root_logger.handlers[0]
+        assert (handler.maxBytes, handler.backupCount) == (App.LOG_MAX_BYTES, App.LOG_BACKUPS) == (5 * 1024 * 1024, 3)
+        for _ in range(App.LOG_BACKUPS + 2):                   # fill it up more often than files are kept
+            handler.doRollover()
+            logging.getLogger("test").warning("a line after a new file was started")
+        handler.flush()
+    finally:
+        for handler in root_logger.handlers:
+            handler.close()
+        root_logger.handlers, root_logger.level = saved_handlers, saved_level
+    files = sorted(path.name for path in (root / "logs").iterdir())
+    assert files == ["app.log", "app.log.1", "app.log.2", "app.log.3"]          # the oldest ones were deleted
+    assert "a line after a new file" in (root / "logs" / "app.log").read_text(encoding="utf-8")
+
+
 def test_an_app_with_broken_settings_says_so_and_refuses_to_assess(tmp_path, monkeypatch):
     root = _app_with_damaged_policy(tmp_path, monkeypatch)
     application = App(ai_caller=fake_ai.caller, root=str(root), data_folder=str(tmp_path / "data"))

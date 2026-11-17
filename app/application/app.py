@@ -3,6 +3,7 @@
 import copy
 import functools
 import logging
+import logging.handlers
 import os
 import threading
 import time
@@ -81,6 +82,9 @@ class App:
     AUDIT_KEY_MISSING: str = "The audit log is not set up (its key is missing). Please contact your administrator."
     MIN_AUDIT_KEY: int = 32           # a shorter AUDIT_KEY in .env counts as not set
     LOG_HANDLER_NAME: str = "app_log_file"
+    # logs/app.log starts a new file at this size and keeps this many old ones (app.log.1 ... .3)
+    LOG_MAX_BYTES: int = 5 * 1024 * 1024
+    LOG_BACKUPS: int = 3
     # Who did an action when nobody signed in: the command line.
     TERMINAL: str = AuditEvent.TERMINAL
     UNKNOWN: str = AuditEvent.UNKNOWN
@@ -1581,13 +1585,15 @@ class App:
 
     def __configure_logging(self) -> None:
         """Send all logging to logs/app.log. Nothing goes to the console. Done once: a second
-        call keeps the handler it made (no duplicate lines)."""
+        call keeps the handler it made (no duplicate lines). When the file reaches LOG_MAX_BYTES
+        it is renamed app.log.1 and a new one is started; only LOG_BACKUPS old files are kept."""
         root_logger = logging.getLogger()
         if any(getattr(handler, "name", None) == App.LOG_HANDLER_NAME for handler in root_logger.handlers):
             return
         log_dir = os.path.join(self.__root, "logs")
         os.makedirs(log_dir, exist_ok=True)
-        handler = logging.FileHandler(os.path.join(log_dir, "app.log"), encoding="utf-8")
+        handler = logging.handlers.RotatingFileHandler(os.path.join(log_dir, "app.log"), encoding="utf-8",
+                                                       maxBytes=App.LOG_MAX_BYTES, backupCount=App.LOG_BACKUPS)
         handler.set_name(App.LOG_HANDLER_NAME)
         handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
         root_logger.setLevel(logging.DEBUG)
