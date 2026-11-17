@@ -482,13 +482,12 @@ package "AI Manager (app/ai)" {
     #_model : str = ""
     #_temperature : float = 0.0
     #_ai_caller : Callable[[str, dict, dict], str | None] | None = None
-    #_response_cache : ResponseCache | None = None
     #_warnings : list[str] = []
     +PROMPT_NAME : str = "" «const»
     +SCHEMA_NAME : str = "" «const»
     +ATTEMPTS : int = 2 «const»
     --
-    +__init__(provider : str = "", ai_caller : Callable[[str, dict, dict], str | None] | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None)
+    +__init__(provider : str = "", ai_caller : Callable[[str, dict, dict], str | None] | None = None, model : str = "", temperature : float = 0.0)
     +run(source : dict) : dict | None
     {abstract} #_payload(source : dict) : dict
     #_post_process(data : dict, options : dict | None = None) : dict
@@ -498,24 +497,26 @@ package "AI Manager (app/ai)" {
     -__parse_reply(raw : str | None) : dict | None
     -__validate_reply(data : dict, schema : dict) : bool
     #_cache_payload(source : dict, payload : dict) : dict
-    #_cached(cache_payload : dict, version : str) : dict | None
+    #_cached(saved : dict | None, cache_payload : dict, version : str, schema : dict) : dict | None
     #_fill_prompt(template : str, source : dict, payload : dict) : str
     #_load_prompt(name : str) : str
     #_load_schema(name : str) : dict
     #_options(source : dict) : dict
     #_prepare(data : dict) : dict
     #_prompt_version(prompt_text : str) : str
-    #_save(cache_payload : dict, version : str, data : dict) : None
+    #_save(saved : dict | None, cache_payload : dict, version : str, data : dict) : None
     #_schema(source : dict) : dict
     #_without_notes(template : str) : str
     +warnings() : list[str]
+    #_reply_as_asked(data : dict) : dict | None
+    -__question_print(cache_payload : dict, version : str) : str
   }
   class BenchmarkAI {
     +ALLOWED_FIELDS : list[str] = [...] «const»
     +PROMPT_NAME : str = "benchmark" «const»
     +SCHEMA_NAME : str = "benchmark" «const»
     --
-    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None)
+    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0)
     #_payload(source : dict) : dict
     #_cache_payload(source : dict, payload : dict) : dict
     #_fill_prompt(template : str, source : dict, payload : dict) : str
@@ -527,7 +528,7 @@ package "AI Manager (app/ai)" {
     +MAX_DOCUMENTS : int = 10 «const»
     +READABLE_KINDS : tuple[str, ...] = ("text", "image", "pdf") «const»
     --
-    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None, max_chars : int = 40_000)
+    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, max_chars : int = 40_000)
     #_payload(source : dict) : dict
     #_cache_payload(source : dict, payload : dict) : dict
     #_fill_prompt(template : str, source : dict, payload : dict) : str
@@ -545,7 +546,7 @@ package "AI Manager (app/ai)" {
     +SCENARIOS : tuple[str, ...] = ("steady", "boom", "downturn") «const»
     +STAGES : tuple[str, ...] = (...) «const»
     --
-    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None, forecast_years : int = 4, settings : dict | None = None, vocabulary : dict | None = None)
+    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, forecast_years : int = 4, settings : dict | None = None, vocabulary : dict | None = None)
     +run(source : dict) : dict | None
     +read_declaration(record : dict) : Declaration | None
     #_payload(source : dict) : dict
@@ -617,7 +618,7 @@ package "AI Manager (app/ai)" {
     +ALLOWED_FIELDS : list[str] = ["industry", "country"] «const»
     +ATTEMPTS : int = 1 «const»
     --
-    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None, max_reports : int = 8, max_excerpts : int = 5)
+    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, max_reports : int = 8, max_excerpts : int = 5)
     #_payload(source : dict) : dict
     #_post_process(data : dict, options : dict | None = None) : dict
     -__trim_reports(data : dict) : dict
@@ -627,21 +628,18 @@ package "AI Manager (app/ai)" {
     #_fill_prompt(template : str, source : dict, payload : dict) : str
     #_options(source : dict) : dict
     #_prepare(data : dict) : dict
+    #_reply_as_asked(data : dict) : dict | None
   }
   class ResponseCache {
     -__folder : str = ".../data/cache"
-    +RAW_KIND : str = "forecasting" «const»
+    +CLIENT_FOLDER : str = "clients" «const»
     --
     +__init__(folder : str = "data/cache")
-    +get(kind : str, payload : dict, model : str, prompt_version : str = "") : dict | None
-    +put(kind : str, key : str, data : dict) : None
-    +load_raw_replies(ref : str) : dict
-    +save_raw_replies(ref : str, replies : dict) : int
-    -__key(kind : str, payload : dict, model : str, prompt_version : str = "") : str
-    -__path(kind : str, name : str) : str
     -__read(path : str) : object
-    +key(kind : str, payload : dict, model : str, prompt_version : str = "") : str
-    +path_for(kind : str, key : str) : str
+    +fingerprint(case : dict, documents : list[dict]) : str
+    +load_client_replies(client_ref : str, fingerprint : str) : dict
+    +save_client_replies(client_ref : str, fingerprint : str, replies : dict) : bool
+    -__client_path(client_ref : str) : str
   }
   class TypologyAI {
     -__max_patterns : int = 5
@@ -650,13 +648,14 @@ package "AI Manager (app/ai)" {
     +ALLOWED_FIELDS : list[str] = [...] «const»
     +REPORT_FIELDS : list[str] = [...] «const»
     --
-    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, response_cache : ResponseCache | None = None, max_patterns : int = 5)
+    +__init__(provider : str = "", ai_caller : Callable | None = None, model : str = "", temperature : float = 0.0, max_patterns : int = 5)
     #_payload(source : dict) : dict
     #_post_process(data : dict, options : dict | None = None) : dict
     -__build_typology_reports(research : dict) : list
     #_fill_prompt(template : str, source : dict, payload : dict) : str
     #_prepare(data : dict) : dict
     #_schema(source : dict) : dict
+    #_reply_as_asked(data : dict) : dict | None
   }
 }
 
@@ -857,6 +856,10 @@ package "Application (app/application)" {
     -__crime_categories() : dict
     +engine() : VerdictEngine
     {static} -__plain_reason(error : str) : str
+    -__load_saved_replies(ref : str, case : dict, documents : list[dict]) : tuple[str | None, dict]
+    -__save_replies(ref : str, fingerprint : str | None, saved : dict) : None
+    -__saved_forecast_pieces(saved : dict) : dict[str, str]
+    -__assess(case : dict, files : list[dict] | None, documents : list[dict], saved : dict, on_step : Callable[[int, str], None] | None, on_failure : Callable[[str, str], bool] | None) : dict | None
   }
 }
 
@@ -1880,7 +1883,6 @@ package "Domain Model (app/model)" {
   }
 }
 
-AIService -- ResponseCache : caches in
 App *-- "1" AssessmentRunner
 App *-- "1" AuditPolicy
 App *-- "1" AuditRepository

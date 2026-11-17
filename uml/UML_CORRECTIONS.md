@@ -651,3 +651,28 @@ round-trip PROBLEMS: 0; layout_check 0.
   `app.log.1` and a new one is started, and only 3 old files are kept (at most about 20 MB in all).
 - `App` grew by two lines, so the folders were re-packed, every line re-routed and the labels placed again.
   Scan 2 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.
+
+**Client-specific saved replies (17 Nov 2026): saved AI replies belong to one client and are dropped when the client changes**
+- Why: the forecast's saved replies were filed under the client ref only, so an edited client (a rewritten declaration)
+  still got the AI's reading of the old one, and a full verdict with no AI working. The other AI steps were filed under a
+  hash of the question, so two clients with the same industry or the same PDFs shared replies.
+- `ResponseCache`: removed `RAW_KIND`, `get()`, `put()`, `key()`, `path_for()`, `load_raw_replies()`,
+  `save_raw_replies()`, `__key()`, `__path()`. Added `CLIENT_FOLDER : str = "clients"`, `fingerprint(case, documents) : str`
+  (SHA-256 of the case without `current_date` plus every read document's name, kind and content hash),
+  `load_client_replies(client_ref, fingerprint) : dict` (`{}` when the fingerprint differs or the file is missing or
+  damaged), `save_client_replies(client_ref, fingerprint, replies) : bool`, and private `__client_path(client_ref)`
+  (rejects a ref that could leave the folder).
+- `AIService`: removed `#_response_cache` and the `response_cache` input of `__init__` (the service no longer holds a
+  cache; the run hands it the client's saved replies in `source["saved_replies"]`). `#_cached` and `#_save` take that
+  dict as their first input (`_cached` also the schema, because a saved reply is checked again before reuse). Added
+  `−__question_print(cache_payload, version)` (the old `ResponseCache.__key` recipe, now private to the service) and
+  `#_reply_as_asked(data) : dict | None` (a saved reply carries fields `_post_process` added, which the schema forbids;
+  a child strips and checks them before the schema check, or returns None when they are damaged).
+- `ResearchAI`, `TypologyAI`: `response_cache` input removed; `#_reply_as_asked` overridden.
+- `BenchmarkAI`, `DocumentAI`, `ForecastAI`: `response_cache` input removed.
+- `AssessmentRunner`: added `−__load_saved_replies`, `−__assess` (the old body of `run()`, so the replies are saved in a
+  `finally`), `−__save_replies`, `−__saved_forecast_pieces` (drops saved forecast pieces that are not text).
+- Arrow `AIService -- ResponseCache : caches in` removed: the code no longer connects them. `AssessmentRunner o-- ResponseCache`
+  and `App` → `ResponseCache` stay.
+- Boxes changed size, so the folders were re-packed, every line re-routed and the labels placed again.
+  Scan 32 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.
