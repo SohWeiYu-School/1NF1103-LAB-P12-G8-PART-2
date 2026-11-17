@@ -2,6 +2,7 @@
 
 import math
 from datetime import date, datetime, timedelta, timezone
+from typing import Callable
 
 from app.model.audit_event import AuditEvent
 from app.model.audit_filter import AuditFilter
@@ -26,6 +27,9 @@ class AuditInsights:
                 the days before it (medium)
       integrity the chain check found a broken entry (high)
 
+    A flag that cannot be built (a value that does not pass the Flag's own checks) is left out and counted
+    in skipped, so one bad flag never hides the others.
+
     Only events that succeeded (result "ok") count for the first four rules: a failed save changed
     nothing. Flags come back newest first (by the time of the last event behind them, then by id).
     """
@@ -41,6 +45,9 @@ class AuditInsights:
         "claims.wealth_countries": "Wealth countries"}
     ACTION_NAMES: dict[str, str] = {"client_edited": "Edited client", "assessment_run": "Assessed"}
     FAILURE_KINDS: tuple[str, ...] = ("AI step not run", "Save failed", "Read failed", "Sync failed")
+    MAX_QUOTED: int = 60                          # a text value quoted in a sentence is cut to this many characters
+    MAX_MOVES: int = 3                            # changes spelled out in a shop flag; the rest are counted
+    MAX_LISTED_RUNS: int = 8                      # results spelled out in a repeat flag; more are summed up
     __DAY: timedelta = timedelta(days=1)
     __NO_ACCOUNT: frozenset[str] = frozenset((AuditEvent.TERMINAL, AuditEvent.UNKNOWN))   # not a named officer
 
@@ -63,6 +70,13 @@ class AuditInsights:
         self.__policy: AuditPolicy = policy
         self.__broken_at: int = broken_at
         self.__now: datetime | None = now
+        self.__skipped: int = 0
+
+    @property
+    def skipped(self) -> int:
+        """How many flags the last flags() call found a pattern for but could not build (a flag that would
+        not pass its own checks). The others are still returned. 0 before flags() has run."""
+        return self.__skipped
 
     @staticmethod
     def failure_kind(event: AuditEvent) -> str:
@@ -83,7 +97,9 @@ class AuditInsights:
         return ""
 
     def flags(self) -> list[Flag]:
-        """Every flag the rules find, newest first (same time: by id)."""
+        """Every flag the rules find, newest first (same time: by id). One flag that cannot be built never
+        stops the others: it is left out and counted in skipped."""
+        self.__skipped = 0
         found: list[Flag] = []
         by_client: dict[str, list[AuditEvent]] = {}
         for event in self.__events:
@@ -94,7 +110,7 @@ class AuditInsights:
             found += self.__client_flags(reference, history)
         found += self.__hours_flags(owners)
         found += self.__spike_flags()
-        found += self.__integrity_flags()
+        found += self.__built(self.__integrity_flag)
         found.sort(key=lambda flag: flag.flag_id)
         found.sort(key=lambda flag: -AuditInsights.__moment(flag.raised_at).timestamp())
         return found
@@ -131,6 +147,35 @@ class AuditInsights:
         if isinstance(value, float) and value.is_integer():
             value = int(value)
         return f"{value:,}" if isinstance(value, int) else f"{value:,.3f}".rstrip("0").rstrip(".")
+
+    def __built(self, make: Callable[[], Flag | list[Flag]]) -> list[Flag]:
+        """The flag make() builds as a list of one (make may return [] for no flag). If it cannot be built the
+        flag is left out and counted in skipped, so one bad flag does not sink the rest."""
+        try:
+            made = make()
+        except (ValueError, TypeError, KeyError, AttributeError, IndexError):
+            self.__skipped += 1
+            return []
+        return made if isinstance(made, list) else [made]
+
+    @staticmethod
+    def __quote(value: object) -> str:
+        """A value for a sentence: numbers as 1,500,000, nothing or an empty text as "blank", other text
+        cut to MAX_QUOTED characters with "…" (a long story would not fit in the explanation)."""
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return "blank"
+        if isinstance(value, bool):
+            return "yes" if value else "no"
+        if isinstance(value, (int, float)):
+            return AuditInsights.__number(value)
+        text = " ".join(str(value).split())
+        limit = AuditInsights.MAX_QUOTED
+        return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
+
+    @staticmethod
+    def __is_figure(value: object) -> bool:
+        """True for a number or nothing: a change that is only figures."""
+        return value is None or (isinstance(value, (int, float)) and not isinstance(value, bool))
 
     @staticmethod
     def __level(event: AuditEvent) -> int:
@@ -193,17 +238,18 @@ class AuditInsights:
                     pending = event
                 if (owner and event.actor != owner
                         and AuditInsights.__NO_ACCOUNT.isdisjoint((owner, event.actor))):
-                    found.append(self.__other_flag(reference, event, owner, watched))
+                    found += self.__built(lambda: self.__other_flag(reference, event, owner, watched))
             elif event.action == "assessment_run":
                 if (last_assessment and pending and AuditInsights.__level(event) >= 0
                         and AuditInsights.__level(last_assessment) >= 0
                         and abs(AuditInsights.__level(event) - AuditInsights.__level(last_assessment))
                         >= self.__policy.jump_levels
                         and AuditInsights.__moment(event.at) - AuditInsights.__moment(last_assessment.at) <= window):
-                    found.append(self.__shop_flag(reference, owner, last_assessment, pending, event))
+                    found += self.__built(lambda: self.__shop_flag(reference, owner, last_assessment, pending, event))
                 last_assessment, pending = event, None
-        found += self.__repeat_flags(reference, owner, [e for e in history if e.action == "assessment_run"
-                                                        and e.result == "ok"])
+        runs = [e for e in history if e.action == "assessment_run" and e.result == "ok"]
+        for burst in self.__bursts(runs):
+            found += self.__built(lambda: self.__repeat_flag(reference, owner, burst))
         return found
 
     def __other_flag(self, reference: str, edit: AuditEvent, owner: str, watched: list[dict]) -> Flag:
@@ -216,24 +262,34 @@ class AuditInsights:
         gap = AuditInsights.__level(after) - AuditInsights.__level(before)
         minutes = AuditInsights.__round((AuditInsights.__moment(after.at) - AuditInsights.__moment(edit.at))
                                         .total_seconds() / 60)
+        hours = AuditInsights.__round(minutes / 60)
         how_long = (AuditInsights.__amount(minutes, "minute") if minutes < 60
-                    else AuditInsights.__amount(AuditInsights.__round(minutes / 60), "hour"))
+                    else AuditInsights.__amount(hours, "hour") if hours < 24
+                    else AuditInsights.__amount(AuditInsights.__round(hours / 24), "day"))
         watched = self.__watched(edit)
-        moved = " and ".join(f"{self.__moved_name(change)} went "
-                             f"{AuditInsights.__number(change.get('before'))} → "
-                             f"{AuditInsights.__number(change.get('after'))}" for change in watched)
+        shown = [f"{self.__moved_name(change)} went {AuditInsights.__quote(change.get('before'))} → "
+                 f"{AuditInsights.__quote(change.get('after'))}" for change in watched[:AuditInsights.MAX_MOVES]]
+        if len(watched) > AuditInsights.MAX_MOVES:
+            shown.append(f"{len(watched) - AuditInsights.MAX_MOVES} more changes")
+        moved = " and ".join(shown)
+        figures = all(AuditInsights.__is_figure(change.get("before")) and AuditInsights.__is_figure(change.get("after"))
+                      for change in watched)
+        improved = gap < 0
+        closing = (f"Raising declared {'figures' if figures else 'details'} until a case passes is the pattern "
+                   "regulators look for." if improved else
+                   f"Check that the new {'figures are' if figures else 'details are'} backed by documents.")
         meaning = (f"The result went from {AuditInsights.__verdict_label(before)} to "
-                   f"{AuditInsights.__verdict_label(after)} {how_long} after {moved}. Raising declared "
-                   "figures until a case passes is the pattern regulators look for.")
-        headline = (f"Verdict {'improved' if gap < 0 else 'worsened'} by {abs(gap)} levels after declared "
-                    "figures were edited")
+                   f"{AuditInsights.__verdict_label(after)} {how_long} after {moved}. {closing}")
+        headline = (f"Verdict {'improved' if improved else 'worsened'} by "
+                    f"{AuditInsights.__amount(abs(gap), 'level')} after declared "
+                    f"{'figures' if figures else 'details'} were edited")
         return Flag(Flag.make_id("shop", reference, after.sequence), "shop", "high", reference, headline, meaning,
                     (before.sequence, edit.sequence, after.sequence), after.at, owner, watched)
 
-    def __repeat_flags(self, reference: str, owner: str, runs: list[AuditEvent]) -> list[Flag]:
-        """One flag per burst. A burst starts with a run and takes in every later run within window_days of
-        that first run; the next run after that starts a new burst. A burst of more than repeat_assessments
-        runs is flagged, with the id of its first run, so the id stays the same while the burst grows."""
+    def __bursts(self, runs: list[AuditEvent]) -> list[list[AuditEvent]]:
+        """The bursts of assessments worth a flag. A burst starts with a run and takes in every later run
+        within window_days of that first run; the next run after that starts a new burst. Only a burst of
+        more than repeat_assessments runs is kept."""
         window = timedelta(days=self.__policy.window_days)
         bursts: list[list[AuditEvent]] = []
         for run in runs:
@@ -241,70 +297,77 @@ class AuditInsights:
                 bursts[-1].append(run)
             else:
                 bursts.append([run])
-        found: list[Flag] = []
-        for within in bursts:
-            if len(within) <= self.__policy.repeat_assessments:
-                continue
-            run = within[-1]
-            labels = [AuditInsights.__verdict_label(other) for other in within]
-            days = max(1, AuditInsights.__round((AuditInsights.__moment(run.at)
-                                                 - AuditInsights.__moment(within[0].at)).total_seconds() / 86400))
-            same = ("Nothing changed between runs, so re-running is not moving the case forward."
-                    if len(set(labels)) == 1 else "The result changed between runs.")
-            meaning = (f"Results: {', '.join(labels)}. {same} Repeated runs can also be a way of hoping for a "
-                       "better answer.")
-            found.append(Flag(Flag.make_id("repeat", reference, within[0].sequence), "repeat", "medium", reference,
-                              f"Assessed {len(within)} times in {AuditInsights.__amount(days, 'day')}", meaning,
-                              tuple(other.sequence for other in within), run.at, owner))
-        return found
+        return [burst for burst in bursts if len(burst) > self.__policy.repeat_assessments]
+
+    @staticmethod
+    def __repeat_flag(reference: str, owner: str, within: list[AuditEvent]) -> Flag:
+        """The flag for one burst, with the id of its first run so the id stays the same while the burst grows."""
+        run = within[-1]
+        labels = [AuditInsights.__verdict_label(other) for other in within]
+        days = max(1, AuditInsights.__round((AuditInsights.__moment(run.at)
+                                             - AuditInsights.__moment(within[0].at)).total_seconds() / 86400))
+        same = ("Nothing changed between runs, so re-running is not moving the case forward."
+                if len(set(labels)) == 1 else "The result changed between runs.")
+        results = (", ".join(labels) if len(labels) <= AuditInsights.MAX_LISTED_RUNS
+                   else f"{len(labels)} runs, {AuditInsights.__amount(len(set(labels)), 'different outcome')}")
+        meaning = (f"Results: {results}. {same} Repeated runs can also be a way of hoping for a "
+                   "better answer.")
+        return Flag(Flag.make_id("repeat", reference, within[0].sequence), "repeat", "medium", reference,
+                    f"Assessed {len(within)} times in {AuditInsights.__amount(days, 'day')}", meaning,
+                    tuple(other.sequence for other in within), run.at, owner)
 
     # ---- rules that look at single events or whole days ----
 
     def __hours_flags(self, owners: dict[str, str]) -> list[Flag]:
-        policy = self.__policy
         found: list[Flag] = []
         for event in self.__events:
             if event.action not in AuditInsights.ACTION_NAMES or event.result != "ok":
                 continue
-            local = AuditInsights.__local(event)
-            minutes = local.hour * 60 + local.minute
-            if policy.work_start_minutes <= minutes < policy.work_end_minutes:
-                continue
-            clock = AuditInsights.__clock(local)
-            worked_on = event.client_ref or "a client"
-            meaning = (f"{event.actor} worked on {worked_on} at {clock} on {AuditInsights.__short_day(local.date())}. "
-                       f"Working hours are {policy.work_start} to {policy.work_end}. Out-of-hours changes are "
-                       "less likely to be seen by a colleague.")
-            found.append(Flag(Flag.make_id("hours", event.client_ref, event.sequence), "hours", "low",
-                              event.client_ref,
-                              f"{AuditInsights.ACTION_NAMES[event.action]} at {clock}, outside working hours",
-                              meaning, (event.sequence,), event.at, owners.get(event.client_ref, "")))
+            found += self.__built(lambda: self.__hours_flag(event, owners))
         return found
 
-    def __spike_flags(self) -> list[Flag]:
+    def __hours_flag(self, event: AuditEvent, owners: dict[str, str]) -> list[Flag] | Flag:
         policy = self.__policy
+        local = AuditInsights.__local(event)
+        minutes = local.hour * 60 + local.minute
+        if policy.work_start_minutes <= minutes < policy.work_end_minutes:
+            return []
+        clock = AuditInsights.__clock(local)
+        worked_on = event.client_ref or "a client"
+        meaning = (f"{event.actor} worked on {worked_on} at {clock} on {AuditInsights.__short_day(local.date())}. "
+                   f"Working hours are {policy.work_start} to {policy.work_end}. Out-of-hours changes are "
+                   "less likely to be seen by a colleague.")
+        return Flag(Flag.make_id("hours", event.client_ref, event.sequence), "hours", "low", event.client_ref,
+                    f"{AuditInsights.ACTION_NAMES[event.action]} at {clock}, outside working hours", meaning,
+                    (event.sequence,), event.at, owners.get(event.client_ref, ""))
+
+    def __spike_flags(self) -> list[Flag]:
         failures: dict[date, list[AuditEvent]] = {}
         for event in self.__events:
             if AuditInsights.failure_kind(event):
                 failures.setdefault(AuditFilter.event_day(event), []).append(event)
         found: list[Flag] = []
         for day in sorted(failures):
-            events = failures[day]
-            count = len(events)
-            if count < policy.spike_min:
-                continue
-            before = sorted(len(failures.get(day - AuditInsights.__DAY * back, []))
-                            for back in range(1, policy.spike_baseline_days + 1))
-            middle = len(before) // 2
-            usual = before[middle] if len(before) % 2 else (before[middle - 1] + before[middle]) / 2
-            if count < policy.spike_multiplier * usual:
-                continue
-            usual_text = AuditInsights.__number(usual)
-            found.append(Flag(Flag.make_id("spike", "", events[0].sequence), "spike", "medium", "",
-                              f"{count} failures on {AuditInsights.__short_day(day)} (usually {usual_text})",
-                              AuditInsights.__spike_meaning(events), tuple(event.sequence for event in events),
-                              events[-1].at, day=day.isoformat(), usual=usual))
+            found += self.__built(lambda: self.__spike_flag(day, failures))
         return found
+
+    def __spike_flag(self, day: date, failures: dict[date, list[AuditEvent]]) -> list[Flag] | Flag:
+        policy = self.__policy
+        events = failures[day]
+        count = len(events)
+        if count < policy.spike_min:
+            return []
+        before = sorted(len(failures.get(day - AuditInsights.__DAY * back, []))
+                        for back in range(1, policy.spike_baseline_days + 1))
+        middle = len(before) // 2
+        usual = before[middle] if len(before) % 2 else (before[middle - 1] + before[middle]) / 2
+        if count < policy.spike_multiplier * usual:
+            return []
+        usual_text = AuditInsights.__number(usual)
+        return Flag(Flag.make_id("spike", "", events[0].sequence), "spike", "medium", "",
+                    f"{count} failures on {AuditInsights.__short_day(day)} (usually {usual_text})",
+                    AuditInsights.__spike_meaning(events), tuple(event.sequence for event in events),
+                    events[-1].at, day=day.isoformat(), usual=usual)
 
     @staticmethod
     def __spike_meaning(events: list[AuditEvent]) -> str:
@@ -332,7 +395,7 @@ class AuditInsights:
         return text + (" Cases assessed that day may be missing steps." if counts["AI step not run"]
                        else " Work done that day may not have been saved or read.")
 
-    def __integrity_flags(self) -> list[Flag]:
+    def __integrity_flag(self) -> list[Flag] | Flag:
         entry = self.__broken_at
         if not entry:
             return []
@@ -345,6 +408,5 @@ class AuditInsights:
         meaning = (f"Entry #{entry} no longer matches the fingerprint stored in entry #{entry + 1}. Someone "
                    "edited or removed it directly in the file. Entries from "
                    f"#{entry} on can't be trusted until this is explained.")
-        return [Flag(Flag.make_id("integrity", "", entry), "integrity", "high", "",
-                     f"Audit log changed outside the app at entry #{entry}", meaning, (), raised,
-                     broken_at=entry)]
+        return Flag(Flag.make_id("integrity", "", entry), "integrity", "high", "",
+                    f"Audit log changed outside the app at entry #{entry}", meaning, (), raised, broken_at=entry)

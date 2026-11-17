@@ -556,3 +556,80 @@ def test_the_non_owner_rule_still_fires_between_two_named_officers():
     log.create(actor="Shareen")
     log.edit(BASE + timedelta(hours=1), [EMPLOYER], actor="Adrian")
     assert len(_of(_flags(log), "other")) == 1
+
+
+# ---------- long values, many runs, and one bad flag ----------
+
+def test_a_long_story_edit_is_cut_so_the_shop_flag_still_fits():
+    story = "I earned this money from many different business deals over thirty years. " * 7        # about 500 characters
+    log = _shop_log(before="SERIOUS_RISK", after="PASSED", changes=[
+        {"field": "sow_declaration", "before": story, "after": story + "and then some more"}])
+    insights = AuditInsights(log.events)
+    (flag,) = insights.flags()
+    assert flag.kind == "shop" and insights.skipped == 0 and len(flag.meaning) <= 800
+    assert "source of wealth story went I earned this money" in flag.meaning and "…" in flag.meaning
+    assert "declared details" in flag.meaning and "declared figures" not in flag.meaning
+
+
+def test_a_blank_value_is_called_blank_and_never_none():
+    log = _shop_log(before="SERIOUS_RISK", after="PASSED", changes=[
+        {"field": "claims.pep_status", "before": None, "after": "Yes"},
+        {"field": "sow_declaration", "before": "", "after": "x"}])
+    (flag,) = _flags(log)
+    assert "pep status went blank → Yes" in flag.meaning and "source of wealth story went blank → x" in flag.meaning
+    assert "None" not in flag.meaning
+
+
+def test_many_changes_are_counted_not_all_spelled_out():
+    changes = [{"field": f"claims.asset_composition.k{n}", "before": n, "after": n + 1} for n in range(9)]
+    (flag,) = _flags(_shop_log(before="SERIOUS_RISK", after="PASSED", changes=changes))
+    assert flag.meaning.count(") went ") == 3 and "6 more changes" in flag.meaning and len(flag.changes) == 9
+
+
+def test_forty_five_runs_are_summed_up_so_the_repeat_flag_still_fits():
+    insights = AuditInsights(_runs(45, step=timedelta(hours=1), outcomes=("RISKY", "PASSED", "MANUAL_REVIEW")).events)
+    (flag,) = _of(insights.flags(), "repeat")
+    assert flag.meaning.startswith("Results: 45 runs, 3 different outcomes. The result changed between runs.")
+    assert insights.skipped == 0 and len(flag.sequences) == 45
+
+
+def test_eight_runs_are_still_listed_one_by_one():
+    (flag,) = _of(_flags(_runs(8, step=timedelta(hours=1))), "repeat")
+    assert flag.meaning.startswith("Results: " + ", ".join(["Risky"] * 8) + ".")
+
+
+class _BrokenHoursPolicy(AuditPolicy):
+    @property
+    def work_start_minutes(self) -> int:
+        raise ValueError("made-up failure")
+
+
+def test_one_flag_that_cannot_be_built_is_counted_and_the_others_survive():
+    log = _runs(5)
+    insights = AuditInsights(log.events, _BrokenHoursPolicy())
+    flags = insights.flags()
+    assert [flag.kind for flag in flags] == ["repeat"]
+    assert insights.skipped == 5                      # the five out-of-reach after-hours checks failed, one each
+    assert AuditInsights(log.events).skipped == 0
+
+
+def test_the_wording_is_singular_for_one_level_and_the_span_goes_minutes_hours_days():
+    (flag,) = _flags(_shop_log(before="RISKY", after="PASSED", span=timedelta(hours=5)))
+    assert "improved by 2 levels" in flag.headline
+    log = _shop_log(before="RISKY", after="PASSED", edit_gap=timedelta(hours=1), span=timedelta(hours=1 + 30))
+    assert "Passed 1 day after" in _flags(log)[0].meaning
+    log = _shop_log(before="RISKY", after="PASSED", edit_gap=timedelta(hours=1), span=timedelta(hours=1 + 50))
+    assert "Passed 2 days after" in _flags(log)[0].meaning
+    log = _shop_log(before="RISKY", after="PASSED", edit_gap=timedelta(hours=1), span=timedelta(hours=1 + 23))
+    assert "Passed 23 hours after" in _flags(log)[0].meaning
+    policy = AuditPolicy(jump_levels=1)
+    (flag,) = _flags(_shop_log(before="RISKY", after="MANUAL_REVIEW"), policy=policy)
+    assert flag.headline == "Verdict improved by 1 level after declared figures were edited"
+
+
+def test_a_worsening_verdict_gets_a_neutral_closing_sentence_not_the_regulator_one():
+    (flag,) = _flags(_shop_log(before="PASSED", after="SERIOUS_RISK"))
+    assert flag.meaning.endswith("Check that the new figures are backed by documents.")
+    assert "regulators" not in flag.meaning
+    (flag,) = _flags(_shop_log(before="SERIOUS_RISK", after="PASSED"))
+    assert flag.meaning.endswith("is the pattern regulators look for.")
