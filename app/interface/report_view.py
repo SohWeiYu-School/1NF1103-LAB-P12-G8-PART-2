@@ -1,5 +1,6 @@
 """ReportView: how results and records are laid out for the officer."""
 
+import logging
 import os
 import textwrap
 from typing import Any
@@ -8,6 +9,8 @@ from app.interface.console_ui import ConsoleUI
 from app.model.client_record import ClientRecord
 from app.model.typology import Typology
 from app.model.verdict import Verdict
+
+logger = logging.getLogger(__name__)
 
 
 class ReportView:
@@ -115,8 +118,16 @@ class ReportView:
         symbols = {entry["mark"]: entry["symbol"] for entry in report["legend"]}
         rule = "\u2550" * self.__width
         lines = [rule, f"  COMBINED ASSESSMENT  {head['client_ref']}  {head['name']}  ({head['assessed_on']})", rule]
-        incomplete = head.get("incomplete")             # a report saved before this field existed has none
-        missing = [str(part) for part in incomplete] if isinstance(incomplete, list) else []
+        # What did not run. A report saved before "incomplete" existed lists it only in its "Could not run" section.
+        incomplete = head.get("incomplete")
+        if incomplete is None:
+            incomplete = [item.get("text") for part in report.get("sections", []) if isinstance(part, dict)
+                          and part.get("title") == "Could not run" for item in part.get("items", [])
+                          if isinstance(item, dict)]
+        missing = [part for part in incomplete if isinstance(part, str) and part.strip()] \
+            if isinstance(incomplete, list) else []
+        if not isinstance(incomplete, list) or len(missing) < len(incomplete):
+            logger.warning("ReportView: the saved report's list of parts that did not run is damaged: %r", incomplete)
         if missing:
             lines.append("  ! INCOMPLETE ASSESSMENT")
             lines += textwrap.wrap("Did not run: " + "; ".join(missing) + ".", self.__width - 2,
