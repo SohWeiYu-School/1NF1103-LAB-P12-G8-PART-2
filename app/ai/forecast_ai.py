@@ -1098,7 +1098,7 @@ class ForecastAI(AIService):
                                 on_step: Callable[[str], None] | None = None) -> dict:
         """Entry point. Run Step 0 and Calls 1-4 in order, stopping at the first failure.
 
-        cache:      {piece_name: raw_text} of saved replies (from data_manager).
+        cache:      {piece_name: raw_text} of saved replies (the AssessmentRunner hands in what it loaded for this client).
         typologies: the crime scan's verified sector typologies; Call 3 builds its crime types from them.
         on_step:    called with each stage name in STAGES as it starts (progress display).
         Returns {"ok", "failed_step", "results": {piece: result}, "forecast": {...}, "partial": {...}}.
