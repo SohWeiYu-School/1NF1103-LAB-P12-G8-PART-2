@@ -126,8 +126,13 @@ class App:
     MAX_ARCHIVE_REASON: int = AssessmentRepository.MAX_REASON_LENGTH
 
     def __init__(self, ai_caller: Callable[[str, dict, dict], str | None] | None = None,
-                 root: str = ROOT_DIR, data_folder: str = "data") -> None:
+                 root: str = ROOT_DIR, data_folder: str = "data",
+                 rules: type[AuditInsights] = AuditInsights) -> None:
+        if not isinstance(rules, type):
+            raise ValueError("The flag rules must be a class (AuditInsights or one that works like it).")
         self.__root: str = root
+        # The class that works the flags out; a test hands in a made-up one.
+        self.__rules: type[AuditInsights] = rules
         # Settings errors are logged while App is built, so the log file must exist before that.
         if not logging.getLogger().handlers:
             self.__configure_logging()
@@ -1297,7 +1302,10 @@ class App:
     def __read_log(self, caller: str, strict: bool) -> tuple[list[AuditEvent], int, int]:
         """(the readable events, how many rows cannot be read, the first broken entry or 0). See __flag_view
         for strict. Raises ValueError(AUDIT_UNAVAILABLE) if the log cannot be read."""
-        rows = self.__audit_rows(caller)
+        return self.__events_of(self.__audit_rows(caller), caller, strict)
+
+    def __events_of(self, rows: list[dict], caller: str, strict: bool) -> tuple[list[AuditEvent], int, int]:
+        """__read_log for rows that have been read already. Raises ValueError(AUDIT_KEY_MISSING) as it does."""
         events, unreadable = App.__audit_events(rows, caller)
         broken_at = 0
         if rows and not self.__audit_key:
@@ -1314,7 +1322,7 @@ class App:
         """(the flags newest first, a ticket per flag id, how many flags the rules found but could not build).
         The ones that could not be built are logged here. Raises ValueError(FLAGS_UNAVAILABLE) if the rules fail."""
         try:
-            insights = AuditInsights(events, self.__audit_policy, broken_at, now)
+            insights = self.__rules(events, self.__audit_policy, broken_at, now)
             flags = insights.flags()
             # Only updates the app itself signed count: a line added or changed in the file by hand has no
             # valid hash, so it can never move a flag (not even close the "log changed outside the app" one).

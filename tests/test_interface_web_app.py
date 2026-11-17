@@ -2398,6 +2398,19 @@ def test_a_part_of_a_watched_field_is_named_under_its_parent(web):
     assert site.flag_field("claims.declared_net_worth") == "Declared net worth"
 
 
+def _flagged_web_with_rules(tmp_path, monkeypatch, rules):
+    """The flagged admin site, with a made-up class standing in for the flag rules (handed to App, not patched in)."""
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    application = App(_no_answer, data_folder=str(tmp_path), rules=rules)
+    site = WebApp(application)
+    site.flask().config["TESTING"] = True
+    browser = site.flask().test_client()
+    sign_in(browser, application, "admin")
+    seed_audit(application_folder(application), ALL_RULES)
+    return browser
+
+
 class _FailingRules:
     def __init__(self, *args, **kwargs) -> None:
         pass
@@ -2406,18 +2419,16 @@ class _FailingRules:
         raise ValueError("made-up rule failure")
 
 
-def test_the_activity_log_still_lists_its_events_when_the_flag_rules_fail(flagged_web, monkeypatch):
-    _, _, browser = flagged_web
-    monkeypatch.setattr("app.application.app.AuditInsights", _FailingRules)
+def test_the_activity_log_still_lists_its_events_when_the_flag_rules_fail(tmp_path, monkeypatch):
+    browser = _flagged_web_with_rules(tmp_path, monkeypatch, _FailingRules)
     page = html.unescape(browser.get("/admin/log?preset=custom").get_data(as_text=True))
     assert "The flags could not be worked out right now." in page and "flags unknown" in page
     assert "10 events" in page and "Shareen" in page
     assert App.AUDIT_UNAVAILABLE not in page
 
 
-def test_asking_for_flagged_events_only_says_the_flags_failed_not_that_the_log_is_unavailable(flagged_web, monkeypatch):
-    _, _, browser = flagged_web
-    monkeypatch.setattr("app.application.app.AuditInsights", _FailingRules)
+def test_asking_for_flagged_events_only_says_the_flags_failed_not_that_the_log_is_unavailable(tmp_path, monkeypatch):
+    browser = _flagged_web_with_rules(tmp_path, monkeypatch, _FailingRules)
     page = html.unescape(browser.get("/admin/log?flagged=1").get_data(as_text=True))
     assert App.FLAGS_UNAVAILABLE in page and App.AUDIT_UNAVAILABLE not in page
 
@@ -2432,9 +2443,8 @@ class _SkippingRules:
         return []
 
 
-def test_the_pages_say_how_many_flags_could_not_be_worked_out(flagged_web, monkeypatch):
-    _, _, browser = flagged_web
-    monkeypatch.setattr("app.application.app.AuditInsights", _SkippingRules)
+def test_the_pages_say_how_many_flags_could_not_be_worked_out(tmp_path, monkeypatch):
+    browser = _flagged_web_with_rules(tmp_path, monkeypatch, _SkippingRules)
     assert "2 flags could not be worked out" in browser.get("/admin").get_data(as_text=True)
     assert "2 flags could not be worked out" in browser.get("/admin/log?preset=custom").get_data(as_text=True)
 

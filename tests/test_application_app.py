@@ -1877,9 +1877,22 @@ class _SkippingRules:
         return []
 
 
-def test_the_log_still_shows_its_events_when_the_flag_rules_fail(app, monkeypatch, caplog):
+def _app_with_rules(tmp_path, monkeypatch, rules):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    return App(ai_caller=None, data_folder=str(tmp_path), rules=rules)
+
+
+def test_the_flag_rules_must_be_a_class(tmp_path):
+    with pytest.raises(ValueError, match="flag rules must be a class"):
+        App(ai_caller=None, data_folder=str(tmp_path), rules="AuditInsights")
+    with pytest.raises(ValueError, match="flag rules must be a class"):
+        App(ai_caller=None, data_folder=str(tmp_path), rules=lambda *args: None)
+
+
+def test_the_log_still_shows_its_events_when_the_flag_rules_fail(tmp_path, monkeypatch, caplog):
+    app = _app_with_rules(tmp_path, monkeypatch, _FailingRules)
     app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
-    monkeypatch.setattr("app.application.app.AuditInsights", _FailingRules)
     log = app.audit_log(AuditFilter())
     assert log.total == 1 and log.flags_ok is False and log.open_flags is None and log.flagged == frozenset()
     assert "the flags could not be worked out" in caplog.text and "made-up rule failure" in caplog.text
@@ -1889,9 +1902,9 @@ def test_the_log_still_shows_its_events_when_the_flag_rules_fail(app, monkeypatc
         app.audit_overview()
 
 
-def test_flags_that_could_not_be_built_are_logged_and_counted_on_the_pages(app, monkeypatch, caplog):
+def test_flags_that_could_not_be_built_are_logged_and_counted_on_the_pages(tmp_path, monkeypatch, caplog):
+    app = _app_with_rules(tmp_path, monkeypatch, _SkippingRules)
     app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
-    monkeypatch.setattr("app.application.app.AuditInsights", _SkippingRules)
     assert app.audit_log(AuditFilter()).flags_skipped == 2
     assert app.audit_overview().flags_skipped == 2
     assert "2 flag(s) found by the rules could not be built" in caplog.text
