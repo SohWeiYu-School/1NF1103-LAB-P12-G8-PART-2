@@ -776,7 +776,7 @@ class ForecastAI(AIService):
             result["attempts"] = attempt
             message = prompt
             if last_errors:
-                # The same prompt at temperature 0 would repeat the mistake, so say what to fix
+                # The same prompt could repeat the mistake, so say what to fix
                 message += ("\n\nYOUR PREVIOUS ANSWER WAS REJECTED because:\n- " + "\n- ".join(last_errors[:settings["max_errors_sent_back"]])
                             + "\nReturn a complete, corrected JSON object.")
             if web_search:
