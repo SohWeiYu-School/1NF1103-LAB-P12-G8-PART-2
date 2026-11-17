@@ -124,6 +124,43 @@ def test_a_good_answer_is_kept_in_the_saved_replies_and_reused_without_asking_ag
     assert second.prompts == []
 
 
+class _Stamped(_Question):
+    """A child that adds a field after the reply and takes it off again to check the schema."""
+
+    def _post_process(self, data, options=None):
+        return {**data, "stamp": "x"}
+
+    def _reply_as_asked(self, data):
+        return {key: value for key, value in data.items() if key != "stamp"}
+
+
+def test_a_reply_with_a_field_added_after_the_ask_is_reused_when_the_child_takes_it_off_to_check():
+    saved = {}
+    first = _Stamped("fake", _Replies(GOOD), "gpt-test").run(_with(saved))
+    assert first == {"answer": "yes", "stamp": "x"}
+    second = _Replies()
+    assert _Stamped("fake", second, "gpt-test").run(_with(saved)) == first
+    assert second.prompts == []
+
+
+def test_a_child_that_finds_the_added_field_damaged_makes_the_saved_reply_unusable():
+    class _Strict(_Stamped):
+        def _reply_as_asked(self, data):
+            return None if data.get("stamp") != "x" else super()._reply_as_asked(data)
+
+    saved = {}
+    _Strict("fake", _Replies(GOOD), "gpt-test").run(_with(saved))
+    saved["test_question"]["reply"]["stamp"] = 5
+    again = _Replies(GOOD)
+    assert _Strict("fake", again, "gpt-test").run(_with(saved))["stamp"] == "x"
+    assert len(again.prompts) == 1
+
+
+def test_the_default_reply_as_asked_returns_the_data_unchanged():
+    data = {"answer": "yes"}
+    assert _Question("fake", None)._reply_as_asked(data) == data
+
+
 def test_without_saved_replies_the_ai_is_always_asked():
     first, second = _Replies(GOOD), _Replies(GOOD)
     _Question("fake", first, "gpt-test").run(SOURCE)

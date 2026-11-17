@@ -112,9 +112,10 @@ class AIService(ABC):
         """Extra instructions for the AI caller (web search, attached documents, ...)."""
         return {}
 
-    def _reply_as_asked(self, data: dict) -> dict:
+    def _reply_as_asked(self, data: dict) -> dict | None:
         """A saved reply as the AI wrote it: without the fields _post_process added, which the schema
-        does not allow. Used to check a saved reply against the schema again. The parent changes nothing."""
+        does not allow. Used to check a saved reply against the schema again. The parent changes nothing.
+        A child returns None when a field it added is missing or wrong: the saved reply is then not used."""
         return data
 
     def _prepare(self, data: dict) -> dict:
@@ -200,7 +201,12 @@ class AIService(ABC):
                         type(self).__name__)
             return None
         reply = copy.deepcopy(entry["reply"])
-        if not self.__validate_reply(self._reply_as_asked(copy.deepcopy(reply)), schema):
+        asked = self._reply_as_asked(copy.deepcopy(reply))
+        if asked is None:
+            logger.warning("%s: a field added to the saved reply is missing or wrong, so the AI is asked again",
+                           type(self).__name__)
+            return None
+        if not self.__validate_reply(asked, schema):
             logger.warning("%s: the saved reply no longer follows the schema, so the AI is asked again",
                            type(self).__name__)
             return None
