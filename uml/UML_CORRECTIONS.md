@@ -630,3 +630,17 @@ shows it. The checker found 77 differences. They are all in this section.
 `FlagTicket` and `OverviewPage` below the Domain Model's money classes (folder widened). `App` and `WebApp` grew, so
 the folders were re-packed, every line was re-routed and labels placed again. Scan 77 differences before, 0 after;
 round-trip PROBLEMS: 0; layout_check 0.
+
+**Review fixes on PR #28 (17 Nov 2026): `App` takes the flag rules as an input and keeps the open-flag count**
+- `App.__init__` gained `rules : type[AuditInsights] = AuditInsights` (last input; it must be a class, else
+  `ValueError`), stored in the private `__rules`. `__work_out_flags()` builds the rules from it, so tests pass a made-up
+  class in instead of replacing `AuditInsights` inside the app module (CLAUDE.md section 7).
+- `App.open_flag_count(now) : int | None` (new): the header badge's number. It reads the log once and keeps the count
+  with a fingerprint of the log (number of rows, last row's hash) in `__flag_count`, guarded by `__flag_count_lock`;
+  an unchanged log returns the kept count without checking the chain or running the rules again. `None` (never 0)
+  when the log or the rules fail. `__events_of(rows, caller, strict)` (new, private) is the part of `__read_log()`
+  that works on rows already read.
+- Arrow `App ..> AuditInsights`: verb `creates` changed to `uses` (App no longer creates it; it is handed the class
+  and its default). The checker reported this as the one wrong verb.
+- `App` grew, so the folders were re-packed, every line re-routed and the labels placed again.
+  Scan 7 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.
