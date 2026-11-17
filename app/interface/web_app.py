@@ -513,7 +513,7 @@ class WebApp:
         if event.action == "assessment_failed":
             return str(details.get("step") or "An assessment stopped before it finished")
         if event.action == "data_unavailable":
-            return f"The {details.get('what') or 'database'} could not be read"
+            return event.summary()
         if event.action == "cloud_sync":
             return "The cloud sync failed"
         return "A save failed"

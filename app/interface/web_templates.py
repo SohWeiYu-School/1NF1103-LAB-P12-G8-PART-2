@@ -260,8 +260,7 @@ tr.ev[data-sev="info"] td:first-child{box-shadow:inset 4px 0 0 var(--info)}
 .why-item.alert{border-left-color:var(--bad)} .why-item.warning{border-left-color:var(--warn)}
 .why-letter{width:26px;height:26px;border-radius:50%;background:var(--surface);border:1px solid var(--line-strong);display:grid;place-items:center;font-weight:700;font-size:.8rem}
 .tl.flagged .body{background:var(--bad-soft);border-radius:8px;padding:8px 10px;margin-left:-10px}
-tr.ev.flagged{background:var(--bad-soft)}
-tr.ev.flagged td:first-child{box-shadow:inset 4px 0 0 var(--bad)}
+tr.ev.flagged td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 .check{display:inline-flex;gap:6px;align-items:center;cursor:pointer;min-height:34px;font-size:.9rem;margin:0;color:var(--ink)}
 .check input{width:auto;margin:0}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:50;font-size:.88rem;box-shadow:0 8px 24px rgba(0,0,0,.2);max-width:calc(100% - 32px);animation:toast-out .4s ease 6s forwards}
@@ -1441,10 +1440,10 @@ OVERVIEW = """{% extends "base.html" %}
   <div class="kpis">
     <div class="panel kpi feature"><div class="kt"><span class="kic">{{ icon('flag') }}</span><span class="pill">{{ view.not_started }} not started</span></div>
       <span class="kl">Flags to handle</span><div class="kval"><span class="v">{{ view.to_handle }}</span><span class="ctx">{{ view.in_progress }} in progress</span></div></div>
-    <div class="panel kpi"><div class="kt"><span class="kic">{{ icon('activity') }}</span>{% if view.actions_change is not none %}<span class="pill {{ 'flat' if view.actions_change == 0 else ('good' if view.actions_change > 0 else 'bad') }}">{{ '+' if view.actions_change > 0 else ('&minus;' if view.actions_change < 0 else '&plusmn;')|safe }}{{ view.actions_change|abs }}%</span>{% endif %}</div>
-      <span class="kl">Actions</span><div class="kval"><span class="v">{{ '{:,}'.format(view.actions) }}</span>{% if view.actions_change is not none %}<span class="ctx">vs previous {{ days }} day{{ '' if days == 1 else 's' }}</span>{% endif %}</div></div>
-    <div class="panel kpi"><div class="kt"><span class="kic">{{ icon('alert') }}</span>{% if view.failures_change is not none %}<span class="pill {{ 'flat' if view.failures_change == 0 else ('bad' if view.failures_change > 0 else 'good') }}">{{ '+' if view.failures_change > 0 else ('&minus;' if view.failures_change < 0 else '&plusmn;')|safe }}{{ view.failures_change|abs }}%</span>{% endif %}</div>
-      <span class="kl">Failures</span><div class="kval"><span class="v">{{ view.failures }}</span>{% if view.failures_change is not none %}<span class="ctx">vs previous {{ days }} day{{ '' if days == 1 else 's' }}</span>{% endif %}</div></div>
+    <div class="panel kpi"><div class="kt"><span class="kic">{{ icon('activity') }}</span>{% if view.actions_change is not none %}<span class="pill {{ 'flat' if view.actions_change == 0 else ('good' if view.actions_change > 0 else 'bad') }}">{{ '+' if view.actions_change > 0 else ('&minus;' if view.actions_change < 0 else '&plusmn;')|safe }}{{ view.actions_change|abs }}%</span>{% else %}<span class="pill flat">No earlier data</span>{% endif %}</div>
+      <span class="kl">Actions</span><div class="kval"><span class="v">{{ '{:,}'.format(view.actions) }}</span><span class="ctx">vs previous {{ days }} day{{ '' if days == 1 else 's' }}</span></div></div>
+    <div class="panel kpi"><div class="kt"><span class="kic">{{ icon('alert') }}</span>{% if view.failures_change is not none %}<span class="pill {{ 'flat' if view.failures_change == 0 else ('bad' if view.failures_change > 0 else 'good') }}">{{ '+' if view.failures_change > 0 else ('&minus;' if view.failures_change < 0 else '&plusmn;')|safe }}{{ view.failures_change|abs }}%</span>{% else %}<span class="pill flat">No earlier data</span>{% endif %}</div>
+      <span class="kl">Failures</span><div class="kval"><span class="v">{{ view.failures }}</span><span class="ctx">vs previous {{ days }} day{{ '' if days == 1 else 's' }}</span></div></div>
     <div class="panel kpi"><div class="kt"><span class="kic" style="color:var({{ '--ok' if view.intact else '--bad' }})">{{ icon('shield' if view.intact else 'shieldx') }}</span><span class="pill {{ 'good' if view.intact else 'bad' }}">{{ 'Intact' if view.intact else 'Broken' }}</span></div>
       <span class="kl">Log integrity</span><div class="kval"><span class="v" style="color:var({{ '--ok' if view.intact else '--bad' }})">{{ '&check;'|safe if view.intact else '#' ~ view.broken_at }}</span><span class="ctx">{{ ('{:,}'.format(view.entries) ~ ' entries verified') if view.intact else 'entry changed outside the app' }} &middot; <form method="post" action="{{ url_for('audit_verify') }}"><button class="link-btn" type="submit">Check again</button></form></span></div></div>
   </div>

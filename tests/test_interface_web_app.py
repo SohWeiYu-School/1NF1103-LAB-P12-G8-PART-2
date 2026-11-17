@@ -2347,3 +2347,25 @@ def test_flags_that_cannot_be_worked_out_say_so_on_the_client_page(flagged_web, 
     monkeypatch.setattr(application, "client_flags", broken)
     page = browser.get("/admin/clients/SOW-1")
     assert page.status_code == 200 and App.FLAGS_UNAVAILABLE in page.get_data(as_text=True)
+
+
+def test_an_open_flag_renders_no_visible_waiting_on_or_outcome_field(flagged_web):
+    _, _, browser = flagged_web
+    text = browser.get("/admin/flags/" + next(i for i in _flag_ids(browser) if i.startswith("F-HOU-"))
+                       ).get_data(as_text=True)
+    assert re.search(r'id="wait-block" hidden>', text) and re.search(r'id="outcome-block"[^>]* hidden>', text)
+
+
+def test_the_kpi_cards_say_no_earlier_data_or_give_the_change_and_the_range_before(web):
+    from datetime import timedelta
+    application, _, browser = _admin_web(web)
+    now = datetime.now(timezone.utc)
+
+    def at(days):
+        return (now - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    first = browser.get("/admin").get_data(as_text=True)
+    assert 'class="pill flat">No earlier data</span>' in first and "vs previous 7 days" in first
+    lines = [("signed_in", at(d), "Shareen", "", "ok", {}) for d in (1, 2, 3, 4, 9, 10, 14)]
+    seed_audit(application_folder(application), lines)
+    page = browser.get("/admin").get_data(as_text=True)
+    assert 'class="pill good">+' in page and "vs previous 7 days" in page and "No earlier data" in page   # failures: none before
