@@ -644,3 +644,10 @@ round-trip PROBLEMS: 0; layout_check 0.
   and its default). The checker reported this as the one wrong verb.
 - `App` grew, so the folders were re-packed, every line re-routed and the labels placed again.
   Scan 7 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.
+
+**Log rotation (17 Nov 2026): `App` keeps the log file small**
+- `App.LOG_MAX_BYTES : int = 5 * 1024 * 1024` and `App.LOG_BACKUPS : int = 3` (new constants). `logs/app.log`
+  had grown to 118 MB; `__configure_logging()` now uses a rotating file handler, so at 5 MB the file is renamed
+  `app.log.1` and a new one is started, and only 3 old files are kept (at most about 20 MB in all).
+- `App` grew by two lines, so the folders were re-packed, every line re-routed and the labels placed again.
+  Scan 2 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.

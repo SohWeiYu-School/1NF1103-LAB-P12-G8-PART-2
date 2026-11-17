@@ -728,6 +728,8 @@ package "Application (app/application)" {
     -__rules : type[AuditInsights] = AuditInsights
     -__flag_count_lock : threading.Lock = threading.Lock()
     -__flag_count : tuple[tuple[int, str], int] | None = None
+    +LOG_MAX_BYTES : int = 5 * 1024 * 1024 «const»
+    +LOG_BACKUPS : int = 3 «const»
     --
     +__init__(ai_caller : Callable[[str, dict, dict], str | None] | None = None, root : str = ROOT_DIR, data_folder : str = "data", rules : type[AuditInsights] = AuditInsights)
     +start(arguments : list[str]) : int
