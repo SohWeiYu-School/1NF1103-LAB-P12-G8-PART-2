@@ -10,8 +10,8 @@ from app.model.audit_policy import AuditPolicy
 
 SGT = timezone(timedelta(hours=8))
 BASE = datetime(2026, 11, 2, 10, 0, tzinfo=SGT)           # a Monday, 10:00 in Singapore
-INCOME = {"field": "career.annual_income", "before": 100000, "after": 250000}
-EMPLOYER = {"field": "career.employer", "before": "A", "after": "B"}
+INCOME = {"field": "claims.expected_aum", "before": 100000, "after": 250000}
+EMPLOYER = {"field": "career.employer_name", "before": "A", "after": "B"}
 
 
 class Log:
@@ -136,7 +136,7 @@ def test_a_watched_edit_then_a_two_level_jump_is_a_high_flag_with_the_three_entr
     (flag,) = _flags(log)
     assert (flag.kind, flag.severity, flag.sequences, flag.flag_id) == ("shop", "high", (2, 3, 4), "F-SHO-SOW-1-4")
     assert flag.headline == "Verdict improved by 2 levels after declared figures were edited"
-    assert flag.meaning == ("The result went from Risky to Passed 30 minutes after annual income went "
+    assert flag.meaning == ("The result went from Risky to Passed 30 minutes after expected aum went "
                             "100,000 → 250,000. Raising declared figures until a case passes is the pattern "
                             "regulators look for.")
     assert flag.changes == (INCOME,) and flag.owner == "Owner" and flag.raised_at == log.events[3].at
@@ -491,3 +491,16 @@ def test_ids_do_not_change_when_unrelated_events_are_added_later():
     before = {flag.flag_id for flag in _flags(log)}
     log.add("signed_in", BASE + timedelta(days=5), client="")
     assert before <= {flag.flag_id for flag in _flags(log)}
+
+
+def test_an_edit_inside_a_watched_dict_counts_and_is_named_under_its_parent():
+    log = Log()
+    log.create()
+    log.assess(BASE, "SERIOUS_RISK")
+    log.edit(BASE + timedelta(hours=1), [{"field": "claims.asset_composition.cash", "before": 10, "after": 90},
+                                         {"field": "claims.asset_composition.property", "before": 90, "after": 10}])
+    log.assess(BASE + timedelta(hours=2), "PASSED")
+    (flag,) = _of(_flags(log), "shop")
+    assert len(flag.changes) == 2
+    assert "asset composition (cash) went 10 → 90" in flag.meaning
+    assert "asset composition (property) went 90 → 10" in flag.meaning

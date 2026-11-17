@@ -33,11 +33,11 @@ class AuditInsights:
     VERDICT_LABELS: dict[str, str] = {"PASSED": "Passed", "MANUAL_REVIEW": "Manual review", "RISKY": "Risky",
                                       "SERIOUS_RISK": "Serious risk"}
     FIELD_NAMES: dict[str, str] = {
-        "claims.declared_net_worth": "Declared net worth", "career.annual_income": "Annual income",
+        "claims.declared_net_worth": "Declared net worth",
         "claims.expected_aum": "Expected AUM", "claims.asset_composition": "Asset composition",
         "claims.pep_status": "PEP status", "sow_declaration": "Source of wealth story",
-        "career.employer": "Employer", "career.position": "Position", "contact.address": "Address",
-        "nationality": "Nationality", "claims.wealth_countries": "Wealth countries"}
+        "career.employer_name": "Employer", "career.occupation": "Occupation", "nationality": "Nationality",
+        "claims.wealth_countries": "Wealth countries"}
     ACTION_NAMES: dict[str, str] = {"client_edited": "Edited client", "assessment_run": "Assessed"}
     FAILURE_KINDS: tuple[str, ...] = ("AI step not run", "Save failed", "Read failed", "Sync failed")
     __DAY: timedelta = timedelta(days=1)
@@ -139,11 +139,19 @@ class AuditInsights:
         return [change for change in changes if isinstance(change, dict)] if isinstance(changes, list) else []
 
     def __watched(self, event: AuditEvent) -> list[dict]:
-        return [change for change in AuditInsights.__changes(event) if change.get("field") in self.__policy.watched_fields]
+        return [change for change in AuditInsights.__changes(event) if self.__policy.watching(change.get("field"))]
 
     @staticmethod
     def __field_name(field: object) -> str:
         return AuditInsights.FIELD_NAMES.get(field, str(field))
+
+    def __moved_name(self, change: dict) -> str:
+        """The changed field in words, under its watched parent: "asset composition (cash)"."""
+        field = str(change.get("field"))
+        root = self.__policy.watching(field) or field
+        name = AuditInsights.__field_name(root).lower()
+        tail = field[len(root):].lstrip(".") if field != root else ""
+        return f"{name} ({tail})" if tail else name
 
     @staticmethod
     def __verdict_label(event: AuditEvent) -> str:
@@ -204,7 +212,7 @@ class AuditInsights:
         how_long = (AuditInsights.__amount(minutes, "minute") if minutes < 60
                     else AuditInsights.__amount(AuditInsights.__round(minutes / 60), "hour"))
         watched = self.__watched(edit)
-        moved = " and ".join(f"{AuditInsights.__field_name(change.get('field')).lower()} went "
+        moved = " and ".join(f"{self.__moved_name(change)} went "
                              f"{AuditInsights.__number(change.get('before'))} → "
                              f"{AuditInsights.__number(change.get('after'))}" for change in watched)
         meaning = (f"The result went from {AuditInsights.__verdict_label(before)} to "

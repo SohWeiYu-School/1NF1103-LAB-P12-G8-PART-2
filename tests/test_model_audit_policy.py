@@ -6,7 +6,7 @@ import pytest
 
 from app.model.audit_policy import AuditPolicy
 
-DEFAULTS = {"watched_fields": ["claims.declared_net_worth", "career.annual_income", "claims.expected_aum",
+DEFAULTS = {"watched_fields": ["claims.declared_net_worth", "claims.expected_aum",
                                "claims.asset_composition", "claims.pep_status", "sow_declaration"],
             "window_days": 30, "repeat_assessments": 3, "jump_levels": 2, "work_start": "08:00",
             "work_end": "20:00", "spike_multiplier": 3, "spike_min": 3, "spike_baseline_days": 14}
@@ -15,7 +15,7 @@ DEFAULTS = {"watched_fields": ["claims.declared_net_worth", "career.annual_incom
 def test_the_defaults_are_the_mockup_values():
     policy = AuditPolicy()
     assert policy.to_dict() == DEFAULTS
-    assert policy.watched_fields[0] == "claims.declared_net_worth" and len(policy.watched_fields) == 6
+    assert policy.watched_fields[0] == "claims.declared_net_worth" and len(policy.watched_fields) == 5
     assert (policy.window_days, policy.repeat_assessments, policy.jump_levels) == (30, 3, 2)
     assert (policy.work_start, policy.work_end, policy.spike_multiplier) == ("08:00", "20:00", 3)
     assert (policy.spike_min, policy.spike_baseline_days) == (3, 14)
@@ -87,4 +87,20 @@ def test_watched_fields_must_be_a_non_empty_list_of_different_names(fields):
 
 
 def test_a_list_of_watched_fields_is_kept_as_a_tuple():
-    assert AuditPolicy(watched_fields=["a.b"]).watched_fields == ("a.b",)
+    assert AuditPolicy(watched_fields=["nationality"]).watched_fields == ("nationality",)
+
+
+def test_a_watched_field_must_be_a_field_a_client_record_really_has():
+    with pytest.raises(ValueError, match="career.annual_income.*not a field of a client record"):
+        AuditPolicy(watched_fields=["career.annual_income"])
+    with pytest.raises(ValueError, match="not a field"):
+        AuditPolicy(watched_fields=["claims.declared_net_worth", "nonsense"])
+    assert AuditPolicy(watched_fields=["investments[0].country", "claims.asset_composition.cash"]).watched_fields
+
+
+def test_watching_names_the_watched_parent_of_a_changed_path():
+    policy = AuditPolicy()
+    assert policy.watching("claims.asset_composition.cash") == "claims.asset_composition"
+    assert policy.watching("claims.asset_composition") == "claims.asset_composition"
+    assert policy.watching("claims.asset_compositions") == ""
+    assert policy.watching("nationality") == "" and policy.watching(None) == ""

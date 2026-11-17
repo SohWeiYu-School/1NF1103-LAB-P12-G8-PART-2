@@ -9,7 +9,7 @@ def _flag(**changes) -> Flag:
     values = dict(flag_id="F-SHO-SOW-1-484", kind="shop", severity="high", client_ref="SOW-1",
                   headline="Verdict worsened by 2 levels", meaning="Because.", sequences=(480, 481, 484),
                   raised_at="2026-11-13T06:05:00Z", owner="Tan Mei Ling",
-                  changes=[{"field": "career.annual_income", "before": 1, "after": 2}])
+                  changes=[{"field": "claims.expected_aum", "before": 1, "after": 2}])
     values.update(changes)
     return Flag(**values)
 
@@ -18,7 +18,7 @@ def test_a_flag_keeps_what_it_was_given_and_names_its_kind_and_severity():
     flag = _flag()
     assert (flag.flag_id, flag.kind, flag.severity, flag.client_ref) == ("F-SHO-SOW-1-484", "shop", "high", "SOW-1")
     assert flag.sequences == (480, 481, 484) and flag.owner == "Tan Mei Ling" and flag.meaning == "Because."
-    assert flag.changes == ({"field": "career.annual_income", "before": 1, "after": 2},)
+    assert flag.changes == ({"field": "claims.expected_aum", "before": 1, "after": 2},)
     assert (flag.name, flag.severity_name) == ("Verdict jump after edit", "High")
     assert (flag.day, flag.usual, flag.broken_at) == ("", 0, 0)
 

@@ -12,9 +12,18 @@ class AuditPolicy:
     approved mockup. Read-only once built.
     """
 
-    DEFAULT_WATCHED_FIELDS: tuple[str, ...] = ("claims.declared_net_worth", "career.annual_income",
+    DEFAULT_WATCHED_FIELDS: tuple[str, ...] = ("claims.declared_net_worth",
                                                "claims.expected_aum", "claims.asset_composition",
                                                "claims.pep_status", "sow_declaration")
+    # The paths a client record really has (see ClientRecord.to_dict). A watched field must be one of these or
+    # inside one (a dict is walked into "claims.asset_composition.cash", a list into "investments[0].country").
+    ALLOWED_FIELDS: tuple[str, ...] = (
+        "name", "nationality", "sow_declaration", "supporting_documents", "career_history", "investments",
+        "claims.declared_net_worth", "claims.expected_aum", "claims.pep_status", "claims.wealth_countries",
+        "claims.asset_composition", "claims.biggest_wealth_jump", "claims.wealth_jump_years",
+        "claims.declared_counterparties",
+        "career.occupation", "career.seniority", "career.industry", "career.employer_name",
+        "career.employer_size", "career.career_start_year", "career.age", "career.country_of_residence")
     KEYS: tuple[str, ...] = ("watched_fields", "window_days", "repeat_assessments", "jump_levels",
                              "work_start", "work_end", "spike_multiplier", "spike_min", "spike_baseline_days")
     MAX_JUMP_LEVELS: int = 3                     # PASSED to SERIOUS_RISK is 3 levels
@@ -38,6 +47,10 @@ class AuditPolicy:
                                  f"{AuditPolicy.MAX_FIELD_LENGTH} characters (got {field!r}).")
         if len(set(fields)) != len(fields):
             raise ValueError("watched_fields must not name the same field twice.")
+        for field in fields:
+            if not any(AuditPolicy.__inside(field, allowed) for allowed in AuditPolicy.ALLOWED_FIELDS):
+                raise ValueError(f"{field!r} is not a field of a client record. Allowed: "
+                                 f"{', '.join(AuditPolicy.ALLOWED_FIELDS)}.")
         AuditPolicy.__check_count("window_days", window_days, 1)
         AuditPolicy.__check_count("repeat_assessments", repeat_assessments, 1)
         AuditPolicy.__check_count("jump_levels", jump_levels, 1, AuditPolicy.MAX_JUMP_LEVELS)
@@ -59,6 +72,18 @@ class AuditPolicy:
         self.__spike_multiplier: float = spike_multiplier
         self.__spike_min: int = spike_min
         self.__spike_baseline_days: int = spike_baseline_days
+
+    @staticmethod
+    def __inside(field: str, parent: str) -> bool:
+        """True if field is parent or a path inside it (the way RecordDiff.touches reads a path)."""
+        return field == parent or field.startswith((parent + ".", parent + "["))
+
+    def watching(self, field: object) -> str:
+        """The watched field a changed path belongs to ("claims.asset_composition" for
+        "claims.asset_composition.cash"); "" if the path is not watched."""
+        if not isinstance(field, str):
+            return ""
+        return next((watched for watched in self.__watched_fields if AuditPolicy.__inside(field, watched)), "")
 
     @staticmethod
     def __check_count(name: str, value: object, low: int, high: int | None = None) -> None:

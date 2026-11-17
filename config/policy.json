@@ -504,7 +504,6 @@
   "audit": {
     "watched_fields": [
       "claims.declared_net_worth",
-      "career.annual_income",
       "claims.expected_aum",
       "claims.asset_composition",
       "claims.pep_status",

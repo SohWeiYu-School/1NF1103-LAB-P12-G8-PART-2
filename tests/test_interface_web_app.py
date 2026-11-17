@@ -2369,3 +2369,10 @@ def test_the_kpi_cards_say_no_earlier_data_or_give_the_change_and_the_range_befo
     seed_audit(application_folder(application), lines)
     page = browser.get("/admin").get_data(as_text=True)
     assert 'class="pill good">+' in page and "vs previous 7 days" in page and "No earlier data" in page   # failures: none before
+
+
+def test_a_part_of_a_watched_field_is_named_under_its_parent(web):
+    _, site, _ = web
+    assert site.flag_field("claims.asset_composition") == "Asset composition"
+    assert site.flag_field("claims.asset_composition.cash") == "Asset composition › Cash"
+    assert site.flag_field("claims.declared_net_worth") == "Declared net worth"

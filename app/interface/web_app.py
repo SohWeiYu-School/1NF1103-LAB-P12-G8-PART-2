@@ -129,11 +129,11 @@ class WebApp:
                                                     ("90", "90 days"))
     # The fields the flag rules watch, in words (a field that is not here is named from its path).
     FLAG_FIELDS: dict[str, str] = {
-        "claims.declared_net_worth": "Declared net worth", "career.annual_income": "Annual income",
+        "claims.declared_net_worth": "Declared net worth",
         "claims.expected_aum": "Expected AUM", "claims.asset_composition": "Asset composition",
         "claims.pep_status": "PEP status", "sow_declaration": "Source of wealth story"}
     FLAG_FIELDS_SHORT: dict[str, str] = {
-        "claims.declared_net_worth": "net worth", "career.annual_income": "income", "claims.expected_aum": "AUM",
+        "claims.declared_net_worth": "net worth", "claims.expected_aum": "AUM",
         "claims.asset_composition": "asset split", "claims.pep_status": "PEP status",
         "sow_declaration": "SoW story"}
     FAILURE_KINDS: tuple[str, ...] = ("AI step not run", "Save failed", "Read failed", "Sync failed")
@@ -459,8 +459,8 @@ class WebApp:
         if flag.kind == "shop":
             before, edit, after = found
             minutes = round((WebApp.__utc_moment(after.at) - WebApp.__utc_moment(edit.at)).total_seconds() / 60)
-            fields = " & ".join(WebApp.FLAG_FIELDS_SHORT.get(str(c.get("field")), self.flag_field(c.get("field")))
-                                for c in flag.changes)
+            fields = " & ".join(dict.fromkeys(WebApp.__short_field(c.get("field"), self.flag_field(c.get("field")))
+                                              for c in flag.changes))
             return Markup("{} &rarr; {} {} min after {} edited").format(
                 self.__badge(before), self.__badge(after), minutes, fields)
         if flag.kind == "other":
@@ -503,8 +503,24 @@ class WebApp:
         days = (datetime.now(timezone.utc).astimezone(WebApp.SINGAPORE).date() - then).days
         return "today" if days <= 0 else ("1 day ago" if days == 1 else f"{days} days ago")
 
+    @staticmethod
+    def __parent_field(path: Any) -> str:
+        """The watched field a path is inside ("claims.asset_composition" for "claims.asset_composition.cash"),
+        or "" if it is not inside one the page has a name for."""
+        text = str(path)
+        return next((known for known in WebApp.FLAG_FIELDS if text == known or text.startswith((known + ".", known + "["))), "")
+
+    @staticmethod
+    def __short_field(path: Any, fallback: str) -> str:
+        """A changed field in two words for a table row; the parts of one field share one name."""
+        return WebApp.FLAG_FIELDS_SHORT.get(WebApp.__parent_field(path), fallback)
+
     def flag_field(self, path: Any) -> str:
-        """A changed field's name for the flag pages: "Declared net worth"."""
+        """A changed field's name for the flag pages: "Declared net worth"; a part of a watched field is
+        shown under it: "Asset composition \u203a Cash"."""
+        parent = WebApp.__parent_field(path)
+        if parent and str(path) != parent:
+            return f"{WebApp.FLAG_FIELDS[parent]} \u203a {WebApp.field_label(path).split(' \u203a ')[-1]}"
         return WebApp.FLAG_FIELDS.get(str(path)) or WebApp.field_label(path).split(" \u203a ")[-1]
 
     def __what_failed(self, event: AuditEvent) -> str:

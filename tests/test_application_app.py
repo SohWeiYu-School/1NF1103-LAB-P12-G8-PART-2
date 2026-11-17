@@ -1545,7 +1545,7 @@ ADMIN = "Orbit Admin"
 NIGHT_OWNER = [("client_created", "2026-11-10T02:00:00Z", "Shareen", "SOW-1", "ok", {}),
                # Adrian did not create SOW-1 and changed a watched field: "Edited by non-owner", high (entry 2)
                ("client_edited", "2026-11-10T03:00:00Z", "Adrian", "SOW-1", "ok",
-                {"changes": [{"field": "career.annual_income", "before": 1, "after": 2}]}),
+                {"changes": [{"field": "claims.expected_aum", "before": 1, "after": 2}]}),
                # 00:00 in Singapore: "After-hours activity", low (entry 3)
                ("assessment_run", "2026-11-11T16:00:00Z", "Shareen", "SOW-1", "ok",
                 {"outcome": "PASSED", "assessment_id": "A-1"})]
