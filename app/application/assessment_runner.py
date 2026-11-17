@@ -132,7 +132,7 @@ class AssessmentRunner:
         try:
             fingerprint = self.__response_cache.fingerprint(case, documents)
             return fingerprint, self.__response_cache.load_client_replies(ref, fingerprint)
-        except ValueError as error:
+        except (TypeError, ValueError) as error:    # a bad client_ref, or a case the fingerprint cannot read
             logger.warning("AssessmentRunner: saved replies are not used for client %r: %s", ref, error)
             return None, {}
 
@@ -143,8 +143,26 @@ class AssessmentRunner:
             return
         try:
             self.__response_cache.save_client_replies(ref, fingerprint, saved)
-        except ValueError as error:
+        except (TypeError, ValueError) as error:
             logger.warning("AssessmentRunner: replies for client %r were not saved: %s", ref, error)
+
+    def __saved_forecast_pieces(self, saved: dict) -> dict[str, str]:
+        """The forecast pieces saved for this client that can be used: both the piece name and its reply
+        must be non-empty text. Anything else is dropped (and logged), so one damaged entry in a saved
+        file cannot stop every later run; the dropped pieces are asked again."""
+        pieces = saved.get("forecast")
+        if pieces is None:
+            return {}
+        if not isinstance(pieces, dict):
+            logger.warning("AssessmentRunner: the saved forecast is a %s, not a set of pieces, so it is not used",
+                           type(pieces).__name__)
+            return {}
+        usable = {name: reply for name, reply in pieces.items()
+                  if isinstance(name, str) and name and isinstance(reply, str) and reply}
+        if len(usable) < len(pieces):
+            logger.warning("AssessmentRunner: %d saved forecast piece(s) are not text and were dropped; "
+                           "they are asked again", len(pieces) - len(usable))
+        return usable
 
     def __assess(self, case: dict, files: list[dict] | None, documents: list[dict], saved: dict,
                  on_step: Callable[[int, str], None] | None,
@@ -210,12 +228,12 @@ class AssessmentRunner:
                 notes += self.__crime_scan.warnings()
 
         # 6-10. Forecast: the declaration is read once here, and the crime types are built from the typologies
-        forecast_saved = saved.get("forecast")
+        forecast_saved = self.__saved_forecast_pieces(saved)
         run = self.__forecast_ai.run({
-            "record": case, "cache": dict(forecast_saved) if isinstance(forecast_saved, dict) else {},
+            "record": case, "cache": dict(forecast_saved),
             "typologies": None if typologies is None else [typology.to_dict() for typology in typologies],
             "on_step": lambda stage: step(AssessmentRunner.FORECAST_STEP[stage])})
-        saved["forecast"] = {**(forecast_saved if isinstance(forecast_saved, dict) else {}),
+        saved["forecast"] = {**forecast_saved,
                              **{name: result["raw"] for name, result in run["results"].items()
                                 if isinstance(result, dict) and result.get("raw")}}
         partial = run["partial"]

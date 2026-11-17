@@ -459,3 +459,80 @@ def test_a_save_that_fails_does_not_change_the_assessment(tmp_path, caplog):
     with caplog.at_level("WARNING"):
         result, _ = _assess(tmp_path, case, saved_forecast=False)
     assert result is not None and "could not write" in caplog.text
+
+
+def _forecast_runner(tmp_path, forecast_caller=None):
+    from tests.logic_fixtures import CONFIG
+    cache = ResponseCache(str(tmp_path / "cache"))
+    built = AssessmentRunner(CONFIG, fake_services.FixedAI(fake_ai.research()),
+                             fake_services.FixedAI(fake_ai.typologies()),
+                             fake_services.FixedAI(fake_ai.benchmark()), fake_services.FixedAI(None),
+                             fake_services.forecast_ai(forecast_caller),
+                             DocumentStore("data/documents", root=str(tmp_path)), cache)
+    return built, cache
+
+
+def _saved_file(tmp_path, case):
+    import json
+    with open(tmp_path / "cache" / "clients" / f"{case['client_ref']}.json", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def test_saved_forecast_pieces_that_are_not_text_are_dropped_and_asked_again(tmp_path, caplog):
+    case = sample_case()
+    built, cache = _forecast_runner(tmp_path)
+    replies = fake_ai.forecast_replies(case)
+    damaged = {**replies, "step0_declaration": 5, "call1_markets.list": "", "call2_earnings.future_pay": None}
+    cache.save_client_replies(case["client_ref"], cache.fingerprint(case, []), {"forecast": damaged})
+    with caplog.at_level("WARNING"):
+        result = built.run(case, on_failure=lambda step, reason: True)     # must not raise
+    assert result is not None and "3 saved forecast piece(s)" in caplog.text
+    assert "The forecast" in result["verdict"].not_run                     # no AI to ask again, honestly reported
+    assert set(_saved_file(tmp_path, case)["replies"]["forecast"]) >= {"call1_markets.series.ECO_SG"}
+    assert all(isinstance(name, str) and isinstance(reply, str) and reply
+               for name, reply in _saved_file(tmp_path, case)["replies"]["forecast"].items())
+
+
+def test_a_saved_forecast_that_is_not_a_set_of_pieces_counts_as_nothing_saved(tmp_path, caplog):
+    case = sample_case()
+    built, cache = _forecast_runner(tmp_path)
+    cache.save_client_replies(case["client_ref"], cache.fingerprint(case, []), {"forecast": ["not", "a", "dict"]})
+    with caplog.at_level("WARNING"):
+        result = built.run(case, on_failure=lambda step, reason: True)
+    assert result is not None and "not a set of pieces" in caplog.text
+    assert "The forecast" in result["verdict"].not_run
+
+
+def test_a_case_the_fingerprint_cannot_read_still_runs_without_saving(tmp_path, caplog):
+    case = sample_case()
+    case = {**case, "claims": {**case.get("claims", {}), 1: "x"}}
+    built, _ = _forecast_runner(tmp_path)
+    with caplog.at_level("WARNING"):
+        result = built.run(case, on_failure=lambda step, reason: True)     # must not raise
+    assert result is not None and "saved replies are not used" in caplog.text
+    assert not (tmp_path / "cache").exists()
+
+
+def test_a_stopped_forecast_keeps_the_pieces_after_the_stop_and_the_next_run_asks_only_the_missing_one(tmp_path):
+    case = sample_case()
+    replies = fake_ai.forecast_replies(case)
+    stop_at, good = "call2_earnings.position.2", replies["call2_earnings.position.2"]
+    built, cache = _forecast_runner(tmp_path)
+    cache.save_client_replies(case["client_ref"], cache.fingerprint(case, []),
+                              {"forecast": {**replies, stop_at: "not json"}})
+    first = built.run(case, on_failure=lambda step, reason: True)          # no AI: stops at the damaged piece
+    assert "The forecast" in first["verdict"].not_run
+    kept = _saved_file(tmp_path, case)["replies"]["forecast"]
+    assert kept["step0_declaration"] == replies["step0_declaration"]       # earlier pieces are still saved
+    assert kept["call3_types.behaviour.T1"] == replies["call3_types.behaviour.T1"]   # and the ones after the stop
+
+    asked = []
+
+    def caller(prompt, schema=None, options=None):
+        asked.append(prompt)
+        return good
+    again, _ = _forecast_runner(tmp_path, caller)
+    result = again.run(case, on_failure=lambda step, reason: True)
+    assert len(asked) == 1                                                  # only the missing piece was asked
+    assert result["forecast"] is not None and "The forecast" not in result["verdict"].not_run
+    assert _saved_file(tmp_path, case)["replies"]["forecast"][stop_at] == good
