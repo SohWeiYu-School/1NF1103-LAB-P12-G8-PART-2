@@ -2539,3 +2539,51 @@ def test_an_older_saved_assessment_is_incomplete_when_it_lists_parts_that_could_
     page = client.get("/assessment/A1").get_data(as_text=True)
     assert "Incomplete assessment." in page and "2 parts did not run" in page
     assert "<li>The forecast</li>" in page and "<li>The peer benchmark</li>" in page
+
+
+# ----- "(incomplete)" tag next to an outcome --------------------------------------------------
+
+def _client_with_outcome(application, outcome="MANUAL_REVIEW"):
+    record = {**sample_case(), "outcome": outcome, "last_assessed_on": "2026-11-17"}
+    application.clients().save(record)
+    return record["client_ref"]
+
+
+def test_the_client_page_tags_an_incomplete_latest_verdict_and_history_row(web):
+    application, _, client = web
+    _saved_report(application, ["The forecast"])
+    ref = _client_with_outcome(application)
+    page = client.get(f"/client/{ref}").get_data(as_text=True)
+    assert page.count("(incomplete)</span>") == 2                  # the Latest verdict badge and the history row
+    assert 'title="Did not run: The forecast"' in page
+
+
+def test_the_assessments_list_tags_an_incomplete_outcome(web):
+    application, _, client = web
+    _saved_report(application, ["The forecast", "The peer benchmark"])
+    page = client.get("/assessments").get_data(as_text=True)
+    assert "(incomplete)</span>" in page and 'title="Did not run: The forecast; The peer benchmark"' in page
+
+
+@pytest.mark.parametrize("incomplete", [[], "damaged", [""]])
+def test_a_complete_or_damaged_report_gets_no_incomplete_tag(web, incomplete):
+    application, _, client = web
+    _saved_report(application, incomplete)
+    ref = _client_with_outcome(application)
+    assert "(incomplete)" not in client.get(f"/client/{ref}").get_data(as_text=True)
+    assert "(incomplete)" not in client.get("/assessments").get_data(as_text=True)
+
+
+def test_an_older_report_is_tagged_from_its_could_not_run_section(web):
+    application, _, client = web
+    _saved_report(application, None, [{"title": "Could not run", "items": [{"mark": "skip", "text": "The forecast", "sub": []}]}])
+    assert "(incomplete)</span>" in client.get("/assessments").get_data(as_text=True)
+
+
+def test_an_archived_assessment_does_not_tag_the_latest_verdict(web):
+    application, _, client = web
+    _saved_report(application, ["The forecast"])
+    ref = _client_with_outcome(application)
+    client.post("/assessment/A1/archive")
+    page = client.get(f"/client/{ref}").get_data(as_text=True)
+    assert "(incomplete)" not in page
