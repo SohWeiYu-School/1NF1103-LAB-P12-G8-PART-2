@@ -51,6 +51,7 @@ from app.model.declaration import Declaration
 from app.model.flag import Flag
 from app.model.flag_ticket import FlagTicket
 from app.model.overview_page import OverviewPage
+from app.model.trail_filter import TrailFilter
 from app.model.verdict import Verdict
 
 logger = logging.getLogger(__name__)
@@ -423,6 +424,8 @@ class App:
             elif choice == "7":
                 self.__ui.show_message("\n--- Synchronizing Local Data to Cloud Database ---")
                 self.__ui.show_sync_result(self.sync_to_cloud())
+            elif choice == "8":
+                self.__client_history()
             elif choice == "0":
                 self.__ui.show_message("\nGoodbye.")
                 break
@@ -839,19 +842,181 @@ class App:
         # One state per record (not per id: old records may share a missing id).
         states = [App.archive_state(match) for match in matches] if with_archived else None
         self.__report_view.show_assessment_list(matches, states)
-        if matches and self.__ui.ask_yes_no("Open one in full?"):
-            marks = [ReportView.ARCHIVE_MARKS.get(state, "") for state in states] if states else [""] * len(matches)
-            labels = [f"{match['client_ref']}  {match['kind']}{mark}" for match, mark in zip(matches, marks)]
-            chosen = matches[self.__ui.ask_choice("Which one?", labels)]
-            if chosen.get("report"):                                         # the combined assessment
-                verdict = self.__saved_verdict(chosen)
-                if verdict is None:
-                    self.__ui.show_error("This saved assessment could not be read, so its report cannot be "
-                                         "shown. The other saved assessments are not affected.")
-                else:
-                    self.__report_view.show_verdict_report(verdict)
+        if not matches:
+            return
+        actions = ["Open one in full", "Archive or restore one"]
+        action = self.__ui.ask_choice("What next?", actions, allow_back=True)
+        if action == 0:
+            index = self.__pick_assessment(matches, states, "Which one?")
+            if index is not None:
+                self.__open_assessment(matches[index])
+        elif action == 1:
+            self.__change_archive(matches)
+
+    def __pick_assessment(self, records: list[dict], states: list[str] | None, question: str,
+                          back_label: str = "Back") -> int | None:
+        """Ask which of the listed assessments (states: one per record, or None for all active); its position
+        in records, or None if the officer goes back."""
+        marks = [ReportView.ARCHIVE_MARKS.get(state, "") for state in states] if states else [""] * len(records)
+        labels = [f"{record['client_ref']}  {record['kind']}{mark}" for record, mark in zip(records, marks)]
+        return self.__ui.ask_choice(question, labels, allow_back=True, back_label=back_label)
+
+    def __open_assessment(self, chosen: dict) -> None:
+        """Show one saved assessment in full: the combined report, or a forecast-only one saved before it."""
+        if chosen.get("report"):                                         # the combined assessment
+            verdict = self.__saved_verdict(chosen)
+            if verdict is None:
+                self.__ui.show_error("This saved assessment could not be read, so its report cannot be "
+                                     "shown. The other saved assessments are not affected.")
             else:
-                self.__report_view.show_onboarding(chosen["assessment"])     # saved before the combined verdict
+                self.__report_view.show_verdict_report(verdict)
+        else:
+            self.__report_view.show_onboarding(chosen["assessment"])     # saved before the combined verdict
+
+    def __change_archive(self, records: list[dict]) -> None:
+        """Ask which of these assessments to archive or restore, ask for the reason (archive only) and do it.
+        Every result is told to the officer in the words the web app uses; a result that did nothing is never
+        shown as done."""
+        states = [App.archive_state(record) for record in records]
+        index = self.__pick_assessment(records, states, "Archive or restore which one?", "Cancel")
+        if index is None:
+            return
+        chosen, state = records[index], states[index]
+        assessment_id = str(chosen.get("assessment_id") or "").strip()
+        if not assessment_id:
+            self.__ui.show_error("This saved assessment has no id, so it cannot be archived or restored.")
+            return
+        if state == App.ARCHIVE_UNREADABLE:
+            self.__ui.show_error("This assessment's archive record is damaged, so it cannot be changed.")
+            return
+        archive = state == App.ARCHIVE_ACTIVE
+        reason = ""
+        if not self.__ui.ask_yes_no("Archive this assessment? It is hidden from the lists, not deleted."
+                                    if archive else "Restore this assessment to the lists?"):
+            return
+        while archive:
+            reason = self.__ui.ask_optional_text(
+                f"Reason (optional, up to {App.MAX_ARCHIVE_REASON} characters, Enter to skip)")
+            problem = App.archive_reason_problem(reason)
+            if not problem:
+                break
+            self.__ui.show_error(problem)
+        try:
+            result = (self.archive_assessment(assessment_id, reason, App.TERMINAL) if archive
+                      else self.restore_assessment(assessment_id, App.TERMINAL))
+        except ValueError as error:
+            logger.error("App.__change_archive: the saved assessments cannot be read: %r", error)
+            self.__ui.show_error(App.ASSESSMENTS_UNAVAILABLE)
+            return
+        word = "archived" if archive else "restored"
+        done, nothing_to_do = (("Assessment archived. It is hidden from the lists, not deleted.",
+                                "This assessment is already archived.") if archive else
+                               ("Assessment restored.", "This assessment is not archived."))
+        if result == App.ARCHIVE_CHANGED:
+            self.__ui.show_message(done)
+        elif result == App.ARCHIVE_NO_CHANGE:
+            self.__ui.show_message(nothing_to_do)
+        elif result == App.ARCHIVE_UNREADABLE:
+            self.__ui.show_error("This assessment's archive record is damaged, so it cannot be changed.")
+        elif result == App.ARCHIVE_NOT_SAVED:
+            self.__ui.show_error(f"The assessment was not {word} because saving failed. Please try again later.")
+        elif result == App.ARCHIVE_BAD_REASON:
+            self.__ui.show_error(f"Nothing was archived. {App.archive_reason_problem(reason)}")
+        elif result == App.ARCHIVE_NOT_FOUND:
+            self.__ui.show_error("That assessment could not be found, so nothing was changed.")
+        else:
+            self.__ui.show_error(App.ASSESSMENTS_UNAVAILABLE)
+
+    def __client_history(self) -> None:
+        """Menu 8: one client's assessments (archive marks), archive/restore, open one in full and the audit
+        trail with its Show / When filter."""
+        ref = self.__ui.ask_client_ref()
+        if ref is None:
+            return
+        try:
+            record = self.find_client(ref)
+        except ValueError as error:
+            self.__ui.show_error(str(error))
+            return
+        if record is None:
+            self.__ui.show_error(f"No client found with reference {ref}.")
+            return
+        client_ref = record.client_ref
+        self.__ui.show_message(f"\nClient {client_ref}  {record.profile.name}")
+        assessments = self.__show_client_assessments(client_ref)
+        trail_filter = TrailFilter()
+        options = ["Show history (audit trail)", "Change the history filter", "Open an assessment in full",
+                   "Archive or restore an assessment"]
+        while True:
+            choice = self.__ui.ask_choice("What next?", options, allow_back=True)
+            if choice is None:
+                return
+            if choice == 1:
+                trail_filter = self.__ask_trail_filter()
+            if choice in (0, 1):
+                self.__show_trail(client_ref, trail_filter)
+                continue
+            if assessments is None:                  # it could not be read before: try again
+                assessments = self.__show_client_assessments(client_ref)
+            if not assessments:
+                if assessments is not None:
+                    self.__ui.show_message("This client has no saved assessments.")
+                continue
+            if choice == 2:
+                index = self.__pick_assessment(assessments, [App.archive_state(a) for a in assessments],
+                                               "Which one?")
+                if index is not None:
+                    self.__open_assessment(assessments[index])
+            else:
+                self.__change_archive(assessments)
+                assessments = self.__show_client_assessments(client_ref)
+
+    def __show_client_assessments(self, client_ref: str) -> list[dict] | None:
+        """Show the client's saved assessments (archived ones marked) and return them; None, after saying so,
+        if the saved assessments cannot be read."""
+        try:
+            assessments = self.client_assessments(client_ref, include_archived=True)
+        except (OSError, ValueError) as error:
+            logger.error("App.__show_client_assessments: the saved assessments cannot be read: %r", error)
+            self.__read_failed("assessments", App.TERMINAL)
+            self.__ui.show_error(App.ASSESSMENTS_UNAVAILABLE)
+            return None
+        self.__ui.show_message("\nSaved assessments")
+        self.__report_view.show_assessment_list(assessments, [App.archive_state(a) for a in assessments])
+        return assessments
+
+    def __ask_trail_filter(self) -> TrailFilter:
+        """Ask for the Show and When choices (and the dates, for a custom range) of the history. A date the
+        model refuses is shown with its own message and asked again."""
+        shows, whens = list(TrailFilter.SHOW_LABELS), list(TrailFilter.WHEN)
+        show = shows[self.__ui.ask_choice("Show which events?", list(TrailFilter.SHOW_LABELS.values()))]
+        when = whens[self.__ui.ask_choice("Which period?", [TrailFilter.WHEN_LABELS[w] for w in whens])]
+        while True:
+            first = last = ""
+            if when == "custom":
+                first = self.__ui.ask_optional_text("From date (YYYY-MM-DD, Enter for no start)")
+                last = self.__ui.ask_optional_text("To date (YYYY-MM-DD, Enter for no end)")
+            try:
+                return TrailFilter(show, when, first, last)
+            except ValueError as error:
+                self.__ui.show_error(str(error))
+
+    def __show_trail(self, client_ref: str, trail_filter: TrailFilter) -> None:
+        """Show the client's audit trail, newest first, through the filter. An audit log that cannot be read
+        is said so; it is never shown as "no history"."""
+        try:
+            events, unreadable = self.audit_trail(client_ref)
+        except ValueError as error:
+            logger.error("App.__show_trail: the audit log cannot be read: %r", error)
+            self.__ui.show_error(App.AUDIT_UNAVAILABLE)
+            return
+        now = datetime.now(timezone.utc)
+        shown = [event for event in events if trail_filter.matches(event, now)]
+        dates = f" ({trail_filter.date_from or '...'} to {trail_filter.date_to or '...'})" \
+            if trail_filter.when == "custom" else ""
+        self.__ui.show_message(f"\nShowing: {TrailFilter.SHOW_LABELS[trail_filter.show]}, "
+                               f"{TrailFilter.WHEN_LABELS[trail_filter.when]}{dates}")
+        self.__report_view.show_client_history(shown, len(events), unreadable)
 
     def client_assessments(self, client_ref: str, include_archived: bool = False) -> list[dict]:
         """Every saved assessment of one client, newest first; archived ones only if include_archived.
