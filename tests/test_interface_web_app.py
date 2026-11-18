@@ -120,7 +120,7 @@ def test_pages_return_html_text_and_redirects_return_a_response(web):
 def test_every_page_is_branded_orbit(web):
     _, _, client = web
     page = client.get("/").get_data(as_text=True)
-    assert "Orbit</title>" in page and 'class="brand"' in page and '<span class="brand-mark">O</span>Orbit' in page
+    assert "Orbit</title>" in page and 'class="brand"' in page and '<span class="brand-logo">O</span>Orbit' in page
     assert 'class="portal-tag"' not in page and "KYC officer" in page
 
 
