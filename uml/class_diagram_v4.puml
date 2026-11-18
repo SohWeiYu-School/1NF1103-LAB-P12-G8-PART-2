@@ -251,6 +251,7 @@ package "IO Manager (app/interface)" {
     +LETTERS : str = " '.-" «const»
     +MAX_EMPLOYEES : int = 10_000_000 «const»
     +LABEL : str = " '.-&/,()%#0123456789" «const»
+    +MENU_CHOICES : tuple[str, ...] = (...) «const»
     --
     +__init__(read : Callable[[str], str] | None = None, write : Callable[[str], None] | None = None)
     +show(text : str = "") : None
@@ -266,7 +267,7 @@ package "IO Manager (app/interface)" {
     +ask_int(question : str, minimum : int | None = None, maximum : int | None = None, allow_blank : bool = False) : int | None
     +ask_money(question : str, allow_zero : bool = False, allow_blank : bool = False) : float | None
     +ask_year(question : str, minimum : int = 1940, maximum : int | None = None, allow_blank : bool = False) : int | None
-    +ask_choice(question : str, options : list[str], allow_back : bool = False) : int | None
+    +ask_choice(question : str, options : list[str], allow_back : bool = False, back_label : str = "Back to the main menu") : int | None
     +ask_yes_no(question : str) : bool
     +ask_client_ref() : str | None
     +keep_text(label : str, current : str, min_length : int = 2) : str
@@ -293,6 +294,7 @@ package "IO Manager (app/interface)" {
     +show_unexpected_error() : None
     +show_dropped_fields(messages : list[str]) : None
     +show_optional_intro(count : int) : None
+    +ask_optional_text(question : str) : str
   }
   class RateLimiter {
     -__cooldown_seconds : int = 60
@@ -322,7 +324,7 @@ package "IO Manager (app/interface)" {
     +show_verdict_report(verdict : Verdict, ask_for_evidence : bool = True, crime_result : dict | None = None, typologies : list[Typology] | None = None) : None
     +show_onboarding(assessment : dict) : None
     +show_assessment_list(records : list[dict], states : list[str] | None = None) : None
-    +show_client_list(records : list[dict]) : None
+    +show_client_list(records : list[dict], activity : dict[str, AuditEvent] | None = None, activity_note : str = "") : None
     +display_client_record(record : ClientRecord) : None
     +format_evidence(verdict : Verdict) : str
     -__format_crime_section(crime : dict, typologies : list[Typology]) : list[str]
@@ -334,6 +336,15 @@ package "IO Manager (app/interface)" {
     +format_onboarding(assessment : dict) : str
     +format_verdict_report(verdict : Verdict, crime_result : dict | None = None, typologies : list[Typology] | None = None) : str
     +show_document_summary(rows : list[dict], files : list[str], notes : list[str], checks : list[str]) : None
+    +show_client_history(events : list[AuditEvent], total : int | None = None, unreadable : int = 0) : None
+    +format_client_history(events : list[AuditEvent], total : int | None = None, unreadable : int = 0) : str
+    {static} +format_assessment_row(record : object, state : str = "", labelled : bool = False) : str
+    {static} -__missing_parts(report : object) : list[str]
+    {static} -__singapore_time(event : AuditEvent) : datetime
+    {static} -__last_activity_text(event : AuditEvent | None) : str
+    {static} -__by_day(events : list[AuditEvent]) : list[tuple[str, list[AuditEvent]]]
+    {static} -__fit(value : object, width : int) : str
+    {static} -__text_or_unknown(value : object) : str
   }
   class WebApp {
     -__app : App | None = None
@@ -829,6 +840,13 @@ package "Application (app/application)" {
     +update_flag(flag_id : str, actor : str, status : str, note : str, waiting_on : str = "", outcome : str = "", now : datetime | None = None) : tuple[FlagTicket | None, list[str], int]
     +open_flag_count(now : datetime | None = None) : int | None
     -__events_of(rows : list[dict], caller : str, strict : bool) : tuple[list[AuditEvent], int, int]
+    -__pick_assessment(records : list[dict], states : list[str] | None, question : str, back_label : str = "Back") : int | None
+    -__open_assessment(chosen : dict) : None
+    -__change_archive(records : list[dict]) : None
+    -__client_history() : None
+    -__show_client_assessments(client_ref : str) : list[dict] | None
+    -__ask_trail_filter() : TrailFilter
+    -__show_trail(client_ref : str, trail_filter : TrailFilter) : None
   }
   class AssessmentRunner {
     -__verdict_engine : VerdictEngine = VerdictEngine(...)
@@ -1916,6 +1934,7 @@ App ..> FlagTicket : creates
 App ..> MongoRepository : creates
 App ..> OverviewPage : creates
 App ..> RecordDiff : uses
+App ..> TrailFilter : uses
 App ..> Verdict : uses
 App ..> WebApp : creates
 AssessmentRepository --|> JsonRepository
@@ -2035,6 +2054,8 @@ PdfReader --|> DocumentReader
 RelatedPartyTransaction --|> Indicator
 RelatedPartyTransaction ..> ClaimedSource : checks
 ReportView -- ConsoleUI : prints via
+ReportView ..> AuditEvent : uses
+ReportView ..> AuditFilter : uses
 ReportView ..> ClientRecord : uses
 ReportView ..> Investment : uses
 ReportView ..> Job : uses

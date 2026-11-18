@@ -676,3 +676,19 @@ round-trip PROBLEMS: 0; layout_check 0.
   and `App` → `ResponseCache` stay.
 - Boxes changed size, so the folders were re-packed, every line re-routed and the labels placed again.
   Scan 32 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.
+
+**Terminal parity, phase 1 (18 Nov 2026): the terminal shows a client's history, archives and restores, and tags incomplete assessments**
+- Why: the terminal now does what the web pages do (menu 8: one client's assessments, archive/restore, open one in full,
+  the audit history with a Show/When filter; the client list shows the last activity; an assessment that did not fully
+  run is tagged "(incomplete)"). The code was right, so the diagram was brought up to it.
+- `ConsoleUI`: `ask_choice` gained `back_label : str = "Back to the main menu"`; added `+MENU_CHOICES : tuple[str, ...] = (...) «const»`
+  and `+ask_optional_text(question : str) : str`.
+- `ReportView`: `show_client_list(records, activity : dict[str, AuditEvent] | None = None, activity_note : str = "")`;
+  added `+show_client_history`, `+format_client_history` (events, total, unreadable), `+format_assessment_row(record, state, labelled) «static»`,
+  and the private static helpers `−__missing_parts`, `−__singapore_time`, `−__last_activity_text`, `−__by_day`, `−__fit`, `−__text_or_unknown`.
+- `App`: added private `−__pick_assessment`, `−__open_assessment`, `−__change_archive`, `−__client_history`,
+  `−__show_client_assessments`, `−__ask_trail_filter`, `−__show_trail`.
+- Arrows added (all "uses"): `App ..> TrailFilter`, `ReportView ..> AuditEvent`, `ReportView ..> AuditFilter`.
+- The diagram states no 1-8 range for `show_app_menu`, so nothing to change there.
+- Boxes changed size, so the folders were re-packed, every line re-routed and the labels placed again.
+  Scan 23 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.
