@@ -692,3 +692,34 @@ round-trip PROBLEMS: 0; layout_check 0.
 - The diagram states no 1-8 range for `show_app_menu`, so nothing to change there.
 - Boxes changed size, so the folders were re-packed, every line re-routed and the labels placed again.
   Scan 23 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.
+
+**Terminal front end (18 Nov 2026): the terminal's screens move out of App into TerminalApp, the command-line twin of WebApp**
+- Why: design review. `App` did two jobs, coordinating the managers and driving the terminal screens. The usual pattern
+  is one core and two front ends, so the terminal menu and every terminal screen moved to a new class `TerminalApp`
+  (`app/interface/terminal_app.py`), next to `WebApp`. CLAUDE.md §2 and §3 now name `WebApp` and `TerminalApp` as the two
+  front ends that call `App`. The code was right, so the diagram was brought up to it.
+- New class `TerminalApp` (IO Manager): `+GOODBYE «const»`; attributes `−__app`, `−__ui`, `−__report_view`, `−__client_form`,
+  `−__case_builder`; `+__init__(app, ui = None)`, `+start`, `+run_menu`, `+assess_client_record`, `+run_case_file`,
+  `+list_assessments` and the private screens `−__require_settings`, `−__prepare_case`, `−__maybe_assess`, `−__show_step`,
+  `−__new_client_from_documents`, `−__fill_field`, `−__pick_assessment`, `−__open_assessment`, `−__change_archive`,
+  `−__client_history`, `−__show_client_assessments`, `−__ask_trail_filter`, `−__show_trail`.
+- `App`: removed the moved members (`−__report_view`, `run_menu`, `run_case_file`, `assess_client_record`, `list_assessments`
+  and the 12 private screen methods). Added public helpers the front ends call: `archive_message «static»`,
+  `case_schema`, `finish_record`, `is_forecasting_case`, `list_document_folder`, `load_case_file`, `missing_fields`,
+  `read_failed`, `reading_summary`, `sample_case_files`, `saved_verdict`, `set_record_field`; private `−__need_record «static»`
+  and `−__case_schema`; constants `+ARCHIVE_DONE_RESULTS`, `+READ_TARGETS`. Changed: `record_builder` is now private
+  `−__record_builder`; `all_assessments(include_archived, outcome = "")`; `read_document_for_extraction(path, name = "")`;
+  `record_from_reading(extracted, today, client_ref = "")`.
+- `AuditFilter`: added `+RULE_BOTH_DATES`, `+RULE_FUTURE`, `+SHOWING_ALL` and `+range_problem(date_from, date_to, today) «static»`.
+- Arrows added: `App ..> TerminalApp : creates` (as `App ..> WebApp`), `TerminalApp -- App : calls`,
+  `TerminalApp *-- "1" ReportView`, `TerminalApp *-- "1" ClientForm`, `TerminalApp *-- "1" CaseBuilder` (it builds them),
+  `TerminalApp -- ConsoleUI : prints via` (handed in, as `ClientForm -- ConsoleUI`), `TerminalApp ..> RateLimiter : uses`
+  (it only gets the limiter from `App` inside a method, so a dependency, not WebApp's stored link), and "uses": `ClientRecord`, `Verdict`, `TrailFilter`, `AuditFilter`, `AuditEvent`.
+- Arrows removed or changed: `App ..> TrailFilter` removed (the trail filter screens are in `TerminalApp` now);
+  `App *-- ReportView` became `App ..> ReportView : uses` (`App` no longer stores one, it only passes one to `ClientForm`).
+- Not drawn: `TerminalApp → DocumentStore` (false match: `record.documents()` is a list of entries), recorded in the
+  checker's not-drawn list like `WebApp`.
+- `main.py` note unchanged: it still only starts `App`.
+- `Claims`: added private static `−__as_list(value, name) : list` (commit 21d3dc4).
+- Boxes changed size (`AuditFilter` widened), so the folders were re-packed, every line re-routed and the labels placed again.
+  Scan 42 differences before (stage 1 = 1, 3 = 3, 4 = 17, 5 = 20, 6 = 1), 0 after; round-trip PROBLEMS: 0; layout_check 0.
