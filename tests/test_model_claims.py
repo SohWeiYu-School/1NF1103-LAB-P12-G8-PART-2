@@ -147,9 +147,15 @@ def test_saved_claims_holding_a_text_for_the_countries_are_refused_not_split_int
         ClientRecord.from_dict(data)
 
 
-def test_the_refusal_is_in_plain_words_without_a_python_type_name():
+def test_the_refusal_is_in_plain_words_without_python_syntax_or_type_names():
     for bad in ("Singapore", 5, {"SG": 1}):
         with pytest.raises(ValueError) as error:
             Claims(wealth_countries=bad)
-        assert str(error.value).endswith("not a single value")
-        assert "str" not in str(error.value).split("not a single")[-1] and "dict" not in str(error.value)
+        assert str(error.value) == ("the wealth countries must be a list of names, for example Singapore and Malaysia, "
+                                    "or left empty; a single value was given")
+    with pytest.raises(ValueError) as error:
+        Claims(declared_counterparties="DBS")
+    assert str(error.value) == ("the declared counterparties must be a list of names, for example DBS and OCBC, "
+                                "or left empty; a single value was given")
+    for symbol in "[]{}'":
+        assert symbol not in str(error.value)
