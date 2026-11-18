@@ -202,3 +202,20 @@ def test_the_main_menu_shows_the_product_name_orbit():
     shown = []
     ConsoleUI(read=_answers("1"), write=shown.append).show_app_menu()
     assert any("ORBIT" in line for line in shown)
+
+
+# ---- the messages shown when the AI fails: friendly, and never the technical detail ----
+
+@pytest.mark.parametrize("feature, shown", [(None, "Assessment"), ("Forecasting", "Forecasting"),
+                                            ("Document reading", "Document reading")])
+def test_show_ai_unavailable_names_the_feature_and_says_it_is_not_available(capsys, feature, shown):
+    ui = ConsoleUI()
+    ui.show_ai_unavailable() if feature is None else ui.show_ai_unavailable(feature)
+    out = capsys.readouterr().out
+    assert shown in out and "not available right now" in out
+
+
+def test_show_unexpected_error_prints_a_friendly_message_with_no_technical_detail(capsys):
+    ConsoleUI().show_unexpected_error()
+    out = capsys.readouterr().out
+    assert "unexpected error" in out.lower() and "OPENAI" not in out
