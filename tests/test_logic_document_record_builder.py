@@ -79,6 +79,19 @@ def test_an_impossible_value_is_left_empty_and_named_while_every_good_field_is_k
     assert ["career", "age"] in [field["path"] for field in builder.missing_fields(record)]
 
 
+def test_a_text_where_a_list_of_countries_or_counterparties_belongs_is_dropped_not_split_into_letters():
+    reading = {**READING, "claims": {**READING["claims"], "wealth_countries": "Singapore",
+                                     "declared_counterparties": "DBS"}}
+    record, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    saved = record.to_dict()
+    assert saved["claims"]["wealth_countries"] == [] and saved["claims"]["declared_counterparties"] == []
+    assert sorted(entry["path"] for entry in dropped) == [["claims", "declared_counterparties"],
+                                                          ["claims", "wealth_countries"]]
+    assert all("must be a list" in entry["message"] for entry in dropped)
+    assert saved["claims"]["expected_aum"] == READING["claims"]["expected_aum_sgd"]     # the rest is kept
+    assert record.profile.name == READING["client"]["name"]
+
+
 def test_several_impossible_values_in_jobs_assets_and_claims_are_each_dropped_on_their_own():
     reading = {**READING, "jobs": [{**READING["jobs"][0], "start_year": 1800}],
                "assets": [{**READING["assets"][0], "price_paid_sgd": -5}],
