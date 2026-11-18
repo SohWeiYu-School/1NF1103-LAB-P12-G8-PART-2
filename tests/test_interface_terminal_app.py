@@ -965,9 +965,10 @@ def test_the_end_of_input_inside_the_admin_screens_leaves_cleanly_and_signs_out(
 def test_the_end_of_input_partway_through_a_flag_update_writes_nothing_and_signs_out(app, tmp_path):
     seed_audit(tmp_path, ALL_RULES)
     answers = iter(["9", "Orbit Admin", "admin123", "2", "F-HOU-SOW-1-7", "1", "2"])      # then Ctrl-D at the note
-    shown = []
+    shown, prompts = [], []
 
     def read(question: str = "") -> str:
+        prompts.append(question)
         try:
             return next(answers)
         except StopIteration:
@@ -975,6 +976,7 @@ def test_the_end_of_input_partway_through_a_flag_update_writes_nothing_and_signs
 
     ui = ConsoleUI(read=read, write=shown.append, secret=read)
     assert TerminalApp(app, ui).start([]) == 0
+    assert prompts[-1].startswith("Why (required")           # the note question was reached before the input ended
     assert not any("unexpected" in line for line in shown) and not any("Saved in the audit log" in line for line in shown)
     actions = [line.action for line in _audit_lines(app)]
     assert "flag_updated" not in actions and actions[-2:] == ["signed_in", "signed_out"]
