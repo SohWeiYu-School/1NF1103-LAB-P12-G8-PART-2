@@ -53,6 +53,9 @@ class TerminalApp:
             --case FILE             assess one case file
             --all-samples           assess every sample case
         """
+        if not self.__app.settings_ok():            # App.start() checks this too; a direct caller is told honestly
+            self.__ui.show_error(App.SETTINGS_UNAVAILABLE)
+            return 1
         if not self.__app.ai_available():
             logger.warning("TerminalApp: the AI caller has no API key, so only AI replies saved earlier can be used")
             self.__ui.show_error("The AI service is not available right now, so only AI replies saved earlier "
@@ -149,11 +152,6 @@ class TerminalApp:
 
     # ----- assessing ---------------------------------------------------------------------------
 
-    def __require_settings(self) -> None:
-        """Raises RuntimeError(SETTINGS_UNAVAILABLE) instead of running on empty rules."""
-        if not self.__app.settings_ok():
-            raise RuntimeError(App.SETTINGS_UNAVAILABLE)
-
     def __prepare_case(self, record: ClientRecord) -> dict | None:
         """The case to assess, built from a saved client record. The officer is only asked for
         what cannot be read from the record. None if no usable case could be made."""
@@ -172,7 +170,6 @@ class TerminalApp:
     def assess_client_record(self, record: ClientRecord) -> Verdict | None:
         """The command line's assessment of a saved client: prepare, run, save, show.
         Returns the Verdict, or None if no assessment could be made."""
-        self.__require_settings()
         app = self.__app
         case = self.__prepare_case(record)
         if case is None:
@@ -197,7 +194,6 @@ class TerminalApp:
 
     def run_case_file(self, path: str) -> bool:
         """Assess a case file (the same assessment as the menu). False if it could not be assessed."""
-        self.__require_settings()
         app = self.__app
         case = app.load_case_file(path)
         if case is not None and not app.is_forecasting_case(case):

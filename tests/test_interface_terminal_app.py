@@ -624,7 +624,7 @@ def test_a_saved_report_without_its_evidence_prints_nothing_of_the_report(app, t
     assert "TerminalApp.__open_assessment" in caplog.text and "Traceback" in caplog.text
 
 
-def test_the_terminal_refuses_to_assess_when_the_settings_could_not_be_loaded(tmp_path, monkeypatch):
+def test_the_terminal_refuses_to_assess_when_the_settings_could_not_be_loaded(tmp_path, monkeypatch, capsys):
     import shutil
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MONGODB_URI", "")
@@ -635,6 +635,9 @@ def test_the_terminal_refuses_to_assess_when_the_settings_could_not_be_loaded(tm
     case_path = tmp_path / "case.json"
     case_path.write_text(json.dumps(sample_case()))
     terminal = _terminal(application)
+    assert terminal.start([]) == 1                       # the settings message, not "unexpected error"
+    out = capsys.readouterr().out
+    assert App.SETTINGS_UNAVAILABLE in out and "unexpected error" not in out.lower()
     with pytest.raises(RuntimeError, match="settings could not be loaded"):
         terminal.run_case_file(str(case_path))
     with pytest.raises(RuntimeError, match="settings could not be loaded"):
