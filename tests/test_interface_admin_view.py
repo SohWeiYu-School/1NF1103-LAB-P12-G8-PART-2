@@ -168,7 +168,7 @@ def test_the_chain_result_when_intact_and_when_broken(tmp_path, monkeypatch):
     tamper(tmp_path)
     text = view.format_chain(application.verify_audit_log("Orbit Admin"))
     assert "WARNING: The log has been changed outside the app: entry 5 does not match." in text
-    assert "Changed outside the app: " in text
+    assert "Changed outside the app: " not in text
 
 
 def test_show_methods_print_through_the_console_ui_only(app):
@@ -206,3 +206,18 @@ def test_the_view_imports_neither_the_app_nor_the_logic_manager():
     with open(path, encoding="utf-8") as handle:
         modules = [node.module or "" for node in ast.walk(ast.parse(handle.read())) if isinstance(node, ast.ImportFrom)]
     assert not [m for m in modules if m.startswith(("app.application", "app.logic", "app.data", "app.ai"))]
+
+
+def test_stored_text_cannot_carry_escape_or_control_characters_to_the_terminal(app, tmp_path):
+    seed_audit(tmp_path, [("flag_updated", "2026-11-07T02:00:00Z", "Orbit Admin", "SOW-1", "ok",
+                           {"flag_id": "F-SHO-SOW-1-4", "from": "open", "to": "review",
+                            "note": "looked\x1b[31m red\nsecond line\r\x07", "waiting_on": "", "outcome": ""})])
+    ticket, evidence, entries = app.flag_evidence("F-SHO-SOW-1-4", NOW)
+    text = AdminView().format_flag(ticket, evidence, entries)
+    assert "looked?[31m red?second line??" in text
+    for char in ("\x1b", "\r", "\x07"):
+        assert char not in text
+    assert all(line.isprintable() for line in text.splitlines())
+    audit_filter = AuditFilter("90", query="looked")
+    page = app.audit_log(audit_filter, NOW)
+    assert all(line.isprintable() for line in AdminView().format_log_page(page, audit_filter, NOW).splitlines())
