@@ -109,6 +109,20 @@ def test_the_message_for_a_text_instead_of_a_list_reads_inside_the_dropped_sente
            "or left empty; a single value was given)" in dropped[0]["message"]
 
 
+@pytest.mark.parametrize("odd", [["SG", None, 5], [["x"]], ["SG", "  "], 0, False, {}, 0.0])
+def test_a_reading_with_odd_items_or_a_non_list_for_the_countries_drops_only_that_field_with_its_message(odd):
+    reading = {**READING, "claims": {**READING["claims"], "wealth_countries": odd, "declared_counterparties": odd}}
+    record, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    saved = record.to_dict()
+    assert saved["claims"]["wealth_countries"] == [] and saved["claims"]["declared_counterparties"] == []
+    assert sorted(entry["path"] for entry in dropped) == [["claims", "declared_counterparties"],
+                                                          ["claims", "wealth_countries"]]
+    assert all("is not possible" in entry["message"] and "so it was left empty" in entry["message"]
+               for entry in dropped)
+    assert saved["claims"]["expected_aum"] == READING["claims"]["expected_aum_sgd"]       # the rest is kept
+    assert record.profile.name == READING["client"]["name"]
+
+
 def test_several_impossible_values_in_jobs_assets_and_claims_are_each_dropped_on_their_own():
     reading = {**READING, "jobs": [{**READING["jobs"][0], "start_year": 1800}],
                "assets": [{**READING["assets"][0], "price_paid_sgd": -5}],
