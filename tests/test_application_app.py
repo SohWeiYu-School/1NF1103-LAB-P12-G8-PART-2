@@ -1898,3 +1898,43 @@ def test_the_record_methods_refuse_something_that_is_not_a_client_record(app):
                  lambda: app.set_record_field(None, ["career", "age"], 30)):
         with pytest.raises(ValueError, match="client record is needed"):
             call()
+
+
+# ----- the inputs of the public helpers are checked ------------------------------------------------
+
+@pytest.mark.parametrize("bad", [None, 5, ["x"], b"bytes"])
+def test_a_case_file_path_and_a_document_folder_must_be_text(app, bad):
+    with pytest.raises(ValueError, match="text"):
+        app.list_document_folder(bad)
+    with pytest.raises(ValueError, match="text"):
+        app.load_case_file(bad)
+
+
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_an_empty_case_file_path_is_refused(app, bad):
+    with pytest.raises(ValueError):
+        app.load_case_file(bad)
+
+
+def test_saved_verdict_refuses_what_is_not_a_record_and_gives_none_without_a_report(app, caplog):
+    for bad in (None, "text", [1], 5):
+        with pytest.raises(ValueError, match="record"):
+            app.saved_verdict(bad)
+    assert app.saved_verdict({"assessment_id": "A1", "client_ref": "C-1", "assessed_at": "2026-11-01",
+                              "outcome": "PASSED"}) is None                # no report: not possible, and logged
+    assert "A1" in caplog.text
+    assert app.saved_verdict({"assessment_id": "A1", "client_ref": "C-1", "assessed_at": "2026-11-01",
+                              "outcome": "PASSED", "report": "text"}) is None
+
+
+def test_read_failed_checks_what_and_who(app):
+    for bad in ("databases", "", None, 5):
+        with pytest.raises(ValueError, match="client records, assessments"):
+            app.read_failed(bad)
+    with pytest.raises(ValueError, match="actor"):
+        app.read_failed("assessments", "Nobody Known")
+    with pytest.raises(ValueError, match="actor"):
+        app.read_failed("assessments", 5)
+    app.read_failed("client records")
+    app.read_failed("assessments", App.TERMINAL)
+    assert [e.action for e in app.audit_log(AuditFilter(preset="1")).events] == ["data_unavailable"]

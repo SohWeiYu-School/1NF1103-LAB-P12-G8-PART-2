@@ -126,6 +126,8 @@ class App:
     ARCHIVE_NO_CHANGE: str = AssessmentRepository.NO_CHANGE
     ARCHIVE_NOT_SAVED: str = AssessmentRepository.NOT_SAVED
     ARCHIVE_BAD_REASON: str = "bad_reason"
+    # What a failed read can be about (the "what" of the audit line "database unreadable").
+    READ_TARGETS: tuple[str, ...] = ("client records", "assessments")
     # The results of archive_assessment / restore_assessment that are told as news; any other result is a problem.
     ARCHIVE_DONE_RESULTS: tuple[str, ...] = (AssessmentRepository.CHANGED, AssessmentRepository.NO_CHANGE)
     MAX_ARCHIVE_REASON: int = AssessmentRepository.MAX_REASON_LENGTH
@@ -650,12 +652,18 @@ class App:
         return self.__documents.read_for_extraction(path, name or None)
 
     def list_document_folder(self, folder: str) -> list[str] | None:
-        """The readable documents directly inside a folder, sorted by name; None if the folder does not exist."""
+        """The readable documents directly inside a folder, sorted by name; None if the folder does not exist.
+        Raises ValueError if folder is not text."""
+        if not isinstance(folder, str):
+            raise ValueError("The folder must be given as text.")
         return self.__documents.list_folder(folder)
 
     def load_case_file(self, path: str) -> object | None:
         """The contents of one case file as it is (normally a JSON object; whatever is wrong with it is for
-        validate_case to say), or None if it is missing or cannot be read."""
+        validate_case to say), or None if it is missing or cannot be read. Raises ValueError if path is not
+        non-empty text."""
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError("The case file path must be non-empty text.")
         return self.__case_files.load(path)
 
     def is_forecasting_case(self, case: object) -> bool:
@@ -672,12 +680,22 @@ class App:
 
     def read_failed(self, what: str, actor: str = "") -> None:
         """Write one "database unreadable" line for a read the caller found failing (at most one for each
-        request). Never raises."""
+        request). what must be one of READ_TARGETS and actor, if given, a name App knows (as for any action);
+        ValueError otherwise. Writing the line never raises."""
+        if what not in App.READ_TARGETS:
+            raise ValueError(f"What could not be read must be one of {', '.join(App.READ_TARGETS)} (got {what!r}).")
+        if not isinstance(actor, str):
+            raise ValueError("The actor must be text.")
+        if actor:
+            self.__check_actor(actor)
         self.__read_failed(what, actor)
 
     def saved_verdict(self, saved: dict) -> Verdict | None:
         """A saved assessment as a Verdict holding its saved report, so it can be shown again.
-        None (and logged) if the saved outcome or report is not possible."""
+        None (and logged) if the saved outcome or report is not possible or there is no report. Raises ValueError
+        if saved is not a record (a dict)."""
+        if not isinstance(saved, dict):
+            raise ValueError("A saved assessment must be a record (a dict).")
         return self.__saved_verdict(saved)
 
     @staticmethod
@@ -1383,7 +1401,7 @@ class App:
             verdict = Verdict(str(saved.get("assessment_id") or ""), str(saved.get("client_ref") or ""),
                               str(saved.get("assessed_at") or ""), saved.get("outcome"))
             verdict.report = saved["report"]
-        except ValueError as error:
+        except (ValueError, KeyError) as error:
             logger.error("App: the saved assessment %s cannot be read: %r", saved.get("assessment_id"), error)
             return None
         return verdict
