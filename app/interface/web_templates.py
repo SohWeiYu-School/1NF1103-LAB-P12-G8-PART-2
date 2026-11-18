@@ -37,7 +37,7 @@ header.top{background:var(--header);color:var(--header-ink);position:sticky;top:
 header.top.admin{background:#232b36}
 header.top .wrap{display:flex;align-items:center;gap:18px;min-height:56px;flex-wrap:wrap;padding-block:6px}
 .brand{color:var(--header-ink);text-decoration:none;font-weight:700;letter-spacing:.01em;display:flex;gap:10px;align-items:center}
-.brand-mark{width:26px;height:26px;border-radius:6px;background:rgba(255,255,255,.14);display:grid;place-items:center;font-size:.72rem;font-weight:700}
+.brand-logo{width:30px;height:30px;border-radius:8px;object-fit:contain;flex:none}
 .portal-tag{font-size:.66rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:#f2c94c;color:#3d2e00;border-radius:4px;padding:2px 6px}
 nav.main{display:flex;gap:4px;flex-wrap:nowrap;flex:1 1 auto;min-width:0;overflow-x:auto}
 nav.main form{display:contents}
@@ -346,7 +346,7 @@ legend{font-weight:600;padding:0 6px}
 </head>
 <body{% if portal == 'admin' %} class="admin-portal"{% endif %}>
 <header class="top{% if portal == 'admin' %} admin{% endif %}"><div class="wrap">
-  <a class="brand" href="{{ url_for('admin_home' if portal == 'admin' else 'home') }}"><span class="brand-mark">O</span>Orbit{% if portal == 'admin' %} <span class="portal-tag">Admin</span>{% endif %}</a>
+  <a class="brand" href="{{ url_for('admin_home' if portal == 'admin' else 'home') }}"><img class="brand-logo" src="{{ url_for('static', filename='logo.svg') }}" alt="">Orbit{% if portal == 'admin' %} <span class="portal-tag">Admin</span>{% endif %}</a>
   {% if account %}
   {% set here = request.endpoint %}
   {% if portal == 'admin' %}
