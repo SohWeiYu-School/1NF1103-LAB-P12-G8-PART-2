@@ -143,30 +143,40 @@ class AdminConsole:
     # ----- 2. one flag -----------------------------------------------------------------------
 
     def __open_flag(self) -> None:
-        """Ask for a flag (its number in the Overview list above, or its id) and show it with its evidence."""
+        """Ask for a flag and show it with its evidence."""
+        flag_id = self.__pick_flag()
+        if flag_id is None:
+            return
+        if self.__show_flag(flag_id) is not None:
+            self.__ui.read_answer("\nPress Enter to continue...")
+
+    def __pick_flag(self) -> str | None:
+        """Ask for a flag: its number in the Overview list above, or its id. None if the admin goes back (0)."""
         while True:
             question = ("Flag number from the list, or a flag id (0 to go back)" if self.__listed
                         else "Flag id (0 to go back)")
             answer = self.__ui.ask_text(question)
             if answer == "0":
-                return
+                return None
             if answer.isascii() and answer.isdigit() and not self.__listed:
                 self.__ui.show_error("Show the Overview first to pick a flag by number, or type a flag id.")
                 continue
             if answer.isascii() and answer.isdigit():
                 if 1 <= int(answer) <= len(self.__listed):
-                    flag_id = self.__listed[int(answer) - 1].flag.flag_id
-                    break
+                    return self.__listed[int(answer) - 1].flag.flag_id
                 self.__ui.show_error(f"Choose a number from 1 to {len(self.__listed)}, or type a flag id.")
                 continue
-            flag_id = answer
-            break
+            return answer
+
+    def __show_flag(self, flag_id: str) -> FlagTicket | None:
+        """Fetch the flag fresh and show it with its evidence. None (after saying the flag is gone) if the rules find
+        no flag with that id now."""
         ticket, evidence, entries = self.__app.flag_evidence(flag_id, self.__now())
         if ticket is None:
             self.__ui.show_message(f"\n{App.FLAG_GONE}")
-            return
+            return None
         self.__view.show_flag(ticket, evidence, entries)
-        self.__ui.read_answer("\nPress Enter to continue...")
+        return ticket
 
     # ----- 3. a client's flags ---------------------------------------------------------------
 
