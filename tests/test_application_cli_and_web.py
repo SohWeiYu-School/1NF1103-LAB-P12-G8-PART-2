@@ -5,11 +5,12 @@ import copy
 import html
 import os
 import time
-from unittest.mock import patch
 
 import pytest
 
 from app.application.app import App
+from app.interface.console_ui import ConsoleUI
+from app.interface.terminal_app import TerminalApp
 from app.interface.web_app import WebApp
 from app.model.client_record import ClientRecord
 from tests import fake_ai, fake_services
@@ -62,11 +63,15 @@ def test_cli_and_web_app_give_the_same_report(tmp_path, monkeypatch, capsys):
     application.clients().save(copy.deepcopy(record))
 
     # the command line (menu option 4)
-    with patch("builtins.input", return_value="y") as answer:
-        cli = application.assess_client_record(ClientRecord.from_dict(record))
+    asked = []
+
+    def answer(question=""):
+        asked.append(question)
+        return "y"
+    cli = TerminalApp(application, ConsoleUI(read=answer)).assess_client_record(ClientRecord.from_dict(record))
     printed = capsys.readouterr().out
     assert "COMBINED ASSESSMENT" in printed and cli.report["header"]["verdict_label"] in printed
-    assert "Show the full evidence?" in answer.call_args.args[0]       # asked before the evidence
+    assert "Show the full evidence?" in asked[-1]                       # asked before the evidence
     assert printed.index("FULL EVIDENCE  ") > printed.index("WHAT CAME BACK CLEAN")
 
     # the web app (Run Assessment button), on the same App
@@ -120,8 +125,8 @@ def test_cli_and_web_app_read_the_documents_the_same_way(tmp_path, monkeypatch, 
     application = _app(tmp_path, monkeypatch, documents_reply=reading)
     _save_replies(application, record)
     application.clients().save(copy.deepcopy(record))
-    with patch("builtins.input", return_value="n"):
-        cli = application.assess_client_record(ClientRecord.from_dict(record))
+    cli = TerminalApp(application, ConsoleUI(read=lambda question="": "n")).assess_client_record(
+        ClientRecord.from_dict(record))
     application.rate_limiter().reset()
     web, page = _assess_on_the_web(application, record["client_ref"])
     assert web["report"] == cli.report

@@ -2,7 +2,7 @@
 
 1. The four managers (interface, ai, logic, data) never import each other or the
    Application folder. All coordination is in app/application. Any of them may use
-   app/model. The one exception is WebApp, which calls App.
+   app/model. The exceptions are WebApp and TerminalApp, the two front ends, which call App.
 2. Only ConsoleUI prints or reads from the terminal.
 3. The Logic Manager does no file access and no network calls.
 """
@@ -14,7 +14,8 @@ import pytest
 
 APP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app")
 MANAGERS = ("interface", "ai", "logic", "data")
-ALLOWED_EXCEPTIONS = {("interface/web_app.py", "app.application.app")}
+ALLOWED_EXCEPTIONS = {("interface/web_app.py", "app.application.app"),
+                      ("interface/terminal_app.py", "app.application.app")}
 
 
 def _python_files(folder: str) -> list[str]:
@@ -93,15 +94,25 @@ def test_the_logic_manager_opens_no_files_and_makes_no_network_calls():
     assert problems == []
 
 
-def test_the_web_app_asks_app_and_never_works_a_managers_object():
-    # #39: WebApp may call App, but not take one of App's managers' objects and work it itself.
-    handed_out = {"clients", "assessments", "documents", "record_builder"}
-    path = os.path.join(APP_DIR, "interface", "web_app.py")
+@pytest.mark.parametrize("file, handed_out", [
+    ("web_app.py", {"clients", "assessments", "documents", "record_builder"}),
+    # the terminal's new-client screen works the record builder App makes for it, as App did before
+    ("terminal_app.py", {"clients", "assessments", "documents"}),
+])
+def test_a_front_end_asks_app_and_never_works_a_managers_object(file, handed_out):
+    # #39: a front end may call App, but not take one of App's managers' objects and work it itself.
+    path = os.path.join(APP_DIR, "interface", file)
     with open(path, encoding="utf-8") as handle:
         tree = ast.parse(handle.read())
-    problems = [f"web_app.py:{node.lineno} App.{node.func.attr}()" for node in ast.walk(tree)
+    problems = [f"{file}:{node.lineno} App.{node.func.attr}()" for node in ast.walk(tree)
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
                 and node.func.attr in handed_out
                 and isinstance(node.func.value, (ast.Attribute, ast.Name))
                 and getattr(node.func.value, "attr", getattr(node.func.value, "id", "")) in ("__app", "app")]
     assert problems == []
+
+
+@pytest.mark.parametrize("file", ["web_app.py", "terminal_app.py"])
+def test_a_front_end_never_reaches_into_apps_private_members(file):
+    with open(os.path.join(APP_DIR, "interface", file), encoding="utf-8") as handle:
+        assert "_App__" not in handle.read()

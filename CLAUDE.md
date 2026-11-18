@@ -31,7 +31,7 @@ The only module-level functions are the AI caller functions in `app/ai/ai_caller
 |---|---|---|
 | `main.py` | Entry point | Picks the AI brand and starts `App`. Nothing else. |
 | `app/application/` | Application | `App`, `AssessmentRunner`. The only place that coordinates the managers. |
-| `app/interface/` | IO Manager | `ConsoleUI`, `ReportView`, `ClientForm`, `CaseBuilder`, `WebApp` (and its page templates in `web_templates.py`), `RateLimiter` |
+| `app/interface/` | IO Manager | `ConsoleUI`, `ReportView`, `ClientForm`, `CaseBuilder`, `TerminalApp`, `WebApp` (and its page templates in `web_templates.py`), `RateLimiter` |
 | `app/ai/` | AI Manager | `AIService` and its children, `ResponseCache`, the AI caller functions |
 | `app/logic/` | Logic Manager | `VerdictEngine`, `RiskAnalysis` and its children, `Indicator` and its children, the forecast classes, `CaseReader`, `DocumentRecordBuilder`, `CaseTimeline`, `Formatter` |
 | `app/data/` | Data Manager | The repositories, `CloudSync`, `DocumentStore`, the document readers, `ConfigReader`, `CaseFiles` |
@@ -46,7 +46,7 @@ import from each other, and must never import from `app/application`.
 All coordination happens in `app/application`.
 
 - Any group may import from `app/model`.
-- The one exception is `WebApp`, which calls `App`.
+- The exceptions are `WebApp` and `TerminalApp`, the two front ends, which call `App`.
 
 ```python
 # app/application/app.py — correct
