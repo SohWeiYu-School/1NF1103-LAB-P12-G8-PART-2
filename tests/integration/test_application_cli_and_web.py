@@ -16,7 +16,7 @@ from tests import fake_ai, fake_services
 from tests.logic_fixtures import sample_case
 from tests.web_session import sign_in
 
-MARCUS = os.path.join(os.path.dirname(__file__), "documents", "marcus_lim")
+MARCUS = os.path.join(os.path.dirname(os.path.dirname(__file__)), "documents", "marcus_lim")
 
 
 def _app(tmp_path, monkeypatch, **replies) -> App:

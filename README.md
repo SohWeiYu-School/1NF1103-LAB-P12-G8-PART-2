@@ -177,7 +177,7 @@ sites; when it is empty they use `OPENAI_MODEL` too. `FORECAST_WEB_SEARCH=on` le
 market figures online. If the AI can't describe one asset sensibly even after the system repairs its
 answer, that asset is held at its purchase price and the report says so; the rest still runs.
 
-`tests/documents/marcus_lim/` holds a specimen set of documents, and `tests/test_document_parity.py` checks that both routes save the same client from them.
+`tests/documents/marcus_lim/` holds a specimen set of documents, and `tests/integration/test_document_parity.py` checks that both routes save the same client from them.
 
 > **Privacy note:** this sends the full document contents — including declared figures — to the AI provider. This is separate from the benchmark call, whose allowlist (see `CLAUDE.md`) is unchanged. Only use synthetic documents.
 
@@ -194,7 +194,8 @@ Add `-v` for verbose output (shows each test name) or `-q` for a one-line summar
 Tests are plain pytest functions, one file per class (`tests/test_<group>_<class>.py`). They never
 call a real AI: the AI services are given made-up callers with hard-coded replies (`tests/fake_ai.py`,
 `tests/fake_services.py`), so a connection failure, a reply that is not JSON and a reply that breaks
-its schema are all tested without a network.
+its schema are all tested without a network. Tests that run the whole app together (the command
+line and the web app giving the same result, for example) are in `tests/integration/`.
 
 ---
 
@@ -221,6 +222,7 @@ its schema are all tested without a network.
 ├── logs/
 │   └── app.log           # All application logs (warnings, errors, AI call info)
 ├── tests/                # All test files (one per class, plus the boundary and behaviour tests)
+│   └── integration/      # Tests that run the whole app together
 ├── .dockerignore
 ├── .env.example          # Template showing what variables are needed
 ├── .gitignore
