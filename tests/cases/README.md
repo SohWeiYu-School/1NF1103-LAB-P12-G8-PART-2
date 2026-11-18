@@ -34,9 +34,9 @@ The file must contain:
 
 ## Adding a New Golden Case
 
-1. Create a new file: `tests/golden/case_<descriptive_name>.json`
+1. Create a new file: `tests/cases/case_<descriptive_name>.json`
 2. Fill in all fields above
-3. Run `pytest tests/golden/` to verify it passes
+3. Run `pytest tests/cases/` to verify it passes
 4. Commit the file on a feature branch
 
 ---
@@ -44,7 +44,7 @@ The file must contain:
 ## Running Golden Tests
 
 ```bash
-pytest tests/golden/
+pytest tests/cases/
 ```
 
 Or as part of the full suite:

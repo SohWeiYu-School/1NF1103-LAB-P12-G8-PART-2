@@ -21,7 +21,7 @@ from app.model.client_record import ClientRecord
 from tests.logic_fixtures import CONFIG
 from tests.web_session import sign_in
 
-FOLDER = os.path.join(os.path.dirname(__file__), "documents", "marcus_lim")
+FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), "documents", "marcus_lim")
 TODAY = "2026-10-13"
 
 
@@ -98,7 +98,7 @@ def test_the_record_holds_the_declared_figures(site):
 
 
 def test_both_records_pass_the_forecasting_checks(site):
-    schema_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app", "schemas", "case_input.schema.json")
+    schema_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "app", "schemas", "case_input.schema.json")
     with open(schema_path, encoding="utf-8") as handle:
         builder = CaseBuilder(ConsoleUI(), json.load(handle))
     for record in (cli_record(expected_reply()), web_record(site, expected_reply())):

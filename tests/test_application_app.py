@@ -369,12 +369,18 @@ def _damage(tmp_path, name):
     return path
 
 
-def test_find_client_raises_a_safe_message_when_the_database_cannot_be_read(app, tmp_path, caplog):
-    _damage(tmp_path, "sow_cases.json")
+@pytest.mark.parametrize("damaged, method, args, message", [
+    ("sow_cases.json", "find_client", ("CL-1",), App.CLIENTS_UNAVAILABLE),
+    ("sow_cases.json", "all_clients", (), App.CLIENTS_UNAVAILABLE),
+    ("ai_assessments.json", "all_assessments", (), App.ASSESSMENTS_UNAVAILABLE),
+], ids=["find_client", "all_clients", "all_assessments"])
+def test_a_database_that_cannot_be_read_raises_the_safe_message_and_logs_where(app, tmp_path, caplog,
+                                                                                damaged, method, args, message):
+    _damage(tmp_path, damaged)
     with pytest.raises(ValueError) as error:
-        app.find_client("CL-1")
-    assert str(error.value) == App.CLIENTS_UNAVAILABLE
-    assert "App.find_client" in caplog.text
+        getattr(app, method)(*args)
+    assert str(error.value) == message
+    assert f"App.{method}" in caplog.text
 
 
 def test_saving_a_client_into_a_damaged_file_fails_and_keeps_the_file(app, tmp_path):
@@ -516,14 +522,6 @@ def test_all_clients_is_empty_when_there_are_none_and_lists_them_when_saved(app)
     assert [client["client_ref"] for client in app.all_clients()] == [sample_case()["client_ref"]]
 
 
-def test_all_clients_raises_the_safe_message_when_the_database_cannot_be_read(app, tmp_path, caplog):
-    _damage(tmp_path, "sow_cases.json")
-    with pytest.raises(ValueError) as error:
-        app.all_clients()
-    assert str(error.value) == App.CLIENTS_UNAVAILABLE
-    assert "App.all_clients" in caplog.text
-
-
 def test_all_assessments_is_empty_when_there_are_none(app):
     assert app.all_assessments() == []
 
@@ -532,14 +530,6 @@ def test_all_assessments_lists_the_saved_ones(app):
     saved = {"assessment_id": "A1", "client_ref": "C-1", "assessed_at": "2025-01-01T00:00:00+00:00"}
     assert app.assessments().save(saved)
     assert app.all_assessments() == [saved]
-
-
-def test_all_assessments_raises_the_safe_message_when_they_cannot_be_read(app, tmp_path, caplog):
-    _damage(tmp_path, "ai_assessments.json")
-    with pytest.raises(ValueError) as error:
-        app.all_assessments()
-    assert str(error.value) == App.ASSESSMENTS_UNAVAILABLE
-    assert "App.all_assessments" in caplog.text
 
 
 def test_a_reading_becomes_a_record_and_the_fields_left_out_are_named(app):
@@ -1360,11 +1350,11 @@ def test_a_log_where_every_row_is_unreadable_gives_no_events_and_the_count(app, 
 
 # ----- the audit Overview, flags and "database unreadable" lines ----------------------------------------
 
-import stat
 from datetime import date, datetime, timezone
 
+from app.data.audit_repository import AuditRepository
 from app.model.overview_page import OverviewPage
-from tests.audit_files import audit_path, seed_audit
+from tests.audit_files import seed_audit
 
 FLAG_NOW = datetime(2026, 11, 16, 8, 0, tzinfo=timezone.utc)          # 16:00 on Monday 16 Nov in Singapore
 ADMIN = "Orbit Admin"
@@ -1382,10 +1372,6 @@ def flagged(app, tmp_path):
     """An App whose audit log holds one high flag (F-OTH-SOW-1-2) and one low flag (F-HOU-SOW-1-3)."""
     seed_audit(tmp_path, NIGHT_OWNER)
     return app
-
-
-def _log_text(tmp_path):
-    return (tmp_path / "local database" / "audit_log.json").read_text(encoding="utf-8")
 
 
 def test_the_audit_settings_come_from_the_policy(app):
@@ -1612,14 +1598,12 @@ def test_only_an_admin_can_update_a_flag_and_the_inputs_must_be_text(flagged):
     assert len(_events(flagged)) == 3
 
 
-def test_an_update_that_cannot_be_written_is_not_saved_and_the_caller_can_tell(flagged, tmp_path, caplog):
-    folder = tmp_path / "local database"
-    folder.chmod(stat.S_IRUSR | stat.S_IXUSR)                  # readable, but no new file can be made in it
-    try:
-        ticket, problems, entry = flagged.update_flag("F-OTH-SOW-1-2", ADMIN, "review", "Asked Adrian why.",
-                                                      now=FLAG_NOW)
-    finally:
-        folder.chmod(stat.S_IRWXU)
+def test_an_update_that_cannot_be_written_is_not_saved_and_the_caller_can_tell(flagged, monkeypatch, caplog):
+    # The log can still be read, but writing it fails (this works for every user, admin included)
+    monkeypatch.setattr(AuditRepository, "_write_all", lambda self, records: False)
+    ticket, problems, entry = flagged.update_flag("F-OTH-SOW-1-2", ADMIN, "review", "Asked Adrian why.",
+                                                  now=FLAG_NOW)
+    monkeypatch.undo()
     assert problems == [App.FLAG_NOT_SAVED] and entry == 0 and ticket.status == "open"
     assert flagged.audit_write_failed() is True
     assert "was not written" in caplog.text
