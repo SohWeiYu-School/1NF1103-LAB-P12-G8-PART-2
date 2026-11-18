@@ -821,7 +821,7 @@ round-trip PROBLEMS: 0; layout_check 0.
   `+show_update_saved(ticket : FlagTicket, sequence : int, moved_to : str) : None` (commit 6ce7448: the line names the status the admin
   chose, so `moved : bool` became `moved_to : str`).
 - `AdminConsole`: added `+NOT_SAVED : str = "Your update was not saved." «const»` (the constant moved here from `AdminView`).
-- Member order (U1): the members of `AdminConsole` were not in the order every other box uses, because the five Phase 3
+- Member order (U1): the members of `AdminConsole` were not in the order used by the boxes changed on this branch, because the five Phase 3
   methods and `NOT_SAVED` were appended at the end. The order is: constants, then attributes, each A to Z; then methods
   sorted by name as written (so `__init__` sits among the private ones and `run` comes last). `AdminConsole` was
   re-sorted this way. `AdminView` (its added constants and the new methods sat at the end) and `FlagTicket` (the new
@@ -830,3 +830,17 @@ round-trip PROBLEMS: 0; layout_check 0.
   the relationship check agrees (225 arrows: 221 confirmed, 4 accepted, none missing).
 - Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
   Scan 8 differences before (stage 5 = 8), 0 after; round-trip PROBLEMS: 0; layout_check 0; make_views SELF-CHECK OK.
+
+## Whole-branch review fixes (2026-11-18): code changed, the diagram follows it
+
+- `TerminalApp`: `−__limiter : RateLimiter` sat in the methods compartment; it is an attribute, so it moved up. Every attribute
+  now shows the default the code gives it (terminal_app.py:46-52): `−__app : App = app`,
+  `−__limiter : RateLimiter = limiter if limiter is not None else app.rate_li...` (shortened with "..."),
+  `−__ui : ConsoleUI = ConsoleUI()` (the code reads `ui or ConsoleUI()`; the checker takes the value the attribute starts with when no `ui`
+  is handed in, so the diagram keeps `ConsoleUI()`). The box's members were sorted into the member order of the U1 entry above
+  (constants, then attributes, then methods, each A to Z by name as written).
+- `AdminConsole`: added `+NO_SUCH_FLAG : str = "No flag has the id {flag_id}. Check th..." «const»`; `−__show_flag` gained a second
+  parameter, `(flag_id : str, typed : bool = False) : FlagTicket | None` (a typed id that matches no flag now says so).
+- Arrows: none added or changed.
+- Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
+  Scan 2 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0; make_views SELF-CHECK OK.

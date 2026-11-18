@@ -194,6 +194,7 @@ package "IO Manager (app/interface)" {
   class AdminConsole {
     +MENU : tuple[str, ...] = (...) «const»
     +NOT_SAVED : str = "Your update was not saved." «const»
+    +NO_SUCH_FLAG : str = "No flag has the id {flag_id}. Check th... «const»
     +SAFE_ERRORS : tuple[str, ...] = (...) «const»
     -__account : Account = account
     -__app : App = app
@@ -218,7 +219,7 @@ package "IO Manager (app/interface)" {
     -__show_again(flag_id : str, lead : str) : FlagTicket | None
     -__show_audit_warning() : None
     -__show_error(error : ValueError, where : str, not_saved : bool = False) : None
-    -__show_flag(flag_id : str) : FlagTicket | None
+    -__show_flag(flag_id : str, typed : bool = False) : FlagTicket | None
     -__update_flag(ticket : FlagTicket) : FlagTicket | None
     -__verify() : None
     +run() : None
@@ -412,36 +413,36 @@ package "IO Manager (app/interface)" {
     {static} -__text_or_unknown(value : object) : str
   }
   class TerminalApp {
-    -__app : App
-    -__ui : ConsoleUI = ConsoleUI()
-    -__report_view : ReportView = ReportView(...)
-    -__client_form : ClientForm = ClientForm(...)
-    -__case_builder : CaseBuilder = CaseBuilder(...)
     +GOODBYE : str = "Thank you for using Orbit. Goodbye." «const»
     +OFFICER_AT_ADMIN : str = "This is an officer account. Only adm... «const»
     -__admin_view : AdminView = AdminView(self.__ui)
+    -__app : App = app
+    -__case_builder : CaseBuilder = CaseBuilder(...)
+    -__client_form : ClientForm = ClientForm(...)
+    -__limiter : RateLimiter = limiter if limiter is not None else app.rate_li...
+    -__report_view : ReportView = ReportView(...)
+    -__ui : ConsoleUI = ConsoleUI()
     --
-    +start(arguments : list[str]) : int
-    +run_menu() : None
-    -__prepare_case(record : ClientRecord) : dict | None
-    +assess_client_record(record : ClientRecord) : Verdict | None
-    +run_case_file(path : str) : bool
-    -__maybe_assess(record : ClientRecord) : None
-    -__show_step(number : int, label : str) : None
-    -__new_client_from_documents() : ClientRecord | None
-    -__fill_field(record : ClientRecord, field : dict, optional : bool = False) : ClientRecord
-    +list_assessments() : None
-    -__pick_assessment(records : list[dict], states : list[str] | None, question : str, back_label : str = "Back") : int | None
-    -__open_assessment(chosen : dict) : None
+    -__admin() : None
+    -__ask_trail_filter() : TrailFilter
+    -__audited(action : Callable[..., T]) : Callable[..., T]
     -__change_archive(records : list[dict]) : None
     -__client_history() : None
-    -__show_client_assessments(client_ref : str) : list[dict] | None
-    -__ask_trail_filter() : TrailFilter
-    -__show_trail(client_ref : str, trail_filter : TrailFilter) : None
+    -__fill_field(record : ClientRecord, field : dict, optional : bool = False) : ClientRecord
     +__init__(app : App, ui : ConsoleUI | None = None, limiter : RateLimiter | None = None)
-    -__limiter : RateLimiter
-    -__audited(action : Callable[..., T]) : Callable[..., T]
-    -__admin() : None
+    -__maybe_assess(record : ClientRecord) : None
+    -__new_client_from_documents() : ClientRecord | None
+    -__open_assessment(chosen : dict) : None
+    -__pick_assessment(records : list[dict], states : list[str] | None, question : str, back_label : str = "Back") : int | None
+    -__prepare_case(record : ClientRecord) : dict | None
+    -__show_client_assessments(client_ref : str) : list[dict] | None
+    -__show_step(number : int, label : str) : None
+    -__show_trail(client_ref : str, trail_filter : TrailFilter) : None
+    +assess_client_record(record : ClientRecord) : Verdict | None
+    +list_assessments() : None
+    +run_case_file(path : str) : bool
+    +run_menu() : None
+    +start(arguments : list[str]) : int
   }
   class WebApp {
     -__app : App | None = None
