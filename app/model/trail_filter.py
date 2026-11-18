@@ -102,14 +102,14 @@ class TrailFilter:
                 date_from, date_to, ignored = "", "", True
             elif not date_from and not date_to:
                 ignored = True                     # Custom was just picked: all dates until both are chosen
-            elif first is None or last is None:
-                problems.append(AuditFilter.PROBLEM_BOTH_DATES)
+            elif (rule := AuditFilter.range_problem(date_from, date_to, today)) == AuditFilter.RULE_BOTH_DATES:
+                problems.append(rule + AuditFilter.SHOWING_ALL)
                 ignored = True
             elif first > last:
                 problems.append(AuditFilter.PROBLEM_DATE_ORDER)
                 ignored = True
-            elif last > today:
-                problems.append(AuditFilter.PROBLEM_FUTURE)
+            elif rule:
+                problems.append(rule + AuditFilter.SHOWING_ALL)
                 ignored = True
         trail_filter = TrailFilter(show, when, "" if ignored else date_from, "" if ignored else date_to)
         if ignored and when == "custom":

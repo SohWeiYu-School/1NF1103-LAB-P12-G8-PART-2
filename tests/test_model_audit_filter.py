@@ -312,3 +312,27 @@ def test_flagged_only_is_in_the_query_and_the_chips_and_survives_a_round_trip():
     assert f.chips() == [("result", "OK only"), ("flagged", "Flagged only")]
     assert AuditFilter.from_query(f.to_query(), NOW).to_query() == f.to_query()
     assert "flagged" not in AuditFilter().to_query()
+
+
+def test_the_problem_texts_of_a_custom_range_are_the_rules_plus_the_fall_back_sentence():
+    assert AuditFilter.PROBLEM_BOTH_DATES == "Pick both a start and an end date. Showing all dates for now."
+    assert AuditFilter.PROBLEM_FUTURE == "The dates cannot be in the future. Showing all dates for now."
+    assert AuditFilter.PROBLEM_DATE_ORDER == "The start date must be on or before the end date. Showing all dates for now."
+    assert AuditFilter.PROBLEM_DATE_FORMAT == ("The dates must look like 2026-11-15 (year-month-day). "
+                                               "Showing all dates for now.")
+    assert AuditFilter.RULE_BOTH_DATES == "Pick both a start and an end date."
+    assert AuditFilter.RULE_FUTURE == "The dates cannot be in the future."
+
+
+def test_range_problem_judges_only_the_missing_date_and_the_future():
+    import datetime as dt
+    today = dt.date(2026, 11, 15)
+    judge = AuditFilter.range_problem
+    assert judge("2026-11-10", "", today) == AuditFilter.RULE_BOTH_DATES
+    assert judge("", "2026-11-10", today) == AuditFilter.RULE_BOTH_DATES
+    assert judge("2026-11-10", "2026-11-16", today) == AuditFilter.RULE_FUTURE
+    assert judge("2026-11-10", "2026-11-15", today) == ""          # today itself is fine
+    assert judge("", "", today) == ""                              # nothing chosen yet
+    assert judge("nov", "2026-11-16", today) == ""                 # the format check owns this
+    assert judge("2026-11-12", "2026-11-10", today) == ""          # the order rule is the constructor's
+    assert judge("2026-11-20", "2026-11-16", today) == ""

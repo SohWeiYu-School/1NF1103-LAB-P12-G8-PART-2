@@ -26,10 +26,15 @@ class AuditFilter:
     MAX_CLIENT_REF: int = AuditEvent.MAX_CLIENT_REF
     DATE_FORMAT: str = "%Y-%m-%d"
     SINGAPORE: timezone = timezone(timedelta(hours=8))
-    PROBLEM_BOTH_DATES: str = "Pick both a start and an end date. Showing all dates for now."
-    PROBLEM_DATE_ORDER: str = "The start date must be on or before the end date. Showing all dates for now."
-    PROBLEM_FUTURE: str = "The dates cannot be in the future. Showing all dates for now."
-    PROBLEM_DATE_FORMAT: str = "The dates must look like 2026-11-15 (year-month-day). Showing all dates for now."
+    # The rules of a custom date range, in words. The web app shows them with SHOWING_ALL added (the page falls
+    # back to all dates); the terminal asks again and shows them as they are.
+    RULE_BOTH_DATES: str = "Pick both a start and an end date."
+    RULE_FUTURE: str = "The dates cannot be in the future."
+    SHOWING_ALL: str = " Showing all dates for now."
+    PROBLEM_BOTH_DATES: str = RULE_BOTH_DATES + SHOWING_ALL
+    PROBLEM_DATE_ORDER: str = "The start date must be on or before the end date." + SHOWING_ALL
+    PROBLEM_FUTURE: str = RULE_FUTURE + SHOWING_ALL
+    PROBLEM_DATE_FORMAT: str = "The dates must look like 2026-11-15 (year-month-day)." + SHOWING_ALL
 
     def __init__(self, preset: str = "7", date_from: str = "", date_to: str = "",
                  groups: Iterable[str] | None = None, result: str = "all", actor: str = "",
@@ -88,6 +93,20 @@ class AuditFilter:
             return datetime.strptime(text, AuditFilter.DATE_FORMAT).date()
         except ValueError:
             return None
+
+    @staticmethod
+    def range_problem(date_from: str, date_to: str, today: date) -> str:
+        """RULE_BOTH_DATES if only one of the two dates is given, RULE_FUTURE if the end is after today (the
+        Singapore day), else "". A date that is not YYYY-MM-DD, two blank dates and a start after the end are
+        not judged here: the date check and the filter's constructor own those."""
+        first, last = AuditFilter.parse_day(date_from), AuditFilter.parse_day(date_to)
+        if (date_from and first is None) or (date_to and last is None) or (not date_from and not date_to):
+            return ""
+        if first is None or last is None:
+            return AuditFilter.RULE_BOTH_DATES
+        if first <= last and last > today:
+            return AuditFilter.RULE_FUTURE
+        return ""
 
     @staticmethod
     def singapore_day(moment: datetime) -> date:
@@ -257,14 +276,14 @@ class AuditFilter:
                 date_from, date_to, ignored = "", "", True
             elif not first_text and not last_text:
                 ignored = True                     # Custom was just picked: all dates until both are chosen
-            elif first is None or last is None:
-                problems.append(AuditFilter.PROBLEM_BOTH_DATES)
+            elif (rule := AuditFilter.range_problem(date_from, date_to, today)) == AuditFilter.RULE_BOTH_DATES:
+                problems.append(rule + AuditFilter.SHOWING_ALL)
                 ignored = True
             elif first > last:
                 problems.append(AuditFilter.PROBLEM_DATE_ORDER)
                 ignored = True
-            elif last > today:
-                problems.append(AuditFilter.PROBLEM_FUTURE)
+            elif rule:
+                problems.append(rule + AuditFilter.SHOWING_ALL)
                 ignored = True
         groups: list[str] = []
         for text in many("group"):
