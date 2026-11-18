@@ -775,3 +775,23 @@ round-trip PROBLEMS: 0; layout_check 0.
 - Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
   Scan 8 differences before (stage 1 = 2, 3 = 1, 5 = 5) plus 2 relationships, 0 after; round-trip PROBLEMS: 0; layout_check 0;
   make_views SELF-CHECK OK.
+
+**Phase 2 design review follow-ups (2026-11-18)**
+- Why: design review of the terminal admin screens (commits ef38385, 0c5c8dd, e2ca156). The code was right, so the diagram was brought up to it.
+- `ConsoleUI`: added `+printable(lines : list[str]) : str «static»`. The control-character clean-up lives in one place now, so
+  `−__printable` was removed from `AdminView` and from `ReportView`.
+- `AuditFilter`: added `+with_page(page : int) : AuditFilter` (a copy of the filter on another page, keeping the ignored dates and
+  problems). `AdminConsole`: removed `−__on_page «static»`, which it replaces.
+- `AdminConsole`: removed `LOG_PRESET_NAMES`, `RESULT_NAMES` and `SORT_NAMES`; the menu words are looked up by filter code in `AdminView`.
+  `AdminView`: `LOG_PRESET_NAMES` stays a `dict[str, str]`; added `+RESULT_NAMES : dict[str, str]` and `+SORT_NAMES : dict[str, str]`.
+- `TerminalApp`: added `−__admin_view : AdminView = AdminView(self.__ui)`; it builds one view and hands it to each `AdminConsole`.
+  `TerminalApp ..> AdminView : creates` became `TerminalApp *-- "1" AdminView` (as `TerminalApp *-- "1" ReportView`: it builds and keeps it).
+- Arrows added at the review's request: `AdminView ..> AuditChain : shows`, `AdminConsole ..> AuditEvent : uses` (it reads
+  `AuditEvent.GROUPS`), `TerminalApp ..> Account : signs in`.
+- Accepted by hand in the checker (`accepted_relations.json`), because the scan cannot see them: `AdminView ..> AuditChain` (`format_chain`
+  takes the result of `App.verify_audit_log()` typed `Any` and reads its fields; the class name is never written) and
+  `TerminalApp ..> Account` (`__admin` gets the `Account` from `App.sign_in`, tests it for `None` and hands it on; the name is never written).
+  `AdminConsole ..> AuditEvent` is confirmed by the scan (class constant), so it is no longer in the not-drawn list.
+- Boxes changed size (`AuditEvent` widened to 760 and `AuditFilter` to 700, which carry many arrows), so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
+  Scan 5 differences before (stage 3 = 0, 5 = 5), plus 2 relationships needing acceptance, 0 after; round-trip PROBLEMS: 0;
+  layout_check 0; make_views SELF-CHECK OK.

@@ -192,11 +192,8 @@ package "Data Manager (app/data)" {
 
 package "IO Manager (app/interface)" {
   class AdminConsole {
-    +LOG_PRESET_NAMES : tuple[str, ...] = (...) «const»
     +MENU : tuple[str, ...] = (...) «const»
-    +RESULT_NAMES : tuple[str, ...] = ("All", "OK only", "Failed only") «const»
     +SAFE_ERRORS : tuple[str, ...] = (...) «const»
-    +SORT_NAMES : tuple[str, ...] = ("Newest first", "Oldest first") «const»
     -__account : Account = account
     -__app : App = app
     -__listed : list[FlagTicket] = []
@@ -212,7 +209,6 @@ package "IO Manager (app/interface)" {
     -__client_flags() : None
     +__init__(app : App, ui : ConsoleUI, view : AdminView, account : Account)
     {static} -__now() : datetime
-    {static} -__on_page(audit_filter : AuditFilter, page : int) : AuditFilter
     -__open_flag() : None
     -__overview() : None
     {static} -__rejected(**values : object) : str
@@ -227,6 +223,8 @@ package "IO Manager (app/interface)" {
     +PRESET_NAMES : dict[str, str] = {...} «const»
     +SGT_FORMAT : str = "%Y-%m-%d %H:%M" «const»
     -__ui : ConsoleUI = ui if ui is not None else ConsoleUI()
+    +RESULT_NAMES : dict[str, str] = {...} «const»
+    +SORT_NAMES : dict[str, str] = {...} «const»
     --
     {static} -__change(has_previous : bool, change : int | None, diff : int) : str
     {static} -__event_line(event : AuditEvent, marked : bool = False) : str
@@ -234,7 +232,6 @@ package "IO Manager (app/interface)" {
     -__flag_rows(page : OverviewPage) : list[str]
     +__init__(ui : ConsoleUI | None = None)
     {static} -__plural(count : int, word : str, many : str = "") : str
-    {static} -__printable(lines : list[str]) : str
     {static} -__sgt(text : str) : str
     +format_chain(chain : Any) : str
     +format_client_flags(client_ref : str, tickets : list[FlagTicket]) : str
@@ -354,6 +351,7 @@ package "IO Manager (app/interface)" {
     +show_optional_intro(count : int) : None
     +ask_optional_text(question : str) : str
     +ask_password(question : str) : str
+    {static} +printable(lines : list[str]) : str
   }
   class RateLimiter {
     -__cooldown_seconds : int = 60
@@ -404,7 +402,6 @@ package "IO Manager (app/interface)" {
     {static} -__by_day(events : list[AuditEvent]) : list[tuple[str, list[AuditEvent]]]
     {static} -__fit(value : object, width : int) : str
     {static} -__text_or_unknown(value : object) : str
-    {static} -__printable(lines : list[str]) : str
   }
   class TerminalApp {
     -__app : App
@@ -414,6 +411,7 @@ package "IO Manager (app/interface)" {
     -__case_builder : CaseBuilder = CaseBuilder(...)
     +GOODBYE : str = "Thank you for using Orbit. Goodbye." «const»
     +OFFICER_AT_ADMIN : str = "This is an officer account. Only adm... «const»
+    -__admin_view : AdminView = AdminView(self.__ui)
     --
     +start(arguments : list[str]) : int
     +run_menu() : None
@@ -1518,6 +1516,7 @@ package "Domain Model (app/model)" {
     +range_text(now : datetime) : str
     {static} +singapore_day(moment : datetime) : date
     {static} +range_problem(date_from : str, date_to : str, today : date) : str
+    +with_page(page : int) : AuditFilter
   }
   class AuditPage {
     -__events : list[AuditEvent] = [] {get}
@@ -2003,11 +2002,13 @@ AdminConsole -- AdminView : shows with
 AdminConsole -- App : calls
 AdminConsole -- ConsoleUI : prints via
 AdminConsole ..> AuditChain : uses
+AdminConsole ..> AuditEvent : uses
 AdminConsole ..> AuditFilter : uses
 AdminConsole ..> AuditPage : uses
 AdminConsole ..> OverviewPage : uses
 AdminConsole o-- "0..*" FlagTicket : lists
 AdminView -- ConsoleUI : prints via
+AdminView ..> AuditChain : shows
 AdminView ..> AuditEvent : uses
 AdminView ..> AuditFilter : uses
 AdminView ..> AuditPage : uses
@@ -2177,14 +2178,15 @@ ResearchAI --|> AIService
 RiskAnalysis ..> Check : creates
 SourceContradictsOccupation --|> Indicator
 SourceContradictsOccupation ..> ClaimedSource : checks
+TerminalApp *-- "1" AdminView
 TerminalApp *-- "1" CaseBuilder
 TerminalApp *-- "1" ClientForm
 TerminalApp *-- "1" ReportView
 TerminalApp -- App : calls
 TerminalApp -- ConsoleUI : prints via
 TerminalApp -- RateLimiter : checks with
+TerminalApp ..> Account : signs in
 TerminalApp ..> AdminConsole : creates
-TerminalApp ..> AdminView : creates
 TerminalApp ..> AuditFilter : uses
 TerminalApp ..> ClientRecord : uses
 TerminalApp ..> TrailFilter : uses
