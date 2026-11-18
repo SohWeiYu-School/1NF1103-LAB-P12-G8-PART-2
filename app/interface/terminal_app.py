@@ -60,11 +60,11 @@ class TerminalApp:
                     self.__ui.show_error("--case needs a file path")
                     return 1
                 return 0 if self.run_case_file(arguments[position + 1]) else 1
-            self.run_menu()
-            return 0
-        except EOFError:                          # Ctrl-D: nobody can answer any more, so leave cleanly
-            logger.info("TerminalApp: the end of input was reached, leaving the app")
-            self.__ui.show_message("\n" + TerminalApp.GOODBYE)
+            try:
+                self.run_menu()
+            except EOFError:                      # Ctrl-D: nobody can answer any more, so leave cleanly
+                logger.info("TerminalApp: the end of input was reached, leaving the app")
+                self.__ui.show_message("\n" + TerminalApp.GOODBYE)
             return 0
         except KeyboardInterrupt:
             self.__ui.show_message("\nStopped.")

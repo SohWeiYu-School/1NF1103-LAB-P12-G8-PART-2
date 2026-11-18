@@ -706,3 +706,20 @@ def test_the_end_of_input_while_asking_for_a_client_reference_also_leaves_cleanl
     app.clients().save(sample_case())
     code = TerminalApp(app, _ends_after("4")).start([])        # asked for a client reference, then Ctrl-D
     assert code == 0 and "Thank you for using Orbit. Goodbye." in capsys.readouterr().out
+
+
+def test_the_end_of_input_inside_a_case_file_run_is_an_unexpected_error_not_a_clean_goodbye(app, tmp_path, capsys, caplog):
+    case_path = tmp_path / "case.json"
+    case_path.write_text(json.dumps(sample_case()))
+    seen = []
+
+    def write(text):
+        seen.append(text)
+        if "Assessing" in text:
+            raise EOFError                       # something below ran out of input where no question is asked
+
+    code = TerminalApp(app, ConsoleUI(write=write)).start(["--case", str(case_path)])
+    assert code == 1
+    assert not any("Thank you for using Orbit" in text for text in seen)
+    assert any("unexpected error" in text.lower() for text in seen)
+    assert "EOFError" in caplog.text
