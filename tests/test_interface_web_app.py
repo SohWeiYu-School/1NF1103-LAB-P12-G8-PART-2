@@ -120,7 +120,8 @@ def test_pages_return_html_text_and_redirects_return_a_response(web):
 def test_every_page_is_branded_orbit(web):
     _, _, client = web
     page = client.get("/").get_data(as_text=True)
-    assert "Orbit</title>" in page and 'class="brand"' in page and '<span class="brand-mark">O</span>Orbit' in page
+    assert "Orbit</title>" in page and 'class="brand"' in page
+    assert '<img class="brand-logo" src="/static/logo.svg" alt="">Orbit' in page
     assert 'class="portal-tag"' not in page and "KYC officer" in page
 
 
@@ -1072,6 +1073,43 @@ def test_the_sign_in_pages_show_the_demo_accounts_of_their_own_portal_and_the_tr
         assert "DEMO ONLY" in page and "config/accounts.json" in page and ">.env<" not in page
         assert "stored <b>hashed</b>" in page and 'type="password"' in page and "Signed in as" not in page
     assert "Officer sign-in" in officers and "System admin sign-in" in admins
+
+
+def test_the_demo_note_stays_on_a_sign_in_page_whose_portal_has_no_demo_account(tmp_path, monkeypatch):
+    application, _, browser = _anonymous(tmp_path, monkeypatch)
+    officers_only = [account for account in application.accounts() if not account.is_admin()]
+    monkeypatch.setattr(application, "accounts", lambda: officers_only)
+    admins = browser.get("/admin/signin").get_data(as_text=True)
+    assert "DEMO ONLY" in admins and "not how a real bank would do login" in admins
+    assert "data-name=" not in admins and "<table>" not in admins
+
+
+def test_the_logo_is_served_to_someone_not_signed_in_and_the_sign_in_page_uses_it(tmp_path, monkeypatch):
+    _, _, browser = _anonymous(tmp_path, monkeypatch)
+    logo = browser.get("/static/logo.svg")
+    assert logo.status_code == 200 and b"<svg" in logo.data and b"c2pa" not in logo.data
+    page = browser.get("/signin").get_data(as_text=True)
+    assert 'src="/static/logo.svg"' in page
+
+
+def test_the_sign_in_page_loads_nothing_from_other_sites_and_posts_to_its_own_portal(tmp_path, monkeypatch):
+    _, _, browser = _anonymous(tmp_path, monkeypatch)
+    officers = browser.get("/signin").get_data(as_text=True)
+    admins = browser.get("/admin/signin").get_data(as_text=True)
+    for page in (officers, admins):
+        assert "fonts.googleapis.com" not in page and "https://" not in page
+    assert 'action="/signin"' in officers and 'action="/admin/signin"' in admins
+
+
+def test_a_signed_out_message_is_not_shown_as_an_error_on_the_sign_in_page(tmp_path, monkeypatch):
+    application, _, browser = _anonymous(tmp_path, monkeypatch)
+    with browser.session_transaction() as session:
+        session["_flashes"] = [("success", "You are signed out."), ("success", "You are signed out."),
+                               ("message", "Your session has ended.")]
+    page = browser.get("/signin").get_data(as_text=True)
+    assert page.count("You are signed out.") == 1
+    assert '<p class="note success" role="status">You are signed out.</p>' in page
+    assert '<p class="error" role="alert">Your session has ended.</p>' in page
 
 
 def test_the_right_name_and_password_sign_an_officer_in_records_it_and_goes_home(tmp_path, monkeypatch):

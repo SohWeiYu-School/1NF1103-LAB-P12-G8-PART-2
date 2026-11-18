@@ -37,7 +37,7 @@ header.top{background:var(--header);color:var(--header-ink);position:sticky;top:
 header.top.admin{background:#232b36}
 header.top .wrap{display:flex;align-items:center;gap:18px;min-height:56px;flex-wrap:wrap;padding-block:6px}
 .brand{color:var(--header-ink);text-decoration:none;font-weight:700;letter-spacing:.01em;display:flex;gap:10px;align-items:center}
-.brand-mark{width:26px;height:26px;border-radius:6px;background:rgba(255,255,255,.14);display:grid;place-items:center;font-size:.72rem;font-weight:700}
+.brand-logo{width:30px;height:30px;border-radius:8px;object-fit:contain;flex:none}
 .portal-tag{font-size:.66rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:#f2c94c;color:#3d2e00;border-radius:4px;padding:2px 6px}
 nav.main{display:flex;gap:4px;flex-wrap:nowrap;flex:1 1 auto;min-width:0;overflow-x:auto}
 nav.main form{display:contents}
@@ -130,20 +130,8 @@ details.info summary::before{content:"\\25B8";font-size:.7rem;transition:transfo
 details.info[open] summary::before{transform:rotate(90deg)}
 details.info[open]{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px 10px;margin-top:2px}
 details.info .kv{margin-top:6px}
-.signin-wrap{max-width:900px;margin:36px auto 0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
-.signin{padding:28px}
-.signin input{width:100%;border:1px solid var(--line-strong);border-radius:6px;padding:9px 11px;background:var(--surface);margin-top:4px}
-.signin label{margin:0;color:var(--ink);font-size:inherit}
-.demo-note{border:1px solid #e6cf7a;background:#fdf8e4;border-radius:10px;padding:18px 20px}
-.demo-note h2{font-size:1rem;margin:0 0 6px;display:flex;gap:8px;align-items:center}
-.demo-note ul{margin:6px 0 0;padding-left:18px}.demo-note li{margin:3px 0}
-.demo-pill{font-size:.68rem;font-weight:700;letter-spacing:.06em;background:#7a5c00;color:#fff;border-radius:4px;padding:2px 6px}
-.acct{width:100%;font-size:.86rem;margin-top:10px}.acct td{padding:5px 6px;border-top:1px solid #efe3b5;border-bottom:0}.acct th{text-align:left;font-size:.74rem;color:var(--muted);padding:4px 6px;background:none}
-.acct button{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:6px;padding:2px 9px;cursor:pointer;font-size:.8rem}
-.env{font-family:var(--mono);font-size:.74rem;background:#fff;border:1px solid #efe3b5;border-radius:6px;padding:8px 10px;white-space:pre;overflow-x:auto;margin:6px 0 0}
 .ro-pill{font-size:.74rem;border:1px solid var(--line-strong);border-radius:12px;padding:3px 10px;color:var(--muted);background:var(--surface-2);white-space:nowrap}
 @media (max-width:1000px){ .who .name{display:none} }
-@media (max-width:760px){.signin-wrap{grid-template-columns:1fr}}
 @media (max-width:520px){ .client-head{grid-template-columns:1fr} .kv{grid-template-columns:1fr} .tl{grid-template-columns:44px 18px 1fr;padding-inline:12px} .tl .rail{left:calc(12px + 44px + 10px + 8px)} }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
@@ -346,7 +334,7 @@ legend{font-weight:600;padding:0 6px}
 </head>
 <body{% if portal == 'admin' %} class="admin-portal"{% endif %}>
 <header class="top{% if portal == 'admin' %} admin{% endif %}"><div class="wrap">
-  <a class="brand" href="{{ url_for('admin_home' if portal == 'admin' else 'home') }}"><span class="brand-mark">O</span>Orbit{% if portal == 'admin' %} <span class="portal-tag">Admin</span>{% endif %}</a>
+  <a class="brand" href="{{ url_for('admin_home' if portal == 'admin' else 'home') }}"><img class="brand-logo" src="{{ url_for('static', filename='logo.svg') }}" alt="">Orbit{% if portal == 'admin' %} <span class="portal-tag">Admin</span>{% endif %}</a>
   {% if account %}
   {% set here = request.endpoint %}
   {% if portal == 'admin' %}
@@ -1290,52 +1278,124 @@ AUDIT = """{% extends "base.html" %}
 {% endblock %}
 """
 
-SIGNIN = """{% extends "base.html" %}
-{% block title %}{{ 'Admin sign-in' if portal == 'admin' else 'Sign in' }} — Orbit{% endblock %}
-{% block content %}
-<div class="signin-wrap">
-  <form class="panel signin stack" method="post" action="{{ url_for('admin_signin' if portal == 'admin' else 'signin') }}" id="signin-form" novalidate>
-    <div><div class="eyebrow">{{ 'Admin portal · /admin' if portal == 'admin' else 'Orbit' }}</div>
-      <h1 style="margin-top:4px">{{ 'System admin sign-in' if portal == 'admin' else 'Officer sign-in' }}</h1></div>
-    <p class="muted" style="margin:0">{{ 'The activity log and a read-only view of clients. For system admins only.' if portal == 'admin' else 'Clients, assessments and client history.' }}</p>
-    <label for="signin-name"><span class="eyebrow">Name</span>
-      <input id="signin-name" name="name" autocomplete="username" maxlength="{{ max_text }}" placeholder="e.g. {{ demo[0].name if demo else 'Shareen' }}" value="{{ name }}"></label>
-    <label for="signin-pw"><span class="eyebrow">Password</span>
-      <input id="signin-pw" name="password" type="password" autocomplete="current-password" maxlength="{{ max_text }}"></label>
-    {% if problem %}<div class="err" role="alert">{{ problem }}</div>{% endif %}
-    <button class="btn" type="submit" style="justify-content:center">Sign in</button>
-    <p class="muted" style="margin:0; font-size:.84rem">{% if portal == 'admin' %}Not an admin? <a href="{{ url_for('signin') }}">Officer sign-in is at /</a>{% else %}System admin? <a href="{{ url_for('admin_signin') }}">Admin sign-in is at /admin</a>{% endif %}</p>
-  </form>
-  <aside class="demo-note">
-    <h2><span class="demo-pill">DEMO ONLY</span> This login is for demonstration</h2>
-    <p style="margin:0">It shows <b>who did what</b> in the activity log and keeps the admin pages separate. It is not how a real bank would do login.</p>
-    <ul>
-      <li><b>No sign-up.</b> Accounts are set up by whoever runs the app, in the <span class="mono">config/accounts.json</span> file.</li>
-      <li><b>No password reset.</b> To change a password, put a new hash in <span class="mono">config/accounts.json</span> and restart.</li>
-      <li>Passwords are stored <b>hashed</b>, never as plain text.</li>
-      <li>A real system would add single sign-on, a second factor (MFA), lockout after failed tries and self-service reset.</li>
-    </ul>
-    <table class="acct"><thead><tr><th>Demo account</th><th>Password</th><th></th></tr></thead><tbody>
-      {% for a in demo %}
-      <tr><td>{{ a.name }}</td><td class="mono">{{ a.password }}</td><td style="text-align:right"><button type="button" data-name="{{ a.name }}" data-password="{{ a.password }}">Use</button></td></tr>
-      {% endfor %}
-    </tbody></table>
-    <details style="margin-top:10px"><summary style="cursor:pointer; font-size:.86rem">How accounts look in <span class="mono">config/accounts.json</span></summary>
-      <div class="env">{"email": "shareen@orbit.local", "name": "Shareen", "role": "officer",
- "password_hash": "scrypt:32768:8:1$…"}</div>
-      <p class="muted small" style="margin:6px 0 0">Make a hash with <span class="mono">python3 -c "from werkzeug.security import generate_password_hash as g; print(g('a-password'))"</span>.</p></details>
-  </aside>
+# The sign-in page is a whole page of its own (it does not extend base.html): a split screen with the
+# brand on the left and the form plus the demo-account note on the right.
+SIGNIN = r"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ 'Admin' if portal == 'admin' else 'Officer' }} sign-in · Orbit</title>
+<style>
+:root{--navy:#1f4e79;--ring:rgba(255,255,255,.22);--page:#f0f2f6;--ink:#17283b;--muted:#5a6b7e;
+--border:#d9dee6;--gold:#e6a21e;--demo-bg:#fdf5e0;--demo-line:#efdfb0;--badge:#7a5200;--error:#b42318;
+--font:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{font-family:var(--font);color:var(--ink);background:var(--page)}
+.split{display:grid;grid-template-columns:5fr 6fr;min-height:100%}
+.brand{position:relative;overflow:hidden;background:var(--navy);color:#fff;padding:40px 48px;display:flex;flex-direction:column}
+.logo{display:flex;align-items:center;gap:12px;font-weight:700;font-size:1.25rem}
+.logo img{width:40px;height:40px;border-radius:10px;object-fit:contain}
+.pitch{margin-top:auto;margin-bottom:18%;position:relative;z-index:1;max-width:26rem}
+.pitch h1{font-size:clamp(1.8rem,2.8vw,2.5rem);line-height:1.18;margin:0 0 18px}
+.pitch p{margin:0;font-size:.95rem;line-height:1.5;color:#d6e4f2}
+.pitch p.kicker{color:var(--gold);font-size:.72rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin:0 0 16px}
+.rings{position:absolute;left:-10%;bottom:-26%;width:120%;height:auto;pointer-events:none}
+.rings circle{fill:none;stroke:var(--ring);stroke-width:1.5}.rings .dot{fill:var(--gold);stroke:none}
+.side{display:flex;align-items:center;justify-content:center;padding:40px 24px}
+.stack{width:100%;max-width:350px;display:grid;gap:16px}
+.card{background:#fff;border-radius:14px;padding:26px 28px 22px;box-shadow:0 1px 2px rgba(23,40,59,.06),0 6px 20px rgba(23,40,59,.05)}
+.card h2{margin:0;font-size:1.35rem}
+.card h2::after{content:"";display:block;width:38px;height:3px;background:var(--gold);border-radius:2px;margin:8px 0 20px}
+label{display:block;font-size:.68rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+input{width:100%;font:inherit;font-size:.9rem;padding:11px 12px;margin-bottom:16px;border:1px solid var(--border);border-radius:8px;color:var(--ink);background:#fff}
+input:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 2px rgba(230,162,30,.25)}
+button{width:100%;font:inherit;font-weight:600;font-size:.85rem;padding:12px;border:0;border-radius:8px;background:var(--navy);color:#fff;cursor:pointer}
+button:hover{background:#18405f}button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.error{background:#fdecea;color:var(--error);border-radius:8px;padding:10px 12px;font-size:.85rem;margin:0 0 16px}
+.note{background:#eef3f8;color:var(--ink);border-radius:8px;padding:10px 12px;font-size:.85rem;margin:0 0 16px}
+.note.success{background:#e8f5ec;color:#1d5c34}.note.warning{background:var(--demo-bg);color:var(--badge)}
+.demo ul{margin:0 0 10px;padding-left:18px;line-height:1.45}.demo p{margin:0 0 8px;line-height:1.45}
+.demo code{font-family:var(--mono);font-size:.72rem}
+.alt{margin:16px 0 0;font-size:.75rem;color:var(--muted)}.alt a{color:var(--navy)}
+.demo{background:var(--demo-bg);border:1px solid var(--demo-line);border-radius:12px;padding:14px 18px 8px;font-size:.78rem}
+.demo header{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-weight:600;font-size:.85rem}
+.badge{background:var(--badge);color:#fff;font-size:.6rem;font-weight:700;letter-spacing:.08em;padding:4px 7px;border-radius:4px}
+.demo table{width:100%;border-collapse:collapse}.demo td{padding:6px 0;border-top:1px solid var(--demo-line)}
+.demo td:nth-child(2){font-family:var(--mono);font-size:.75rem}
+.demo td:last-child{text-align:right;width:1%}
+.demo button.use{width:auto;padding:3px 12px;font-size:.78rem;font-weight:500;background:#fff;color:var(--ink);border:1px solid var(--border)}
+.demo button.use:hover{background:var(--page)}
+@media(max-width:820px){.split{grid-template-columns:1fr}.brand{padding:24px}
+.pitch{margin:28px 0 8px}.pitch h1{font-size:1.5rem}.rings{display:none}}
+</style>
+</head>
+<body>
+<div class="split">
+
+  <section class="brand">
+    <div class="logo"><img src="{{ url_for('static', filename='logo.svg') }}" alt="">Orbit</div>
+    <div class="pitch">
+      <p class="kicker">Source of wealth screening</p>
+      <h1>Crime scan, forecast and benchmark in one verdict.</h1>
+      <p>Clients, assessments and client history for compliance officers.</p>
+    </div>
+    <svg class="rings" viewBox="0 0 600 600" aria-hidden="true">
+      <circle cx="300" cy="300" r="290"/><circle cx="300" cy="300" r="225"/>
+      <circle cx="300" cy="300" r="160"/><circle cx="300" cy="300" r="95"/>
+      <circle class="dot" cx="212" cy="365" r="9"/>
+    </svg>
+  </section>
+
+  <main class="side">
+    <div class="stack">
+      <form class="card" method="post" action="{{ url_for('admin_signin' if portal == 'admin' else 'signin') }}">
+        <h2>{{ 'System admin sign-in' if portal == 'admin' else 'Officer sign-in' }}</h2>
+
+        {% for category, message in get_flashed_messages(with_categories=true)|unique(case_sensitive=True) %}{% if category in ('success', 'warning', 'toast') %}<p class="note {{ category }}" role="status">{{ message }}</p>{% else %}<p class="error" role="alert">{{ message }}</p>{% endif %}{% endfor %}
+        {% if problem %}<p class="error" role="alert">{{ problem }}</p>{% endif %}
+
+        <label for="name">Name</label>
+        <input id="name" name="name" type="text" value="{{ name }}" placeholder="e.g. {{ demo[0].name if demo else 'Shareen' }}"
+               maxlength="{{ max_text }}" autocomplete="username" autofocus>
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" maxlength="{{ max_text }}"
+               autocomplete="current-password">
+
+        <button type="submit">Sign in</button>
+        <p class="alt">
+          {% if portal == 'admin' %}Officer? <a href="{{ url_for('signin') }}">Officer sign-in is at /signin</a>
+          {% else %}System admin? <a href="{{ url_for('admin_signin') }}">Admin sign-in is at /admin</a>{% endif %}
+        </p>
+      </form>
+
+      <aside class="demo">
+        <header><span class="badge">DEMO ONLY</span> This login is for demonstration</header>
+        <p>It shows <b>who did what</b> in the activity log and keeps the admin pages separate. It is not how a real bank would do login.</p>
+        <ul>
+          <li><b>No sign-up or reset.</b> Accounts are set up by whoever runs the app, in <code>config/accounts.json</code>.</li>
+          <li>Passwords are stored <b>hashed</b>, never as plain text.</li>
+          <li>A real system would add single sign-on, a second factor (MFA), lockout after failed tries and self-service reset.</li>
+        </ul>
+        {% if demo %}<table>{% for account in demo %}<tr><td>{{ account.name }}</td><td>{{ account.password }}</td><td><button type="button" class="use" data-name="{{ account.name }}" data-password="{{ account.password }}">Use</button></td></tr>{% endfor %}</table>{% endif %}
+      </aside>
+    </div>
+  </main>
+
 </div>
 <script>
-document.querySelectorAll('.acct button[data-name]').forEach(function (button) {
+document.querySelectorAll('.demo button.use').forEach(function (button) {
   button.addEventListener('click', function () {
-    document.getElementById('signin-name').value = button.dataset.name;
-    document.getElementById('signin-pw').value = button.dataset.password;
-    document.getElementById('signin-pw').focus();
+    document.getElementById('name').value = button.dataset.name;
+    document.getElementById('password').value = button.dataset.password;
+    document.getElementById('password').focus();
   });
 });
 </script>
-{% endblock %}
+</body>
+</html>
 """
 
 FORBIDDEN = """{% extends "base.html" %}

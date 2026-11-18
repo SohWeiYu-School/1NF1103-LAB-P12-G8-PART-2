@@ -142,6 +142,37 @@ On a Mac, port 5000 is often taken by AirPlay. Start the web app on another port
 
 ---
 
+## Signing In and Accounts
+
+The web app has two sign-in pages: officers sign in at `/signin`, the system admin at `/admin`
+(for example http://127.0.0.1:5000/signin). In the terminal, the officer menu needs no sign-in
+(the audit log records the actor as `terminal`), and menu 9 asks for the admin's name and password.
+
+**Demo login only.** It records who did what in the audit log and keeps the admin pages separate;
+it is not how a real bank would do login (no sign-up, no password reset, no lockout, no MFA).
+The demo passwords are `officer123` for officers and `admin123` for the admin, and the sign-in page
+shows them.
+
+Accounts live in `config/accounts.json`. Passwords are stored only as werkzeug hashes. The file needs
+exactly one admin, at least one officer, and no repeated name or email; if an entry is wrong (for
+example a plain password instead of a hash), the app names the problem and does not start.
+
+**Add an account** (or change a password): make a hash, put the entry in `config/accounts.json`,
+then restart the app.
+
+```bash
+python3 -c "from werkzeug.security import generate_password_hash as g; print(g('a-password'))"
+```
+
+```json
+{"email": "shareen@orbit.local", "name": "Shareen", "role": "officer",
+ "password_hash": "scrypt:32768:8:1$..."}
+```
+
+`role` is `officer` or `admin`. Sign-in matches the **name**, ignoring upper/lower case.
+
+---
+
 ## Filling in a Client from Documents (web app)
 
 Instead of typing every field, the officer can upload the client's documents and let the AI fill in the form.
@@ -213,6 +244,7 @@ line and the web app giving the same result, for example) are in `tests/integrat
 │   ├── schemas/          # JSON Schema files for validating AI responses
 │   └── __init__.py       # Makes app a Python package (do not delete)
 ├── config/
+│   ├── accounts.json     # Officer and admin accounts (password hashes only); see Signing In and Accounts
 │   ├── policy.json       # Risk thresholds and rules
 │   └── vocabulary.json   # The code names (signals, documents, crime categories)
 ├── data/
