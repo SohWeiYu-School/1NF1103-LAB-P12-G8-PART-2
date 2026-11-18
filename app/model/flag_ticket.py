@@ -108,6 +108,14 @@ class FlagTicket:
         """Plain dicts, oldest first. The first is the rule opening the flag; then one per update."""
         return [dict(entry) for entry in self.__history]
 
+    def needs_waiting_on(self, status: str) -> bool:
+        """True if moving to this status needs "waiting on": moving to Following up from another status."""
+        return status == "followup" and status != self.__status
+
+    def needs_outcome(self, status: str) -> bool:
+        """True if moving to this status needs an outcome: moving to Resolved from another status."""
+        return status == "resolved" and status != self.__status
+
     def check_update(self, status: str, note: str, waiting_on: str = "", outcome: str = "") -> list[str]:
         """What is wrong with an update, as messages for the officer (an empty list when it is fine).
         The same status as now means "add a note": only the note is needed."""
@@ -120,10 +128,9 @@ class FlagTicket:
                             "you found or did.")
         elif len(text) > FlagTicket.NOTE_MAX:
             problems.append(f"Please keep the note to {FlagTicket.NOTE_MAX} characters or fewer.")
-        moving = status != self.__status
-        if status == "followup" and moving and waiting_on not in FlagTicket.WAITING_ON:
+        if self.needs_waiting_on(status) and waiting_on not in FlagTicket.WAITING_ON:
             problems.append("Choose who you are waiting on.")
-        if status == "resolved" and moving and outcome not in FlagTicket.OUTCOMES:
+        if self.needs_outcome(status) and outcome not in FlagTicket.OUTCOMES:
             problems.append("Choose an outcome before resolving.")
         return problems
 
@@ -137,7 +144,6 @@ class FlagTicket:
         problems = self.check_update(status, note, waiting_on, outcome)
         if problems:
             raise ValueError(" ".join(problems))
-        moving = status != self.__status
         return {"flag_id": self.__flag.flag_id, "from": self.__status, "to": status,
-                "waiting_on": waiting_on if status == "followup" and moving else "",
-                "outcome": outcome if status == "resolved" and moving else "", "note": note.strip()}
+                "waiting_on": waiting_on if self.needs_waiting_on(status) else "",
+                "outcome": outcome if self.needs_outcome(status) else "", "note": note.strip()}

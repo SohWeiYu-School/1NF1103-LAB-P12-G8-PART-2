@@ -44,6 +44,17 @@ class DocumentRecordBuilder:
         age = day.year - born.year - ((day.month, day.day) < (born.month, born.day))
         return age if 0 < age < 130 else None
 
+    @staticmethod
+    def __names(value: Any) -> Any:
+        """A reading's list of names as it is, except that a text with nothing in it means no names, and blank
+        texts inside a list are left out (so one empty name does not cost the whole list). Anything else, such
+        as a text with something in it, a number or a non-text item, is left for the record to refuse."""
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return []
+        if isinstance(value, (list, tuple)):
+            return [item for item in value if not (isinstance(item, str) and not item.strip())]
+        return value
+
     def _blank(self, value: Any) -> bool:
         return value is None or (isinstance(value, str) and not value.strip()) or value == []
 
@@ -105,11 +116,11 @@ class DocumentRecordBuilder:
                 "declared_net_worth": claims.get("declared_net_worth_sgd"),
                 "expected_aum": claims.get("expected_aum_sgd"),
                 "pep_status": claims.get("pep_status"),
-                "wealth_countries": list(claims.get("wealth_countries") or []),
+                "wealth_countries": self.__names(claims.get("wealth_countries")),
                 "asset_composition": split,
                 "biggest_wealth_jump": claims.get("biggest_wealth_jump_sgd"),
                 "wealth_jump_years": claims.get("wealth_jump_years"),
-                "declared_counterparties": list(claims.get("declared_counterparties") or []),
+                "declared_counterparties": self.__names(claims.get("declared_counterparties")),
             },
             "sow_declaration": extracted.get("sow_declaration"),
             "supporting_documents": [],

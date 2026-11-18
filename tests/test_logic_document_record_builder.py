@@ -79,6 +79,70 @@ def test_an_impossible_value_is_left_empty_and_named_while_every_good_field_is_k
     assert ["career", "age"] in [field["path"] for field in builder.missing_fields(record)]
 
 
+def test_a_text_where_a_list_of_countries_or_counterparties_belongs_is_dropped_not_split_into_letters():
+    reading = {**READING, "claims": {**READING["claims"], "wealth_countries": "Singapore",
+                                     "declared_counterparties": "DBS"}}
+    record, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    saved = record.to_dict()
+    assert saved["claims"]["wealth_countries"] == [] and saved["claims"]["declared_counterparties"] == []
+    assert sorted(entry["path"] for entry in dropped) == [["claims", "declared_counterparties"],
+                                                          ["claims", "wealth_countries"]]
+    assert all("must be a list" in entry["message"] for entry in dropped)
+    assert saved["claims"]["expected_aum"] == READING["claims"]["expected_aum_sgd"]     # the rest is kept
+    assert record.profile.name == READING["client"]["name"]
+
+
+def test_a_blank_text_for_countries_or_counterparties_means_none_and_the_reading_is_kept():
+    reading = {**READING, "claims": {**READING["claims"], "wealth_countries": "  ", "declared_counterparties": ""}}
+    record, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    saved = record.to_dict()
+    assert saved["claims"]["wealth_countries"] == [] and saved["claims"]["declared_counterparties"] == []
+    assert dropped == []
+    assert record.profile.name == READING["client"]["name"]
+    assert saved["claims"]["expected_aum"] == READING["claims"]["expected_aum_sgd"]
+
+
+def test_the_message_for_a_text_instead_of_a_list_reads_inside_the_dropped_sentence():
+    reading = {**READING, "claims": {**READING["claims"], "wealth_countries": "Singapore"}}
+    _, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    assert "is not possible (the wealth countries must be a list of names, for example Singapore and Malaysia, " \
+           "or left empty; a single value was given)" in dropped[0]["message"]
+
+
+@pytest.mark.parametrize("odd", [["SG", None, 5], [["x"]], 0, False, {}, 0.0])
+def test_a_reading_with_odd_items_or_a_non_list_for_the_countries_drops_only_that_field_with_its_message(odd):
+    reading = {**READING, "claims": {**READING["claims"], "wealth_countries": odd, "declared_counterparties": odd}}
+    record, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    saved = record.to_dict()
+    assert saved["claims"]["wealth_countries"] == [] and saved["claims"]["declared_counterparties"] == []
+    assert sorted(entry["path"] for entry in dropped) == [["claims", "declared_counterparties"],
+                                                          ["claims", "wealth_countries"]]
+    assert all("is not possible" in entry["message"] and "so it was left empty" in entry["message"]
+               for entry in dropped)
+    assert saved["claims"]["expected_aum"] == READING["claims"]["expected_aum_sgd"]       # the rest is kept
+    assert record.profile.name == READING["client"]["name"]
+
+
+def test_blank_names_inside_a_list_are_left_out_and_the_good_names_are_kept():
+    reading = {**READING, "claims": {**READING["claims"], "wealth_countries": ["Singapore", "", "  ", "Malaysia"],
+                                     "declared_counterparties": ["", "DBS"]}}
+    record, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    saved = record.to_dict()
+    assert saved["claims"]["wealth_countries"] == ["Singapore", "Malaysia"]
+    assert saved["claims"]["declared_counterparties"] == ["DBS"]
+    assert dropped == []
+
+
+def test_a_list_of_only_blank_names_means_none_and_a_non_text_item_still_drops_the_field():
+    reading = {**READING, "claims": {**READING["claims"], "wealth_countries": ["", " "],
+                                     "declared_counterparties": ["DBS", 5, ""]}}
+    record, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    saved = record.to_dict()
+    assert saved["claims"]["wealth_countries"] == []
+    assert saved["claims"]["declared_counterparties"] == []
+    assert [entry["path"] for entry in dropped] == [["claims", "declared_counterparties"]]
+
+
 def test_several_impossible_values_in_jobs_assets_and_claims_are_each_dropped_on_their_own():
     reading = {**READING, "jobs": [{**READING["jobs"][0], "start_year": 1800}],
                "assets": [{**READING["assets"][0], "price_paid_sgd": -5}],

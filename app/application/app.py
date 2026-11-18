@@ -1,7 +1,6 @@
 """App: creates every object of the system and coordinates them."""
 
 import copy
-import functools
 import logging
 import logging.handlers
 import os
@@ -127,6 +126,10 @@ class App:
     ARCHIVE_NO_CHANGE: str = AssessmentRepository.NO_CHANGE
     ARCHIVE_NOT_SAVED: str = AssessmentRepository.NOT_SAVED
     ARCHIVE_BAD_REASON: str = "bad_reason"
+    # What a failed read can be about (the "what" of the audit line "database unreadable").
+    READ_TARGETS: tuple[str, ...] = ("client records", "assessments")
+    # The results of archive_assessment / restore_assessment that are told as news; any other result is a problem.
+    ARCHIVE_DONE_RESULTS: tuple[str, ...] = (AssessmentRepository.CHANGED, AssessmentRepository.NO_CHANGE)
     MAX_ARCHIVE_REASON: int = AssessmentRepository.MAX_REASON_LENGTH
 
     def __init__(self, ai_caller: Callable[[str, dict, dict], str | None] | None = None,
@@ -205,9 +208,15 @@ class App:
 
         # IO Manager
         self.__ui: ConsoleUI = ConsoleUI()
-        self.__report_view: ReportView = ReportView(self.__ui)
-        self.__client_form: ClientForm = ClientForm(self.__ui, self.__report_view)
+        self.__client_form: ClientForm = ClientForm(self.__ui, ReportView(self.__ui))
         schema = self.__case_files.load(os.path.join(root, "app", "schemas", "case_input.schema.json"), default={})
+        if not isinstance(schema, dict) or not schema:
+            # Without the schema every case would pass unchecked: an empty result is not a safe fallback.
+            # start() and start_web() see the flag, tell the officer and stop.
+            logger.error("App: the case schema app/schemas/case_input.schema.json could not be read")
+            self.__settings_ok = False
+            schema = {}
+        self.__case_schema: dict = schema
         self.__case_builder: CaseBuilder = CaseBuilder(self.__ui, schema)
         limits = policy.get("assessment_rate_limit", {})
         if not isinstance(limits, dict):
@@ -303,17 +312,12 @@ class App:
         """Run the command line app. Returns the exit code (0 = fine).
 
             (no arguments)          the menu
-            --case FILE             assess one case file
-            --all-samples           assess every sample case
             --web                   start the web app instead of the menu
         """
         self.__configure_logging()
-        allowed = ("--web", "--case", "--all-samples")
-        unknown = [argument for position, argument in enumerate(arguments)
-                   if argument not in allowed and not (position > 0 and arguments[position - 1] == "--case")]
+        unknown = [argument for argument in arguments if argument != "--web"]
         if unknown:
-            self.__ui.show_error(f"Unknown option {unknown[0]}. Allowed: --web, --case FILE, --all-samples "
-                                 "(or nothing, for the menu).")
+            self.__ui.show_error(f"Unknown option {unknown[0]}. Allowed: --web (or nothing, for the menu).")
             return 1
         if not self.__settings_ok:
             self.__ui.show_error(App.SETTINGS_UNAVAILABLE)
@@ -328,28 +332,8 @@ class App:
             return 1
         if "--web" in arguments:
             return self.start_web()
-        if not self.ai_available():
-            self.__ui.show_error("No OPENAI_API_KEY set: only saved AI replies can be used.")
-        try:
-            if "--all-samples" in arguments:
-                paths = self.__case_files.list_samples()
-                results = [self.run_case_file(path) for path in paths]
-                return 0 if paths and all(results) else 1
-            if "--case" in arguments:
-                position = arguments.index("--case")
-                if position + 1 >= len(arguments):
-                    self.__ui.show_error("--case needs a file path")
-                    return 1
-                return 0 if self.run_case_file(arguments[position + 1]) else 1
-            self.run_menu()
-            return 0
-        except KeyboardInterrupt:
-            self.__ui.show_message("\nStopped.")
-            return 130
-        except Exception:
-            logger.exception("Unexpected error in the command line app")
-            self.__ui.show_unexpected_error()
-            return 1
+        from app.interface.terminal_app import TerminalApp    # imported here: TerminalApp itself imports App
+        return TerminalApp(self, self.__ui, self.__limiter).start()
 
     def start_web(self, host: str = "", port: int = 0) -> int:
         """Start the web app. HOST and PORT in .env set where it listens (default 127.0.0.1:5000)."""
@@ -364,80 +348,7 @@ class App:
         WebApp(self, self.__limiter).start(host or os.getenv("HOST") or "127.0.0.1", port or int(os.getenv("PORT") or 5000))
         return 0
 
-    def run_menu(self) -> None:
-        """Show the main menu until the officer chooses to leave."""
-        self.begin_request(App.TERMINAL)
-        try:
-            self.__ui.show_message(f"{len(self.__assessments.load())} saved assessment(s) loaded.")
-        except (OSError, ValueError) as error:
-            logger.error("App.run_menu: the saved assessments cannot be read: %r", error)
-            self.__read_failed("assessments", App.TERMINAL)
-            self.__ui.show_error(App.ASSESSMENTS_UNAVAILABLE)
-        while True:
-            self.begin_request(App.TERMINAL)         # each pass of the menu is a new request
-            choice = self.__ui.show_app_menu()
-            if choice == "1":
-                record = self.__client_form.create_new_client(save_fn=functools.partial(self.save_client, new_client=True),
-                                                             upload_fn=self.upload_document,
-                                                             is_taken_fn=self.client_ref_taken)
-                if record is not None:
-                    self.__maybe_assess(record)
-            elif choice == "2":
-                record = self.__new_client_from_documents()
-                if record is not None:
-                    self.__maybe_assess(record)
-            elif choice == "3":
-                self.__client_form.find_existing_client(
-                    find_fn=self.find_client, save_fn=self.save_client,
-                    download_fn=self.download_document, upload_fn=self.upload_document)
-            elif choice == "4":
-                ref = self.__ui.ask_client_ref()
-                if ref is None:
-                    continue
-                try:
-                    record = self.find_client(ref)
-                except ValueError as error:
-                    self.__ui.show_error(str(error))
-                    continue
-                if record is None:
-                    self.__ui.show_error(f"No client found with reference {ref}.")
-                    continue
-                self.__maybe_assess(record)
-            elif choice == "5":
-                self.list_assessments()
-            elif choice == "6":
-                try:
-                    clients = self.__clients.load()
-                except (OSError, ValueError) as error:
-                    logger.error("App.run_menu: the client records cannot be read: %r", error)
-                    self.__read_failed("client records", App.TERMINAL)
-                    self.__ui.show_error(App.CLIENTS_UNAVAILABLE)
-                    continue
-                self.__report_view.show_client_list(clients)
-                self.__ui.read_answer("Press Enter to continue...")
-            elif choice == "7":
-                self.__ui.show_message("\n--- Synchronizing Local Data to Cloud Database ---")
-                self.__ui.show_sync_result(self.sync_to_cloud())
-            elif choice == "8":
-                self.__ui.show_message("\nGoodbye.")
-                break
-
     # ----- assessing ---------------------------------------------------------------------------
-
-    def __prepare_case(self, record: ClientRecord) -> dict | None:
-        """The case to assess, built from a saved client record. The officer is only asked for
-        what cannot be read from the record. None if no usable case could be made."""
-        case, missing = self.read_case(record)
-        if case is None:
-            self.__ui.show_error("Needed before the assessment can run: " + ", ".join(missing))
-            case = self.__case_builder.build(record)
-            if case is None:
-                return None
-        problems = self.__case_builder.validate_case(case)
-        if problems:
-            self.__case_builder.show_case_problems(case["client_ref"], problems)
-            return None
-        return case
 
     def read_case(self, record: ClientRecord) -> tuple[dict | None, list[str]]:
         """(case, []) when the record can be read into a case, otherwise (None, what is missing).
@@ -452,8 +363,8 @@ class App:
         then gets an "assessment failed" line for actor).
         on_failure defaults to App's own rule (CRITICAL_STEPS). show_failures=False keeps
         failed steps off the terminal (the web app shows them in the report instead)."""
+        self.__start(actor)            # first: a refusal must not leave the last action's audit failure showing
         self.__require_settings()
-        self.__start(actor)
         if on_failure is None:
             on_failure = self.__handle_failure if show_failures else self.__handle_failure_quietly
         decide = on_failure
@@ -476,31 +387,6 @@ class App:
             self.__record("assessment_failed", actor, ref, "failed",
                           {"step": stopped_at[0] if stopped_at else "The assessment"})
         return result
-
-    def assess_client_record(self, record: ClientRecord) -> Verdict | None:
-        """The command line's assessment of a saved client: prepare, run, save, show.
-        Returns the Verdict, or None if no assessment could be made."""
-        self.__require_settings()
-        case = self.__prepare_case(record)
-        if case is None:
-            return None
-        self.__ui.show_message(f"\nAssessing {case['client_ref']}: documents, crime scan, forecast "
-                               "and benchmark together.")
-        result = self.assess(case, record.documents(), on_step=self.__show_step)
-        if result is None:
-            self.__ui.show_error("The assessment was stopped. Nothing was saved.")
-            return None
-        saved = self.save_assessment(result, record, on_step=self.__show_step)
-        verdict = result["verdict"]
-        self.__report_view.show_verdict_report(verdict, crime_result=result.get("crime_result"),
-                                               typologies=result.get("typologies"))
-        if saved:
-            self.__ui.show_message("Assessment saved.")
-            if self.client_outcome_failed():
-                self.__ui.show_error(App.OUTCOME_NOT_UPDATED)
-        else:
-            self.__ui.show_error("Could not save the assessment.")
-        return verdict
 
     def save_assessment(self, result: dict, record: ClientRecord | None = None,
                         on_step: Callable[[int, str], None] | None = None, actor: str = TERMINAL) -> str | None:
@@ -591,30 +477,6 @@ class App:
             return None
         return {**crime_result, "match_results": [match.to_dict() for match in crime_result["match_results"]]}
 
-    def run_case_file(self, path: str) -> bool:
-        """Assess a case file (the same assessment as the menu). False if it could not be assessed."""
-        self.__require_settings()
-        case = self.__case_files.load(path)
-        if case is not None and not self.__case_files.is_forecasting_case(case):
-            self.__ui.show(f"\n{os.path.basename(path)}: not in the forecasting format "
-                           "(it's a client record), skipped. Use the menu to assess it.")
-            return True
-        problems = self.__case_builder.validate_case(case)
-        if problems:
-            self.__case_builder.show_case_problems(path, problems)
-            return False
-        self.__ui.show_message(f"\nAssessing {case['client_ref']} ({os.path.basename(path)}).")
-        result = self.assess(case, on_step=self.__show_step)
-        if result is None:
-            self.__ui.show_error("The assessment was stopped. Nothing was saved.")
-            return False
-        if not self.save_assessment(result, on_step=self.__show_step):
-            self.__ui.show_error("Could not save the assessment.")
-        self.__report_view.show_verdict_report(result["verdict"], ask_for_evidence=False,
-                                               crime_result=result.get("crime_result"),
-                                               typologies=result.get("typologies"))
-        return result["forecast"] is not None
-
     # ----- clients and records ---------------------------------------------------------------
 
     def find_client(self, client_ref: str) -> ClientRecord | None:
@@ -673,94 +535,6 @@ class App:
             logger.error("App.__save_record: could not save the client record %s", record.client_ref)
         return saved
 
-    def __new_client_from_documents(self) -> ClientRecord | None:
-        """Read a folder of documents, pre-fill the client, ask for what is missing, show a
-        summary to check, then save. Returns the saved record (to assess) or None."""
-        # 1. Which folder
-        while True:
-            folder = self.__client_form.ask_document_folder()
-            if folder is None:
-                return None
-            paths = self.__documents.list_folder(folder)
-            if paths is None:
-                self.__ui.show_error(f"Folder not found: {folder}")
-            elif not paths:
-                self.__ui.show_error("No PDF, Word, Excel, text or image files in that folder.")
-            else:
-                break
-        self.__ui.show_documents_found(paths)
-
-        # 2. Read the documents and let the AI pull out the details
-        self.__ui.show_message(f"\nReading {len(paths)} document(s) with AI... this can take up to a minute.")
-        extracted, warnings = self.read_documents([self.__documents.read_for_extraction(path) for path in paths])
-        if extracted is None:
-            self.__ui.show_ai_unavailable("Document reading")
-            if not self.__ui.ask_yes_no("Type the details in yourself?"):
-                return None
-            extracted = {}
-
-        # 3. Build the record and ask for anything missing
-        builder = self.record_builder()
-        try:
-            client_ref = self.new_client_ref()
-        except ValueError as error:
-            self.__ui.show_error(str(error))
-            return None
-        try:
-            document_record, _, dropped = builder.build(extracted, client_ref)
-        except ValueError as error:
-            logger.error("App.__new_client_from_documents: the AI's reading is not a possible record: %r", error)
-            self.__ui.show_error(f"The details read from the documents cannot be used because {error}.")
-            if not self.__ui.ask_yes_no("Type the details in yourself?"):
-                return None
-            extracted = {}
-            document_record, _, dropped = builder.build(extracted, client_ref)
-        if dropped:
-            messages = [entry["message"] for entry in dropped]
-            logger.warning("App.__new_client_from_documents: left out of the AI's reading: %s", " | ".join(messages))
-            self.__ui.show_dropped_fields(messages)
-        record = document_record
-        missing = builder.missing_fields(record)
-        self.__ui.show_missing_intro(len(missing))
-        for field in missing:
-            record = self.__fill_field(builder, record, field)
-        # a dropped detail the form does not insist on is asked for too: the message said to enter it
-        optional = [entry["optional_field"] for entry in dropped if entry["optional_field"]]
-        if optional:
-            self.__ui.show_optional_intro(len(optional))
-            for field in optional:
-                record = self.__fill_field(builder, record, field, optional=True)
-
-        # 4. Summary to check, edit until right, then save or discard
-        notes = list(extracted.get("notes") or []) + list(warnings)
-        while True:
-            self.__report_view.show_document_summary(builder.summarise(record, document_record), paths, notes,
-                                                     builder.check(record))
-            action = self.__ui.ask_document_record_action()
-            if action == "discard":
-                self.__ui.show_message("\nClient discarded. Nothing was saved.")
-                return None
-            if action == "edit":
-                record = builder.finish(self.__client_form.edit_existing_client(record, self.upload_document))
-                for field in builder.missing_fields(record):
-                    record = self.__fill_field(builder, record, field)
-                continue
-            break
-
-        # 5. Keep the documents with the client, then save
-        for path in paths:
-            stored = self.upload_document(path)
-            if stored is None:
-                self.__ui.show_error(f"Could not keep a copy of {os.path.basename(path)}.")
-            else:
-                record.add_document({"file_name": os.path.basename(path), "file_path": stored})
-        if not self.save_client(record, new_client=True):
-            self.__ui.show_error("The client could not be saved.")
-            return None
-        self.__ui.show_message(f"\nClient saved. Reference: {record.client_ref} "
-                               f"({len(record.documents())} document(s) attached).")
-        return record if self.__client_form.ask_after_save(record) else None
-
     def read_documents(self, documents: list[dict], actor: str = TERMINAL,
                        client_ref: str = "") -> tuple[dict | None, list[str]]:
         """Ask the AI to read documents the DocumentStore has opened. Returns (details, warnings).
@@ -788,7 +562,7 @@ class App:
             return sum(App.__count_fields(item) for item in value)
         return 1
 
-    def record_builder(self, date: str = "") -> DocumentRecordBuilder:
+    def __record_builder(self, date: str = "") -> DocumentRecordBuilder:
         """A DocumentRecordBuilder for one record, dated today unless another date is given."""
         return DocumentRecordBuilder(self.__config, date or self.today())
 
@@ -814,39 +588,6 @@ class App:
     def read_amount(self, text: object) -> float | None:
         """'1,650,000', 'S$1.65m', '410k' -> a number; None if it cannot be read."""
         return CaseReader.read_amount(text)
-
-    def list_assessments(self) -> None:
-        """List saved assessments (filtered by outcome) and optionally open one."""
-        outcomes = ["(all)", *Verdict.OUTCOMES, "(include archived)"]
-        choice = self.__ui.ask_choice("Show which outcome?", outcomes, allow_back=True)
-        if choice is None:
-            return          # 0 = back to the main menu
-        picked = outcomes[choice]
-        with_archived = picked == "(include archived)"      # every outcome, archived ones too
-        try:
-            matches = self.__assessments.query("" if picked == "(all)" or with_archived else picked,
-                                               include_archived=with_archived)
-        except (OSError, ValueError) as error:
-            logger.error("App.list_assessments: the saved assessments cannot be read: %r", error)
-            self.__read_failed("assessments", App.TERMINAL)
-            self.__ui.show_error(App.ASSESSMENTS_UNAVAILABLE)
-            return
-        # One state per record (not per id: old records may share a missing id).
-        states = [App.archive_state(match) for match in matches] if with_archived else None
-        self.__report_view.show_assessment_list(matches, states)
-        if matches and self.__ui.ask_yes_no("Open one in full?"):
-            marks = [ReportView.ARCHIVE_MARKS.get(state, "") for state in states] if states else [""] * len(matches)
-            labels = [f"{match['client_ref']}  {match['kind']}{mark}" for match, mark in zip(matches, marks)]
-            chosen = matches[self.__ui.ask_choice("Which one?", labels)]
-            if chosen.get("report"):                                         # the combined assessment
-                verdict = self.__saved_verdict(chosen)
-                if verdict is None:
-                    self.__ui.show_error("This saved assessment could not be read, so its report cannot be "
-                                         "shown. The other saved assessments are not affected.")
-                else:
-                    self.__report_view.show_verdict_report(verdict)
-            else:
-                self.__report_view.show_onboarding(chosen["assessment"])     # saved before the combined verdict
 
     def client_assessments(self, client_ref: str, include_archived: bool = False) -> list[dict]:
         """Every saved assessment of one client, newest first; archived ones only if include_archived.
@@ -905,10 +646,65 @@ class App:
         """True only for a document reference this app made (the DocumentStore decides)."""
         return self.__documents.owns(file_id)
 
-    def read_document_for_extraction(self, path: str, name: str) -> dict:
+    def read_document_for_extraction(self, path: str, name: str = "") -> dict:
         """One file read so the AI can pull client details out of it: {"file_name", "kind", ...}.
+        name is the file's name for the reader (the file's own name if not given).
         A file that cannot be read comes back with kind "error" and a message that is safe to show."""
-        return self.__documents.read_for_extraction(path, name)
+        return self.__documents.read_for_extraction(path, name or None)
+
+    def list_document_folder(self, folder: str) -> list[str] | None:
+        """The readable documents directly inside a folder, sorted by name; None if the folder does not exist.
+        Raises ValueError if folder is not text."""
+        if not isinstance(folder, str):
+            raise ValueError("The folder must be given as text.")
+        return self.__documents.list_folder(folder)
+
+    def case_schema(self) -> dict:
+        """The JSON schema a case is checked against ({} only if it could not be read, and then settings_ok() is
+        False and the app does not start)."""
+        return dict(self.__case_schema)
+
+    def read_failed(self, what: str, actor: str = "") -> None:
+        """Write one "database unreadable" line for a read the caller found failing (at most one for each
+        request). what must be one of READ_TARGETS and actor, if given, a name App knows (as for any action);
+        ValueError otherwise. Writing the line never raises."""
+        if what not in App.READ_TARGETS:
+            raise ValueError(f"What could not be read must be one of {', '.join(App.READ_TARGETS)} (got {what!r}).")
+        if not isinstance(actor, str):
+            raise ValueError("The actor must be text.")
+        if actor:
+            self.__check_actor(actor)
+        self.__read_failed(what, actor)
+
+    def saved_verdict(self, saved: dict) -> Verdict | None:
+        """A saved assessment as a Verdict holding its saved report, so it can be shown again.
+        None (and logged) if the saved outcome or report is not possible or there is no report. Raises ValueError
+        if saved is not a record (a dict)."""
+        if not isinstance(saved, dict):
+            raise ValueError("A saved assessment must be a record (a dict).")
+        return self.__saved_verdict(saved)
+
+    @staticmethod
+    def archive_message(result: str, archive: bool, reason: str = "") -> str:
+        """What to tell the officer about the result of archive_assessment (archive=True) or restore_assessment.
+        reason is the one that was given (used when it was refused). Results in ARCHIVE_DONE_RESULTS are
+        news; every other result is a problem. The web app words the same results itself, and a test checks
+        the two agree."""
+        word = "archived" if archive else "restored"
+        if result == App.ARCHIVE_CHANGED:
+            return ("Assessment archived. It is hidden from the lists, not deleted." if archive
+                    else "Assessment restored.")
+        if result == App.ARCHIVE_NO_CHANGE:
+            return "This assessment is already archived." if archive else "This assessment is not archived."
+        if result == App.ARCHIVE_UNREADABLE:
+            return "This assessment's archive record is damaged, so it cannot be changed."
+        if result == App.ARCHIVE_NOT_SAVED:
+            return f"The assessment was not {word} because saving failed. Please try again later."
+        if result == App.ARCHIVE_BAD_REASON:
+            return f"Nothing was archived. {App.archive_reason_problem(reason)}"
+        if result == App.ARCHIVE_NOT_FOUND:
+            return "That assessment could not be found, so nothing was changed."
+        return App.ASSESSMENTS_UNAVAILABLE
 
     def all_clients(self) -> list[dict]:
         """Every saved client; [] only when there are none yet. Raises ValueError(CLIENTS_UNAVAILABLE)
@@ -920,11 +716,12 @@ class App:
             self.__read_failed("client records")
             raise ValueError(App.CLIENTS_UNAVAILABLE) from error
 
-    def all_assessments(self, include_archived: bool = False) -> list[dict]:
-        """Every saved assessment (archived ones only if include_archived); [] only when there are
-        none yet. Raises ValueError(ASSESSMENTS_UNAVAILABLE) if the saved assessments cannot be read."""
+    def all_assessments(self, include_archived: bool = False, outcome: str = "") -> list[dict]:
+        """Every saved assessment, or only those with this outcome (archived ones only if include_archived);
+        [] only when there are none yet. Raises ValueError(ASSESSMENTS_UNAVAILABLE) if the saved assessments
+        cannot be read."""
         try:
-            return self.__assessments.query("", include_archived)
+            return self.__assessments.query(outcome, include_archived)
         except (OSError, ValueError) as error:
             logger.error("App.all_assessments: the saved assessments cannot be read: %r", error)
             self.__read_failed("assessments")
@@ -993,17 +790,65 @@ class App:
         """ARCHIVE_ACTIVE, ARCHIVE_ARCHIVED or ARCHIVE_UNREADABLE for one saved assessment."""
         return AssessmentRepository.archive_state(saved)
 
-    def record_from_reading(self, extracted: dict, today: str = "") -> tuple[ClientRecord, list[dict]]:
-        """The client record made from the AI's reading of documents, and one entry for each field
-        left out because no client record can have that value: {"path", "message", "optional_field"}.
-        Raises ValueError, saying what is wrong, if today is not a YYYY-MM-DD date or if the
-        reading as a whole cannot be a record."""
-        record, _, dropped = self.record_builder(today).build(extracted, "")
+    def record_from_reading(self, extracted: dict, today: str = "",
+                            client_ref: str = "") -> tuple[ClientRecord, list[dict]]:
+        """The client record made from the AI's reading of documents (client_ref is its reference, none yet
+        if not given), and one entry for each field left out because no client record can have that value:
+        {"path", "message", "optional_field"}. Raises ValueError, saying what is wrong, if today is not a
+        YYYY-MM-DD date or if the reading as a whole cannot be a record."""
+        record, _, dropped = self.__record_builder(today).build(extracted, client_ref)
         return record, dropped
+
+    def missing_fields(self, record: ClientRecord) -> list[dict]:
+        """The required fields of a record filled from documents that are still empty or unusable, in form
+        order: {"path", "label", "kind", ...}. Raises ValueError if record is not a ClientRecord."""
+        App.__need_record(record)
+        return self.__record_builder().missing_fields(record)
+
+    def set_record_field(self, record: ClientRecord, path: list, value: object) -> ClientRecord:
+        """A copy of record with the value at path (a path from missing_fields) replaced. Raises ValueError,
+        saying what is wrong, if record is not a ClientRecord, the path does not lead to a field the record has, or
+        the value is not possible there. Every message reads on after "That value cannot be used because"."""
+        App.__need_record(record)
+        if not isinstance(path, list) or not path or not all(
+                isinstance(part, (str, int)) and not isinstance(part, bool) for part in path):
+            raise ValueError("the field to change must be given as a path of names and positions")
+        here: object = record.to_dict()
+        for part in path:                           # the path must lead to a field the record has
+            if isinstance(here, dict) and isinstance(part, str) and part in here:
+                here = here[part]
+            elif isinstance(here, list) and isinstance(part, int) and 0 <= part < len(here):
+                here = here[part]
+            else:
+                raise ValueError("the record has no such field (" + ".".join(str(part) for part in path) + ")")
+        try:
+            return self.__record_builder().set_path(record, path, value)
+        except (TypeError, AttributeError) as error:      # the record cannot be built with this kind of value
+            logger.warning("App.set_record_field: %r at %r could not be put into the record: %r", value, path, error)
+            raise ValueError("it is not possible there (wrong kind of value)") from error
+
+    def finish_record(self, record: ClientRecord) -> ClientRecord:
+        """The record with its current job copied into "career" again, after the officer has edited the jobs.
+        Raises ValueError if record is not a ClientRecord."""
+        App.__need_record(record)
+        return self.__record_builder().finish(record)
+
+    def reading_summary(self, record: ClientRecord, from_documents: ClientRecord) -> list[dict]:
+        """One row per field for the officer to check: its value and where it came from ("documents",
+        "edited", "entered" or "blank"). from_documents is the record as first made from the reading. Raises
+        ValueError if either is not a ClientRecord."""
+        App.__need_record(record)
+        App.__need_record(from_documents)
+        return self.__record_builder().summarise(record, from_documents)
+
+    @staticmethod
+    def __need_record(record: object) -> None:
+        if not isinstance(record, ClientRecord):
+            raise ValueError("A client record is needed.")
 
     def reading_problems(self, record: ClientRecord, today: str = "") -> list[str]:
         """Things worth a second look in a record filled from documents. [] = nothing spotted."""
-        return self.record_builder(today).check(record)
+        return self.__record_builder(today).check(record)
 
     # ----- who is using the app, and the audit log ----------------------------------------------
 
@@ -1432,6 +1277,14 @@ class App:
         """True if the last action in this thread was done but its audit line could not be written."""
         return bool(getattr(self.__audit_note, "failed", False))
 
+    def audit_failure_message(self) -> str:
+        """What to tell the user when the last action in this thread could not be written to the audit log:
+        AUDIT_NOT_WRITTEN ("Saved, but ...") if the action had saved something, AUDIT_LINE_NOT_WRITTEN if not;
+        "" when its line was written (or there was no action)."""
+        if not self.audit_write_failed():
+            return ""
+        return App.AUDIT_NOT_WRITTEN if getattr(self.__audit_note, "kept", False) else App.AUDIT_LINE_NOT_WRITTEN
+
     def __start(self, actor: str) -> None:
         """Begin an action: forget the last audit failure of this thread and check who is acting.
         Raises ValueError (a programming error) if actor is neither TERMINAL, UNKNOWN nor a configured account name."""
@@ -1451,7 +1304,8 @@ class App:
     def __record(self, action: str, actor: str, client_ref: str = "", result: str = "ok",
                  details: dict | None = None, kept: bool = False) -> bool:
         """Add one line to the audit log. Never raises: if it cannot be written the real error is logged,
-        audit_write_failed() turns True, and the terminal is told (the web app checks audit_write_failed()).
+        audit_write_failed() turns True, and audit_failure_message() says what to tell the user (each front end
+        checks it after the action; App itself shows nothing, whoever the actor is).
         kept is True when the action saved something: the message then says "Saved, but ...", otherwise it
         only says the action could not be written."""
         self.__audit_note.failed = False
@@ -1465,8 +1319,7 @@ class App:
         if not written:
             logger.error("App.__record: the audit line for %s by %s was not written", action, actor)
             self.__audit_note.failed = True
-            if actor == App.TERMINAL:
-                self.__ui.show_error(App.AUDIT_NOT_WRITTEN if kept else App.AUDIT_LINE_NOT_WRITTEN)
+            self.__audit_note.kept = kept
         return written
 
     # ----- the objects set-up code and tests reach through App ------------------------------
@@ -1531,10 +1384,10 @@ class App:
         without the step, False to stop the assessment."""
         if step in App.CRITICAL_STEPS:
             logger.error("App: critical step failed, stopping the assessment: %s (%s)", step, error)
-            self.__ui.show_error(f"{step} failed, so no verdict can be given: {error}")
+            self.__ui.show_error(f"{step} failed, so no verdict can be given.")     # the reason is in the log only
             return False
         logger.warning("App: step failed, carrying on without it: %s (%s)", step, error)
-        self.__ui.show_message(f"   ! {step} could not be completed and is left out: {error}")
+        self.__ui.show_message(f"   ! {step} could not be completed and is left out.")  # the reason is in the log only
         return True
 
     def __handle_failure_quietly(self, step: str, error: str) -> bool:
@@ -1544,32 +1397,6 @@ class App:
                    "App: step failed (%s): %s (%s)", "stopping" if critical else "carrying on", step, error)
         return not critical
 
-    def __maybe_assess(self, record: ClientRecord) -> None:
-        """Check the rate limit; if clear, run the assessment."""
-        allowed, wait = self.__limiter.check("cli")
-        if not allowed:
-            self.__ui.show_rate_limit_error(wait)
-            return
-        self.__limiter.record("cli")
-        self.assess_client_record(record)
-
-    def __fill_field(self, builder: DocumentRecordBuilder, record: ClientRecord, field: dict,
-                     optional: bool = False) -> ClientRecord:
-        """Ask the officer for one missing detail until the record accepts it. An optional detail
-        may be left empty by pressing Enter (the record is then unchanged)."""
-        while True:
-            try:
-                if optional:
-                    answer = self.__client_form.ask_optional_field(field)
-                    return record if answer in (None, []) else builder.set_path(record, field["path"], answer)
-                return builder.set_path(record, field["path"], self.__client_form.ask_missing_field(field))
-            except ValueError as error:
-                logger.warning("App: %s was not accepted: %r", field["label"], error)
-                self.__ui.show_error(f"That value cannot be used because {error}. Please try again.")
-
-    def __show_step(self, number: int, label: str) -> None:
-        self.__ui.show_step(number, len(AssessmentRunner.STEPS), label)
-
     def __saved_verdict(self, saved: dict) -> Verdict | None:
         """A saved assessment as a Verdict holding its saved report, so it can be shown again.
         None (and logged) if the saved outcome or report is not possible."""
@@ -1577,7 +1404,7 @@ class App:
             verdict = Verdict(str(saved.get("assessment_id") or ""), str(saved.get("client_ref") or ""),
                               str(saved.get("assessed_at") or ""), saved.get("outcome"))
             verdict.report = saved["report"]
-        except ValueError as error:
+        except (ValueError, KeyError) as error:
             logger.error("App: the saved assessment %s cannot be read: %r", saved.get("assessment_id"), error)
             return None
         return verdict

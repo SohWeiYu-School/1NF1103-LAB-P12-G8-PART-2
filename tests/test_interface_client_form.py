@@ -134,14 +134,10 @@ def test_the_declaration_is_asked_until_it_is_long_enough(monkeypatch, capsys):
     assert "[ERROR]" in capsys.readouterr().out
 
 
-def test_no_jobs_are_added_when_the_officer_says_no(monkeypatch):
+@pytest.mark.parametrize("ask", ["get_career_history", "get_investments"])
+def test_nothing_is_added_when_the_officer_says_no(monkeypatch, ask):
     _type(monkeypatch, "n")
-    assert _form().get_career_history() == []
-
-
-def test_no_assets_are_added_when_the_officer_says_no(monkeypatch):
-    _type(monkeypatch, "n")
-    assert _form().get_investments() == []
+    assert getattr(_form(), ask)() == []
 
 
 NEW_CLIENT_ANSWERS = ("Daniel Tan", "Malaysian", "Chief Operating Officer", "C-suite", "Shipping",

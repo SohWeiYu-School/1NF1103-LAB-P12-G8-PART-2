@@ -191,6 +191,69 @@ package "Data Manager (app/data)" {
 }
 
 package "IO Manager (app/interface)" {
+  class AdminConsole {
+    +MENU : tuple[str, ...] = (...) «const»
+    +NOT_SAVED : str = "Your update was not saved." «const»
+    +NO_SUCH_FLAG : str = "No flag has the id {flag_id}. Check th... «const»
+    +SAFE_ERRORS : tuple[str, ...] = (...) «const»
+    -__account : Account = account
+    -__app : App = app
+    -__listed : list[FlagTicket] = []
+    -__ui : ConsoleUI = ui
+    -__view : AdminView = view
+    --
+    -__activity_log() : None
+    -__ask_dates() : tuple[str, str]
+    -__ask_filter() : AuditFilter | None
+    -__ask_groups() : list[str] | None
+    -__ask_officer() : str
+    -__ask_text(question : str, field : str) : str
+    -__ask_update(ticket : FlagTicket) : tuple[str, str, str, str] | None
+    -__client_flags() : None
+    +__init__(app : App, ui : ConsoleUI, view : AdminView, account : Account)
+    {static} -__now() : datetime
+    -__open_flag() : None
+    -__overview() : None
+    -__pick_flag() : str | None
+    {static} -__rejected(**values : object) : str
+    -__show_again(flag_id : str, lead : str) : FlagTicket | None
+    -__show_audit_warning() : None
+    -__show_error(error : ValueError, where : str, not_saved : bool = False) : None
+    -__show_flag(flag_id : str, typed : bool = False) : FlagTicket | None
+    -__update_flag(ticket : FlagTicket) : FlagTicket | None
+    -__verify() : None
+    +run() : None
+  }
+  class AdminView {
+    +FAILURE_COLUMN : int = 16 «const»
+    +LOG_PRESET_NAMES : dict[str, str] = {...} «const»
+    +PRESET_NAMES : dict[str, str] = {...} «const»
+    +RESULT_NAMES : dict[str, str] = {...} «const»
+    +SGT_FORMAT : str = "%Y-%m-%d %H:%M" «const»
+    +SORT_NAMES : dict[str, str] = {...} «const»
+    -__ui : ConsoleUI = ui if ui is not None else ConsoleUI()
+    --
+    {static} -__change(has_previous : bool, change : int | None, diff : int) : str
+    {static} -__event_line(event : AuditEvent, marked : bool = False) : str
+    -__failure_table(page : OverviewPage) : list[str]
+    -__flag_rows(page : OverviewPage) : list[str]
+    +__init__(ui : ConsoleUI | None = None)
+    {static} -__plural(count : int, word : str, many : str = "") : str
+    {static} -__sgt(text : str) : str
+    +format_chain(chain : Any) : str
+    +format_client_flags(client_ref : str, tickets : list[FlagTicket]) : str
+    +format_filter(audit_filter : AuditFilter, now : datetime) : str
+    +format_flag(ticket : FlagTicket, evidence : list[AuditEvent], entries : int) : str
+    +format_log_page(page : AuditPage, audit_filter : AuditFilter, now : datetime) : str
+    +format_overview(page : OverviewPage) : str
+    +format_update_saved(ticket : FlagTicket, sequence : int, moved_to : str) : str
+    +show_chain(chain : Any) : None
+    +show_client_flags(client_ref : str, tickets : list[FlagTicket]) : None
+    +show_flag(ticket : FlagTicket, evidence : list[AuditEvent], entries : int) : None
+    +show_log_page(page : AuditPage, audit_filter : AuditFilter, now : datetime) : None
+    +show_overview(page : OverviewPage) : None
+    +show_update_saved(ticket : FlagTicket, sequence : int, moved_to : str) : None
+  }
   class CaseBuilder {
     -__ui : ConsoleUI = ConsoleUI()
     -__case_schema : dict = {}
@@ -251,8 +314,10 @@ package "IO Manager (app/interface)" {
     +LETTERS : str = " '.-" «const»
     +MAX_EMPLOYEES : int = 10_000_000 «const»
     +LABEL : str = " '.-&/,()%#0123456789" «const»
+    +MENU_CHOICES : tuple[str, ...] = (...) «const»
+    -__secret : Callable[[str], str] = secret if secret is not None else lam...
     --
-    +__init__(read : Callable[[str], str] | None = None, write : Callable[[str], None] | None = None)
+    +__init__(read : Callable[[str], str] | None = None, write : Callable[[str], None] | None = None, secret : Callable[[str], str] | None = None)
     +show(text : str = "") : None
     +show_message(text : str) : None
     +show_error(text : str) : None
@@ -266,7 +331,7 @@ package "IO Manager (app/interface)" {
     +ask_int(question : str, minimum : int | None = None, maximum : int | None = None, allow_blank : bool = False) : int | None
     +ask_money(question : str, allow_zero : bool = False, allow_blank : bool = False) : float | None
     +ask_year(question : str, minimum : int = 1940, maximum : int | None = None, allow_blank : bool = False) : int | None
-    +ask_choice(question : str, options : list[str], allow_back : bool = False) : int | None
+    +ask_choice(question : str, options : list[str], allow_back : bool = False, back_label : str = "Back to the main menu") : int | None
     +ask_yes_no(question : str) : bool
     +ask_client_ref() : str | None
     +keep_text(label : str, current : str, min_length : int = 2) : str
@@ -293,6 +358,9 @@ package "IO Manager (app/interface)" {
     +show_unexpected_error() : None
     +show_dropped_fields(messages : list[str]) : None
     +show_optional_intro(count : int) : None
+    +ask_optional_text(question : str) : str
+    +ask_password(question : str) : str
+    {static} +printable(lines : list[str]) : str
   }
   class RateLimiter {
     -__cooldown_seconds : int = 60
@@ -322,7 +390,7 @@ package "IO Manager (app/interface)" {
     +show_verdict_report(verdict : Verdict, ask_for_evidence : bool = True, crime_result : dict | None = None, typologies : list[Typology] | None = None) : None
     +show_onboarding(assessment : dict) : None
     +show_assessment_list(records : list[dict], states : list[str] | None = None) : None
-    +show_client_list(records : list[dict]) : None
+    +show_client_list(records : list[dict], activity : dict[str, AuditEvent] | None = None, activity_note : str = "") : None
     +display_client_record(record : ClientRecord) : None
     +format_evidence(verdict : Verdict) : str
     -__format_crime_section(crime : dict, typologies : list[Typology]) : list[str]
@@ -334,6 +402,46 @@ package "IO Manager (app/interface)" {
     +format_onboarding(assessment : dict) : str
     +format_verdict_report(verdict : Verdict, crime_result : dict | None = None, typologies : list[Typology] | None = None) : str
     +show_document_summary(rows : list[dict], files : list[str], notes : list[str], checks : list[str]) : None
+    +show_client_history(events : list[AuditEvent], total : int | None = None, unreadable : int = 0) : None
+    +format_client_history(events : list[AuditEvent], total : int | None = None, unreadable : int = 0) : str
+    {static} +format_assessment_row(record : object, state : str = "", labelled : bool = False) : str
+    {static} -__missing_parts(report : object) : list[str]
+    {static} -__singapore_time(event : AuditEvent) : datetime
+    {static} -__last_activity_text(event : AuditEvent | None) : str
+    {static} -__by_day(events : list[AuditEvent]) : list[tuple[str, list[AuditEvent]]]
+    {static} -__fit(value : object, width : int) : str
+    {static} -__text_or_unknown(value : object) : str
+  }
+  class TerminalApp {
+    +GOODBYE : str = "Thank you for using Orbit. Goodbye." «const»
+    +OFFICER_AT_ADMIN : str = "This is an officer account. Only adm... «const»
+    -__admin_view : AdminView = AdminView(self.__ui)
+    -__app : App = app
+    -__case_builder : CaseBuilder = CaseBuilder(...)
+    -__client_form : ClientForm = ClientForm(...)
+    -__limiter : RateLimiter = limiter if limiter is not None else app.rate_li...
+    -__report_view : ReportView = ReportView(...)
+    -__ui : ConsoleUI = ConsoleUI()
+    --
+    -__admin() : None
+    -__ask_trail_filter() : TrailFilter
+    -__audited(action : Callable[..., T]) : Callable[..., T]
+    -__change_archive(records : list[dict]) : None
+    -__client_history() : None
+    -__fill_field(record : ClientRecord, field : dict, optional : bool = False) : ClientRecord
+    +__init__(app : App, ui : ConsoleUI | None = None, limiter : RateLimiter | None = None)
+    -__maybe_assess(record : ClientRecord) : None
+    -__new_client_from_documents() : ClientRecord | None
+    -__open_assessment(chosen : dict) : None
+    -__pick_assessment(records : list[dict], states : list[str] | None, question : str, back_label : str = "Back") : int | None
+    -__prepare_case(record : ClientRecord) : dict | None
+    -__show_client_assessments(client_ref : str) : list[dict] | None
+    -__show_step(number : int, label : str) : None
+    -__show_trail(client_ref : str, trail_filter : TrailFilter) : None
+    +assess_client_record(record : ClientRecord) : Verdict | None
+    +list_assessments() : None
+    +run_menu() : None
+    +start() : int
   }
   class WebApp {
     -__app : App | None = None
@@ -664,7 +772,6 @@ package "Application (app/application)" {
     -__ai_caller : Callable | None = None
     -__config : Config = Config(...) {get}
     -__ui : ConsoleUI = ConsoleUI()
-    -__report_view : ReportView = ReportView(...)
     -__client_form : ClientForm = ClientForm(...)
     -__case_builder : CaseBuilder = CaseBuilder(...)
     -__case_files : CaseFiles = CaseFiles(...)
@@ -729,24 +836,20 @@ package "Application (app/application)" {
     -__flag_count : tuple[tuple[int, str], int] | None = None
     +LOG_MAX_BYTES : int = 5 * 1024 * 1024 «const»
     +LOG_BACKUPS : int = 3 «const»
+    +ARCHIVE_DONE_RESULTS : tuple[str, ...] = (...) «const»
+    +READ_TARGETS : tuple[str, ...] = ("client records", "assessments") «const»
+    -__case_schema : dict = self.__case_files.load(...)
     --
     +__init__(ai_caller : Callable[[str, dict, dict], str | None] | None = None, root : str = ROOT_DIR, data_folder : str = "data", rules : type[AuditInsights] = AuditInsights)
     +start(arguments : list[str]) : int
-    +run_menu() : None
-    +run_case_file(path : str) : bool
-    +assess_client_record(record : ClientRecord) : Verdict | None
     +find_client(client_ref : str) : ClientRecord | None
     +save_client(record : ClientRecord, actor : str = TERMINAL, new_client : bool = False) : bool
     +client_assessments(client_ref : str, include_archived : bool = False) : list[dict]
     +find_assessment(assessment_id : str) : dict | None
-    +list_assessments() : None
     +upload_document(file_path : str, actor : str = TERMINAL, client_ref : str = "") : str | None
     +download_document(file_id : str, output_path : str, actor : str = TERMINAL, client_ref : str = "") : bool
     +sync_to_cloud(actor : str = TERMINAL) : dict
     {static} +today() : str
-    -__new_client_from_documents() : ClientRecord | None
-    -__maybe_assess(record : ClientRecord) : None
-    -__prepare_case(record : ClientRecord) : dict | None
     -__handle_failure(step : str, error : str) : bool
     -__ai_model() : str
     -__configure_logging() : None
@@ -754,11 +857,9 @@ package "Application (app/application)" {
     -__create_runner(policy : dict) : AssessmentRunner
     {static} -__crime_declaration_layout(declaration : Declaration | None) : dict | None
     {static} -__crime_result_layout(crime_result : dict | None) : dict | None
-    -__fill_field(builder : DocumentRecordBuilder, record : ClientRecord, field : dict, optional : bool = False) : ClientRecord
     -__handle_failure_quietly(step : str, error : str) : bool
     -__require_settings() : None
     -__saved_verdict(saved : dict) : Verdict | None
-    -__show_step(number : int, label : str) : None
     +ai_available() : bool
     +assess(case : dict, supporting_documents : list[dict] | None = None, on_step : Callable[[int, str], None] | None = None, on_failure : Callable[[str, str], bool] | None = None, show_failures : bool = True, actor : str = TERMINAL) : dict | None
     +assessments() : AssessmentRepository
@@ -770,7 +871,7 @@ package "Application (app/application)" {
     +read_amount(text : object) : float | None
     +read_case(record : ClientRecord) : tuple[dict | None, list[str]]
     +read_documents(documents : list[dict], actor : str = TERMINAL, client_ref : str = "") : tuple[dict | None, list[str]]
-    +record_builder(date : str = "") : DocumentRecordBuilder
+    -__record_builder(date : str = "") : DocumentRecordBuilder
     +response_cache() : ResponseCache
     +runner() : AssessmentRunner
     +save_assessment(result : dict, record : ClientRecord | None = None, on_step : Callable[[int, str], None] | None = None, actor : str = TERMINAL) : str | None
@@ -780,12 +881,12 @@ package "Application (app/application)" {
     +validate_case(case : object) : list[str]
     +client_ref_taken(client_ref : str) : bool
     {static} +typologies_checked(report : dict | None) : bool
-    +all_assessments(include_archived : bool = False) : list[dict]
+    +all_assessments(include_archived : bool = False, outcome : str = "") : list[dict]
     +all_clients() : list[dict]
     +owns_document(file_id : str) : bool
-    +read_document_for_extraction(path : str, name : str) : dict
+    +read_document_for_extraction(path : str, name : str = "") : dict
     +reading_problems(record : ClientRecord, today : str = "") : list[str]
-    +record_from_reading(extracted : dict, today : str = "") : tuple[ClientRecord, list[dict]]
+    +record_from_reading(extracted : dict, today : str = "", client_ref : str = "") : tuple[ClientRecord, list[dict]]
     -__ai_search_model() : str
     +archive_assessment(assessment_id : str, reason : str = "", actor : str = TERMINAL) : str
     {static} +archive_state(saved : dict) : str
@@ -829,6 +930,17 @@ package "Application (app/application)" {
     +update_flag(flag_id : str, actor : str, status : str, note : str, waiting_on : str = "", outcome : str = "", now : datetime | None = None) : tuple[FlagTicket | None, list[str], int]
     +open_flag_count(now : datetime | None = None) : int | None
     -__events_of(rows : list[dict], caller : str, strict : bool) : tuple[list[AuditEvent], int, int]
+    {static} -__need_record(record : object) : None
+    {static} +archive_message(result : str, archive : bool, reason : str = "") : str
+    +case_schema() : dict
+    +finish_record(record : ClientRecord) : ClientRecord
+    +list_document_folder(folder : str) : list[str] | None
+    +missing_fields(record : ClientRecord) : list[dict]
+    +read_failed(what : str, actor : str = "") : None
+    +reading_summary(record : ClientRecord, from_documents : ClientRecord) : list[dict]
+    +saved_verdict(saved : dict) : Verdict | None
+    +set_record_field(record : ClientRecord, path : list, value : object) : ClientRecord
+    +audit_failure_message() : str
   }
   class AssessmentRunner {
     -__verdict_engine : VerdictEngine = VerdictEngine(...)
@@ -1110,6 +1222,7 @@ package "Logic Manager (app/logic)" {
     -__leaf_paths(record : dict) : list[list[str | int]]
     {static} -__set(record : dict, path : list[str | int], value : Any) : None
     -__without_impossible_fields(record : dict) : tuple[dict, list[dict]]
+    {static} -__names(value : Any) : Any
   }
   class Forecast {
     -__forecast : dict = {}
@@ -1384,6 +1497,9 @@ package "Domain Model (app/model)" {
     +FALSE_TEXTS : tuple[str, ...] = ("0", "off", "false", "no") «const»
     +TRUE_TEXTS : tuple[str, ...] = ("1", "on", "true", "yes") «const»
     -__flagged_only : bool = False {get}
+    +RULE_BOTH_DATES : str = "Pick both a start and an end date." «const»
+    +RULE_FUTURE : str = "The dates cannot be in the future." «const»
+    +SHOWING_ALL : str = " Showing all dates for now." «const»
     --
     +__init__(preset : str = "7", date_from : str = "", date_to : str = "", groups : Iterable[str] | None = None, result : str = "all", actor : str = "", client_ref : str = "", query : str = "", sort : str = "desc", page : int = 1, flagged_only : bool = False)
     +chips() : list[tuple[str, str]]
@@ -1404,6 +1520,8 @@ package "Domain Model (app/model)" {
     +period_text(now : datetime) : str
     +range_text(now : datetime) : str
     {static} +singapore_day(moment : datetime) : date
+    {static} +range_problem(date_from : str, date_to : str, today : date) : str
+    +with_page(page : int) : AuditFilter
   }
   class AuditPage {
     -__events : list[AuditEvent] = [] {get}
@@ -1550,6 +1668,7 @@ package "Domain Model (app/model)" {
     -__check_shares(composition : dict) : None
     +to_dict() : dict
     -__check_net_worth(value : float | None) : None
+    {static} -__as_list(value : object, name : str, example : str) : list
   }
   class ClientProfile {
     -__name : str = "" {get, set}
@@ -1684,6 +1803,8 @@ package "Domain Model (app/model)" {
     -__apply(event : AuditEvent) : None
     +__init__(flag : Flag | None = None, events : list[AuditEvent] | None = None)
     +check_update(status : str, note : str, waiting_on : str = "", outcome : str = "") : list[str]
+    +needs_outcome(status : str) : bool
+    +needs_waiting_on(status : str) : bool
     +update_details(actor : str, status : str, note : str, waiting_on : str = "", outcome : str = "") : dict
   }
   class Investment {
@@ -1883,6 +2004,23 @@ package "Domain Model (app/model)" {
   }
 }
 
+AdminConsole -- Account : acts for
+AdminConsole -- AdminView : shows with
+AdminConsole -- App : calls
+AdminConsole -- ConsoleUI : prints via
+AdminConsole ..> AuditChain : uses
+AdminConsole ..> AuditEvent : uses
+AdminConsole ..> AuditFilter : uses
+AdminConsole ..> AuditPage : uses
+AdminConsole ..> OverviewPage : uses
+AdminConsole o-- "0..*" FlagTicket : lists
+AdminView -- ConsoleUI : prints via
+AdminView ..> AuditChain : shows
+AdminView ..> AuditEvent : uses
+AdminView ..> AuditFilter : uses
+AdminView ..> AuditPage : uses
+AdminView ..> FlagTicket : uses
+AdminView ..> OverviewPage : uses
 App *-- "1" AssessmentRunner
 App *-- "1" AuditPolicy
 App *-- "1" AuditRepository
@@ -1895,7 +2033,6 @@ App *-- "1" ConsoleUI
 App *-- "1" DocumentAI
 App *-- "1" DocumentStore
 App *-- "1" RateLimiter
-App *-- "1" ReportView
 App *-- "1" ResponseCache
 App *-- "2" CloudSync
 App *-- "2" Repository
@@ -1916,6 +2053,8 @@ App ..> FlagTicket : creates
 App ..> MongoRepository : creates
 App ..> OverviewPage : creates
 App ..> RecordDiff : uses
+App ..> ReportView : creates
+App ..> TerminalApp : creates
 App ..> Verdict : uses
 App ..> WebApp : creates
 AssessmentRepository --|> JsonRepository
@@ -2035,6 +2174,8 @@ PdfReader --|> DocumentReader
 RelatedPartyTransaction --|> Indicator
 RelatedPartyTransaction ..> ClaimedSource : checks
 ReportView -- ConsoleUI : prints via
+ReportView ..> AuditEvent : uses
+ReportView ..> AuditFilter : uses
 ReportView ..> ClientRecord : uses
 ReportView ..> Investment : uses
 ReportView ..> Job : uses
@@ -2044,6 +2185,19 @@ ResearchAI --|> AIService
 RiskAnalysis ..> Check : creates
 SourceContradictsOccupation --|> Indicator
 SourceContradictsOccupation ..> ClaimedSource : checks
+TerminalApp *-- "1" AdminView
+TerminalApp *-- "1" CaseBuilder
+TerminalApp *-- "1" ClientForm
+TerminalApp *-- "1" ReportView
+TerminalApp -- App : calls
+TerminalApp -- ConsoleUI : prints via
+TerminalApp -- RateLimiter : checks with
+TerminalApp ..> Account : signs in
+TerminalApp ..> AdminConsole : creates
+TerminalApp ..> AuditFilter : uses
+TerminalApp ..> ClientRecord : uses
+TerminalApp ..> TrailFilter : uses
+TerminalApp ..> Verdict : uses
 TextReader --|> DocumentReader
 TrailFilter ..> AuditEvent : uses
 TrailFilter ..> AuditFilter : uses

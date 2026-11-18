@@ -74,9 +74,10 @@ def test_empty_typologies_passes_schema():
     jsonschema.validate(instance=_valid_typology_response(typologies=[]), schema=TYPOLOGY_SCHEMA)
 
 
-def test_missing_source_ids_fails_schema():
+@pytest.mark.parametrize("field", ["source_ids", "source_quotes"])
+def test_a_typology_missing_its_sources_fails_schema(field):
     t = _valid_typology()
-    del t["source_ids"]
+    del t[field]
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(instance=_valid_typology_response(typologies=[t]), schema=TYPOLOGY_SCHEMA)
 
@@ -108,13 +109,6 @@ def test_source_id_wrong_format_fails_schema():
     """source_ids entries must match ^R[0-9]+$."""
     t = _valid_typology()
     t["source_ids"] = ["X1"]
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(instance=_valid_typology_response(typologies=[t]), schema=TYPOLOGY_SCHEMA)
-
-
-def test_missing_source_quotes_fails_schema():
-    t = _valid_typology()
-    del t["source_quotes"]
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(instance=_valid_typology_response(typologies=[t]), schema=TYPOLOGY_SCHEMA)
 

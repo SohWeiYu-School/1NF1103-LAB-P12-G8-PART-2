@@ -125,15 +125,11 @@ def test_the_real_accounts_file_has_one_admin_and_officers():
     assert roles.count("admin") == 1 and roles.count("officer") == 5
 
 
-def test_problems_names_an_accounts_file_that_cannot_be_read_without_details(tmp_path):
+@pytest.mark.parametrize("spoil", [lambda path: path.write_text("{broken"), lambda path: path.unlink()],
+                         ids=["broken", "missing"])
+def test_problems_names_an_accounts_file_that_cannot_be_read_without_details(tmp_path, spoil):
     reader = _config_with_accounts(tmp_path, None)
-    (tmp_path / "config" / "accounts.json").write_text("{broken")
-    assert reader.problems() == ["config/accounts.json could not be read (see the log)."]
-
-
-def test_problems_names_a_missing_accounts_file(tmp_path):
-    reader = _config_with_accounts(tmp_path, None)
-    (tmp_path / "config" / "accounts.json").unlink()
+    spoil(tmp_path / "config" / "accounts.json")
     assert reader.problems() == ["config/accounts.json could not be read (see the log)."]
 
 

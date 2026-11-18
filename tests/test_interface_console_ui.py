@@ -202,3 +202,108 @@ def test_the_main_menu_shows_the_product_name_orbit():
     shown = []
     ConsoleUI(read=_answers("1"), write=shown.append).show_app_menu()
     assert any("ORBIT" in line for line in shown)
+
+
+# ---- the messages shown when the AI fails: friendly, and never the technical detail ----
+
+@pytest.mark.parametrize("feature, shown", [(None, "Assessment"), ("Forecasting", "Forecasting"),
+                                            ("Document reading", "Document reading")])
+def test_show_ai_unavailable_names_the_feature_and_says_it_is_not_available(capsys, feature, shown):
+    ui = ConsoleUI()
+    ui.show_ai_unavailable() if feature is None else ui.show_ai_unavailable(feature)
+    out = capsys.readouterr().out
+    assert shown in out and "not available right now" in out
+
+
+def test_show_unexpected_error_prints_a_friendly_message_with_no_technical_detail(capsys):
+    ConsoleUI().show_unexpected_error()
+    out = capsys.readouterr().out
+    assert "unexpected error" in out.lower() and "OPENAI" not in out
+
+
+def test_the_main_menu_lists_client_history_and_quit_as_zero():
+    shown = []
+    ConsoleUI(read=_answers("0"), write=shown.append).show_app_menu()
+    assert any(line.startswith("8. Client History") for line in shown)
+    assert "0. Quit" in shown
+    assert not any(line.startswith("8. Quit") for line in shown)
+
+
+@pytest.mark.parametrize("choice", ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"])
+def test_every_menu_choice_is_accepted(choice):
+    assert ConsoleUI(read=_answers(choice), write=lambda text: None).show_app_menu() == choice
+
+
+def test_a_menu_choice_outside_the_allowed_set_is_refused_with_the_allowed_ones():
+    shown = []
+    ask = _answers("10", "-1", "", "x", "08", " 3 ")
+    assert ConsoleUI(read=ask, write=shown.append).show_app_menu() == "3"
+    assert [line for line in shown if line.startswith("Invalid choice")] == \
+        ["Invalid choice. Please enter a number from 1 to 9, or 0 to quit."] * 5
+
+
+def test_ask_choice_can_name_its_back_option():
+    shown = []
+    ui = ConsoleUI(read=_answers("0"), write=shown.append)
+    assert ui.ask_choice("Which?", ["a", "b"], allow_back=True, back_label="Back to the client") is None
+    assert "  0. Back to the client" in shown
+
+
+def test_ask_optional_text_allows_a_blank_answer():
+    ui = ConsoleUI(read=_answers("  ", " 2026-11-01 "), write=lambda text: None)
+    assert ui.ask_optional_text("From") == ""
+    assert ui.ask_optional_text("From") == "2026-11-01"
+
+
+def test_the_main_menu_offers_the_admin_screens_as_nine():
+    shown = []
+    ConsoleUI(read=_answers("0"), write=shown.append).show_app_menu()
+    assert "9. Admin: audit and flags" in shown
+
+
+def test_ask_password_uses_the_secret_reader_and_never_shows_the_answer():
+    shown, asked = [], []
+
+    def secret(question: str) -> str:
+        asked.append(question)
+        return " s3cret pass "
+
+    ui = ConsoleUI(read=_answers(), write=shown.append, secret=secret)
+    assert ui.ask_password("Password") == " s3cret pass "          # exactly as typed
+    assert asked == ["Password: "]
+    assert shown == []                                              # nothing is echoed back
+
+
+def test_ask_password_does_not_use_the_plain_reader(capsys):
+    def plain(question: str) -> str:
+        raise AssertionError("a password must not be read with the plain reader")
+
+    ConsoleUI(read=plain, secret=lambda question: "x").ask_password("Password")
+    assert capsys.readouterr().out == ""
+
+
+def test_the_secret_reader_defaults_to_getpass(monkeypatch):
+    import getpass
+    asked = []
+    monkeypatch.setattr(getpass, "getpass", lambda prompt="": asked.append(prompt) or "hidden")
+    assert ConsoleUI().ask_password("Password") == "hidden"
+    assert asked == ["Password: "]
+
+
+def test_a_secret_reader_that_cannot_be_called_is_refused():
+    with pytest.raises(ValueError):
+        ConsoleUI(secret="not a function")
+
+
+def test_printable_replaces_control_and_format_characters_and_joins_the_lines():
+    assert ConsoleUI.printable(["a\x1b[31mb", "c\x07", "d\u202ee"]) == "a?[31mb\nc?\nd?e"
+    assert ConsoleUI.printable(["one\ntwo\r"]) == "one?two?"          # a break inside a value is not a new line
+    assert ConsoleUI.printable([]) == ""
+
+
+def test_printable_turns_a_tab_and_a_no_break_space_into_a_space():
+    assert ConsoleUI.printable(["a\tb\u00a0c"]) == "a b c"
+
+
+def test_printable_keeps_ordinary_text_in_other_scripts_and_symbols():
+    assert ConsoleUI.printable(["Zoë 李 — →"]) == "Zoë 李 — →"

@@ -1,7 +1,7 @@
 """
 Tests for the combined assessment: the documents, the crime scan, the forecast and the benchmark
 working as ONE feature with ONE verdict, (the command line and the web app
-are compared in test_application_cli_and_web.py).
+are compared in tests/integration/test_application_cli_and_web.py).
 
 No API key and no network: every test runs a real App whose AI is a made-up caller
 (tests/fake_ai.caller); the forecast runs on made-up saved replies through its real checks.
@@ -36,7 +36,7 @@ from app.model.verdict import Verdict
 from tests import fake_ai, fake_services
 from tests.logic_fixtures import CONFIG, POLICY, sample_case
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SEVERITY = Verdict.SEVERITY
 
 
@@ -314,7 +314,7 @@ def test_typology_schema_requires_a_crime_category(tmp_path):
 # The documents layer, pay from documents, and the report layout
 # ---------------------------------------------------------------------------
 
-MARCUS = os.path.join(os.path.dirname(__file__), "documents", "marcus_lim")
+MARCUS = os.path.join(os.path.dirname(os.path.dirname(__file__)), "documents", "marcus_lim")
 
 
 def marcus() -> tuple[dict, dict]:
@@ -559,7 +559,7 @@ def test_network_libraries_dont_flood_the_log(run):
     root = logging.getLogger()
     handlers, level = list(root.handlers), root.level
     try:
-        run.app().start(["--case"])                  # starting the app sets up logging, then stops at --case
+        run.app().start(["--demo"])                  # starting the app sets up logging, then stops at the unknown option
         for name in ("httpx", "httpcore", "openai"):
             assert logging.getLogger(name).getEffectiveLevel() >= logging.WARNING
     finally:

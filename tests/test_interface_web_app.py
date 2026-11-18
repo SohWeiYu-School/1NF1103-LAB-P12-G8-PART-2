@@ -14,6 +14,7 @@ import pytest
 from markupsafe import escape
 
 from app.application.app import App
+from app.data.audit_repository import AuditRepository
 from app.interface.rate_limiter import RateLimiter
 from app.interface.web_app import WebApp
 from app.model.client_record import ClientRecord
@@ -460,6 +461,7 @@ def test_the_wealth_split_is_left_alone_if_partly_typed(web):
 def test_only_this_apps_document_references_are_accepted(tmp_path, monkeypatch):
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     shutil.copytree("config", tmp_path / "config")                     # the settings App needs
+    shutil.copytree("app/schemas", tmp_path / "app" / "schemas")   # the case schema App needs
     site = WebApp(App(None, root=str(tmp_path), data_folder="data"))     # laid out as in production
     assert site._is_stored_document("data/documents/ab12cd34_cv.pdf")
     assert site._is_stored_document("0123456789abcdef01234567")
@@ -2306,16 +2308,13 @@ def test_an_update_with_a_short_or_long_note_or_a_made_up_status_is_refused_and_
     assert len(_events(application)) == before                                       # nothing was written
 
 
-def test_an_update_that_cannot_be_written_says_it_was_not_saved_and_keeps_the_form(flagged_web, tmp_path):
+def test_an_update_that_cannot_be_written_says_it_was_not_saved_and_keeps_the_form(flagged_web, monkeypatch):
     application, _, browser = flagged_web
     flag_id = next(i for i in _flag_ids(browser) if i.startswith("F-HOU-"))
-    folder = tmp_path / "local database"
-    import stat
-    folder.chmod(stat.S_IRUSR | stat.S_IXUSR)
-    try:
-        reply = browser.post(f"/admin/flags/{flag_id}", data={"status": "review", "note": "Asking about it now."})
-    finally:
-        folder.chmod(stat.S_IRWXU)
+    # The log can still be read, but writing it fails (this works for every user, admin included)
+    monkeypatch.setattr(AuditRepository, "_write_all", lambda self, records: False)
+    reply = browser.post(f"/admin/flags/{flag_id}", data={"status": "review", "note": "Asking about it now."})
+    monkeypatch.undo()
     text = html.unescape(reply.get_data(as_text=True))
     assert App.FLAG_NOT_SAVED in text and "Asking about it now." in text and 'class="toast"' not in text
 
@@ -2599,3 +2598,27 @@ def test_the_latest_verdict_badge_never_has_an_incomplete_tag(web):
     page = client.get(f"/client/{ref}").get_data(as_text=True)
     assert "(incomplete)" not in _latest_verdict(page)        # the tag belongs to the assessment's own row
     assert "(incomplete)</span>" in page
+
+
+def test_the_web_and_the_terminal_word_every_archive_result_the_same(web, monkeypatch):
+    application, _, client = web
+    _two_assessments(application)
+    client.post("/assessment/A1/archive")
+    assert App.archive_message(App.ARCHIVE_CHANGED, True) in _flashes(client)
+    client.post("/assessment/A1/archive")
+    assert App.archive_message(App.ARCHIVE_NO_CHANGE, True) in _flashes(client)
+    client.post("/assessment/A1/restore")
+    assert App.archive_message(App.ARCHIVE_CHANGED, False) in _flashes(client)
+    client.post("/assessment/A1/restore")
+    assert App.archive_message(App.ARCHIVE_NO_CHANGE, False) in _flashes(client)
+    reason = "x" * 201
+    client.post("/assessment/A1/archive", data={"reason": reason})
+    assert App.archive_message(App.ARCHIVE_BAD_REASON, True, reason) in _flashes(client)
+    records = application.assessments().load()
+    records[1]["archive_log"] = "broken"
+    application.assessments()._write_all(records)
+    client.post("/assessment/A2/archive")
+    assert App.archive_message(App.ARCHIVE_UNREADABLE, True) in _flashes(client)
+    monkeypatch.setattr(application.assessments(), "_write_all", lambda records: False)
+    client.post("/assessment/A1/archive")
+    assert App.archive_message(App.ARCHIVE_NOT_SAVED, True) in _flashes(client)
