@@ -71,15 +71,15 @@ class AdminConsole:
         shown as they are; any other ValueError is not an audit log problem, so it is logged with its details and
         shown as an unexpected error, never as "the audit log is unavailable". not_saved adds that the admin's update
         was not saved."""
-        tail = " Your update was not saved." if not_saved else ""
+        tail = f" {AdminView.NOT_SAVED}" if not_saved else ""
         if str(error) in AdminConsole.SAFE_ERRORS:
-            logger.error("AdminConsole: %s could not be shown: %s", where, error)
+            logger.error("AdminConsole: %s %s: %s", where, "failed" if not_saved else "could not be shown", error)
             self.__ui.show_error(str(error) + tail)
         else:
             logger.error("AdminConsole: %s failed with an unexpected error: %r", where, error)
             self.__ui.show_unexpected_error()
             if not_saved:
-                self.__ui.show_error(tail.strip())
+                self.__ui.show_error(AdminView.NOT_SAVED)
 
     def __show_audit_warning(self) -> None:
         """If the last action's audit line could not be written, say so."""
@@ -167,18 +167,36 @@ class AdminConsole:
             return ticket
         status, waiting_on, outcome, note = asked
         flag_id = ticket.flag.flag_id
+        result: tuple[FlagTicket | None, list[str], int] | None = None
         try:
             try:
-                updated, problems, sequence = self.__app.update_flag(
+                result = self.__app.update_flag(
                     flag_id, self.__account.name, status, note, waiting_on, outcome, self.__now())
             finally:
-                self.__show_audit_warning()                 # the line may be missing whether or not the update ran
+                if result is None or App.FLAG_NOT_SAVED not in result[1]:   # that answer already says it
+                    self.__show_audit_warning()             # the line may be missing whether or not the update ran
         except ValueError as error:
             self.__show_error(error, "Update a flag", not_saved=True)
             return ticket
-        if not self.__view.show_update_result(updated, problems, sequence, status):
-            return updated                                  # None when the flag is gone
-        return self.__show_flag(flag_id)
+        updated, problems, sequence = result
+        if not self.__view.show_update_result(updated, problems, sequence, status, ticket.status,
+                                              App.FLAG_NOT_SAVED in problems):
+            if updated is None or App.FLAG_NOT_SAVED in problems:
+                return updated                              # gone (None), or not written: the flag has not changed
+            return self.__show_again(flag_id, "")           # not valid: it changed meanwhile, show it as it is now
+        return self.__show_again(flag_id, "Your update was saved, but the flag can't be shown again right now.")
+
+    def __show_again(self, flag_id: str, lead: str) -> FlagTicket | None:
+        """Show the flag fresh after an update. If that cannot be done, say so (lead first, then the safe message) and
+        return None, so the admin goes back; the real error is logged."""
+        try:
+            return self.__show_flag(flag_id)
+        except ValueError as error:
+            logger.error("AdminConsole: the flag could not be shown again after the update: %s", error)
+            safe = str(error) if str(error) in AdminConsole.SAFE_ERRORS else ""
+            self.__ui.show_error(" ".join(part for part in (lead or "The flag can't be shown again right now.",
+                                                            safe) if part))
+            return None
 
     def __ask_update(self, ticket: FlagTicket) -> tuple[str, str, str, str] | None:
         """Ask the status, who the flag waits on (moving to Following up), the outcome (moving to Resolved) and the
@@ -186,7 +204,7 @@ class AdminConsole:
         backs out (0, or a blank note)."""
         statuses = list(FlagTicket.STATUSES)
         self.__ui.show_message("Pick the status the flag is in now to add a note without moving it.")
-        picked = self.__ui.ask_choice("New status", [FlagTicket.STATUSES[key] + (" (now)" if key == ticket.status else "")
+        picked = self.__ui.ask_choice("New status", [FlagTicket.STATUSES[key] + (" (current)" if key == ticket.status else "")
                                                      for key in statuses], allow_back=True, back_label="Back")
         if picked is None:
             return None
@@ -204,8 +222,9 @@ class AdminConsole:
                 return None
             outcome = outcomes[picked]
         while True:
-            note = self.__ui.ask_optional_text(f"Note ({FlagTicket.NOTE_MIN}-{FlagTicket.NOTE_MAX} characters; "
-                                               "blank or 0 to cancel)")
+            label = "Why" if status != ticket.status else "Note"
+            note = self.__ui.ask_optional_text(f"{label} (required, {FlagTicket.NOTE_MIN}-{FlagTicket.NOTE_MAX} "
+                                               "characters; blank or 0 to cancel)")
             if note in ("", "0"):
                 return None
             problems = ticket.check_update(status, note, waiting_on, outcome)

@@ -260,43 +260,43 @@ def _ticket_after(app, status, note="Asked the officer why.", **more):
 
 def test_a_move_says_the_new_status_and_the_entry_number(app):
     ticket, problems, sequence = _ticket_after(app, "review")
-    assert AdminView().format_update_result(ticket, problems, sequence, "review") == \
+    assert AdminView().format_update_result(ticket, problems, sequence, "review", "open") == \
         ("F-HOU-SOW-1-7 is now In review. Saved in the audit log as entry #11.", False)
 
 
 def test_the_same_status_says_a_note_was_added(app):
     ticket, problems, sequence = _ticket_after(app, "open")
-    assert AdminView().format_update_result(ticket, problems, sequence, "open") == \
+    assert AdminView().format_update_result(ticket, problems, sequence, "open", "open") == \
         ("Note added. Saved in the audit log as entry #11.", False)
 
 
 def test_a_saved_update_with_no_entry_number_says_it_was_saved(app):
     ticket, _, _ = _ticket_after(app, "review")
-    assert AdminView().format_update_result(ticket, [], 0, "review") == \
+    assert AdminView().format_update_result(ticket, [], 0, "review", "open") == \
         ("Your update was saved in the audit log.", False)
 
 
 def test_a_flag_that_is_gone_is_an_error_that_says_it_was_not_saved():
     from app.application.app import App
-    text, failed = AdminView().format_update_result(None, [App.FLAG_GONE], 0, "review")
+    text, failed = AdminView().format_update_result(None, [App.FLAG_GONE], 0, "review", "open")
     assert failed and text == App.FLAG_GONE + " Your update was not saved."
 
 
 def test_an_update_that_was_not_written_is_an_error_and_the_sentence_is_not_doubled(app):
     from app.application.app import App
     ticket = app.flag("F-HOU-SOW-1-7", NOW)
-    text, failed = AdminView().format_update_result(ticket, [App.FLAG_NOT_SAVED], 0, "review")
+    text, failed = AdminView().format_update_result(ticket, [App.FLAG_NOT_SAVED], 0, "review", "open", True)
     assert failed and text == App.FLAG_NOT_SAVED and text.count("not saved") == 1
 
 
 def test_problems_are_joined_and_say_nothing_was_saved(app):
     ticket = app.flag("F-HOU-SOW-1-7", NOW)
-    text, failed = AdminView().format_update_result(ticket, ["First problem.", "Second problem."], 0, "followup")
+    text, failed = AdminView().format_update_result(ticket, ["First problem.", "Second problem."], 0, "followup", "open")
     assert failed and text == "First problem. Second problem. Your update was not saved."
 
 
 def test_no_ticket_and_no_problem_is_still_an_error_not_a_success():
-    text, failed = AdminView().format_update_result(None, [], 0, "review")
+    text, failed = AdminView().format_update_result(None, [], 0, "review", "open")
     assert failed and "not saved" in text
 
 
@@ -304,8 +304,21 @@ def test_show_update_result_prints_an_error_with_the_error_tag_and_a_success_pla
     ui, shown, _, _ = screen()
     view = AdminView(ui)
     ticket, problems, sequence = _ticket_after(app, "review")
-    assert view.show_update_result(ticket, problems, sequence, "review") is True
-    assert view.show_update_result(None, ["That flag no longer exists."], 0, "review") is False
+    assert view.show_update_result(ticket, problems, sequence, "review", "open") is True
+    assert view.show_update_result(None, ["That flag no longer exists."], 0, "review", "open") is False
     out = text_of(shown)
     assert "is now In review. Saved in the audit log as entry #11." in out
     assert "[ERROR] That flag no longer exists. Your update was not saved." in out
+
+
+def test_a_move_and_a_note_are_told_apart_by_the_status_before_not_by_the_history(app):
+    ticket, problems, sequence = _ticket_after(app, "review")
+    view = AdminView()
+    assert view.format_update_result(ticket, problems, sequence, "review", "review")[0].startswith("Note added.")
+    assert view.format_update_result(ticket, problems, sequence, "review", "open")[0].startswith(
+        "F-HOU-SOW-1-7 is now In review.")
+
+
+def test_the_not_saved_sentence_is_one_constant_added_once():
+    text, _ = AdminView().format_update_result(None, ["Gone."], 0, "review", "open")
+    assert text == f"Gone. {AdminView.NOT_SAVED}" and AdminView.NOT_SAVED == "Your update was not saved."

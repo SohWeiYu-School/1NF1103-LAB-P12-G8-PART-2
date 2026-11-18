@@ -535,7 +535,7 @@ def test_reopening_needs_no_extra_question(app):
 
 def test_the_current_status_is_marked_and_picking_it_adds_only_a_note(app):
     out = _update(app, "1", NOTE)
-    assert "1. Open (now)" in out and "Waiting on" not in out and "Outcome" not in out
+    assert "1. Open (current)" in out and "Waiting on" not in out and "Outcome" not in out
     assert "Note added. Saved in the audit log as entry #11." in out and "is now" not in out
     assert _state(app) == ("open", "", "", NOTE)
 
@@ -546,7 +546,7 @@ def test_a_note_that_is_too_short_or_too_long_is_asked_again(app):
     out = text_of(shown)
     assert "Please write a note of at least 5 characters" in out
     assert "Please keep the note to 500 characters or fewer." in out
-    assert asked.count("Note (5-500 characters; blank or 0 to cancel): ") == 3 and _state(app)[3] == NOTE
+    assert asked.count("Why (required, 5-500 characters; blank or 0 to cancel): ") == 3 and _state(app)[3] == NOTE
 
 
 def test_a_note_of_exactly_five_and_of_five_hundred_characters_is_accepted(app):
@@ -605,7 +605,7 @@ def test_a_log_that_cannot_be_read_when_saving_gives_the_plain_message_and_not_s
     assert f"[ERROR] {App.AUDIT_UNAVAILABLE} Your update was not saved." in out
     assert "Saved in the audit log" not in out and "the audit log cannot be read" not in out
     assert out.rindex("What next?") > out.index("Your update was not saved.")      # still on the flag's menu
-    assert "could not be shown" in caplog.text
+    assert "Update a flag failed: " + App.AUDIT_UNAVAILABLE in caplog.text and "could not be shown" not in caplog.text
 
 
 def test_an_error_app_did_not_choose_is_unexpected_not_saved_and_logged(tmp_path, monkeypatch, caplog):
@@ -622,10 +622,59 @@ def test_a_saved_update_whose_number_cannot_be_read_back_still_says_it_was_saved
     assert "Your update was saved in the audit log." in out and "entry #" not in out and "[ERROR]" not in out
 
 
-def test_the_audit_warning_is_shown_when_the_line_could_not_be_written(tmp_path, monkeypatch):
-    application = _update_app(tmp_path, monkeypatch, warning=App.AUDIT_LINE_NOT_WRITTEN)
+def test_an_update_that_really_cannot_be_written_shows_one_error_and_nothing_is_saved(app, tmp_path):
+    folder = tmp_path / "local database"
+    ui, shown, _, _ = screen("2", FLAG, "1", "2", NOTE, "0", "0")
+    console = AdminConsole(app, ui, AdminView(ui), account_named(app, "admin"))
+    before = len(app.audit_log(AuditFilter("90")).events)
+    folder.chmod(stat.S_IRUSR | stat.S_IXUSR)                  # readable, but no new file can be made in it
+    try:
+        if os.access(folder, os.W_OK):
+            pytest.skip("this account can write to a read-only folder")
+        console.run()
+    finally:
+        folder.chmod(stat.S_IRWXU)
+    out = text_of(shown)
+    assert out.count("[ERROR]") == 1 and f"[ERROR] {App.FLAG_NOT_SAVED}" in out
+    assert App.AUDIT_LINE_NOT_WRITTEN not in out and "Saved in the audit log" not in out
+    assert len(app.audit_log(AuditFilter("90")).events) == before and _state(app)[0] == "open"
+
+
+def test_an_update_that_is_not_valid_shows_the_flag_as_it_is_now(tmp_path, monkeypatch):
+    application = _update_app(tmp_path, monkeypatch)
+    application.answer = (application.flag(FLAG), ["Choose who you are waiting on."], 0)
     out = _update(application, "2", NOTE)
-    assert f"[ERROR] {App.AUDIT_LINE_NOT_WRITTEN}" in out and "Saved in the audit log as entry" in out
+    assert "[ERROR] Choose who you are waiting on. Your update was not saved." in out
+    assert out.count(f"{FLAG}  After-hours activity") == 2
+
+
+@pytest.mark.parametrize("message", [App.FLAG_ADMIN_ONLY, App.AUDIT_KEY_MISSING, App.FLAGS_UNAVAILABLE])
+def test_the_other_errors_app_can_raise_are_shown_plainly_and_not_saved(tmp_path, monkeypatch, message):
+    application = _update_app(tmp_path, monkeypatch, error=ValueError(message))
+    out = _update(application, "2", NOTE)
+    assert f"[ERROR] {message} Your update was not saved." in out and "Saved in the audit log" not in out
+
+
+def test_a_saved_update_whose_flag_cannot_be_shown_again_says_so_and_goes_back(tmp_path, monkeypatch, caplog):
+    application = _update_app(tmp_path, monkeypatch)
+    real = App.flag_evidence
+    calls = []
+
+    def evidence(self, *args, **kwargs):
+        calls.append(1)
+        if len(calls) > 1:                                    # the first look-up works, the one after the save does not
+            raise ValueError(App.AUDIT_UNAVAILABLE)
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(_UpdateApp, "flag_evidence", evidence)
+    ui, shown, _, _ = screen("2", FLAG, "1", "2", NOTE, "0")
+    AdminConsole(application, ui, AdminView(ui), account_named(application, "admin")).run()
+    out = text_of(shown)
+    assert "Saved in the audit log as entry #11." in out
+    assert f"[ERROR] Your update was saved, but the flag can't be shown again right now. {App.AUDIT_UNAVAILABLE}" in out
+    assert out.rindex("--- ADMIN") > out.index("can't be shown again")          # back at the menu, no flag menu
+    assert "the flag could not be shown again after the update" in caplog.text
+    assert _state(application)[0] == "review"
 
 
 def test_the_audit_warning_is_shown_even_when_the_update_raised(tmp_path, monkeypatch):

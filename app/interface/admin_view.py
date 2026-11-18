@@ -24,6 +24,7 @@ class AdminView:
                                         "custom": "Custom dates"}
     RESULT_NAMES: dict[str, str] = {"all": "All", "ok": "OK only", "failed": "Failed only"}
     SORT_NAMES: dict[str, str] = {"desc": "Newest first", "asc": "Oldest first"}
+    NOT_SAVED: str = "Your update was not saved."
     FAILURE_COLUMN: int = 16                          # width of one failure kind's column in the table
 
     def __init__(self, ui: ConsoleUI | None = None) -> None:
@@ -213,26 +214,24 @@ class AdminView:
 
     # ----- the result of updating a flag -----------------------------------------------------
 
-    def format_update_result(self, ticket: FlagTicket | None, problems: list[str], sequence: int,
-                             status: str) -> tuple[str, bool]:
+    def format_update_result(self, ticket: FlagTicket | None, problems: list[str], sequence: int, status: str,
+                             before: str, says_not_saved: bool = False) -> tuple[str, bool]:
         """What App.update_flag answered, as (the text, whether it is an error). The words are the web's.
-        ticket, problems and sequence are App's three answers; status is the status the admin chose."""
+        ticket, problems and sequence are App's three answers; status is the status the admin chose and before the
+        status the flag had before the update. says_not_saved is True when a problem already says the update was
+        not saved (FLAG_NOT_SAVED), so the sentence is not said twice."""
         if ticket is None or problems:
             text = " ".join(problems) if problems else "That flag could not be found."
-            if "not saved" not in text:
-                text += " Your update was not saved."
-            return text, True
+            return text if says_not_saved else f"{text} {AdminView.NOT_SAVED}", True
         if not sequence:
             return "Your update was saved in the audit log.", False      # written, the new line could not be read back
-        last = ticket.history[-1]
-        start = (f"{ticket.flag.flag_id} is now {FlagTicket.STATUSES[status]}" if last["from"] != last["to"]
-                 else "Note added")
+        start = f"{ticket.flag.flag_id} is now {FlagTicket.STATUSES[status]}" if status != before else "Note added"
         return f"{start}. Saved in the audit log as entry #{sequence}.", False
 
-    def show_update_result(self, ticket: FlagTicket | None, problems: list[str], sequence: int,
-                           status: str) -> bool:
+    def show_update_result(self, ticket: FlagTicket | None, problems: list[str], sequence: int, status: str,
+                           before: str, says_not_saved: bool = False) -> bool:
         """Show the answer of an update, as an error when it was not saved. True if it was saved."""
-        text, failed = self.format_update_result(ticket, problems, sequence, status)
+        text, failed = self.format_update_result(ticket, problems, sequence, status, before, says_not_saved)
         if failed:
             self.__ui.show_error(text)
         else:
