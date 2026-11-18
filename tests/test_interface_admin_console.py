@@ -92,7 +92,7 @@ def test_an_overview_with_no_flags_says_so_and_is_not_an_error(tmp_path, monkeyp
 
 
 def test_a_flag_can_be_opened_from_the_overview_list_by_its_number(app):
-    out = _run(app, "1", "4", "6", "1", "1", "", "0", "0")    # open one, flag 1, Enter, back, sign out
+    out = _run(app, "1", "4", "6", "1", "1", "0", "0", "0")    # open one, flag 1, no update, back, sign out
     assert "F-SHO-SOW-1-4  Verdict jump after edit" in out and "The 3 log entries behind this flag" in out
 
 
@@ -114,7 +114,7 @@ def test_flags_that_cannot_be_worked_out_say_so_on_the_overview(tmp_path, monkey
 # ----- 2. one flag ------------------------------------------------------------------------------
 
 def test_a_flag_is_opened_by_its_id_with_its_evidence(app):
-    out = _run(app, "2", "F-HOU-SOW-1-7", "", "0")
+    out = _run(app, "2", "F-HOU-SOW-1-7", "0", "0")
     assert "F-HOU-SOW-1-7  After-hours activity" in out and "Evidence" in out and "#7" in out
 
 
@@ -128,7 +128,7 @@ def test_the_flag_prompt_can_be_left_with_zero(app):
 
 
 def test_a_list_number_outside_the_list_is_asked_again(app):
-    out = _run(app, "1", "4", "6", "1", "9", "2", "", "0", "0")
+    out = _run(app, "1", "4", "6", "1", "9", "2", "0", "0", "0")
     assert "Choose a number from 1 to 5, or type a flag id." in out and "F-OTH-SOW-1-3  Edited by non-owner" in out
 
 
@@ -400,7 +400,7 @@ def test_a_digit_that_int_cannot_read_is_not_a_number_and_is_not_an_audit_log_pr
     out = _run(app, "2", "²", "0", "0")                        # "²".isdigit() is True, int("²") raises
     assert App.AUDIT_UNAVAILABLE not in out and "unexpected" not in out
     assert App.FLAG_GONE in out                                # taken as a flag id, which does not exist
-    out = _run(app, "1", "4", "6", "1", "²", "1", "1", "", "0", "0")
+    out = _run(app, "1", "4", "6", "1", "²", "1", "1", "0", "0", "0")
     assert App.AUDIT_UNAVAILABLE not in out and "F-SHO-SOW-1-4  Verdict" in out
 
 
@@ -410,7 +410,7 @@ def test_a_group_number_that_int_cannot_read_is_asked_again(app):
 
 
 def test_a_flag_number_with_no_overview_shown_says_to_show_it_first(app):
-    out = _run(app, "2", "3", "F-HOU-SOW-1-7", "", "0")
+    out = _run(app, "2", "3", "F-HOU-SOW-1-7", "0", "0")
     assert "Show the Overview first to pick a flag by number, or type a flag id." in out
     assert App.FLAG_GONE not in out and "F-HOU-SOW-1-7  After-hours" in out
 
@@ -458,3 +458,194 @@ def test_a_reload_that_fails_for_another_reason_is_still_shown(tmp_path, monkeyp
     application.__class__ = _Reloading
     out = _run(application, "1", "4", "6", "1", "1", "0")
     assert out.count(App.AUDIT_UNAVAILABLE) == 1 and out.count(App.FLAGS_UNAVAILABLE) == 1
+
+
+# ----- 2b. updating a flag ----------------------------------------------------------------------
+
+FLAG = "F-HOU-SOW-1-7"                                  # an Open flag in the seeded log
+NOTE = "Asked the officer why."
+
+
+def _update(application, *typed, flag=FLAG):
+    """Open a flag by its id, choose "Update this flag" and type the answers; then leave the flag's menu (0) and
+    sign out (0)."""
+    return _run(application, "2", flag, "1", *typed, "0", "0")
+
+
+def _state(application, flag=FLAG):
+    ticket = application.flag(flag)
+    return ticket.status, ticket.waiting_on, ticket.outcome, ticket.history[-1]["note"]
+
+
+class _UpdateApp(App):
+    """An App whose update_flag answers what the test chooses (or raises), and whose audit warning can be chosen."""
+    answer: tuple | None = None
+    error: ValueError | None = None
+    warning: str = ""
+    asked: list = []
+
+    def update_flag(self, *args, **kwargs):
+        self.asked.append(args)
+        if self.error is not None:
+            raise self.error
+        return self.answer if self.answer is not None else super().update_flag(*args, **kwargs)
+
+    def audit_failure_message(self):
+        return self.warning or super().audit_failure_message()
+
+
+def _update_app(tmp_path, monkeypatch, **chosen) -> _UpdateApp:
+    application = _made_up_app(tmp_path, monkeypatch)
+    application.__class__ = _UpdateApp
+    application.asked = []
+    for name, value in chosen.items():
+        setattr(application, name, value)
+    return application
+
+
+def test_the_flag_page_offers_to_update_it_or_go_back(app):
+    out = _run(app, "2", FLAG, "0", "0")
+    assert "1. Update this flag" in out and "0. Back" in out and "Nothing was changed" not in out
+
+
+def test_a_flag_is_moved_to_in_review_with_a_note(app):
+    out = _update(app, "2", NOTE)
+    assert f"{FLAG} is now In review. Saved in the audit log as entry #11." in out
+    assert _state(app) == ("review", "", "", NOTE)
+    assert out.count(f"{FLAG}  After-hours activity") == 2 and "In review" in out      # shown again, fresh
+
+
+def test_following_up_asks_who_the_flag_waits_on(app):
+    out = _update(app, "3", "3", NOTE)
+    assert "Waiting on" in out and "3. IT support" in out
+    assert f"{FLAG} is now Following up." in out and _state(app) == ("followup", "IT support", "", NOTE)
+
+
+def test_resolving_asks_for_the_outcome(app):
+    out = _update(app, "4", "2", NOTE)
+    assert "Outcome" in out and "2. Fixed: the problem was corrected" in out
+    assert f"{FLAG} is now Resolved." in out and _state(app) == ("resolved", "", "fixed", NOTE)
+
+
+def test_reopening_needs_no_extra_question(app):
+    _update(app, "4", "1", NOTE)
+    out = _update(app, "1", "Reopened after a new call.")
+    assert f"{FLAG} is now Open." in out and _state(app)[0] == "open"
+
+
+def test_the_current_status_is_marked_and_picking_it_adds_only_a_note(app):
+    out = _update(app, "1", NOTE)
+    assert "1. Open (now)" in out and "Waiting on" not in out and "Outcome" not in out
+    assert "Note added. Saved in the audit log as entry #11." in out and "is now" not in out
+    assert _state(app) == ("open", "", "", NOTE)
+
+
+def test_a_note_that_is_too_short_or_too_long_is_asked_again(app):
+    ui, shown, asked, _ = screen("2", FLAG, "1", "2", "ok", "x" * 501, NOTE, "0", "0")
+    AdminConsole(app, ui, AdminView(ui), account_named(app, "admin")).run()
+    out = text_of(shown)
+    assert "Please write a note of at least 5 characters" in out
+    assert "Please keep the note to 500 characters or fewer." in out
+    assert asked.count("Note (5-500 characters; blank or 0 to cancel): ") == 3 and _state(app)[3] == NOTE
+
+
+def test_a_note_of_exactly_five_and_of_five_hundred_characters_is_accepted(app):
+    _update(app, "2", "x" * 500)
+    assert _state(app)[3] == "x" * 500
+    _update(app, "1", "12345")
+    assert _state(app)[3] == "12345"
+
+
+@pytest.mark.parametrize("typed", [
+    ("0",),                                  # back at the status
+    ("3", "0"),                              # back at "waiting on"
+    ("4", "0"),                              # back at the outcome
+    ("2", ""),                               # a blank note
+    ("2", "0"),                              # 0 as the note
+    ("3", "1", "0"),                         # 0 as the note after the choices
+])
+def test_backing_out_of_any_question_changes_nothing(app, typed):
+    before = len(app.audit_log(AuditFilter("90")).events)
+    out = _update(app, *typed)
+    assert "Nothing was changed." in out and "Saved in the audit log" not in out
+    assert len(app.audit_log(AuditFilter("90")).events) == before and _state(app)[0] == "open"
+
+
+def test_an_update_is_written_in_the_admins_name(app):
+    _update(app, "2", NOTE)
+    event = app.audit_log(AuditFilter("90")).events[0]
+    assert event.action == "flag_updated" and event.actor == "Orbit Admin"
+
+
+def test_a_flag_that_is_gone_when_saving_says_it_was_not_saved(tmp_path, monkeypatch):
+    application = _update_app(tmp_path, monkeypatch, answer=(None, [App.FLAG_GONE], 0))
+    out = _update(application, "2", NOTE)
+    assert f"[ERROR] {App.FLAG_GONE} Your update was not saved." in out and "Saved in the audit log" not in out
+    assert out.count("--- ADMIN") == 2 and out.count(f"{FLAG}  After-hours") == 1      # back to the menu, no re-show
+
+
+def test_an_update_that_could_not_be_written_says_it_was_not_saved(tmp_path, monkeypatch):
+    application = _update_app(tmp_path, monkeypatch)
+    application.answer = (application.flag(FLAG), [App.FLAG_NOT_SAVED], 0)
+    out = _update(application, "2", NOTE)
+    assert f"[ERROR] {App.FLAG_NOT_SAVED}" in out and "Your update was not saved." in out
+    assert "Saved in the audit log" not in out and out.count("Your update was not saved.") == 1
+
+
+def test_a_problem_app_finds_is_shown_as_not_saved(tmp_path, monkeypatch):
+    application = _update_app(tmp_path, monkeypatch)
+    application.answer = (application.flag(FLAG), ["Choose a status: Open, In review, Following up or Resolved."], 0)
+    out = _update(application, "2", NOTE)
+    assert "[ERROR] Choose a status" in out and "Your update was not saved." in out
+
+
+def test_a_log_that_cannot_be_read_when_saving_gives_the_plain_message_and_not_saved(tmp_path, monkeypatch, caplog):
+    application = _update_app(tmp_path, monkeypatch, error=ValueError(App.AUDIT_UNAVAILABLE))
+    out = _update(application, "2", NOTE)
+    assert f"[ERROR] {App.AUDIT_UNAVAILABLE} Your update was not saved." in out
+    assert "Saved in the audit log" not in out and "the audit log cannot be read" not in out
+    assert out.rindex("What next?") > out.index("Your update was not saved.")      # still on the flag's menu
+    assert "could not be shown" in caplog.text
+
+
+def test_an_error_app_did_not_choose_is_unexpected_not_saved_and_logged(tmp_path, monkeypatch, caplog):
+    application = _update_app(tmp_path, monkeypatch, error=ValueError("made-up detail nobody should see"))
+    out = _update(application, "2", NOTE)
+    assert "An unexpected error occurred" in out and "[ERROR] Your update was not saved." in out
+    assert "made-up detail" not in out and "made-up detail nobody should see" in caplog.text
+
+
+def test_a_saved_update_whose_number_cannot_be_read_back_still_says_it_was_saved(tmp_path, monkeypatch):
+    application = _update_app(tmp_path, monkeypatch)
+    application.answer = (application.flag(FLAG), [], 0)
+    out = _update(application, "2", NOTE)
+    assert "Your update was saved in the audit log." in out and "entry #" not in out and "[ERROR]" not in out
+
+
+def test_the_audit_warning_is_shown_when_the_line_could_not_be_written(tmp_path, monkeypatch):
+    application = _update_app(tmp_path, monkeypatch, warning=App.AUDIT_LINE_NOT_WRITTEN)
+    out = _update(application, "2", NOTE)
+    assert f"[ERROR] {App.AUDIT_LINE_NOT_WRITTEN}" in out and "Saved in the audit log as entry" in out
+
+
+def test_the_audit_warning_is_shown_even_when_the_update_raised(tmp_path, monkeypatch):
+    application = _update_app(tmp_path, monkeypatch, warning=App.AUDIT_LINE_NOT_WRITTEN,
+                              error=ValueError(App.AUDIT_UNAVAILABLE))
+    out = _update(application, "2", NOTE)
+    assert out.index(App.AUDIT_LINE_NOT_WRITTEN) < out.index(App.AUDIT_UNAVAILABLE)
+
+
+def test_no_warning_when_the_line_was_written(app):
+    assert App.AUDIT_LINE_NOT_WRITTEN not in _update(app, "2", NOTE)
+
+
+def test_the_update_is_asked_with_the_admins_name_and_the_chosen_answers(tmp_path, monkeypatch):
+    application = _update_app(tmp_path, monkeypatch)
+    _update(application, "4", "1", NOTE)
+    flag_id, actor, status, note, waiting_on, outcome, _ = application.asked[0]
+    assert (flag_id, actor, status, note, waiting_on, outcome) == (FLAG, "Orbit Admin", "resolved", NOTE, "", "legit")
+
+
+def test_a_flag_can_be_updated_after_opening_it_from_the_overview(app):
+    out = _run(app, "1", "4", "6", "1", "1", "1", "2", NOTE, "0", "0", "0")
+    assert "F-SHO-SOW-1-4 is now In review." in out

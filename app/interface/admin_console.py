@@ -16,8 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 class AdminConsole:
-    """What a signed-in admin can do on the terminal: the Overview, one flag, a client's flags, the activity log and
-    the check of the audit log. It only reads (changing a flag is not here). TerminalApp signs the admin in, hands over the
+    """What a signed-in admin can do on the terminal: the Overview, one flag (and updating it, as on the web), a
+    client's flags, the activity log and the check of the audit log. Updating a flag is the only thing that writes
+    (one flag_updated line in the audit log, in the admin's name). TerminalApp signs the admin in, hands over the
     Account and signs out when run() ends, however it ends.
 
     Every pass of the menu is a new request (begin_request with the admin's name), and every App call that takes an
@@ -65,16 +66,20 @@ class AdminConsole:
             except ValueError as error:
                 self.__show_error(error, AdminConsole.MENU[picked])
 
-    def __show_error(self, error: ValueError, where: str) -> None:
+    def __show_error(self, error: ValueError, where: str, not_saved: bool = False) -> None:
         """Tell the admin which kind of problem it is. Only the messages App chose for the admin (SAFE_ERRORS) are
         shown as they are; any other ValueError is not an audit log problem, so it is logged with its details and
-        shown as an unexpected error, never as "the audit log is unavailable"."""
+        shown as an unexpected error, never as "the audit log is unavailable". not_saved adds that the admin's update
+        was not saved."""
+        tail = " Your update was not saved." if not_saved else ""
         if str(error) in AdminConsole.SAFE_ERRORS:
             logger.error("AdminConsole: %s could not be shown: %s", where, error)
-            self.__ui.show_error(str(error))
+            self.__ui.show_error(str(error) + tail)
         else:
             logger.error("AdminConsole: %s failed with an unexpected error: %r", where, error)
             self.__ui.show_unexpected_error()
+            if not_saved:
+                self.__ui.show_error(tail.strip())
 
     def __show_audit_warning(self) -> None:
         """If the last action's audit line could not be written, say so."""
@@ -147,8 +152,67 @@ class AdminConsole:
         flag_id = self.__pick_flag()
         if flag_id is None:
             return
-        if self.__show_flag(flag_id) is not None:
-            self.__ui.read_answer("\nPress Enter to continue...")
+        ticket = self.__show_flag(flag_id)
+        while ticket is not None:
+            if self.__ui.ask_choice("What next?", ["Update this flag"], allow_back=True, back_label="Back") is None:
+                return
+            ticket = self.__update_flag(ticket)
+
+    def __update_flag(self, ticket: FlagTicket) -> FlagTicket | None:
+        """Ask for an update of this flag and save it. Returns the flag to offer next: the flag fetched fresh after a
+        save, the same one if nothing was saved, None if the flag is gone."""
+        asked = self.__ask_update(ticket)
+        if asked is None:
+            self.__ui.show_message("Nothing was changed.")
+            return ticket
+        status, waiting_on, outcome, note = asked
+        flag_id = ticket.flag.flag_id
+        try:
+            try:
+                updated, problems, sequence = self.__app.update_flag(
+                    flag_id, self.__account.name, status, note, waiting_on, outcome, self.__now())
+            finally:
+                self.__show_audit_warning()                 # the line may be missing whether or not the update ran
+        except ValueError as error:
+            self.__show_error(error, "Update a flag", not_saved=True)
+            return ticket
+        if not self.__view.show_update_result(updated, problems, sequence, status):
+            return updated                                  # None when the flag is gone
+        return self.__show_flag(flag_id)
+
+    def __ask_update(self, ticket: FlagTicket) -> tuple[str, str, str, str] | None:
+        """Ask the status, who the flag waits on (moving to Following up), the outcome (moving to Resolved) and the
+        note, in that order. FlagTicket checks the answers; the note is asked again until it does. None if the admin
+        backs out (0, or a blank note)."""
+        statuses = list(FlagTicket.STATUSES)
+        self.__ui.show_message("Pick the status the flag is in now to add a note without moving it.")
+        picked = self.__ui.ask_choice("New status", [FlagTicket.STATUSES[key] + (" (now)" if key == ticket.status else "")
+                                                     for key in statuses], allow_back=True, back_label="Back")
+        if picked is None:
+            return None
+        status, waiting_on, outcome = statuses[picked], "", ""
+        if status == "followup" and status != ticket.status:
+            picked = self.__ui.ask_choice("Waiting on", list(FlagTicket.WAITING_ON), allow_back=True, back_label="Back")
+            if picked is None:
+                return None
+            waiting_on = FlagTicket.WAITING_ON[picked]
+        if status == "resolved" and status != ticket.status:
+            outcomes = list(FlagTicket.OUTCOMES)
+            picked = self.__ui.ask_choice("Outcome", [FlagTicket.OUTCOMES[key] for key in outcomes], allow_back=True,
+                                          back_label="Back")
+            if picked is None:
+                return None
+            outcome = outcomes[picked]
+        while True:
+            note = self.__ui.ask_optional_text(f"Note ({FlagTicket.NOTE_MIN}-{FlagTicket.NOTE_MAX} characters; "
+                                               "blank or 0 to cancel)")
+            if note in ("", "0"):
+                return None
+            problems = ticket.check_update(status, note, waiting_on, outcome)
+            if not problems:
+                return status, waiting_on, outcome, note
+            for problem in problems:
+                self.__ui.show_error(problem)
 
     def __pick_flag(self) -> str | None:
         """Ask for a flag: its number in the Overview list above, or its id. None if the admin goes back (0)."""

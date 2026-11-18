@@ -13,7 +13,7 @@ from app.model.overview_page import OverviewPage
 
 class AdminView:
     """Turns what App returns for the admin (the overview, a flag, a client's flags, a page of the activity log, the
-    result of a chain check) into text. Each format_ method returns the text; each show_ method gives it to the
+    result of a chain check, the answer of a flag update) into text. Each format_ method returns the text; each show_ method gives it to the
     ConsoleUI to print, so this class never prints itself. The words are the ones the web pages use. An empty
     result says so plainly; an error is never shown here, the AdminConsole shows it.
     """
@@ -210,6 +210,34 @@ class AdminView:
 
     def show_flag(self, ticket: FlagTicket, evidence: list[AuditEvent], entries: int) -> None:
         self.__ui.show("\n" + self.format_flag(ticket, evidence, entries))
+
+    # ----- the result of updating a flag -----------------------------------------------------
+
+    def format_update_result(self, ticket: FlagTicket | None, problems: list[str], sequence: int,
+                             status: str) -> tuple[str, bool]:
+        """What App.update_flag answered, as (the text, whether it is an error). The words are the web's.
+        ticket, problems and sequence are App's three answers; status is the status the admin chose."""
+        if ticket is None or problems:
+            text = " ".join(problems) if problems else "That flag could not be found."
+            if "not saved" not in text:
+                text += " Your update was not saved."
+            return text, True
+        if not sequence:
+            return "Your update was saved in the audit log.", False      # written, the new line could not be read back
+        last = ticket.history[-1]
+        start = (f"{ticket.flag.flag_id} is now {FlagTicket.STATUSES[status]}" if last["from"] != last["to"]
+                 else "Note added")
+        return f"{start}. Saved in the audit log as entry #{sequence}.", False
+
+    def show_update_result(self, ticket: FlagTicket | None, problems: list[str], sequence: int,
+                           status: str) -> bool:
+        """Show the answer of an update, as an error when it was not saved. True if it was saved."""
+        text, failed = self.format_update_result(ticket, problems, sequence, status)
+        if failed:
+            self.__ui.show_error(text)
+        else:
+            self.__ui.show("\n" + text)
+        return not failed
 
     # ----- a client's flags ------------------------------------------------------------------
 
