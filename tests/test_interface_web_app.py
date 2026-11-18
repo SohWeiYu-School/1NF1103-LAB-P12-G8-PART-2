@@ -2599,3 +2599,27 @@ def test_the_latest_verdict_badge_never_has_an_incomplete_tag(web):
     page = client.get(f"/client/{ref}").get_data(as_text=True)
     assert "(incomplete)" not in _latest_verdict(page)        # the tag belongs to the assessment's own row
     assert "(incomplete)</span>" in page
+
+
+def test_the_web_and_the_terminal_word_every_archive_result_the_same(web, monkeypatch):
+    application, _, client = web
+    _two_assessments(application)
+    client.post("/assessment/A1/archive")
+    assert App.archive_message(App.ARCHIVE_CHANGED, True) in _flashes(client)
+    client.post("/assessment/A1/archive")
+    assert App.archive_message(App.ARCHIVE_NO_CHANGE, True) in _flashes(client)
+    client.post("/assessment/A1/restore")
+    assert App.archive_message(App.ARCHIVE_CHANGED, False) in _flashes(client)
+    client.post("/assessment/A1/restore")
+    assert App.archive_message(App.ARCHIVE_NO_CHANGE, False) in _flashes(client)
+    reason = "x" * 201
+    client.post("/assessment/A1/archive", data={"reason": reason})
+    assert App.archive_message(App.ARCHIVE_BAD_REASON, True, reason) in _flashes(client)
+    records = application.assessments().load()
+    records[1]["archive_log"] = "broken"
+    application.assessments()._write_all(records)
+    client.post("/assessment/A2/archive")
+    assert App.archive_message(App.ARCHIVE_UNREADABLE, True) in _flashes(client)
+    monkeypatch.setattr(application.assessments(), "_write_all", lambda records: False)
+    client.post("/assessment/A1/archive")
+    assert App.archive_message(App.ARCHIVE_NOT_SAVED, True) in _flashes(client)

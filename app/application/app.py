@@ -128,6 +128,8 @@ class App:
     ARCHIVE_NO_CHANGE: str = AssessmentRepository.NO_CHANGE
     ARCHIVE_NOT_SAVED: str = AssessmentRepository.NOT_SAVED
     ARCHIVE_BAD_REASON: str = "bad_reason"
+    # The results of archive_assessment / restore_assessment that are told as news; any other result is a problem.
+    ARCHIVE_DONE_RESULTS: tuple[str, ...] = (AssessmentRepository.CHANGED, AssessmentRepository.NO_CHANGE)
     MAX_ARCHIVE_REASON: int = AssessmentRepository.MAX_REASON_LENGTH
 
     def __init__(self, ai_caller: Callable[[str, dict, dict], str | None] | None = None,
@@ -209,6 +211,7 @@ class App:
         self.__report_view: ReportView = ReportView(self.__ui)
         self.__client_form: ClientForm = ClientForm(self.__ui, self.__report_view)
         schema = self.__case_files.load(os.path.join(root, "app", "schemas", "case_input.schema.json"), default={})
+        self.__case_schema: dict = schema if isinstance(schema, dict) else {}
         self.__case_builder: CaseBuilder = CaseBuilder(self.__ui, schema)
         limits = policy.get("assessment_rate_limit", {})
         if not isinstance(limits, dict):
@@ -1102,10 +1105,64 @@ class App:
         """True only for a document reference this app made (the DocumentStore decides)."""
         return self.__documents.owns(file_id)
 
-    def read_document_for_extraction(self, path: str, name: str) -> dict:
+    def read_document_for_extraction(self, path: str, name: str = "") -> dict:
         """One file read so the AI can pull client details out of it: {"file_name", "kind", ...}.
+        name is the file's name for the reader (the file's own name if not given).
         A file that cannot be read comes back with kind "error" and a message that is safe to show."""
-        return self.__documents.read_for_extraction(path, name)
+        return self.__documents.read_for_extraction(path, name or None)
+
+    def list_document_folder(self, folder: str) -> list[str] | None:
+        """The readable documents directly inside a folder, sorted by name; None if the folder does not exist."""
+        return self.__documents.list_folder(folder)
+
+    def load_case_file(self, path: str) -> object | None:
+        """The contents of one case file as it is (normally a JSON object; whatever is wrong with it is for
+        validate_case to say), or None if it is missing or cannot be read."""
+        return self.__case_files.load(path)
+
+    def is_forecasting_case(self, case: object) -> bool:
+        """True for a case in the forecasting layout (the layout that can be assessed directly)."""
+        return self.__case_files.is_forecasting_case(case)
+
+    def sample_case_files(self) -> list[str]:
+        """The path of every sample case file shipped with the code, sorted by name."""
+        return self.__case_files.list_samples()
+
+    def case_schema(self) -> dict:
+        """The JSON schema a case is checked against ({} if it could not be read)."""
+        return dict(self.__case_schema)
+
+    def read_failed(self, what: str, actor: str = "") -> None:
+        """Write one "database unreadable" line for a read the caller found failing (at most one for each
+        request). Never raises."""
+        self.__read_failed(what, actor)
+
+    def saved_verdict(self, saved: dict) -> Verdict | None:
+        """A saved assessment as a Verdict holding its saved report, so it can be shown again.
+        None (and logged) if the saved outcome or report is not possible."""
+        return self.__saved_verdict(saved)
+
+    @staticmethod
+    def archive_message(result: str, archive: bool, reason: str = "") -> str:
+        """What to tell the officer about the result of archive_assessment (archive=True) or restore_assessment.
+        reason is the one that was given (used when it was refused). Results in ARCHIVE_DONE_RESULTS are
+        news; every other result is a problem. The web app words the same results itself, and a test checks
+        the two agree."""
+        word = "archived" if archive else "restored"
+        if result == App.ARCHIVE_CHANGED:
+            return ("Assessment archived. It is hidden from the lists, not deleted." if archive
+                    else "Assessment restored.")
+        if result == App.ARCHIVE_NO_CHANGE:
+            return "This assessment is already archived." if archive else "This assessment is not archived."
+        if result == App.ARCHIVE_UNREADABLE:
+            return "This assessment's archive record is damaged, so it cannot be changed."
+        if result == App.ARCHIVE_NOT_SAVED:
+            return f"The assessment was not {word} because saving failed. Please try again later."
+        if result == App.ARCHIVE_BAD_REASON:
+            return f"Nothing was archived. {App.archive_reason_problem(reason)}"
+        if result == App.ARCHIVE_NOT_FOUND:
+            return "That assessment could not be found, so nothing was changed."
+        return App.ASSESSMENTS_UNAVAILABLE
 
     def all_clients(self) -> list[dict]:
         """Every saved client; [] only when there are none yet. Raises ValueError(CLIENTS_UNAVAILABLE)
@@ -1117,11 +1174,12 @@ class App:
             self.__read_failed("client records")
             raise ValueError(App.CLIENTS_UNAVAILABLE) from error
 
-    def all_assessments(self, include_archived: bool = False) -> list[dict]:
-        """Every saved assessment (archived ones only if include_archived); [] only when there are
-        none yet. Raises ValueError(ASSESSMENTS_UNAVAILABLE) if the saved assessments cannot be read."""
+    def all_assessments(self, include_archived: bool = False, outcome: str = "") -> list[dict]:
+        """Every saved assessment, or only those with this outcome (archived ones only if include_archived);
+        [] only when there are none yet. Raises ValueError(ASSESSMENTS_UNAVAILABLE) if the saved assessments
+        cannot be read."""
         try:
-            return self.__assessments.query("", include_archived)
+            return self.__assessments.query(outcome, include_archived)
         except (OSError, ValueError) as error:
             logger.error("App.all_assessments: the saved assessments cannot be read: %r", error)
             self.__read_failed("assessments")

@@ -2389,3 +2389,53 @@ def test_a_saved_report_without_its_evidence_prints_nothing_of_the_report(app, t
     assert _UNREADABLE in out and "Goodbye." in out
     assert "COMBINED ASSESSMENT" not in out and "VERDICT:" not in out
     assert "App.__open_assessment" in caplog.text and "Traceback" in caplog.text
+
+
+# ----- what the terminal front end asks App for -------------------------------------------------
+
+def test_archive_message_words_every_result_and_the_done_ones_are_news():
+    words = App.archive_message
+    assert words(App.ARCHIVE_CHANGED, True) == "Assessment archived. It is hidden from the lists, not deleted."
+    assert words(App.ARCHIVE_CHANGED, False) == "Assessment restored."
+    assert words(App.ARCHIVE_NO_CHANGE, True) == "This assessment is already archived."
+    assert words(App.ARCHIVE_NO_CHANGE, False) == "This assessment is not archived."
+    assert words(App.ARCHIVE_UNREADABLE, True) == "This assessment's archive record is damaged, so it cannot be changed."
+    assert words(App.ARCHIVE_NOT_SAVED, True) == "The assessment was not archived because saving failed. Please try again later."
+    assert words(App.ARCHIVE_NOT_SAVED, False) == "The assessment was not restored because saving failed. Please try again later."
+    assert words(App.ARCHIVE_BAD_REASON, True, "x" * 201).startswith("Nothing was archived. The reason is too long")
+    assert words(App.ARCHIVE_NOT_FOUND, True) == "That assessment could not be found, so nothing was changed."
+    assert words("something else", True) == App.ASSESSMENTS_UNAVAILABLE
+    assert App.ARCHIVE_DONE_RESULTS == (App.ARCHIVE_CHANGED, App.ARCHIVE_NO_CHANGE)
+
+
+def test_all_assessments_can_be_limited_to_one_outcome(app):
+    for number, outcome in ((1, "PASSED"), (2, "RISKY")):
+        assert app.assessments().save({"assessment_id": f"O{number}", "client_ref": "C-1", "kind": "onboarding",
+                                       "outcome": outcome, "assessed_at": f"2026-11-0{number}T00:00:00+00:00"})
+    assert [a["assessment_id"] for a in app.all_assessments(outcome="RISKY")] == ["O2"]
+    assert len(app.all_assessments()) == 2
+
+
+def test_app_hands_out_case_files_sample_names_and_document_folders(app, tmp_path):
+    samples = app.sample_case_files()
+    assert samples and all(path.endswith(".json") for path in samples)
+    case = app.load_case_file(samples[0])
+    assert app.is_forecasting_case(case) in (True, False)
+    assert app.load_case_file(str(tmp_path / "nowhere.json")) is None
+    assert app.is_forecasting_case([1]) is False
+    assert app.list_document_folder(str(tmp_path / "nowhere")) is None
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "note.txt").write_text("hello", encoding="utf-8")
+    assert [os.path.basename(p) for p in app.list_document_folder(str(tmp_path / "docs"))] == ["note.txt"]
+    assert app.read_document_for_extraction(str(tmp_path / "docs" / "note.txt"))["file_name"] == "note.txt"
+    assert isinstance(app.case_schema(), dict) and app.case_schema()
+
+
+def test_saved_verdict_and_read_failed_are_public(app, tmp_path):
+    saved = {"assessment_id": "A1", "client_ref": "C-1", "assessed_at": "2026-11-01", "outcome": "PASSED",
+             "report": {"header": {}}}
+    assert app.saved_verdict(saved).report == {"header": {}}
+    assert app.saved_verdict({**saved, "outcome": "FINE"}) is None
+    app.read_failed("assessments", App.TERMINAL)
+    log = app.audit_log(AuditFilter(preset="1"))
+    assert [event.action for event in log.events] == ["data_unavailable"]
