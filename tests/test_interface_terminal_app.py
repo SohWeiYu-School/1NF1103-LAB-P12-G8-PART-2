@@ -911,15 +911,39 @@ def test_a_wrong_admin_password_is_refused_and_recorded_without_the_password(app
 
 def test_an_officer_cannot_sign_in_at_the_admin_screens_and_is_told_where_to_go(app):
     out, _ = _admin_session(app, "9", "Shareen", "officer123", "0")
-    assert f"[ERROR] {App.SIGN_IN_OFFICER_AT_ADMIN}" in out and "ADMIN: AUDIT" not in out
+    assert f"[ERROR] {TerminalApp.OFFICER_AT_ADMIN}" in out and "ADMIN: AUDIT" not in out
+    assert "officer portal" not in out and App.SIGN_IN_OFFICER_AT_ADMIN not in out
     line = _audit_lines(app)[-1]
     assert (line.action, line.actor, line.result) == ("sign_in_failed", "Shareen", "failed")
 
 
 def test_an_unknown_name_and_a_blank_answer_are_refused(app):
-    out, _ = _admin_session(app, "9", "Nobody Here", "admin123", "9", "", "", "0")
+    out, _ = _admin_session(app, "9", "Nobody Here", "admin123", "9", "Orbit Admin", "", "0")
     assert f"[ERROR] {App.SIGN_IN_WRONG}" in out and f"[ERROR] {App.SIGN_IN_EMPTY}" in out
     assert [line.actor for line in _audit_lines(app)] == ["unknown"]          # the blank attempt wrote nothing
+
+
+@pytest.mark.parametrize("name", ["", "0", "  "])
+def test_a_blank_or_zero_name_goes_back_without_asking_for_the_password(app, name):
+    out, hidden = _admin_session(app, "9", name, "0")
+    assert hidden == []                                          # the password was never asked for
+    assert "Goodbye." in out and "Signed in as" not in out and _audit_lines(app) == []
+
+
+def test_keyboard_interrupt_inside_the_admin_screens_still_signs_out(app):
+    answers = iter(["9", "Orbit Admin", "admin123"])
+
+    def read(question: str = "") -> str:
+        try:
+            return next(answers)
+        except StopIteration:
+            raise KeyboardInterrupt from None
+
+    shown = []
+    ui = ConsoleUI(read=read, write=shown.append, secret=read)
+    assert TerminalApp(app, ui).start([]) == 130
+    assert any("Stopped." in line for line in shown)
+    assert [line.action for line in _audit_lines(app)] == ["signed_in", "signed_out"]
 
 
 def test_the_end_of_input_inside_the_admin_screens_leaves_cleanly_and_signs_out(app, capsys):

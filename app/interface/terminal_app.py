@@ -32,6 +32,7 @@ class TerminalApp:
     it never works a manager's object itself.
     """
 
+    OFFICER_AT_ADMIN: str = "This is an officer account. Only admin accounts can open the admin screens."
     GOODBYE: str = "Thank you for using Orbit. Goodbye."      # shown for 0. Quit and for the end of input (Ctrl-D)
 
     def __init__(self, app: App, ui: ConsoleUI | None = None, limiter: RateLimiter | None = None) -> None:
@@ -180,11 +181,15 @@ class TerminalApp:
         and run the AdminConsole. The admin is signed out when the console ends, however it ends (0, the end of
         input, an error). A refused sign-in shows App's message and goes back to the menu."""
         app = self.__app
-        name = self.__ui.ask_optional_text("Admin name")
+        name = self.__ui.ask_optional_text("Admin name (0 or blank to go back)")
+        if name in ("", "0"):
+            return
         password = self.__ui.ask_password("Password")
         account, message = self.__audited(app.sign_in)(name, password, App.ADMIN_PORTAL)
         if account is None:
-            self.__ui.show_error(message)
+            # App's officer message says where to sign in on the web, which means nothing on the terminal
+            self.__ui.show_error(TerminalApp.OFFICER_AT_ADMIN if message == App.SIGN_IN_OFFICER_AT_ADMIN
+                                 else message)
             return
         try:
             AdminConsole(app, self.__ui, AdminView(self.__ui), account).run()
