@@ -112,13 +112,13 @@ def test_the_problems_say_what_to_enter_and_do_not_assume_the_clients_gender():
 # ----- a list of countries or counterparties is a list, never a text taken apart ----------------------------
 
 @pytest.mark.parametrize("field", ["wealth_countries", "declared_counterparties"])
-@pytest.mark.parametrize("bad", ["Singapore", "SG, HK", 5, {"SG": 1}, {"SG"}, 1.5, True])
+@pytest.mark.parametrize("bad", ["Singapore", "SG, HK", 5, {"SG": 1}, {"SG"}, 1.5, True, False, 0, 0.0, {}])
 def test_a_list_field_refuses_anything_that_is_not_a_list_or_tuple(field, bad):
     with pytest.raises(ValueError, match="must be a list"):
         Claims(**{field: bad})
 
 
-@pytest.mark.parametrize("bad", ["Singapore", 5, {"SG": 1}, True])
+@pytest.mark.parametrize("bad", ["Singapore", 5, {"SG": 1}, True, False, 0])
 def test_the_countries_setter_refuses_a_text_instead_of_storing_its_letters(bad):
     claims = Claims(wealth_countries=["SG"])
     with pytest.raises(ValueError, match="must be a list"):
@@ -145,3 +145,11 @@ def test_saved_claims_holding_a_text_for_the_countries_are_refused_not_split_int
     data["claims"]["wealth_countries"] = "Singapore"
     with pytest.raises(ValueError, match="must be a list"):
         ClientRecord.from_dict(data)
+
+
+def test_the_refusal_is_in_plain_words_without_a_python_type_name():
+    for bad in ("Singapore", 5, {"SG": 1}):
+        with pytest.raises(ValueError) as error:
+            Claims(wealth_countries=bad)
+        assert str(error.value).endswith("not a single value")
+        assert "str" not in str(error.value).split("not a single")[-1] and "dict" not in str(error.value)

@@ -136,13 +136,14 @@ class Claims:
 
     @staticmethod
     def __as_list(value: object, name: str) -> list:
-        """value as a new list. Nothing (None, or an empty text or list) is an empty list. Anything else must be
-        a list or a tuple: a text would otherwise be taken apart letter by letter. Raises ValueError."""
-        if not value:
+        """value as a new list. Only None, an empty text, an empty list and an empty tuple mean "nothing given"
+        (an empty list). Anything else must be a list or a tuple: a text would otherwise be taken apart letter
+        by letter. Raises ValueError."""
+        if value is None or (isinstance(value, (str, list, tuple)) and not value):
             return []
         if not isinstance(value, (list, tuple)):
             raise ValueError(f"{name} must be a list (for example ['Singapore', 'Malaysia']) or left empty, "
-                             f"not {type(value).__name__}")
+                             "not a single value")
         return list(value)
 
     def __check_net_worth(self, value: float | None) -> None:
