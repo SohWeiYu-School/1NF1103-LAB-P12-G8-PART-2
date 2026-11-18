@@ -14,7 +14,7 @@ from app.model.audit_filter import AuditFilter
 from app.model.client_record import ClientRecord
 from app.model.verdict import Verdict
 from tests import fake_ai, fake_services
-from tests.audit_files import seed_audit
+from tests.audit_files import break_audit, seed_audit
 from tests.logic_fixtures import sample_case
 
 
@@ -759,3 +759,37 @@ def test_the_terminal_uses_the_limiter_it_is_given_and_refuses_something_that_is
     TerminalApp(app, ConsoleUI(read=lambda question="": next(waiting)), limiter).run_menu()
     out = capsys.readouterr().out
     assert "Assessing" not in out and "wait" in out.lower()
+
+
+# ----- an audit line that could not be written is told on the terminal, as App used to do itself ------------
+
+def test_the_terminal_says_saved_but_when_an_archive_changed_something_and_its_line_was_not_written(
+        app, tmp_path, capsys):
+    _history_client(app)
+    break_audit(tmp_path)
+    out = _run_menu(app, capsys, "8", CLIENT_REF, "4", "1", "y", "", "0", "0")
+    assert App.AUDIT_NOT_WRITTEN in out and "Assessment archived." in out
+    assert App.AUDIT_LINE_NOT_WRITTEN not in out
+
+
+def test_the_terminal_says_the_action_was_not_written_when_nothing_was_saved(app, tmp_path, capsys):
+    break_audit(tmp_path)
+    out = _run_menu(app, capsys, "7", "0")
+    assert out.count(App.AUDIT_LINE_NOT_WRITTEN) == 1 and App.AUDIT_NOT_WRITTEN not in out
+    assert out.index("--- Synchronizing") < out.index(App.AUDIT_LINE_NOT_WRITTEN) < out.index("Sync unsuccessful")
+
+
+def test_the_callbacks_handed_to_the_forms_are_wrapped_too(tmp_path, monkeypatch, capsys):
+    """Menu 2 saves the client and keeps its documents through App's save and upload: each tells the officer."""
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    monkeypatch.setattr("app.interface.client_form.tk", None)
+    folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documents", "marcus_lim")
+    with open(folder + "_expected_extract.json", encoding="utf-8") as handle:
+        reading = json.load(handle)
+    application = App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))
+    break_audit(tmp_path)
+    out = _run_menu(application, capsys, "2", folder, "0", "1", "3", "0")
+    assert "Client saved. Reference: CL-" in out
+    assert out.count(App.AUDIT_NOT_WRITTEN) >= 1 + len(os.listdir(folder))      # the client and each document kept
+    assert App.AUDIT_LINE_NOT_WRITTEN in out                                    # the reading itself saved nothing

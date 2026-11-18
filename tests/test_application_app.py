@@ -1039,13 +1039,16 @@ def test_an_audit_line_that_cannot_be_written_leaves_the_action_standing_and_is_
     assert "was not written" in caplog.text
 
 
-def test_the_terminal_is_told_when_the_audit_line_was_not_written_but_the_web_is_not_printed_to(
+def test_app_prints_nothing_when_an_audit_line_is_not_written_and_says_what_to_tell_the_user(
         app, tmp_path, capsys):
+    assert app.audit_failure_message() == ""
     break_audit(tmp_path)
     app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    assert capsys.readouterr().out == ""                  # App shows nothing, whoever the actor is
+    assert app.audit_failure_message() == App.AUDIT_NOT_WRITTEN
+    app.sync_to_cloud()                                  # nothing was saved
     assert capsys.readouterr().out == ""
-    app.sync_to_cloud()                                  # the terminal: nothing was saved
-    assert App.AUDIT_LINE_NOT_WRITTEN in capsys.readouterr().out
+    assert app.audit_failure_message() == App.AUDIT_LINE_NOT_WRITTEN
 
 
 def test_the_audit_failure_flag_is_reset_by_the_next_action(app, tmp_path):
@@ -1263,29 +1266,31 @@ def test_an_assessment_with_its_outcome_saved_says_record_saved_true_and_one_wit
     assert "record_saved" not in _events(app)[-1].details
 
 
-def test_the_terminal_message_says_saved_only_when_something_was_saved(app, tmp_path, capsys):
+def test_the_failure_message_says_saved_only_when_something_was_saved(app, tmp_path, capsys):
     break_audit(tmp_path)
     app.save_client(ClientRecord.from_dict(sample_case()))                    # saved: "Saved, but ..."
-    out = capsys.readouterr().out
-    assert App.AUDIT_NOT_WRITTEN in out
+    assert app.audit_failure_message() == App.AUDIT_NOT_WRITTEN
     app.refused("Shareen", "opening the audit log")                           # nothing saved
+    assert app.audit_failure_message() == App.AUDIT_LINE_NOT_WRITTEN
     app.sync_to_cloud()
+    assert app.audit_failure_message() == App.AUDIT_LINE_NOT_WRITTEN
     app.upload_document(str(tmp_path / "missing.pdf"))                         # not kept
-    out = capsys.readouterr().out
-    assert App.AUDIT_NOT_WRITTEN not in out and out.count(App.AUDIT_LINE_NOT_WRITTEN) == 2
+    assert app.audit_failure_message() == App.AUDIT_LINE_NOT_WRITTEN
     source = tmp_path / "a.txt"
     source.write_text("x", encoding="utf-8")
     assert app.upload_document(str(source)) is not None                       # kept
-    assert App.AUDIT_NOT_WRITTEN in capsys.readouterr().out
+    assert app.audit_failure_message() == App.AUDIT_NOT_WRITTEN
+    assert capsys.readouterr().out == ""
 
 
 def test_an_archive_that_changed_something_says_saved_and_one_that_changed_nothing_writes_no_line(app, tmp_path, capsys):
     _two_saved(app)
     break_audit(tmp_path)
     app.archive_assessment("A1")
-    assert app.audit_write_failed() is True and App.AUDIT_NOT_WRITTEN in capsys.readouterr().out
+    assert app.audit_write_failed() is True and app.audit_failure_message() == App.AUDIT_NOT_WRITTEN
     app.archive_assessment("A1")                                               # already archived: no line, no message
-    assert app.audit_write_failed() is False and capsys.readouterr().out == ""
+    assert app.audit_write_failed() is False and app.audit_failure_message() == ""
+    assert capsys.readouterr().out == ""
 
 
 def test_without_an_audit_key_app_is_built_but_start_and_start_web_stop_with_a_message(tmp_path, monkeypatch, capsys,

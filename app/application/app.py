@@ -1291,6 +1291,14 @@ class App:
         """True if the last action in this thread was done but its audit line could not be written."""
         return bool(getattr(self.__audit_note, "failed", False))
 
+    def audit_failure_message(self) -> str:
+        """What to tell the user when the last action in this thread could not be written to the audit log:
+        AUDIT_NOT_WRITTEN ("Saved, but ...") if the action had saved something, AUDIT_LINE_NOT_WRITTEN if not;
+        "" when its line was written (or there was no action)."""
+        if not self.audit_write_failed():
+            return ""
+        return App.AUDIT_NOT_WRITTEN if getattr(self.__audit_note, "kept", False) else App.AUDIT_LINE_NOT_WRITTEN
+
     def __start(self, actor: str) -> None:
         """Begin an action: forget the last audit failure of this thread and check who is acting.
         Raises ValueError (a programming error) if actor is neither TERMINAL, UNKNOWN nor a configured account name."""
@@ -1310,7 +1318,8 @@ class App:
     def __record(self, action: str, actor: str, client_ref: str = "", result: str = "ok",
                  details: dict | None = None, kept: bool = False) -> bool:
         """Add one line to the audit log. Never raises: if it cannot be written the real error is logged,
-        audit_write_failed() turns True, and the terminal is told (the web app checks audit_write_failed()).
+        audit_write_failed() turns True, and audit_failure_message() says what to tell the user (each front end
+        checks it after the action; App itself shows nothing, whoever the actor is).
         kept is True when the action saved something: the message then says "Saved, but ...", otherwise it
         only says the action could not be written."""
         self.__audit_note.failed = False
@@ -1324,8 +1333,7 @@ class App:
         if not written:
             logger.error("App.__record: the audit line for %s by %s was not written", action, actor)
             self.__audit_note.failed = True
-            if actor == App.TERMINAL:
-                self.__ui.show_error(App.AUDIT_NOT_WRITTEN if kept else App.AUDIT_LINE_NOT_WRITTEN)
+            self.__audit_note.kept = kept
         return written
 
     # ----- the objects set-up code and tests reach through App ------------------------------
