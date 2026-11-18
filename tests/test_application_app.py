@@ -1950,3 +1950,32 @@ def test_read_failed_checks_what_and_who(app):
     app.read_failed("client records")
     app.read_failed("assessments", App.TERMINAL)
     assert [e.action for e in app.audit_log(AuditFilter(preset="1")).events] == ["data_unavailable"]
+
+
+@pytest.mark.parametrize("path", [["claims", "asset_composition"], ["investments", 0], ["claims"]])
+def test_a_value_that_cannot_build_the_record_is_a_wrong_kind_of_value_and_is_logged(app, path, caplog):
+    record, _ = app.record_from_reading(_reading(), client_ref="CL-NEW00001")
+    with pytest.raises(ValueError) as error:
+        app.set_record_field(record, path, "x" if path[-1] == "asset_composition" else 5)
+    assert str(error.value) == "it is not possible there (wrong kind of value)"
+    assert "App.set_record_field" in caplog.text
+
+
+def test_every_field_the_terminal_may_ask_for_accepts_an_empty_answer(app):
+    record, _ = app.record_from_reading({})
+    fields = app.missing_fields(record)
+    assert fields
+    for field in fields:
+        app.set_record_field(record, field["path"], None)
+
+
+def test_the_set_record_field_messages_read_on_after_that_value_cannot_be_used_because(app):
+    record, _ = app.record_from_reading(_reading(), client_ref="CL-NEW00001")
+    with pytest.raises(ValueError) as error:
+        app.set_record_field(record, ["career", "no_such"], 1)
+    assert str(error.value) == "the record has no such field (career.no_such)"
+    with pytest.raises(ValueError) as error:
+        app.set_record_field(record, [], 1)
+    assert str(error.value) == "the field to change must be given as a path of names and positions"
+    for text in ("the record has no such field (career.no_such)", "it is not possible there (wrong kind of value)"):
+        assert text[0].islower() and not text.endswith(".")

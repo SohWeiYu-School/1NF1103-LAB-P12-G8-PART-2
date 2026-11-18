@@ -822,11 +822,11 @@ class App:
     def set_record_field(self, record: ClientRecord, path: list, value: object) -> ClientRecord:
         """A copy of record with the value at path (a path from missing_fields) replaced. Raises ValueError,
         saying what is wrong, if record is not a ClientRecord, the path does not lead to a field the record has, or
-        the value is not possible there (the message reads on after "That value cannot be used because")."""
+        the value is not possible there. Every message reads on after "That value cannot be used because"."""
         App.__need_record(record)
         if not isinstance(path, list) or not path or not all(
                 isinstance(part, (str, int)) and not isinstance(part, bool) for part in path):
-            raise ValueError("The field to change must be given as a path of names and positions.")
+            raise ValueError("the field to change must be given as a path of names and positions")
         here: object = record.to_dict()
         for part in path:                           # the path must lead to a field the record has
             if isinstance(here, dict) and isinstance(part, str) and part in here:
@@ -834,10 +834,11 @@ class App:
             elif isinstance(here, list) and isinstance(part, int) and 0 <= part < len(here):
                 here = here[part]
             else:
-                raise ValueError(f"The record has no field at {path!r}.")
+                raise ValueError("the record has no such field (" + ".".join(str(part) for part in path) + ")")
         try:
             return self.__record_builder().set_path(record, path, value)
-        except TypeError as error:                  # the record cannot be built with this kind of value
+        except (TypeError, AttributeError) as error:      # the record cannot be built with this kind of value
+            logger.warning("App.set_record_field: %r at %r could not be put into the record: %r", value, path, error)
             raise ValueError("it is not possible there (wrong kind of value)") from error
 
     def finish_record(self, record: ClientRecord) -> ClientRecord:
