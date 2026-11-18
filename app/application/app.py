@@ -786,13 +786,52 @@ class App:
         """ARCHIVE_ACTIVE, ARCHIVE_ARCHIVED or ARCHIVE_UNREADABLE for one saved assessment."""
         return AssessmentRepository.archive_state(saved)
 
-    def record_from_reading(self, extracted: dict, today: str = "") -> tuple[ClientRecord, list[dict]]:
-        """The client record made from the AI's reading of documents, and one entry for each field
-        left out because no client record can have that value: {"path", "message", "optional_field"}.
-        Raises ValueError, saying what is wrong, if today is not a YYYY-MM-DD date or if the
-        reading as a whole cannot be a record."""
-        record, _, dropped = self.record_builder(today).build(extracted, "")
+    def record_from_reading(self, extracted: dict, today: str = "",
+                            client_ref: str = "") -> tuple[ClientRecord, list[dict]]:
+        """The client record made from the AI's reading of documents (client_ref is its reference, none yet
+        if not given), and one entry for each field left out because no client record can have that value:
+        {"path", "message", "optional_field"}. Raises ValueError, saying what is wrong, if today is not a
+        YYYY-MM-DD date or if the reading as a whole cannot be a record."""
+        record, _, dropped = self.record_builder(today).build(extracted, client_ref)
         return record, dropped
+
+    def missing_fields(self, record: ClientRecord) -> list[dict]:
+        """The required fields of a record filled from documents that are still empty or unusable, in form
+        order: {"path", "label", "kind", ...}. Raises ValueError if record is not a ClientRecord."""
+        App.__need_record(record)
+        return self.record_builder().missing_fields(record)
+
+    def set_record_field(self, record: ClientRecord, path: list, value: object) -> ClientRecord:
+        """A copy of record with the value at path (a path from missing_fields) replaced. Raises ValueError,
+        saying what is wrong, if record is not a ClientRecord, the path does not lead to a field, or the
+        value is not possible there."""
+        App.__need_record(record)
+        if not isinstance(path, list) or not path or not all(
+                isinstance(part, (str, int)) and not isinstance(part, bool) for part in path):
+            raise ValueError("The field to change must be given as a path of names and positions.")
+        try:
+            return self.record_builder().set_path(record, path, value)
+        except (KeyError, IndexError, TypeError) as error:
+            raise ValueError(f"The record has no field at {path!r}.") from error
+
+    def finish_record(self, record: ClientRecord) -> ClientRecord:
+        """The record with its current job copied into "career" again, after the officer has edited the jobs.
+        Raises ValueError if record is not a ClientRecord."""
+        App.__need_record(record)
+        return self.record_builder().finish(record)
+
+    def reading_summary(self, record: ClientRecord, from_documents: ClientRecord) -> list[dict]:
+        """One row per field for the officer to check: its value and where it came from ("documents",
+        "edited", "entered" or "blank"). from_documents is the record as first made from the reading. Raises
+        ValueError if either is not a ClientRecord."""
+        App.__need_record(record)
+        App.__need_record(from_documents)
+        return self.record_builder().summarise(record, from_documents)
+
+    @staticmethod
+    def __need_record(record: object) -> None:
+        if not isinstance(record, ClientRecord):
+            raise ValueError("A client record is needed.")
 
     def reading_problems(self, record: ClientRecord, today: str = "") -> list[str]:
         """Things worth a second look in a record filled from documents. [] = nothing spotted."""

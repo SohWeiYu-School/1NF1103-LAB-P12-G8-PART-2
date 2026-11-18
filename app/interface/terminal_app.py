@@ -4,7 +4,6 @@ import functools
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any
 
 from app.application.app import App
 from app.interface.case_builder import CaseBuilder
@@ -256,14 +255,13 @@ class TerminalApp:
             extracted = {}
 
         # 3. Build the record and ask for anything missing
-        builder = app.record_builder()
         try:
             client_ref = app.new_client_ref()
         except ValueError as error:
             self.__ui.show_error(str(error))
             return None
         try:
-            document_record, _, dropped = builder.build(extracted, client_ref)
+            document_record, dropped = app.record_from_reading(extracted, client_ref=client_ref)
         except ValueError as error:
             logger.error("TerminalApp.__new_client_from_documents: the AI's reading is not a possible record: %r",
                          error)
@@ -271,37 +269,37 @@ class TerminalApp:
             if not self.__ui.ask_yes_no("Type the details in yourself?"):
                 return None
             extracted = {}
-            document_record, _, dropped = builder.build(extracted, client_ref)
+            document_record, dropped = app.record_from_reading(extracted, client_ref=client_ref)
         if dropped:
             messages = [entry["message"] for entry in dropped]
             logger.warning("TerminalApp.__new_client_from_documents: left out of the AI's reading: %s",
                            " | ".join(messages))
             self.__ui.show_dropped_fields(messages)
         record = document_record
-        missing = builder.missing_fields(record)
+        missing = app.missing_fields(record)
         self.__ui.show_missing_intro(len(missing))
         for field in missing:
-            record = self.__fill_field(builder, record, field)
+            record = self.__fill_field(record, field)
         # a dropped detail the form does not insist on is asked for too: the message said to enter it
         optional = [entry["optional_field"] for entry in dropped if entry["optional_field"]]
         if optional:
             self.__ui.show_optional_intro(len(optional))
             for field in optional:
-                record = self.__fill_field(builder, record, field, optional=True)
+                record = self.__fill_field(record, field, optional=True)
 
         # 4. Summary to check, edit until right, then save or discard
         notes = list(extracted.get("notes") or []) + list(warnings)
         while True:
-            self.__report_view.show_document_summary(builder.summarise(record, document_record), paths, notes,
-                                                     builder.check(record))
+            self.__report_view.show_document_summary(app.reading_summary(record, document_record), paths, notes,
+                                                     app.reading_problems(record))
             action = self.__ui.ask_document_record_action()
             if action == "discard":
                 self.__ui.show_message("\nClient discarded. Nothing was saved.")
                 return None
             if action == "edit":
-                record = builder.finish(self.__client_form.edit_existing_client(record, app.upload_document))
-                for field in builder.missing_fields(record):
-                    record = self.__fill_field(builder, record, field)
+                record = app.finish_record(self.__client_form.edit_existing_client(record, app.upload_document))
+                for field in app.missing_fields(record):
+                    record = self.__fill_field(record, field)
                 continue
             break
 
@@ -319,15 +317,16 @@ class TerminalApp:
                                f"({len(record.documents())} document(s) attached).")
         return record if self.__client_form.ask_after_save(record) else None
 
-    def __fill_field(self, builder: Any, record: ClientRecord, field: dict, optional: bool = False) -> ClientRecord:
+    def __fill_field(self, record: ClientRecord, field: dict, optional: bool = False) -> ClientRecord:
         """Ask the officer for one missing detail until the record accepts it. An optional detail
         may be left empty by pressing Enter (the record is then unchanged)."""
         while True:
             try:
                 if optional:
                     answer = self.__client_form.ask_optional_field(field)
-                    return record if answer in (None, []) else builder.set_path(record, field["path"], answer)
-                return builder.set_path(record, field["path"], self.__client_form.ask_missing_field(field))
+                    return record if answer in (None, []) else self.__app.set_record_field(record, field["path"], answer)
+                return self.__app.set_record_field(record, field["path"],
+                                                   self.__client_form.ask_missing_field(field))
             except ValueError as error:
                 logger.warning("TerminalApp: %s was not accepted: %r", field["label"], error)
                 self.__ui.show_error(f"That value cannot be used because {error}. Please try again.")

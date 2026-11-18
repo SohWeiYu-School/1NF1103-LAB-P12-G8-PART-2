@@ -1856,3 +1856,45 @@ def test_saved_verdict_and_read_failed_are_public(app, tmp_path):
     app.read_failed("assessments", App.TERMINAL)
     log = app.audit_log(AuditFilter(preset="1"))
     assert [event.action for event in log.events] == ["data_unavailable"]
+
+
+# ----- a record filled from documents, edited field by field (what the terminal's new-client screen uses) ----
+
+def test_a_reading_becomes_a_record_with_the_given_reference(app):
+    record, dropped = app.record_from_reading(_reading(), client_ref="CL-NEW00001")
+    assert record.client_ref == "CL-NEW00001"
+    assert app.record_from_reading(_reading())[0].client_ref != "CL-NEW00001"
+
+
+def test_the_missing_fields_can_be_filled_one_at_a_time_and_summarised(app):
+    first, _ = app.record_from_reading(_reading(), client_ref="CL-NEW00001")
+    missing = app.missing_fields(first)
+    assert missing and {"path", "label"} <= set(missing[0])
+    changed = first
+    for field in missing:
+        assert field["path"][-1] == "income_produced"            # the reading leaves one gap, the income of asset 3
+        changed = app.set_record_field(changed, field["path"], 0)
+    assert app.missing_fields(changed) == []
+    assert first.to_dict() != changed.to_dict()                 # a copy: the first record is as it was
+    assert app.finish_record(changed).client_ref == "CL-NEW00001"
+    rows = app.reading_summary(changed, first)
+    assert any(row["source"] == "entered" for row in rows)
+
+
+def test_set_record_field_refuses_an_impossible_value_and_a_bad_path_with_a_value_error(app):
+    record, _ = app.record_from_reading(_reading(), client_ref="CL-NEW00001")
+    with pytest.raises(ValueError):
+        app.set_record_field(record, ["career", "age"], 5)
+    for bad_path in (["no_such_group", "x"], ["investments", 99, "income_produced"], [], "career", [None], [True]):
+        with pytest.raises(ValueError):
+            app.set_record_field(record, bad_path, 1)
+
+
+def test_the_record_methods_refuse_something_that_is_not_a_client_record(app):
+    record, _ = app.record_from_reading(_reading())
+    bad = {"not": "a record"}
+    for call in (lambda: app.missing_fields(bad), lambda: app.finish_record(None),
+                 lambda: app.reading_summary(bad, record), lambda: app.reading_summary(record, None),
+                 lambda: app.set_record_field(None, ["career", "age"], 30)):
+        with pytest.raises(ValueError, match="client record is needed"):
+            call()

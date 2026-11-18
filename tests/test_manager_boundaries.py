@@ -94,13 +94,10 @@ def test_the_logic_manager_opens_no_files_and_makes_no_network_calls():
     assert problems == []
 
 
-@pytest.mark.parametrize("file, handed_out", [
-    ("web_app.py", {"clients", "assessments", "documents", "record_builder"}),
-    # the terminal's new-client screen works the record builder App makes for it, as App did before
-    ("terminal_app.py", {"clients", "assessments", "documents"}),
-])
-def test_a_front_end_asks_app_and_never_works_a_managers_object(file, handed_out):
+@pytest.mark.parametrize("file", ["web_app.py", "terminal_app.py"])
+def test_a_front_end_asks_app_and_never_works_a_managers_object(file):
     # #39: a front end may call App, but not take one of App's managers' objects and work it itself.
+    handed_out = {"clients", "assessments", "documents", "record_builder"}
     path = os.path.join(APP_DIR, "interface", file)
     with open(path, encoding="utf-8") as handle:
         tree = ast.parse(handle.read())
