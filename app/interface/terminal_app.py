@@ -47,6 +47,7 @@ class TerminalApp:
         self.__limiter: RateLimiter = limiter if limiter is not None else app.rate_limiter()
         self.__ui: ConsoleUI = ui or ConsoleUI()
         self.__report_view: ReportView = ReportView(self.__ui)
+        self.__admin_view: AdminView = AdminView(self.__ui)
         self.__client_form: ClientForm = ClientForm(self.__ui, self.__report_view)
         self.__case_builder: CaseBuilder = CaseBuilder(self.__ui, app.case_schema())
 
@@ -192,7 +193,7 @@ class TerminalApp:
                                  else message)
             return
         try:
-            AdminConsole(app, self.__ui, AdminView(self.__ui), account).run()
+            AdminConsole(app, self.__ui, self.__admin_view, account).run()
         finally:
             self.__audited(app.sign_out)(account)
             self.__ui.show_message("Signed out of the admin screens.")
