@@ -866,8 +866,9 @@ The diagram is still one page. Only box positions, frame positions, arrow routes
 
 **Rule for hidden arrows.** A dependency (`..>`) goes to the hidden draw.io layer **Background** (View > Layers to show it) when its target is:
 - a Domain Model class ("any group may import from app/model", CLAUDE.md section 3), including the "creates" arrows into the Model;
-- the «utility» `Formatter`; or
-- `AuditChain`, when the source is a front end (`WebApp`, `AdminConsole`, `AdminView`). `App ..> AuditChain` stays on the main layer.
+- the «utility» `Formatter`.
+
+Every other dependency stays visible. In particular `WebApp`, `AdminConsole` and `AdminView ..> AuditChain` stay on the main layer: `AuditChain` is a Logic class, so these are links from the IO Manager to the Logic Manager (CLAUDE.md section 3), and a reader must see them. (They were hidden in the first draft of this PR; the PR review pointed out that "anyone may use the Model" does not cover them.) The code never imports `app.logic` there: the interface only reads the object `App.verify_audit_log()` returns. A later code change could have `App` return a Model result instead, which would remove these three arrows.
 
 Arrows are moved, not deleted. A new "uses Model class" arrow must be put on the Background layer too. `CaseTimeline` is not marked «utility», so its arrows stay visible.
 
@@ -876,10 +877,10 @@ Arrows are moved, not deleted. A new "uses Model class" arrow must be put on the
 | | Arrows |
 |---|---|
 | All arrows in the file | 225 |
-| Visible on the main layer | 136 |
-| On the Background layer | 89 (83 into the Model, 3 into Formatter, 3 front-end AuditChain) |
+| Visible on the main layer | 139 |
+| On the Background layer | 86 (83 into the Model, 3 into Formatter) |
 
-Structural arrows (inheritance 23, realisation 2, composition 39, aggregation 16, association 28) are all visible, plus 28 dependencies between non-Model classes.
+Structural arrows (inheritance 23, realisation 2, composition 39, aggregation 16, association 28) are all visible, plus 31 dependencies between non-Model classes.
 
 **Scan.** Round trip PROBLEMS 0, relationships 225 (221 confirmed + 4 accepted), missing from UML 0, total 0. `layout_check.py` 0. The scan reads every arrow whatever layer it is on.
 
@@ -888,23 +889,24 @@ Structural arrows (inheritance 23, realisation 2, composition 39, aggregation 16
 | Measure | Before | After |
 |---|---|---|
 | Canvas | 5,830 x 16,906 | 6,090 x 9,891 |
-| Arrows visible | 225 | 136 |
-| Total arrow length | 1,203 k px | 196 k px |
-| Mean / median arrow | 5,345 / 3,114 px | 1,444 / 914 px |
-| Arrows longer than 3,000 px | 114 | 17 |
-| Bends | 1,183 | 585 |
-| Crossings | 1,115 | 137 |
+| Arrows visible | 225 | 139 |
+| Total arrow length | 1,203 k px | 214 k px |
+| Mean / median arrow | 5,345 / 3,114 px | 1,540 / 916 px |
+| Arrows longer than 3,000 px | 114 | 20 |
+| Bends | 1,183 | 621 |
+| Crossings | 1,115 | 171 |
 
 **Hidden arrows are drawn grey, straight and below the boxes.** On the Background layer each arrow keeps its kind, verb, source and target, but has no route: draw.io joins the two boxes with a thin grey line. The layer sits before the main layer, so it is drawn underneath.
 
 **Guard.** `layout_check.py` fails (so the scan step shows a problem) when a file that has a Background layer also has any of these:
 - a dependency (`..>`) into a Domain Model class or into `Formatter` on the main layer;
-- a front end (`WebApp`, `AdminConsole`, `AdminView`) dependency on `AuditChain` on the main layer;
-- any arrow on the Background layer that is not a dependency.
+- any arrow on the Background layer that is not a dependency, or whose target is not a Model class or `Formatter` (so a link between managers can never be hidden).
+
+The guard lives in `~/Documents/uml-check-tools`, outside the repo, so it is run by hand with the scan; no CI step runs it.
 
 It reports 0 on the finished diagram. When you add a new "uses a Model class" arrow, draw it, then move it to the Background layer.
 
-**Hand-in files.** `uml/class_diagram_v4.pdf` (vector, one page) and `uml/class_diagram_v4.png` (scale 0.7, 4,295 x 6,956 px) are exports of this diagram with the Background layer off. Re-export them after any change (`draw.io -x -f pdf --crop`, and `-f png -s 0.7`).
+**Hand-in files.** `uml/class_diagram_v4.pdf` (vector, one page) and `uml/class_diagram_v4.png` (scale 0.7, 4,267 x 6,928 px) are exports of this diagram with the Background layer off. Re-export them after any change (`draw.io -x -f pdf --crop`, and `-f png -s 0.7`).
 
 **Tools changed** (in `~/Documents/uml-check-tools`, outside the repo):
 - `uml_arrows.py`, `Diagram.reroute_all` (about line 281): re-routes only arrows whose own tag has `parent="1"`; arrows on the Background layer keep their layer.
