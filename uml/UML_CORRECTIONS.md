@@ -723,3 +723,25 @@ round-trip PROBLEMS: 0; layout_check 0.
 - `Claims`: added private static `−__as_list(value, name) : list` (commit 21d3dc4).
 - Boxes changed size (`AuditFilter` widened), so the folders were re-packed, every line re-routed and the labels placed again.
   Scan 42 differences before (stage 1 = 1, 3 = 3, 4 = 17, 5 = 20, 6 = 1), 0 after; round-trip PROBLEMS: 0; layout_check 0.
+
+**Terminal front end, design-review follow-ups (18 Nov 2026)**
+- Why: lead-engineer review of `TerminalApp`. (1) Audit warnings must reach every actor, so each front end now checks
+  `App.audit_failure_message()` after an action and `App` shows nothing itself. (2) The limiter is handed in like `WebApp`'s
+  (`TerminalApp(app, ui, limiter)`), so the terminal's link to it is a stored association, not a passing dependency.
+  (3) No API-key name on screen (the AI-unavailable message is the plain one). (4) One typed private helper `__audited`
+  replaces nine untyped attributes. The code was right, so the diagram was brought up to it.
+- `TerminalApp`: `+__init__(app, ui = None, limiter : RateLimiter | None = None)`; added `−__limiter : RateLimiter`
+  and `−__audited(action : Callable[..., T]) : Callable[..., T]` (`T` is a module-level `TypeVar`, not a class member, so not drawn);
+  removed `−__require_settings`.
+- `App`: added `+audit_failure_message() : str`.
+- `Claims`: `−__as_list(value, name, example : str) : list «static»` gained `example`.
+- `DocumentRecordBuilder`: added `−__names(value : Any) : Any «static»`.
+- Arrows changed: `TerminalApp ..> RateLimiter : uses` became `TerminalApp -- RateLimiter : checks with` (as
+  `WebApp -- RateLimiter : checks with`; the scan now confirms it because the limiter is stored). `App ..> ReportView : uses`
+  became `: creates` (`App` builds one only to hand to `ClientForm`, app.py:211). `TerminalApp ..> AuditEvent : uses` removed:
+  `TerminalApp` never names `AuditEvent` or calls its methods; the events from `App.audit_trail()` / `last_activity()` go straight
+  into `TrailFilter.matches` and `ReportView`, which is "only passed on" under the drawing rule, so it is recorded in the
+  checker's not-drawn list (same as `AssessmentRunner → Verdict`). `ReportView ..> AuditEvent` stays (it reads the events).
+- Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
+  Scan 7 differences before (stage 3 = 2, 4 = 1, 5 = 4) plus 1 relationship, 0 after; round-trip PROBLEMS: 0; layout_check 0;
+  make_views SELF-CHECK OK.

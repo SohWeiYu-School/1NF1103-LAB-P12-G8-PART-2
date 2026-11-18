@@ -356,7 +356,6 @@ package "IO Manager (app/interface)" {
     --
     +start(arguments : list[str]) : int
     +run_menu() : None
-    -__require_settings() : None
     -__prepare_case(record : ClientRecord) : dict | None
     +assess_client_record(record : ClientRecord) : Verdict | None
     +run_case_file(path : str) : bool
@@ -372,7 +371,9 @@ package "IO Manager (app/interface)" {
     -__show_client_assessments(client_ref : str) : list[dict] | None
     -__ask_trail_filter() : TrailFilter
     -__show_trail(client_ref : str, trail_filter : TrailFilter) : None
-    +__init__(app : App, ui : ConsoleUI | None = None)
+    +__init__(app : App, ui : ConsoleUI | None = None, limiter : RateLimiter | None = None)
+    -__limiter : RateLimiter
+    -__audited(action : Callable[..., T]) : Callable[..., T]
   }
   class WebApp {
     -__app : App | None = None
@@ -874,6 +875,7 @@ package "Application (app/application)" {
     +sample_case_files() : list[str]
     +saved_verdict(saved : dict) : Verdict | None
     +set_record_field(record : ClientRecord, path : list, value : object) : ClientRecord
+    +audit_failure_message() : str
   }
   class AssessmentRunner {
     -__verdict_engine : VerdictEngine = VerdictEngine(...)
@@ -1155,6 +1157,7 @@ package "Logic Manager (app/logic)" {
     -__leaf_paths(record : dict) : list[list[str | int]]
     {static} -__set(record : dict, path : list[str | int], value : Any) : None
     -__without_impossible_fields(record : dict) : tuple[dict, list[dict]]
+    {static} -__names(value : Any) : Any
   }
   class Forecast {
     -__forecast : dict = {}
@@ -1599,7 +1602,7 @@ package "Domain Model (app/model)" {
     -__check_shares(composition : dict) : None
     +to_dict() : dict
     -__check_net_worth(value : float | None) : None
-    {static} -__as_list(value : object, name : str) : list
+    {static} -__as_list(value : object, name : str, example : str) : list
   }
   class ClientProfile {
     -__name : str = "" {get, set}
@@ -1965,7 +1968,7 @@ App ..> FlagTicket : creates
 App ..> MongoRepository : creates
 App ..> OverviewPage : creates
 App ..> RecordDiff : uses
-App ..> ReportView : uses
+App ..> ReportView : creates
 App ..> TerminalApp : creates
 App ..> Verdict : uses
 App ..> WebApp : creates
@@ -2102,10 +2105,9 @@ TerminalApp *-- "1" ClientForm
 TerminalApp *-- "1" ReportView
 TerminalApp -- App : calls
 TerminalApp -- ConsoleUI : prints via
-TerminalApp ..> AuditEvent : uses
+TerminalApp -- RateLimiter : checks with
 TerminalApp ..> AuditFilter : uses
 TerminalApp ..> ClientRecord : uses
-TerminalApp ..> RateLimiter : uses
 TerminalApp ..> TrailFilter : uses
 TerminalApp ..> Verdict : uses
 TextReader --|> DocumentReader
