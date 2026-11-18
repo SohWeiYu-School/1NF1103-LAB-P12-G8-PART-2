@@ -27,11 +27,6 @@ def app(tmp_path, monkeypatch):
     return App(ai_caller=None, data_folder=str(tmp_path))
 
 
-def _answers(monkeypatch, *typed):
-    waiting = iter(typed)
-    monkeypatch.setattr("builtins.input", lambda question="": next(waiting))
-
-
 def test_app_creates_every_manager_and_shares_one_config(app):
     assert app.config.policy["policy_version"]
     assert app.steps() == list(AssessmentRunner.STEPS)
@@ -67,14 +62,22 @@ def test_a_caller_decides_whether_ai_is_available(tmp_path, monkeypatch):
     assert App(caller, data_folder=str(tmp_path)).ai_available() is False
 
 
-def _save_replies_for_the_samples(app):
-    """Save made-up forecast replies for every sample case, as if the AI had answered before."""
+def _sample_cases() -> list[dict]:
+    """Every sample case in the forecasting layout (career_history and client_ref)."""
     folder = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "sample")
+    cases = []
     for name in sorted(os.listdir(folder)):
         with open(os.path.join(folder, name), encoding="utf-8") as handle:
             case = json.load(handle)
         if "career_history" in case and "client_ref" in case:
-            fake_services.save_forecast_replies(app.response_cache(), case)
+            cases.append(case)
+    return cases
+
+
+def _save_replies_for_the_samples(app):
+    """Save made-up forecast replies for every sample case, as if the AI had answered before."""
+    for case in _sample_cases():
+        fake_services.save_forecast_replies(app.response_cache(), case)
 
 
 def test_a_new_client_reference_is_checked_against_the_saved_clients(app, tmp_path):
@@ -96,45 +99,32 @@ def test_a_client_file_that_cannot_be_read_is_an_error_not_a_free_reference(app,
     assert "App.client_ref_taken" in caplog.text
 
 
-def test_every_sample_is_assessed_from_saved_replies_with_no_ai(app, capsys):
+def test_every_sample_is_assessed_from_saved_replies_with_no_ai(app):
     _save_replies_for_the_samples(app)
-    assert app.start(["--all-samples"]) == 0
-    out = capsys.readouterr().out
-    assert "only saved AI replies can be used" in out
-    assert "Deciding the verdict" in out
+    for case in _sample_cases():
+        result = app.assess(case, show_failures=False)
+        assert result is not None and result["forecast"] is not None
+        assert app.save_assessment(result)
     saved = app.assessments().load()
     assert len(saved) == 2
     assert all(record["outcome"] in ("PASSED", "MANUAL_REVIEW", "RISKY", "SERIOUS_RISK") for record in saved)
 
 
-def test_with_no_saved_replies_the_samples_still_get_a_verdict_but_the_run_reports_failure(app, capsys):
-    assert app.start(["--all-samples"]) == 1          # the forecast could not run
-    out = capsys.readouterr().out
-    assert "The forecast could not be completed and is left out" in out
+def test_with_no_saved_replies_the_samples_still_get_a_verdict_but_the_forecast_is_left_out(app, capsys):
+    for case in _sample_cases():
+        result = app.assess(case)
+        assert result is not None and result["forecast"] is None          # the forecast could not run
+        assert app.save_assessment(result)
+    assert "The forecast could not be completed and is left out" in capsys.readouterr().out
     assert len(app.assessments().load()) == 2
 
 
-def test_a_case_file_that_is_missing_is_reported_not_crashed(app, tmp_path, capsys):
-    assert app.start(["--case", str(tmp_path / "nowhere.json")]) == 1
-    assert "the case must be a JSON object" in capsys.readouterr().out
-
-
-def test_a_damaged_case_file_is_reported_not_crashed(app, tmp_path, capsys):
-    path = tmp_path / "broken.json"
-    path.write_text("{not json", encoding="utf-8")
-    assert app.start(["--case", str(path)]) == 1
-
-
-def test_an_unknown_option_is_refused_with_the_allowed_ones(app, capsys):
-    assert app.start(["--all-samples", "--demo"]) == 1
+@pytest.mark.parametrize("options", [["--demo"], ["--case", "x.json"], ["--all-samples"], ["--web", "--demo"]])
+def test_an_unknown_option_is_refused_with_the_allowed_ones(app, capsys, options):
+    assert app.start(options) == 1
     out = capsys.readouterr().out
-    assert "Unknown option --demo" in out and "--case FILE" in out
+    assert f"Unknown option {[o for o in options if o != '--web'][0]}" in out and "Allowed: --web" in out
     assert app.assessments().load() == []                   # nothing was run
-
-
-def test_case_needs_a_file_path(app, capsys):
-    assert app.start(["--case"]) == 1
-    assert "--case needs a file path" in capsys.readouterr().out
 
 
 def test_a_step_that_fails_is_left_out_and_the_assessment_carries_on(app, capsys):
@@ -222,56 +212,6 @@ def test_the_saved_assessment_keeps_its_layout(app):
         "counterparty", "evidence_sentence", "occupation_mismatch", "amount_explained_by_forecast"]
 
 
-def _saved_assessment(app) -> dict:
-    record = ClientRecord.from_dict(sample_case())
-    app.save_client(record)
-    case, _ = app.read_case(record)
-    fake_services.save_forecast_replies(app.response_cache(), case)
-    result = app.assess(case)
-    return app.assessments().find(app.save_assessment(result, record))
-
-
-def test_a_saved_assessment_can_be_opened_from_the_list(app, monkeypatch, capsys):
-    saved = _saved_assessment(app)
-    capsys.readouterr()
-    _answers(monkeypatch, "1", "y", "1", "y")         # every outcome, open one, the first, the evidence
-    app.list_assessments()
-    out = capsys.readouterr().out
-    assert f"COMBINED ASSESSMENT  {saved['client_ref']}" in out
-    assert saved["report"]["header"]["summary"][:40] in " ".join(out.split())
-    assert "FULL EVIDENCE  " in out
-
-
-def test_a_damaged_saved_assessment_is_reported_not_shown_or_crashed(app, tmp_path, monkeypatch, capsys, caplog):
-    saved = _saved_assessment(app)
-    records = app.assessments().load()
-    records[0]["outcome"] = "FINE"                    # not an outcome
-    with open(tmp_path / "local database" / "ai_assessments.json", "w", encoding="utf-8") as handle:
-        json.dump(records, handle)
-    capsys.readouterr()
-    _answers(monkeypatch, "1", "y", "1")
-    app.list_assessments()
-    out = capsys.readouterr().out
-    assert "This saved assessment could not be read" in out
-    assert "COMBINED ASSESSMENT" not in out
-    assert saved["assessment_id"] in caplog.text and "FINE" in caplog.text
-
-
-def test_the_menu_can_list_clients_and_leave(app, monkeypatch, capsys):
-    app.clients().save(sample_case())
-    _answers(monkeypatch, "6", "", "8")
-    app.run_menu()
-    out = capsys.readouterr().out
-    assert sample_case()["client_ref"] in out
-    assert "Goodbye." in out
-
-
-def test_an_invalid_menu_choice_is_asked_again(app, monkeypatch, capsys):
-    _answers(monkeypatch, "99", "abc", "8")
-    app.run_menu()
-    assert "Goodbye." in capsys.readouterr().out
-
-
 def test_syncing_with_no_database_reports_it_and_keeps_the_local_data(app):
     app.clients().save(sample_case())
     stats = app.sync_to_cloud()
@@ -320,93 +260,6 @@ def test_save_client_reports_a_record_that_could_not_be_saved(app, monkeypatch):
     assert app.save_client(ClientRecord.from_dict(sample_case())) is False
 
 
-def test_the_menu_reports_a_client_that_cannot_be_read_and_carries_on(app, monkeypatch, capsys):
-    app.clients().save(_broken_record())
-    _answers(monkeypatch, "4", sample_case()["client_ref"], "8")
-    app.run_menu()
-    out = capsys.readouterr().out
-    assert "could not be loaded" in out
-    assert "No client found" not in out                         # broken is not the same as missing
-    assert "Goodbye." in out
-
-
-def test_a_new_client_is_made_from_a_folder_of_documents(tmp_path, monkeypatch, capsys):
-    """Menu option 2: the AI reads the folder, the officer fills the one gap and saves."""
-    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.setenv("MONGODB_URI", "")
-    monkeypatch.setattr("app.interface.client_form.tk", None)          # no file explorer window
-    folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documents", "marcus_lim")
-    with open(folder + "_expected_extract.json", encoding="utf-8") as handle:
-        reading = json.load(handle)
-    app = App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))
-    #       menu  folder  income of asset 3  save  back to the menu  leave
-    _answers(monkeypatch, "2", folder, "0", "1", "3", "8")
-    app.run_menu()
-    assert "Client saved. Reference: CL-" in capsys.readouterr().out
-    saved = app.clients().load()
-    assert len(saved) == 1
-    record = app.find_client(saved[0]["client_ref"])
-    assert record.profile.name == reading["client"]["name"]
-    assert record.investments()[2].income_produced == 0
-    assert len(record.documents()) == len(os.listdir(folder))
-
-
-def test_an_impossible_value_in_the_reading_is_left_empty_named_and_asked_for_while_good_fields_are_kept(
-        tmp_path, monkeypatch, capsys, caplog):
-    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.setenv("MONGODB_URI", "")
-    monkeypatch.setattr("app.interface.client_form.tk", None)
-    folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documents", "marcus_lim")
-    with open(folder + "_expected_extract.json", encoding="utf-8") as handle:
-        reading = json.load(handle)
-    reading["client"].update(age=200, date_of_birth=None)
-    app = App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))
-    #       menu  folder  age (asked for)  income of asset 3  save  back to the menu  leave
-    _answers(monkeypatch, "2", folder, "45", "0", "1", "3", "8")
-    app.run_menu()
-    out = capsys.readouterr().out
-    assert "Age: the value read from the documents (200) is not possible" in out
-    assert "so it was left empty. Please enter it." in out
-    assert "cannot be used" not in out                        # the whole reading was not thrown away
-    assert "left out of the AI's reading" in caplog.text      # the details are logged
-    saved = app.find_client(app.clients().load()[0]["client_ref"])
-    assert saved.profile.name == reading["client"]["name"] and saved.profile.age == 45
-
-
-def _documents_with_a_bad_end_year(tmp_path, monkeypatch):
-    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.setenv("MONGODB_URI", "")
-    monkeypatch.setattr("app.interface.client_form.tk", None)
-    folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documents", "marcus_lim")
-    with open(folder + "_expected_extract.json", encoding="utf-8") as handle:
-        reading = json.load(handle)
-    reading["jobs"][0]["end_year"] = 2200                      # a past job the AI read as ending in 2200
-    return App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path)), folder
-
-
-def test_a_dropped_optional_end_year_is_asked_for_and_the_answer_is_kept(tmp_path, monkeypatch, capsys):
-    app, folder = _documents_with_a_bad_end_year(tmp_path, monkeypatch)
-    #       menu  folder  income of asset 3  end year of job 1  save  back  leave
-    _answers(monkeypatch, "2", folder, "0", "2003", "1", "3", "8")
-    app.run_menu()
-    out = capsys.readouterr().out
-    assert "end year: the value read from the documents (2200) is not possible" in out
-    assert "(2001-present)" in out and "blank = current job" in out         # the prompt says what blank means
-    # the officer sees the dropped details before being asked for anything
-    assert out.index("left empty") < out.index("required detail(s) weren't") < out.index("optional detail(s)")
-    saved = app.clients().load()[0]
-    assert saved["career_history"][0]["end_year"] == 2003
-    assert sum(job["end_year"] is None for job in saved["career_history"]) == 1
-
-
-def test_enter_on_a_dropped_optional_field_leaves_it_empty_and_does_not_block_saving(tmp_path, monkeypatch, capsys):
-    app, folder = _documents_with_a_bad_end_year(tmp_path, monkeypatch)
-    _answers(monkeypatch, "2", folder, "0", "", "1", "3", "8")
-    app.run_menu()
-    assert "Client saved. Reference: CL-" in capsys.readouterr().out
-    assert app.clients().load()[0]["career_history"][0]["end_year"] is None
-
-
 def test_the_crime_result_is_saved_in_the_match_layout(tmp_path, monkeypatch):
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("MONGODB_URI", "")
@@ -433,6 +286,7 @@ def test_a_bad_rate_limit_setting_is_reported_at_start_not_crashed(tmp_path, mon
     monkeypatch.setenv("MONGODB_URI", "")
     root = tmp_path / "root"
     shutil.copytree("config", root / "config")
+    shutil.copytree("app/schemas", root / "app" / "schemas")   # the case schema App needs
     policy = json.loads((root / "config" / "policy.json").read_text())
     policy["assessment_rate_limit"] = {"enabled": True, "cooldown_seconds": 60.5}
     (root / "config" / "policy.json").write_text(json.dumps(policy))
@@ -450,6 +304,7 @@ def test_unreadable_settings_stop_the_app_with_a_message_and_nothing_runs(tmp_pa
     monkeypatch.setenv("MONGODB_URI", "")
     root = tmp_path / "root"
     shutil.copytree("config", root / "config")
+    shutil.copytree("app/schemas", root / "app" / "schemas")   # the case schema App needs
     policy = root / "config" / "policy.json"
     if damage == "missing":
         policy.unlink()
@@ -514,42 +369,12 @@ def _damage(tmp_path, name):
     return path
 
 
-def test_the_menu_tells_the_user_when_the_client_database_cannot_be_read(app, tmp_path, monkeypatch, capsys, caplog):
-    path = _damage(tmp_path, "sow_cases.json")
-    _answers(monkeypatch, "6", "8")
-    app.run_menu()
-    out = capsys.readouterr().out
-    assert App.CLIENTS_UNAVAILABLE in out
-    assert "No clients saved yet" not in out
-    assert "damaged" in caplog.text                               # the real details are logged
-    assert "damaged" not in out and "JSONDecodeError" not in out  # and not shown
-    assert path.read_bytes() == b"[{broken"
-
-
-def test_the_menu_tells_the_user_when_the_saved_assessments_cannot_be_read(app, tmp_path, monkeypatch, capsys):
-    _damage(tmp_path, "ai_assessments.json")
-    _answers(monkeypatch, "5", "1", "8")
-    app.run_menu()
-    out = capsys.readouterr().out
-    assert out.count(App.ASSESSMENTS_UNAVAILABLE) == 2           # at start-up, and when listing
-    assert "saved assessment(s) loaded" not in out
-    assert "No assessments" not in out
-
-
 def test_find_client_raises_a_safe_message_when_the_database_cannot_be_read(app, tmp_path, caplog):
     _damage(tmp_path, "sow_cases.json")
     with pytest.raises(ValueError) as error:
         app.find_client("CL-1")
     assert str(error.value) == App.CLIENTS_UNAVAILABLE
     assert "App.find_client" in caplog.text
-
-
-def test_menu_find_client_shows_the_message_not_no_client_found(app, tmp_path, monkeypatch, capsys):
-    _damage(tmp_path, "sow_cases.json")
-    _answers(monkeypatch, "4", "CL-1", "8")
-    app.run_menu()
-    out = capsys.readouterr().out
-    assert App.CLIENTS_UNAVAILABLE in out and "No client found" not in out
 
 
 def test_saving_a_client_into_a_damaged_file_fails_and_keeps_the_file(app, tmp_path):
@@ -578,6 +403,7 @@ def _app_with_damaged_policy(tmp_path, monkeypatch):
     monkeypatch.setenv("MONGODB_URI", "")
     root = tmp_path / "root"
     shutil.copytree("config", root / "config")
+    shutil.copytree("app/schemas", root / "app" / "schemas")   # the case schema App needs
     (root / "config" / "policy.json").write_text("{broken")
     return root
 
@@ -638,10 +464,6 @@ def test_an_app_with_broken_settings_says_so_and_refuses_to_assess(tmp_path, mon
     case_path.write_text(json.dumps(sample_case()))
     with pytest.raises(RuntimeError, match="settings could not be loaded"):
         application.assess(sample_case())
-    with pytest.raises(RuntimeError, match="settings could not be loaded"):
-        application.run_case_file(str(case_path))
-    with pytest.raises(RuntimeError, match="settings could not be loaded"):
-        application.assess_client_record(ClientRecord.from_dict(sample_case()))
 
 
 def test_an_app_with_good_settings_reports_settings_ok(app):
@@ -749,6 +571,7 @@ def test_a_rate_limit_setting_that_is_not_an_object_is_logged_with_its_value(tmp
     monkeypatch.setenv("MONGODB_URI", "")
     root = tmp_path / "root"
     shutil.copytree("config", root / "config")
+    shutil.copytree("app/schemas", root / "app" / "schemas")   # the case schema App needs
     policy = json.loads((root / "config" / "policy.json").read_text())
     policy["assessment_rate_limit"] = "30 seconds"
     (root / "config" / "policy.json").write_text(json.dumps(policy))
@@ -854,22 +677,6 @@ def test_archive_and_restore_raise_the_safe_message_when_they_cannot_read(app, t
     assert "App.archive_assessment" in caplog.text and "App.restore_assessment" in caplog.text
 
 
-def test_the_menu_can_list_archived_assessments_too_and_marks_them(app, monkeypatch, capsys):
-    _two_saved(app)
-    app.archive_assessment("A1")
-    app.assessments().save({"assessment_id": "A3", "client_ref": "C-3", "kind": "onboarding",
-                            "archive_log": "broken", "outcome": "PASSED"})
-    capsys.readouterr()
-    _answers(monkeypatch, "1", "n")                   # every outcome: archived and damaged ones are hidden
-    app.list_assessments()
-    out = capsys.readouterr().out
-    assert "(archived)" not in out and "unreadable" not in out and "C-3" not in out
-    _answers(monkeypatch, str(len(Verdict.OUTCOMES) + 2), "n")     # the last option
-    app.list_assessments()
-    out = capsys.readouterr().out
-    assert out.count("(archived)") == 1 and out.count("(archive state unreadable)") == 1 and "C-3" in out
-
-
 @pytest.mark.parametrize("damage", ["missing", "damaged", "bad_entry", "not_a_list"])
 def test_a_bad_accounts_file_stops_the_app_like_a_bad_policy_file(tmp_path, monkeypatch, capsys, damage):
     import shutil
@@ -877,6 +684,7 @@ def test_a_bad_accounts_file_stops_the_app_like_a_bad_policy_file(tmp_path, monk
     monkeypatch.setenv("MONGODB_URI", "")
     root = tmp_path / "root"
     shutil.copytree("config", root / "config")
+    shutil.copytree("app/schemas", root / "app" / "schemas")   # the case schema App needs
     accounts = root / "config" / "accounts.json"
     if damage == "missing":
         accounts.unlink()
@@ -1231,13 +1039,16 @@ def test_an_audit_line_that_cannot_be_written_leaves_the_action_standing_and_is_
     assert "was not written" in caplog.text
 
 
-def test_the_terminal_is_told_when_the_audit_line_was_not_written_but_the_web_is_not_printed_to(
+def test_app_prints_nothing_when_an_audit_line_is_not_written_and_says_what_to_tell_the_user(
         app, tmp_path, capsys):
+    assert app.audit_failure_message() == ""
     break_audit(tmp_path)
     app.save_client(ClientRecord.from_dict(sample_case()), "Shareen")
+    assert capsys.readouterr().out == ""                  # App shows nothing, whoever the actor is
+    assert app.audit_failure_message() == App.AUDIT_NOT_WRITTEN
+    app.sync_to_cloud()                                  # nothing was saved
     assert capsys.readouterr().out == ""
-    app.sync_to_cloud()                                  # the terminal: nothing was saved
-    assert App.AUDIT_LINE_NOT_WRITTEN in capsys.readouterr().out
+    assert app.audit_failure_message() == App.AUDIT_LINE_NOT_WRITTEN
 
 
 def test_the_audit_failure_flag_is_reset_by_the_next_action(app, tmp_path):
@@ -1372,23 +1183,6 @@ def test_verifying_a_changed_log_reports_the_break_and_records_it_as_failed(app,
     assert (event.action, event.result, event.details["intact"]) == ("audit_verified", "failed", False)
 
 
-def test_the_menu_flow_that_reads_documents_records_every_step(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.setenv("MONGODB_URI", "")
-    monkeypatch.setattr("app.interface.client_form.tk", None)
-    folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documents", "marcus_lim")
-    with open(folder + "_expected_extract.json", encoding="utf-8") as handle:
-        reading = json.load(handle)
-    app = App(fake_ai.caller(documents_reply=reading), data_folder=str(tmp_path))
-    _answers(monkeypatch, "2", folder, "0", "1", "3", "8")
-    app.run_menu()
-    actions = _actions(app)
-    assert actions[0] == "autofill_used" and actions[-1] == "client_created"
-    assert actions.count("document_uploaded") == len(os.listdir(folder))
-    assert {event.actor for event in _events(app)} == {App.TERMINAL}
-    assert App.AUDIT_NOT_WRITTEN not in capsys.readouterr().out
-
-
 def test_a_hand_added_row_without_a_time_or_id_is_not_listed_but_verify_reports_it(app, tmp_path, caplog):
     app.sync_to_cloud("Shareen")
     path = tmp_path / "local database" / "audit_log.json"
@@ -1472,41 +1266,31 @@ def test_an_assessment_with_its_outcome_saved_says_record_saved_true_and_one_wit
     assert "record_saved" not in _events(app)[-1].details
 
 
-def test_the_terminal_is_told_when_the_outcome_could_not_be_written(app, tmp_path, capsys, monkeypatch):
-    monkeypatch.setattr("builtins.input", lambda question="": "n")        # the report asks about evidence
-    record = ClientRecord.from_dict(sample_case())
-    app.save_client(record)
-    case, _ = app.read_case(record)
-    fake_services.save_forecast_replies(app.response_cache(), case)
-    _damage(tmp_path, "sow_cases.json")
-    assert app.assess_client_record(record) is not None
-    out = capsys.readouterr().out
-    assert "Assessment saved." in out and App.OUTCOME_NOT_UPDATED in out
-
-
-def test_the_terminal_message_says_saved_only_when_something_was_saved(app, tmp_path, capsys):
+def test_the_failure_message_says_saved_only_when_something_was_saved(app, tmp_path, capsys):
     break_audit(tmp_path)
     app.save_client(ClientRecord.from_dict(sample_case()))                    # saved: "Saved, but ..."
-    out = capsys.readouterr().out
-    assert App.AUDIT_NOT_WRITTEN in out
+    assert app.audit_failure_message() == App.AUDIT_NOT_WRITTEN
     app.refused("Shareen", "opening the audit log")                           # nothing saved
+    assert app.audit_failure_message() == App.AUDIT_LINE_NOT_WRITTEN
     app.sync_to_cloud()
+    assert app.audit_failure_message() == App.AUDIT_LINE_NOT_WRITTEN
     app.upload_document(str(tmp_path / "missing.pdf"))                         # not kept
-    out = capsys.readouterr().out
-    assert App.AUDIT_NOT_WRITTEN not in out and out.count(App.AUDIT_LINE_NOT_WRITTEN) == 2
+    assert app.audit_failure_message() == App.AUDIT_LINE_NOT_WRITTEN
     source = tmp_path / "a.txt"
     source.write_text("x", encoding="utf-8")
     assert app.upload_document(str(source)) is not None                       # kept
-    assert App.AUDIT_NOT_WRITTEN in capsys.readouterr().out
+    assert app.audit_failure_message() == App.AUDIT_NOT_WRITTEN
+    assert capsys.readouterr().out == ""
 
 
 def test_an_archive_that_changed_something_says_saved_and_one_that_changed_nothing_writes_no_line(app, tmp_path, capsys):
     _two_saved(app)
     break_audit(tmp_path)
     app.archive_assessment("A1")
-    assert app.audit_write_failed() is True and App.AUDIT_NOT_WRITTEN in capsys.readouterr().out
+    assert app.audit_write_failed() is True and app.audit_failure_message() == App.AUDIT_NOT_WRITTEN
     app.archive_assessment("A1")                                               # already archived: no line, no message
-    assert app.audit_write_failed() is False and capsys.readouterr().out == ""
+    assert app.audit_write_failed() is False and app.audit_failure_message() == ""
+    assert capsys.readouterr().out == ""
 
 
 def test_without_an_audit_key_app_is_built_but_start_and_start_web_stop_with_a_message(tmp_path, monkeypatch, capsys,
@@ -1516,6 +1300,7 @@ def test_without_an_audit_key_app_is_built_but_start_and_start_web_stop_with_a_m
     monkeypatch.delenv("AUDIT_KEY", raising=False)
     import shutil
     shutil.copytree("config", tmp_path / "root" / "config")      # a root with no .env, so no key is read from it
+    shutil.copytree("app/schemas", tmp_path / "root" / "app" / "schemas")   # the case schema App needs
     application = App(ai_caller=None, root=str(tmp_path / "root"), data_folder=str(tmp_path / "data"))
     assert not application.audit_key_ok()
     for run in (lambda: application.start([]), lambda: application.start(["--web"]), application.start_web):
@@ -1614,6 +1399,7 @@ def test_a_bad_audit_setting_is_logged_and_the_defaults_are_used(tmp_path, monke
     monkeypatch.setenv("MONGODB_URI", "")
     root = tmp_path / "root"
     shutil.copytree("config", root / "config")
+    shutil.copytree("app/schemas", root / "app" / "schemas")   # the case schema App needs
     policy = json.loads((root / "config" / "policy.json").read_text())
     policy["audit"] = value
     (root / "config" / "policy.json").write_text(json.dumps(policy))
@@ -1740,6 +1526,7 @@ def test_a_log_without_a_key_cannot_be_checked_so_the_overview_says_so(tmp_path,
     monkeypatch.setenv("MONGODB_URI", "")
     import shutil
     shutil.copytree("config", tmp_path / "root" / "config")      # a root with no .env, so no key is read from it
+    shutil.copytree("app/schemas", tmp_path / "root" / "app" / "schemas")   # the case schema App needs
     seed_audit(tmp_path / "data", NIGHT_OWNER)
     monkeypatch.delenv("AUDIT_KEY")
     keyless = App(ai_caller=None, root=str(tmp_path / "root"), data_folder=str(tmp_path / "data"))
@@ -2022,3 +1809,183 @@ def test_flags_to_handle_is_known_only_after_the_flags_were_worked_out_in_this_r
     assert isinstance(flagged.flags_to_handle(), int) and flagged.flags_to_handle() > 0
     flagged.begin_request(ADMIN)
     assert flagged.flags_to_handle() is None
+
+
+# ----- menu 8: a client's history, assessments and archive/restore -------------------------------
+
+LOOK = ("Orbit Officer",)
+
+
+# ----- what the terminal front end asks App for -------------------------------------------------
+
+def test_archive_message_words_every_result_and_the_done_ones_are_news():
+    words = App.archive_message
+    assert words(App.ARCHIVE_CHANGED, True) == "Assessment archived. It is hidden from the lists, not deleted."
+    assert words(App.ARCHIVE_CHANGED, False) == "Assessment restored."
+    assert words(App.ARCHIVE_NO_CHANGE, True) == "This assessment is already archived."
+    assert words(App.ARCHIVE_NO_CHANGE, False) == "This assessment is not archived."
+    assert words(App.ARCHIVE_UNREADABLE, True) == "This assessment's archive record is damaged, so it cannot be changed."
+    assert words(App.ARCHIVE_NOT_SAVED, True) == "The assessment was not archived because saving failed. Please try again later."
+    assert words(App.ARCHIVE_NOT_SAVED, False) == "The assessment was not restored because saving failed. Please try again later."
+    assert words(App.ARCHIVE_BAD_REASON, True, "x" * 201).startswith("Nothing was archived. The reason is too long")
+    assert words(App.ARCHIVE_NOT_FOUND, True) == "That assessment could not be found, so nothing was changed."
+    assert words("something else", True) == App.ASSESSMENTS_UNAVAILABLE
+    assert App.ARCHIVE_DONE_RESULTS == (App.ARCHIVE_CHANGED, App.ARCHIVE_NO_CHANGE)
+
+
+def test_all_assessments_can_be_limited_to_one_outcome(app):
+    for number, outcome in ((1, "PASSED"), (2, "RISKY")):
+        assert app.assessments().save({"assessment_id": f"O{number}", "client_ref": "C-1", "kind": "onboarding",
+                                       "outcome": outcome, "assessed_at": f"2026-11-0{number}T00:00:00+00:00"})
+    assert [a["assessment_id"] for a in app.all_assessments(outcome="RISKY")] == ["O2"]
+    assert len(app.all_assessments()) == 2
+
+
+def test_app_hands_out_document_folders_and_the_case_schema(app, tmp_path):
+    assert app.list_document_folder(str(tmp_path / "nowhere")) is None
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "note.txt").write_text("hello", encoding="utf-8")
+    assert [os.path.basename(p) for p in app.list_document_folder(str(tmp_path / "docs"))] == ["note.txt"]
+    assert app.read_document_for_extraction(str(tmp_path / "docs" / "note.txt"))["file_name"] == "note.txt"
+    assert isinstance(app.case_schema(), dict) and app.case_schema()
+
+
+def test_saved_verdict_and_read_failed_are_public(app, tmp_path):
+    saved = {"assessment_id": "A1", "client_ref": "C-1", "assessed_at": "2026-11-01", "outcome": "PASSED",
+             "report": {"header": {}}}
+    assert app.saved_verdict(saved).report == {"header": {}}
+    assert app.saved_verdict({**saved, "outcome": "FINE"}) is None
+    app.read_failed("assessments", App.TERMINAL)
+    log = app.audit_log(AuditFilter(preset="1"))
+    assert [event.action for event in log.events] == ["data_unavailable"]
+
+
+# ----- a record filled from documents, edited field by field (what the terminal's new-client screen uses) ----
+
+def test_a_reading_becomes_a_record_with_the_given_reference(app):
+    record, dropped = app.record_from_reading(_reading(), client_ref="CL-NEW00001")
+    assert record.client_ref == "CL-NEW00001"
+    assert app.record_from_reading(_reading())[0].client_ref == ""          # none yet when not given
+
+
+def test_the_missing_fields_can_be_filled_one_at_a_time_and_summarised(app):
+    first, _ = app.record_from_reading(_reading(), client_ref="CL-NEW00001")
+    missing = app.missing_fields(first)
+    assert missing and {"path", "label"} <= set(missing[0])
+    changed = first
+    for field in missing:
+        assert field["path"][-1] == "income_produced"            # the reading leaves one gap, the income of asset 3
+        changed = app.set_record_field(changed, field["path"], 0)
+    assert app.missing_fields(changed) == []
+    assert first.to_dict() != changed.to_dict()                 # a copy: the first record is as it was
+    assert app.finish_record(changed).client_ref == "CL-NEW00001"
+    rows = app.reading_summary(changed, first)
+    assert any(row["source"] == "entered" for row in rows)
+
+
+def test_set_record_field_refuses_an_impossible_value_and_a_bad_path_with_a_value_error(app):
+    record, _ = app.record_from_reading(_reading(), client_ref="CL-NEW00001")
+    with pytest.raises(ValueError):
+        app.set_record_field(record, ["career", "age"], 5)
+    for bad_path in (["no_such_group", "x"], ["investments", 99, "income_produced"], [], "career", [None], [True],
+                     ["career", "no_such"], ["no_such"], ["career", "age", "deeper"]):
+        with pytest.raises(ValueError):
+            app.set_record_field(record, bad_path, 1)
+    stray = [key for key in app.set_record_field(record, ["career", "age"], 50).to_dict()["career"]
+             if key == "no_such"]
+    assert stray == []
+
+
+def test_a_value_of_the_wrong_kind_is_reported_as_not_possible_there_not_as_a_missing_field(app):
+    record, _ = app.record_from_reading(_reading(), client_ref="CL-NEW00001")
+    for value in ({"a": 1}, ["x"], object()):
+        with pytest.raises(ValueError) as error:
+            app.set_record_field(record, ["career", "age"], value)
+        assert "no field" not in str(error.value)
+
+
+def test_the_record_methods_refuse_something_that_is_not_a_client_record(app):
+    record, _ = app.record_from_reading(_reading())
+    bad = {"not": "a record"}
+    for call in (lambda: app.missing_fields(bad), lambda: app.finish_record(None),
+                 lambda: app.reading_summary(bad, record), lambda: app.reading_summary(record, None),
+                 lambda: app.set_record_field(None, ["career", "age"], 30)):
+        with pytest.raises(ValueError, match="client record is needed"):
+            call()
+
+
+# ----- the inputs of the public helpers are checked ------------------------------------------------
+
+@pytest.mark.parametrize("bad", [None, 5, ["x"], b"bytes"])
+def test_a_document_folder_must_be_text(app, bad):
+    with pytest.raises(ValueError, match="text"):
+        app.list_document_folder(bad)
+
+
+def test_saved_verdict_refuses_what_is_not_a_record_and_gives_none_without_a_report(app, caplog):
+    for bad in (None, "text", [1], 5):
+        with pytest.raises(ValueError, match="record"):
+            app.saved_verdict(bad)
+    assert app.saved_verdict({"assessment_id": "A1", "client_ref": "C-1", "assessed_at": "2026-11-01",
+                              "outcome": "PASSED"}) is None                # no report: not possible, and logged
+    assert "A1" in caplog.text
+    assert app.saved_verdict({"assessment_id": "A1", "client_ref": "C-1", "assessed_at": "2026-11-01",
+                              "outcome": "PASSED", "report": "text"}) is None
+
+
+def test_read_failed_checks_what_and_who(app):
+    for bad in ("databases", "", None, 5):
+        with pytest.raises(ValueError, match="client records, assessments"):
+            app.read_failed(bad)
+    with pytest.raises(ValueError, match="actor"):
+        app.read_failed("assessments", "Nobody Known")
+    with pytest.raises(ValueError, match="actor"):
+        app.read_failed("assessments", 5)
+    app.read_failed("client records")
+    app.read_failed("assessments", App.TERMINAL)
+    assert [e.action for e in app.audit_log(AuditFilter(preset="1")).events] == ["data_unavailable"]
+
+
+@pytest.mark.parametrize("path", [["claims", "asset_composition"], ["investments", 0], ["claims"]])
+def test_a_value_that_cannot_build_the_record_is_a_wrong_kind_of_value_and_is_logged(app, path, caplog):
+    record, _ = app.record_from_reading(_reading(), client_ref="CL-NEW00001")
+    with pytest.raises(ValueError) as error:
+        app.set_record_field(record, path, "x" if path[-1] == "asset_composition" else 5)
+    assert str(error.value) == "it is not possible there (wrong kind of value)"
+    assert "App.set_record_field" in caplog.text
+
+
+def test_every_field_the_terminal_may_ask_for_accepts_an_empty_answer(app):
+    record, _ = app.record_from_reading({})
+    fields = app.missing_fields(record)
+    assert fields
+    for field in fields:
+        app.set_record_field(record, field["path"], None)
+
+
+def test_the_set_record_field_messages_read_on_after_that_value_cannot_be_used_because(app):
+    record, _ = app.record_from_reading(_reading(), client_ref="CL-NEW00001")
+    with pytest.raises(ValueError) as error:
+        app.set_record_field(record, ["career", "no_such"], 1)
+    assert str(error.value) == "the record has no such field (career.no_such)"
+    with pytest.raises(ValueError) as error:
+        app.set_record_field(record, [], 1)
+    assert str(error.value) == "the field to change must be given as a path of names and positions"
+    for text in ("the record has no such field (career.no_such)", "it is not possible there (wrong kind of value)"):
+        assert text[0].islower() and not text.endswith(".")
+
+
+def test_an_unreadable_case_schema_stops_the_app_instead_of_accepting_every_case(tmp_path, monkeypatch, capsys, caplog):
+    """An empty schema would let every case through unchecked: App must say the settings are broken."""
+    import shutil
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    root = tmp_path / "root"
+    shutil.copytree("config", root / "config")
+    (root / "app" / "schemas").mkdir(parents=True)
+    (root / "app" / "schemas" / "case_input.schema.json").write_text("{broken", encoding="utf-8")
+    application = App(ai_caller=None, root=str(root), data_folder=str(tmp_path / "data"))
+    assert application.settings_ok() is False
+    assert application.start([]) == 1
+    assert App.SETTINGS_UNAVAILABLE in capsys.readouterr().out
+    assert "case schema" in caplog.text

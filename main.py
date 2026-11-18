@@ -5,9 +5,6 @@ It does two things: it chooses the AI brand (OpenAI, with Gemini as the fallback
 starts App. App creates every other object and coordinates them.
 
     python main.py                          interactive menu
-    python main.py --case data/sample/case_001.json
-                                            assess one sample case
-    python main.py --all-samples            assess every sample case in the forecasting format
     python main.py --web                    the web app (http://127.0.0.1:5000)
 """
 

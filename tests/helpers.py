@@ -52,8 +52,8 @@ def saved_replies(case_id: str) -> dict:
     except (OSError, ValueError, KeyError, TypeError):
         replies = {}
     if not replies:
-        pytest.skip(f"no saved AI replies for {client_ref} in the database yet - run the system on "
-                    f"{case_id} first (python main.py --case data/sample/{case_id}.json)")
+        pytest.skip(f"no saved AI replies for {client_ref} in the database yet - assess {case_id} "
+                    "in the system first, so its AI replies are saved")
     return replies
 
 

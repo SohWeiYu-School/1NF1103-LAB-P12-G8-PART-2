@@ -1,7 +1,9 @@
 """ConsoleUI: everything typed into or printed on the terminal."""
 
 import datetime
+import getpass
 import os
+import unicodedata
 from typing import Callable
 
 
@@ -18,22 +20,29 @@ class ConsoleUI:
     LETTERS: str = " '.-"                    # allowed besides letters: names, nationality, countries
     LABEL: str   = " '.-&/,()%#0123456789"     # job titles, industries, employers, asset descriptions
     MAX_EMPLOYEES: int = 10_000_000
+    MENU_CHOICES: tuple[str, ...] = ("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
 
     def __init__(self, read: Callable[[str], str] | None = None,
-                 write: Callable[[str], None] | None = None) -> None:
-        """read asks one question and returns the answer typed; write shows one line. Both
-        default to the terminal (input and print). They are looked up when used, not here, so a
-        test that replaces builtins.input still answers an App's ConsoleUI."""
+                 write: Callable[[str], None] | None = None,
+                 secret: Callable[[str], str] | None = None) -> None:
+        """read asks one question and returns the answer typed; write shows one line; secret asks one question
+        whose answer must not be shown (a password) and returns it. They default to the terminal (input, print
+        and getpass). They are looked up when used, not here, so a test that replaces builtins.input still
+        answers an App's ConsoleUI."""
         if read is not None and not callable(read):
             raise ValueError("read must be a function that asks a question and returns the answer")
         if write is not None and not callable(write):
             raise ValueError("write must be a function that shows a line of text")
+        if secret is not None and not callable(secret):
+            raise ValueError("secret must be a function that asks a question and returns the hidden answer")
         self.__read: Callable[[str], str] = read if read is not None else (lambda question: input(question))
         self.__write: Callable[[str], None] = write if write is not None else (lambda text: print(text))
+        self.__secret: Callable[[str], str] = secret if secret is not None else (
+            lambda question: getpass.getpass(question))
         self.__width: int = len(ConsoleUI.LINE)
 
     def show_app_menu(self) -> str:
-        """Display the unified main menu and return the user's choice (1-8)."""
+        """Display the unified main menu and return the user's choice: "1" to "9", or "0" to quit."""
         self.__write("\n========================================")
         self.__write("     ORBIT · SOURCE OF WEALTH SCREENING")
         self.__write("========================================")
@@ -44,12 +53,14 @@ class ConsoleUI:
         self.__write("5. List Saved Assessments")
         self.__write("6. View All Clients")
         self.__write("7. Manual Sync to Cloud Database")
-        self.__write("8. Quit")
+        self.__write("8. Client History (assessments, archive/restore, audit trail)")
+        self.__write("9. Admin: audit and flags")
+        self.__write("0. Quit")
         while True:
-            choice = self.__read("\nEnter your choice (1-8): ").strip()
-            if choice in ("1", "2", "3", "4", "5", "6", "7", "8"):
+            choice = self.__read("\nEnter your choice (0-9): ").strip()
+            if choice in ConsoleUI.MENU_CHOICES:
                 return choice
-            self.__write("Invalid choice. Please enter 1 to 8.")
+            self.__write("Invalid choice. Please enter a number from 1 to 9, or 0 to quit.")
 
     def show_message(self, text: str) -> None:
         #Print an informational message.
@@ -120,6 +131,18 @@ class ConsoleUI:
         options = ["Save this client", "Edit something first", "Discard (nothing is saved)"]
         return ["save", "edit", "discard"][self.ask_choice("\nIs everything correct?", options)]
 
+    @staticmethod
+    def printable(lines: list[str]) -> str:
+        """The lines joined with newlines, after every control or format character (an escape, a bell, a bidi
+        override, a stray line break inside a stored value) is replaced by "?": the log, notes and values come
+        from saved data, and must not be able to move the cursor or recolour a terminal. A tab or a no-break
+        space becomes a plain space; every other character (accents, Chinese, dashes, arrows) stays."""
+        def clean(char: str) -> str:
+            if char in "\t\u00a0":
+                return " "
+            return "?" if unicodedata.category(char) in ("Cc", "Cf") else char
+        return "\n".join("".join(clean(char) for char in line) for line in lines)
+
     def show(self, text: str = "") -> None:
         self.__write(text)
 
@@ -132,6 +155,11 @@ class ConsoleUI:
     def read_answer(self, question: str) -> str:
         """Ask one question and return what was typed (the terminal unless a read function was handed in)."""
         return self.__read(question)
+
+    def ask_password(self, question: str) -> str:
+        """Ask one question whose answer is never shown, echoed or logged (the terminal's getpass), and return
+        it exactly as typed: a password may start or end with a space."""
+        return self.__secret(f"{question}: ")
 
     def ask_text(self, question: str, min_length: int = 1) -> str:
         while True:
@@ -175,13 +203,14 @@ class ConsoleUI:
                 continue
             return amount
 
-    def ask_choice(self, question: str, options: list[str], allow_back: bool = False) -> int | None:
-        """Show a numbered list and return the index picked. With allow_back, 0 returns None."""
+    def ask_choice(self, question: str, options: list[str], allow_back: bool = False,
+                   back_label: str = "Back to the main menu") -> int | None:
+        """Show a numbered list and return the index picked. With allow_back, 0 (shown as back_label) returns None."""
         self.show(question)
         for number, option in enumerate(options, start=1):
             self.show(f"  {number}. {option}")
         if allow_back:
-            self.show("  0. Back to the main menu")
+            self.show(f"  0. {back_label}")
         number = self.ask_int("Choose a number", 0 if allow_back else 1, len(options))
         return None if number == 0 else number - 1
 
@@ -193,6 +222,10 @@ class ConsoleUI:
             if answer in ("n", "no"):
                 return False
             self.show_error("Please answer y or n.")
+
+    def ask_optional_text(self, question: str) -> str:
+        """Ask one question; a blank answer is allowed and comes back as an empty string."""
+        return self.read_answer(f"{question}: ").strip()
 
     def ask_year(self, question: str, minimum: int = 1940, maximum: int | None = None,
                  allow_blank: bool = False) -> int | None:

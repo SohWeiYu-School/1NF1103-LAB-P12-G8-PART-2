@@ -676,3 +676,184 @@ round-trip PROBLEMS: 0; layout_check 0.
   and `App` → `ResponseCache` stay.
 - Boxes changed size, so the folders were re-packed, every line re-routed and the labels placed again.
   Scan 32 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.
+
+**Terminal parity, phase 1 (18 Nov 2026): the terminal shows a client's history, archives and restores, and tags incomplete assessments**
+- Why: the terminal now does what the web pages do (menu 8: one client's assessments, archive/restore, open one in full,
+  the audit history with a Show/When filter; the client list shows the last activity; an assessment that did not fully
+  run is tagged "(incomplete)"). The code was right, so the diagram was brought up to it.
+- `ConsoleUI`: `ask_choice` gained `back_label : str = "Back to the main menu"`; added `+MENU_CHOICES : tuple[str, ...] = (...) «const»`
+  and `+ask_optional_text(question : str) : str`.
+- `ReportView`: `show_client_list(records, activity : dict[str, AuditEvent] | None = None, activity_note : str = "")`;
+  added `+show_client_history`, `+format_client_history` (events, total, unreadable), `+format_assessment_row(record, state, labelled) «static»`,
+  and the private static helpers `−__missing_parts`, `−__singapore_time`, `−__last_activity_text`, `−__by_day`, `−__fit`, `−__text_or_unknown`.
+- `App`: added private `−__pick_assessment`, `−__open_assessment`, `−__change_archive`, `−__client_history`,
+  `−__show_client_assessments`, `−__ask_trail_filter`, `−__show_trail`.
+- Arrows added (all "uses"): `App ..> TrailFilter`, `ReportView ..> AuditEvent`, `ReportView ..> AuditFilter`.
+- The diagram states no 1-8 range for `show_app_menu`, so nothing to change there.
+- Boxes changed size, so the folders were re-packed, every line re-routed and the labels placed again.
+  Scan 23 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0.
+
+**Terminal front end (18 Nov 2026): the terminal's screens move out of App into TerminalApp, the command-line twin of WebApp**
+- Why: design review. `App` did two jobs, coordinating the managers and driving the terminal screens. The usual pattern
+  is one core and two front ends, so the terminal menu and every terminal screen moved to a new class `TerminalApp`
+  (`app/interface/terminal_app.py`), next to `WebApp`. CLAUDE.md §2 and §3 now name `WebApp` and `TerminalApp` as the two
+  front ends that call `App`. The code was right, so the diagram was brought up to it.
+- New class `TerminalApp` (IO Manager): `+GOODBYE «const»`; attributes `−__app`, `−__ui`, `−__report_view`, `−__client_form`,
+  `−__case_builder`; `+__init__(app, ui = None)`, `+start`, `+run_menu`, `+assess_client_record`, `+run_case_file`,
+  `+list_assessments` and the private screens `−__require_settings`, `−__prepare_case`, `−__maybe_assess`, `−__show_step`,
+  `−__new_client_from_documents`, `−__fill_field`, `−__pick_assessment`, `−__open_assessment`, `−__change_archive`,
+  `−__client_history`, `−__show_client_assessments`, `−__ask_trail_filter`, `−__show_trail`.
+- `App`: removed the moved members (`−__report_view`, `run_menu`, `run_case_file`, `assess_client_record`, `list_assessments`
+  and the 12 private screen methods). Added public helpers the front ends call: `archive_message «static»`,
+  `case_schema`, `finish_record`, `is_forecasting_case`, `list_document_folder`, `load_case_file`, `missing_fields`,
+  `read_failed`, `reading_summary`, `sample_case_files`, `saved_verdict`, `set_record_field`; private `−__need_record «static»`
+  and `−__case_schema`; constants `+ARCHIVE_DONE_RESULTS`, `+READ_TARGETS`. Changed: `record_builder` is now private
+  `−__record_builder`; `all_assessments(include_archived, outcome = "")`; `read_document_for_extraction(path, name = "")`;
+  `record_from_reading(extracted, today, client_ref = "")`.
+- `AuditFilter`: added `+RULE_BOTH_DATES`, `+RULE_FUTURE`, `+SHOWING_ALL` and `+range_problem(date_from, date_to, today) «static»`.
+- Arrows added: `App ..> TerminalApp : creates` (as `App ..> WebApp`), `TerminalApp -- App : calls`,
+  `TerminalApp *-- "1" ReportView`, `TerminalApp *-- "1" ClientForm`, `TerminalApp *-- "1" CaseBuilder` (it builds them),
+  `TerminalApp -- ConsoleUI : prints via` (handed in, as `ClientForm -- ConsoleUI`), `TerminalApp ..> RateLimiter : uses`
+  (it only gets the limiter from `App` inside a method, so a dependency, not WebApp's stored link), and "uses": `ClientRecord`, `Verdict`, `TrailFilter`, `AuditFilter`, `AuditEvent`.
+- Arrows removed or changed: `App ..> TrailFilter` removed (the trail filter screens are in `TerminalApp` now);
+  `App *-- ReportView` became `App ..> ReportView : uses` (`App` no longer stores one, it only passes one to `ClientForm`).
+- Not drawn: `TerminalApp → DocumentStore` (false match: `record.documents()` is a list of entries), recorded in the
+  checker's not-drawn list like `WebApp`.
+- `main.py` note unchanged: it still only starts `App`.
+- `Claims`: added private static `−__as_list(value, name) : list` (commit 21d3dc4).
+- Boxes changed size (`AuditFilter` widened), so the folders were re-packed, every line re-routed and the labels placed again.
+  Scan 42 differences before (stage 1 = 1, 3 = 3, 4 = 17, 5 = 20, 6 = 1), 0 after; round-trip PROBLEMS: 0; layout_check 0.
+
+**Terminal front end, design-review follow-ups (18 Nov 2026)**
+- Why: lead-engineer review of `TerminalApp`. (1) Audit warnings must reach every actor, so each front end now checks
+  `App.audit_failure_message()` after an action and `App` shows nothing itself. (2) The limiter is handed in like `WebApp`'s
+  (`TerminalApp(app, ui, limiter)`), so the terminal's link to it is a stored association, not a passing dependency.
+  (3) No API-key name on screen (the AI-unavailable message is the plain one). (4) One typed private helper `__audited`
+  replaces nine untyped attributes. The code was right, so the diagram was brought up to it.
+- `TerminalApp`: `+__init__(app, ui = None, limiter : RateLimiter | None = None)`; added `−__limiter : RateLimiter`
+  and `−__audited(action : Callable[..., T]) : Callable[..., T]` (`T` is a module-level `TypeVar`, not a class member, so not drawn);
+  removed `−__require_settings`.
+- `App`: added `+audit_failure_message() : str`.
+- `Claims`: `−__as_list(value, name, example : str) : list «static»` gained `example`.
+- `DocumentRecordBuilder`: added `−__names(value : Any) : Any «static»`.
+- Arrows changed: `TerminalApp ..> RateLimiter : uses` became `TerminalApp -- RateLimiter : checks with` (as
+  `WebApp -- RateLimiter : checks with`; the scan now confirms it because the limiter is stored). `App ..> ReportView : uses`
+  became `: creates` (`App` builds one only to hand to `ClientForm`, app.py:211). `TerminalApp ..> AuditEvent : uses` removed:
+  `TerminalApp` never names `AuditEvent` or calls its methods; the events from `App.audit_trail()` / `last_activity()` go straight
+  into `TrailFilter.matches` and `ReportView`, which is "only passed on" under the drawing rule, so it is recorded in the
+  checker's not-drawn list (same as `AssessmentRunner → Verdict`). `ReportView ..> AuditEvent` stays (it reads the events).
+- Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
+  Scan 7 differences before (stage 3 = 2, 4 = 1, 5 = 4) plus 1 relationship, 0 after; round-trip PROBLEMS: 0; layout_check 0;
+  make_views SELF-CHECK OK.
+
+## Phase 2: terminal admin screens (2026-11-18): code changed, the diagram follows it
+
+**Terminal admin screens (menu 9)**
+- Why: terminal parity. The admin pages of `WebApp` now have a command-line twin: `TerminalApp` menu 9 signs an admin in
+  and runs an `AdminConsole`, which prints through an `AdminView`. The code was right, so the diagram was brought up to it.
+- New class `AdminConsole` (IO Manager, `app/interface/admin_console.py`): constants `+SAFE_ERRORS`, `+MENU`,
+  `+LOG_PRESET_NAMES`, `+RESULT_NAMES`, `+SORT_NAMES`; attributes `−__app`, `−__ui`, `−__view`, `−__account`, `−__listed`;
+  `+__init__(app, ui, view, account)`, `+run`, and the private screens `−__overview`, `−__open_flag`, `−__client_flags`,
+  `−__activity_log`, `−__verify`, `−__ask_filter`, `−__ask_dates`, `−__ask_groups`, `−__ask_officer`, `−__ask_text`,
+  `−__show_error`, `−__show_audit_warning`, and the statics `−__now`, `−__on_page`, `−__rejected`.
+- New class `AdminView` (IO Manager, `app/interface/admin_view.py`): constants `+FAILURE_COLUMN`, `+LOG_PRESET_NAMES`,
+  `+PRESET_NAMES`, `+SGT_FORMAT`; attribute `−__ui`; `+__init__(ui = None)`, `+format_overview`, `+format_flag`,
+  `+format_client_flags`, `+format_log_page`, `+format_chain`, `+format_filter`, the matching `+show_overview`, `+show_flag`,
+  `+show_client_flags`, `+show_log_page`, `+show_chain`, and the private `−__flag_rows`, `−__failure_table`, and statics
+  `−__event_line`, `−__change`, `−__plural`, `−__printable`, `−__sgt`.
+- `ConsoleUI`: `+__init__` gained `secret : Callable[[str], str] | None = None`; added `−__secret` and `+ask_password(question) : str`
+  (the terminal's hidden password prompt). `MENU_CHOICES` now ends `"9", "0"`; the diagram shows its value as `(...)`, so no text changed.
+- `TerminalApp`: added `+OFFICER_AT_ADMIN «const»` and `−__admin() : None` (menu 9).
+- `ReportView`: added `−__printable(lines : list[str]) : str «static»` (control characters in stored text become "?").
+- `AuditFilter`: no change in the code since the last scan, so no change in the diagram.
+- Arrows added: `AdminConsole -- App : calls`, `AdminConsole -- ConsoleUI : prints via`, `AdminConsole -- AdminView : shows with`,
+  `AdminConsole -- Account : acts for` and `AdminConsole o-- "0..*" FlagTicket : lists` (both stored in attributes, so associations,
+  not dependencies), `AdminConsole ..> AuditFilter / OverviewPage / AuditChain / AuditPage : uses`,
+  `AdminView -- ConsoleUI : prints via`, `AdminView ..> AuditEvent / AuditFilter / AuditPage / FlagTicket / OverviewPage : uses`,
+  `TerminalApp ..> AdminConsole : creates`, `TerminalApp ..> AdminView : creates` (made inside `__admin`, not stored).
+- Not drawn: `AdminConsole → AuditEvent` (only a class constant is used), in the checker's not-drawn list.
+- Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
+  Scan 8 differences before (stage 1 = 2, 3 = 1, 5 = 5) plus 2 relationships, 0 after; round-trip PROBLEMS: 0; layout_check 0;
+  make_views SELF-CHECK OK.
+
+**Phase 2 design review follow-ups (2026-11-18)**
+- Why: design review of the terminal admin screens (commits ef38385, 0c5c8dd, e2ca156). The code was right, so the diagram was brought up to it.
+- `ConsoleUI`: added `+printable(lines : list[str]) : str «static»`. The control-character clean-up lives in one place now, so
+  `−__printable` was removed from `AdminView` and from `ReportView`.
+- `AuditFilter`: added `+with_page(page : int) : AuditFilter` (a copy of the filter on another page, keeping the ignored dates and
+  problems). `AdminConsole`: removed `−__on_page «static»`, which it replaces.
+- `AdminConsole`: removed `LOG_PRESET_NAMES`, `RESULT_NAMES` and `SORT_NAMES`; the menu words are looked up by filter code in `AdminView`.
+  `AdminView`: `LOG_PRESET_NAMES` stays a `dict[str, str]`; added `+RESULT_NAMES : dict[str, str]` and `+SORT_NAMES : dict[str, str]`.
+- `TerminalApp`: added `−__admin_view : AdminView = AdminView(self.__ui)`; it builds one view and hands it to each `AdminConsole`.
+  `TerminalApp ..> AdminView : creates` became `TerminalApp *-- "1" AdminView` (as `TerminalApp *-- "1" ReportView`: it builds and keeps it).
+- Arrows added at the review's request: `AdminView ..> AuditChain : shows`, `AdminConsole ..> AuditEvent : uses` (it reads
+  `AuditEvent.GROUPS`), `TerminalApp ..> Account : signs in`.
+- Accepted by hand in the checker (`accepted_relations.json`), because the scan cannot see them: `AdminView ..> AuditChain` (`format_chain`
+  takes the result of `App.verify_audit_log()` typed `Any` and reads its fields; the class name is never written) and
+  `TerminalApp ..> Account` (`__admin` gets the `Account` from `App.sign_in`, tests it for `None` and hands it on; the name is never written).
+  `AdminConsole ..> AuditEvent` is confirmed by the scan (class constant), so it is no longer in the not-drawn list.
+- Boxes changed size (`AuditEvent` widened to 760 and `AuditFilter` to 700, which carry many arrows), so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
+  Scan 5 differences before (stage 3 = 0, 5 = 5), plus 2 relationships needing acceptance, 0 after; round-trip PROBLEMS: 0;
+  layout_check 0; make_views SELF-CHECK OK.
+
+## Phase 3: terminal flag updates (2026-11-18): code changed, the diagram follows it
+
+- Why: terminal parity. An admin can now change a flag from the terminal (the twin of the flag page of `WebApp`). The code was
+  right, so the diagram was brought up to it.
+- `AdminConsole`: added `−__pick_flag() : str | None`, `−__show_flag(flag_id : str) : FlagTicket | None`,
+  `−__update_flag(ticket : FlagTicket) : FlagTicket | None`, `−__ask_update(ticket : FlagTicket) : tuple[str, str, str, str] | None`
+  and `−__show_again(flag_id : str, lead : str) : FlagTicket | None`. `−__show_error` gained `not_saved : bool = False`.
+  `−__open_flag() : None` is still in the code, so it stays.
+- `AdminView`: added `+NOT_SAVED : str «const»`, `+format_update_result(ticket : FlagTicket | None, problems : list[str],
+  sequence : int, status : str, before : str, says_not_saved : bool = False) : tuple[str, bool]` and `+show_update_result(...) : bool`
+  (same parameters).
+- Arrows: none added or changed. `AdminConsole o-- "0..*" FlagTicket` and `AdminView ..> FlagTicket` already cover the new
+  `FlagTicket` use; the relationship check found nothing missing.
+- Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
+  Scan 9 differences before (stage 3 = 1, 5 = 8), 0 after; round-trip PROBLEMS: 0; layout_check 0; make_views SELF-CHECK OK.
+
+**Phase 3 design review follow-ups (2026-11-18)**
+- Why: review of the terminal flag update. The console words a failed update and the view words only a saved one, and the
+  status rules moved to `FlagTicket`. The code was right, so the diagram was brought up to it.
+- `FlagTicket`: added `+needs_waiting_on(status : str) : bool` and `+needs_outcome(status : str) : bool`.
+- `AdminView`: removed `+NOT_SAVED «const»`, `+format_update_result(...)` and `+show_update_result(...)`; added
+  `+format_update_saved(ticket : FlagTicket, sequence : int, moved_to : str) : str` and
+  `+show_update_saved(ticket : FlagTicket, sequence : int, moved_to : str) : None` (commit 6ce7448: the line names the status the admin
+  chose, so `moved : bool` became `moved_to : str`).
+- `AdminConsole`: added `+NOT_SAVED : str = "Your update was not saved." «const»` (the constant moved here from `AdminView`).
+- Member order (U1): the members of `AdminConsole` were not in the order used by the boxes changed on this branch, because the five Phase 3
+  methods and `NOT_SAVED` were appended at the end. The order is: constants, then attributes, each A to Z; then methods
+  sorted by name as written (so `__init__` sits among the private ones and `run` comes last). `AdminConsole` was
+  re-sorted this way. `AdminView` (its added constants and the new methods sat at the end) and `FlagTicket` (the new
+  methods) were sorted the same way. No member was added or removed by the re-sort.
+- Arrows: none added or changed. `AdminConsole` calling `ticket.needs_*` is covered by `AdminConsole o-- "0..*" FlagTicket`;
+  the relationship check agrees (225 arrows: 221 confirmed, 4 accepted, none missing).
+- Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
+  Scan 8 differences before (stage 5 = 8), 0 after; round-trip PROBLEMS: 0; layout_check 0; make_views SELF-CHECK OK.
+
+## Whole-branch review fixes (2026-11-18): code changed, the diagram follows it
+
+- `TerminalApp`: `−__limiter : RateLimiter` sat in the methods compartment; it is an attribute, so it moved up. Every attribute
+  now shows the default the code gives it (terminal_app.py:46-52): `−__app : App = app`,
+  `−__limiter : RateLimiter = limiter if limiter is not None else app.rate_li...` (shortened with "..."),
+  `−__ui : ConsoleUI = ConsoleUI()` (the code reads `ui or ConsoleUI()`; the checker takes the value the attribute starts with when no `ui`
+  is handed in, so the diagram keeps `ConsoleUI()`). The box's members were sorted into the member order of the U1 entry above
+  (constants, then attributes, then methods, each A to Z by name as written).
+- `AdminConsole`: added `+NO_SUCH_FLAG : str = "No flag has the id {flag_id}. Check th..." «const»`; `−__show_flag` gained a second
+  parameter, `(flag_id : str, typed : bool = False) : FlagTicket | None` (a typed id that matches no flag now says so).
+- Arrows: none added or changed.
+- Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
+  Scan 2 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0; make_views SELF-CHECK OK.
+
+## Command-line options removed (2026-11-18): code changed, the diagram follows it
+
+- Why: only the menu and `--web` remain; `--case` and `--all-samples` are gone, and an unreadable case schema now stops the app.
+  The code was right, so the diagram was brought up to it.
+- `App`: removed `+load_case_file`, `+is_forecasting_case` and `+sample_case_files`. `−__case_schema` now starts from
+  `self.__case_files.load(...)` (the schema file, loaded when `App` is made). `App ..> CaseFiles` stays, because `App` still loads
+  the schema with it.
+- `TerminalApp`: removed `+run_case_file`; `+start(arguments : list[str]) : int` became `+start() : int`.
+- `CaseFiles` is unchanged (its own `is_forecasting_case` stays).
+- Arrows: none added or changed; the relationship check found nothing missing or different.
+- Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
+  Scan 6 differences before (stage 3 = 1, 4 = 4, 6 = 1), 0 after; round-trip PROBLEMS: 0; layout_check 0; make_views SELF-CHECK OK.

@@ -21,8 +21,10 @@ class Claims:
         self.__expected_aum: float | None = expected_aum
         self.__pep_status: str = pep_status
         self.__asset_composition: dict = dict(asset_composition or {})
-        self.__wealth_countries: list[str] = list(wealth_countries or [])
-        self.__declared_counterparties: list[str] = list(declared_counterparties or [])
+        self.__wealth_countries: list[str] = Claims.__as_list(
+            wealth_countries, "the wealth countries", "Singapore and Malaysia")
+        self.__declared_counterparties: list[str] = Claims.__as_list(
+            declared_counterparties, "the declared counterparties", "DBS and OCBC")
         self.__biggest_wealth_jump: float | None = biggest_wealth_jump
         self.__wealth_jump_years: int | None = wealth_jump_years
         self.__extra: dict = dict(extra or {})
@@ -70,7 +72,7 @@ class Claims:
 
     @wealth_countries.setter
     def wealth_countries(self, countries: list[str]) -> None:
-        self.__wealth_countries = [str(country) for country in countries or []]
+        self.__wealth_countries = Claims.__as_list(countries, "the wealth countries", "Singapore and Malaysia")
 
     @property
     def declared_counterparties(self) -> list[str]:
@@ -132,6 +134,20 @@ class Claims:
                 "biggest_wealth_jump": self.__biggest_wealth_jump,
                 "wealth_jump_years": self.__wealth_jump_years,
                 "declared_counterparties": list(self.__declared_counterparties)}
+
+    @staticmethod
+    def __as_list(value: object, name: str, example: str) -> list:
+        """value as a new list. Only None, an empty text, an empty list and an empty tuple mean "nothing given"
+        (an empty list). Anything else must be a list or a tuple: a text would otherwise be taken apart letter
+        by letter. Every item must be text with something in it; items are stripped. Raises ValueError."""
+        if value is None or (isinstance(value, (str, list, tuple)) and not value):
+            return []
+        if not isinstance(value, (list, tuple)):
+            raise ValueError(f"{name} must be a list of names, for example {example}, or left empty; "
+                             "a single value was given")
+        if not all(isinstance(item, str) and item.strip() for item in value):
+            raise ValueError(f"each of {name} must be a name written as text and not left blank")
+        return [item.strip() for item in value]
 
     def __check_net_worth(self, value: float | None) -> None:
         self.__check_positive(value)
