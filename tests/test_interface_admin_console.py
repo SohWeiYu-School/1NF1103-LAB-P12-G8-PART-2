@@ -11,7 +11,7 @@ from app.interface.admin_console import AdminConsole
 from app.interface.admin_view import AdminView
 from app.interface.console_ui import ConsoleUI
 from app.model.audit_filter import AuditFilter
-from tests.admin_session import account_named, make_app, screen, tamper, text_of
+from tests.admin_session import ALL_RULES, account_named, make_app, screen, tamper, text_of
 from tests.audit_files import audit_path, break_audit, seed_audit
 
 
@@ -168,53 +168,63 @@ def _log(application, *filters, then=("0", "0")):
 
 
 def test_the_activity_log_with_the_default_filters(app):
-    out = _log(app, "4", "", "1", "", "", "", "1", "n")
+    out = _log(app, "4", "", "1", "0", "", "", "1", "n")
     assert "ACTIVITY LOG" in out and "10 events by 2 officers; 3 failed; 5 open flags" in out
     assert "Showing 1-10 of 10   Page 1 of 1" in out and "#10    2026-11-06 10:20  Adrian" in out
 
 
 def test_the_result_filter_keeps_only_failed_or_only_ok_events(app):
-    failed = _log(app, "4", "", "3", "", "", "", "1", "n")
+    failed = _log(app, "4", "", "3", "0", "", "", "1", "n")
     assert "3 events" in failed and "Failed only" in failed and "#1     " not in failed
-    ok = _log(app, "4", "", "2", "", "", "", "1", "n")
+    ok = _log(app, "4", "", "2", "0", "", "", "1", "n")
     assert "7 events" in ok and "OK only" in ok and "0 failed" in ok
 
 
 def test_the_officer_client_and_search_filters(app):
-    out = _log(app, "4", "", "1", "Adrian", "", "", "1", "n")
+    out = _log(app, "4", "", "1", "3", "", "", "1", "n")
     assert "3 events by 1 officer" in out and "Officer: Adrian" in out
-    out = _log(app, "4", "", "1", "", "sow-1", "", "1", "n")
+    out = _log(app, "4", "", "1", "0", "sow-1", "", "1", "n")
     assert "9 events" in out and "Client: SOW-1" in out
-    out = _log(app, "4", "", "1", "", "", "unreadable", "1", "n")
+    out = _log(app, "4", "", "1", "0", "", "unreadable", "1", "n")
     assert "1 event by" in out and "Search: “unreadable”" in out and "#10 " in out
 
 
 def test_the_group_filter_takes_numbers_and_asks_again_for_a_bad_one(app):
-    out = _log(app, "4", "7", "4,9", "x", "4", "1", "", "", "", "1", "n")
-    assert out.count("Enter numbers from 1 to 6 separated by commas, or press Enter for all.") == 3
+    out = _log(app, "4", "7", "4,9", "x", "²", "4", "1", "0", "", "", "1", "n")
+    assert out.count("Enter numbers from 1 to 6 separated by commas, or press Enter for all.") == 4
     assert "Actions: Assessment" in out and "Action groups: 1. Sign-in" in out and "7 events" in out
 
 
 def test_the_order_and_flagged_only_filters(app):
-    out = _log(app, "4", "", "1", "", "", "", "2", "y")
+    out = _log(app, "4", "", "1", "0", "", "", "2", "y")
     assert "Oldest first" in out and "Flagged only" in out and "9 events" in out
     assert out.index("#2 ") < out.index("#9 ")                 # oldest first
 
 
 def test_a_search_text_that_is_too_long_is_asked_again_with_the_filters_own_message(app):
-    out = _log(app, "4", "", "1", "", "", "x" * (AuditFilter.MAX_QUERY + 1), "crime", "1", "n")
+    out = _log(app, "4", "", "1", "0", "", "x" * (AuditFilter.MAX_QUERY + 1), "crime", "1", "n")
     assert f"[ERROR] The search text must be printable text of at most {AuditFilter.MAX_QUERY} characters." in out
     assert "Search: “crime”" in out and "ACTIVITY LOG" in out
 
 
-def test_an_officer_name_that_is_too_long_is_asked_again(app):
-    out = _log(app, "4", "", "1", "A" * 200, "", "", "", "1", "n")
-    assert "[ERROR] The actor must be printable text of at most 80 characters." in out
+def test_the_officer_is_picked_from_the_list_the_web_offers_and_zero_means_everyone(app):
+    names = [account.name for account in app.accounts()] + [App.TERMINAL, App.UNKNOWN]
+    out = _log(app, "4", "", "1", "0", "", "", "1", "n")
+    assert "  0. Everyone (no filter)" in out and all(f"  {n}. {name}" in out for n, name in enumerate(names, 1))
+    assert "Officer:" not in out and "10 events by 2 officers" in out
+    picked = _log(app, "4", "", "1", str(names.index("Shareen") + 1), "", "", "1", "n")
+    assert "Officer: Shareen" in picked and "7 events by 1 officer" in picked
+    assert "Officer: terminal" in _log(app, "4", "", "1", str(len(names) - 1), "", "", "1", "n")
+
+
+def test_an_officer_number_outside_the_list_is_asked_again(app):
+    out = _log(app, "4", "", "1", "99", "0", "", "", "1", "n")
+    assert "[ERROR] Please enter" in out and "ACTIVITY LOG" in out
 
 
 def test_custom_dates_are_asked_again_until_the_filter_accepts_them(app):
     out = _log(app, "5", "2026-13-45", "x", "2026-11-02", "", "2026-11-06", "2026-11-01",
-               "2026-11-01", "2026-11-06", "", "1", "", "", "", "1", "n")
+               "2026-11-01", "2026-11-06", "", "1", "0", "", "", "1", "n")
     assert out.count("[ERROR]") == 3
     assert "The start date must look like 2026-11-15 (year-month-day)" in out
     assert AuditFilter.RULE_BOTH_DATES in out and "The start date must be on or before the end date." in out
@@ -222,12 +232,12 @@ def test_custom_dates_are_asked_again_until_the_filter_accepts_them(app):
 
 
 def test_custom_dates_in_the_future_are_refused(app):
-    out = _log(app, "5", "2026-11-01", "2999-01-01", "2026-11-01", "2026-11-02", "", "1", "", "", "", "1", "n")
+    out = _log(app, "5", "2026-11-01", "2999-01-01", "2026-11-01", "2026-11-02", "", "1", "0", "", "", "1", "n")
     assert f"[ERROR] {AuditFilter.RULE_FUTURE}" in out
 
 
 def test_custom_with_both_dates_blank_means_all_dates(app):
-    out = _log(app, "5", "", "", "", "1", "", "", "", "1", "n")
+    out = _log(app, "5", "", "", "", "1", "0", "", "", "1", "n")
     assert "All dates" in out and "10 events" in out
 
 
@@ -236,13 +246,13 @@ def test_the_log_pages_at_twenty_five_and_pages_back(tmp_path, monkeypatch):
     seed_audit(tmp_path, [("signed_in", f"2026-11-{1 + number // 20:02d}T0{number % 9}:00:00Z", "Adrian", "", "ok", {})
                           for number in range(30)])
     # page 1 -> Next page (1) -> page 2 -> Previous page (1, the only move that exists besides Change the filters)
-    out = _log(application, "4", "", "1", "", "", "", "1", "n", then=("1", "1", "0", "0"))
+    out = _log(application, "4", "", "1", "0", "", "", "1", "n", then=("1", "1", "0", "0"))
     assert out.index("Showing 1-25 of 30   Page 1 of 2") < out.index("Showing 26-30 of 30   Page 2 of 2")
     assert out.rindex("Showing 1-25 of 30   Page 1 of 2") > out.index("Showing 26-30 of 30   Page 2 of 2")
 
 
 def test_the_filters_can_be_changed_after_a_page_is_shown(app):
-    out = _log(app, "4", "", "1", "", "", "", "1", "n", then=("1", "4", "", "3", "", "", "", "1", "n", "0", "0"))
+    out = _log(app, "4", "", "1", "0", "", "", "1", "n", then=("1", "4", "", "3", "0", "", "", "1", "n", "0", "0"))
     assert out.count("ACTIVITY LOG") == 2 and "3 events" in out
 
 
@@ -253,15 +263,15 @@ def test_the_filters_can_be_left_with_zero(app):
 
 def test_an_empty_log_and_a_filter_matching_nothing_are_told_apart(tmp_path, monkeypatch):
     application = make_app(tmp_path, monkeypatch, seeded=False)
-    assert "No activity recorded yet." in _log(application, "2", "", "1", "", "", "", "1", "n")
+    assert "No activity recorded yet." in _log(application, "2", "", "1", "0", "", "", "1", "n")
     seed_audit(tmp_path, [("client_created", "2026-11-01T02:00:00Z", "Shareen", "SOW-1", "ok", {})])
-    out = _log(application, "1", "", "1", "", "", "", "1", "n")
+    out = _log(application, "1", "", "1", "0", "", "", "1", "n")
     assert "No events match these filters." in out and "No activity recorded yet." not in out
 
 
 def test_an_unreadable_log_never_reads_as_no_activity(app, tmp_path, caplog):
     break_audit(tmp_path)
-    out = _log(app, "4", "", "1", "", "", "", "1", "n", then=("0",))
+    out = _log(app, "4", "", "1", "0", "", "", "1", "n", then=("0",))
     assert f"[ERROR] {App.AUDIT_UNAVAILABLE}" in out
     assert "No activity" not in out and "No events" not in out and "0 events" not in out
     assert "the audit log cannot be read" in caplog.text
@@ -269,14 +279,14 @@ def test_an_unreadable_log_never_reads_as_no_activity(app, tmp_path, caplog):
 
 def test_when_the_flags_fail_the_log_still_shows_with_the_flags_message(tmp_path, monkeypatch):
     application = make_app(tmp_path, monkeypatch, rules=_FailingRules)
-    out = _log(application, "4", "", "1", "", "", "", "1", "n")
+    out = _log(application, "4", "", "1", "0", "", "", "1", "n")
     assert "The flags could not be worked out right now. The events below are still complete." in out
     assert "10 events" in out and "flags unknown" in out and "[ERROR]" not in out
 
 
 def test_asking_for_flagged_events_when_the_flags_fail_says_the_flags_failed(tmp_path, monkeypatch):
     application = make_app(tmp_path, monkeypatch, rules=_FailingRules)
-    out = _log(application, "4", "", "1", "", "", "", "1", "y", then=("0",))
+    out = _log(application, "4", "", "1", "0", "", "", "1", "y", then=("0",))
     assert f"[ERROR] {App.FLAGS_UNAVAILABLE}" in out and App.AUDIT_UNAVAILABLE not in out
 
 
@@ -349,3 +359,66 @@ def test_a_read_that_fails_is_recorded_as_the_admins(tmp_path, monkeypatch):
         application.all_clients()
     last = application.audit_log(AuditFilter("90")).events[0]
     assert last.action == "data_unavailable" and last.actor == "Orbit Admin"
+
+
+# ----- typed answers never become "the audit log is unavailable" -------------------------------------------------
+
+class _MadeUpApp(App):
+    """An App whose overview or flag look-up fails with the error the test chooses."""
+    overview_error: ValueError | None = None
+    flag_error: ValueError | None = None
+
+    def audit_overview(self, *args, **kwargs):
+        if self.overview_error is not None:
+            raise self.overview_error
+        return super().audit_overview(*args, **kwargs)
+
+    def flag_evidence(self, *args, **kwargs):
+        if self.flag_error is not None:
+            raise self.flag_error
+        return super().flag_evidence(*args, **kwargs)
+
+
+def _made_up_app(tmp_path, monkeypatch) -> _MadeUpApp:
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    seed_audit(tmp_path, ALL_RULES)
+    return _MadeUpApp(ai_caller=None, data_folder=str(tmp_path))
+
+
+def test_a_value_error_that_app_did_not_choose_is_an_unexpected_error_not_an_audit_log_problem(
+        tmp_path, monkeypatch, caplog):
+    application = _made_up_app(tmp_path, monkeypatch)
+    application.overview_error = ValueError("made-up detail nobody should see")
+    out = _run(application, "1", "4", "6", "0")
+    assert "An unexpected error occurred" in out
+    assert App.AUDIT_UNAVAILABLE not in out and "made-up detail" not in out
+    assert "made-up detail nobody should see" in caplog.text and "--- ADMIN" in out
+
+
+def test_a_digit_that_int_cannot_read_is_not_a_number_and_is_not_an_audit_log_problem(app):
+    out = _run(app, "2", "²", "0", "0")                        # "²".isdigit() is True, int("²") raises
+    assert App.AUDIT_UNAVAILABLE not in out and "unexpected" not in out
+    assert App.FLAG_GONE in out                                # taken as a flag id, which does not exist
+    out = _run(app, "1", "4", "6", "1", "²", "1", "1", "", "0", "0")
+    assert App.AUDIT_UNAVAILABLE not in out and "F-SHO-SOW-1-4  Verdict" in out
+
+
+def test_a_group_number_that_int_cannot_read_is_asked_again(app):
+    out = _log(app, "4", "²", "", "1", "0", "", "", "1", "n")
+    assert "Enter numbers from 1 to 6" in out and App.AUDIT_UNAVAILABLE not in out and "ACTIVITY LOG" in out
+
+
+def test_a_flag_number_with_no_overview_shown_says_to_show_it_first(app):
+    out = _run(app, "2", "3", "F-HOU-SOW-1-7", "", "0")
+    assert "Show the Overview first to pick a flag by number, or type a flag id." in out
+    assert App.FLAG_GONE not in out and "F-HOU-SOW-1-7  After-hours" in out
+
+
+def test_an_error_opening_a_flag_from_the_overview_keeps_the_admin_on_that_page(tmp_path, monkeypatch):
+    application = _made_up_app(tmp_path, monkeypatch)
+    application.flag_error = ValueError(App.AUDIT_UNAVAILABLE)
+    out = _run(application, "1", "4", "6", "1", "1", "0", "0")      # open a flag (fails), back, sign out
+    assert f"[ERROR] {App.AUDIT_UNAVAILABLE}" in out
+    assert out.count("OVERVIEW  90 days") == 2                       # shown again, not dropped to the menu
+    assert out.index("[ERROR]") < out.rindex("OVERVIEW  90 days") < out.rindex("--- ADMIN")

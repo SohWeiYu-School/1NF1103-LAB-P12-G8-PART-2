@@ -69,13 +69,15 @@ class AdminConsole:
                 self.__show_error(error, AdminConsole.MENU[picked])
 
     def __show_error(self, error: ValueError, where: str) -> None:
-        """Tell the admin which kind of problem it is; the real text goes to the log if App did not choose it."""
+        """Tell the admin which kind of problem it is. Only the messages App chose for the admin (SAFE_ERRORS) are
+        shown as they are; any other ValueError is not an audit log problem, so it is logged with its details and
+        shown as an unexpected error, never as "the audit log is unavailable"."""
         if str(error) in AdminConsole.SAFE_ERRORS:
             logger.error("AdminConsole: %s could not be shown: %s", where, error)
             self.__ui.show_error(str(error))
         else:
             logger.error("AdminConsole: %s failed with an unexpected error: %r", where, error)
-            self.__ui.show_error(App.AUDIT_UNAVAILABLE)
+            self.__ui.show_unexpected_error()
 
     def __show_audit_warning(self) -> None:
         """If the last action's audit line could not be written, say so."""
@@ -125,7 +127,10 @@ class AdminConsole:
             elif action == "previous":
                 number = page.page - 1
             elif action == "open":
-                self.__open_flag()
+                try:
+                    self.__open_flag()
+                except ValueError as error:            # stay on this page: the range, tab and page are kept
+                    self.__show_error(error, "Open a flag")
                 number = page.page
             else:
                 return
@@ -135,10 +140,15 @@ class AdminConsole:
     def __open_flag(self) -> None:
         """Ask for a flag (its number in the Overview list above, or its id) and show it with its evidence."""
         while True:
-            answer = self.__ui.ask_text("Flag number from the list, or a flag id (0 to go back)")
+            question = ("Flag number from the list, or a flag id (0 to go back)" if self.__listed
+                        else "Flag id (0 to go back)")
+            answer = self.__ui.ask_text(question)
             if answer == "0":
                 return
-            if answer.isdigit() and self.__listed:
+            if answer.isascii() and answer.isdigit() and not self.__listed:
+                self.__ui.show_error("Show the Overview first to pick a flag by number, or type a flag id.")
+                continue
+            if answer.isascii() and answer.isdigit():
                 if 1 <= int(answer) <= len(self.__listed):
                     flag_id = self.__listed[int(answer) - 1].flag.flag_id
                     break
@@ -221,12 +231,19 @@ class AdminConsole:
             date_from, date_to = self.__ask_dates()
         groups = self.__ask_groups()
         result = AuditFilter.RESULT_CHOICES[ui.ask_choice("Result", list(AdminConsole.RESULT_NAMES))]
-        actor = self.__ask_text("Officer (blank for everyone)", "actor")
+        actor = self.__ask_officer()
         client_ref = self.__ask_text("Client reference (blank for every client)", "client_ref")
         query = self.__ask_text(f"Search text (blank for none, at most {AuditFilter.MAX_QUERY} characters)", "query")
         sort = AuditFilter.SORT_CHOICES[ui.ask_choice("Order", list(AdminConsole.SORT_NAMES))]
         flagged_only = ui.ask_yes_no("Only events behind a flag that is not resolved?")
         return AuditFilter(preset, date_from, date_to, groups, result, actor, client_ref, query, sort, 1, flagged_only)
+
+    def __ask_officer(self) -> str:
+        """The officer to show: one of the accounts, the terminal or an unknown name (the list the web offers), or
+        everyone."""
+        names = [account.name for account in self.__app.accounts()] + [App.TERMINAL, App.UNKNOWN]
+        picked = self.__ui.ask_choice("Officer", names, allow_back=True, back_label="Everyone (no filter)")
+        return "" if picked is None else names[picked]
 
     def __ask_text(self, question: str, field: str) -> str:
         """A text filter, asked again with the filter's own message until it is accepted."""
@@ -258,7 +275,7 @@ class AdminConsole:
             if not answer:
                 return None
             numbers = [part.strip() for part in answer.split(",")]
-            if not all(part.isdigit() and 1 <= int(part) <= len(names) for part in numbers):
+            if not all(part.isascii() and part.isdigit() and 1 <= int(part) <= len(names) for part in numbers):
                 self.__ui.show_error(f"Enter numbers from 1 to {len(names)} separated by commas, or press Enter for all.")
                 continue
             return [names[int(part) - 1] for part in numbers]
