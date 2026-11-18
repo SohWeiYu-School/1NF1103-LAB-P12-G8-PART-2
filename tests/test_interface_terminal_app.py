@@ -14,7 +14,7 @@ from app.model.audit_filter import AuditFilter
 from app.model.client_record import ClientRecord
 from app.model.verdict import Verdict
 from tests import fake_ai, fake_services
-from tests.audit_files import break_audit, seed_audit
+from tests.audit_files import break_audit, fix_audit, seed_audit
 from tests.logic_fixtures import sample_case
 
 
@@ -814,3 +814,52 @@ def test_a_refused_assessment_does_not_show_the_previous_actions_audit_failure_a
     assert application.audit_failure_message() == ""
     out = capsys.readouterr().out
     assert App.AUDIT_NOT_WRITTEN not in out and App.AUDIT_LINE_NOT_WRITTEN not in out
+
+
+def test_a_failed_read_while_the_audit_log_is_broken_shows_only_the_database_message(app, tmp_path, capsys):
+    """The "database unreadable" audit line is about a read, not a kept action: its failure is not told again."""
+    _damage(tmp_path, "sow_cases.json")
+    break_audit(tmp_path)
+    out = _run_menu(app, capsys, "6", "0")
+    assert App.CLIENTS_UNAVAILABLE in out
+    assert App.AUDIT_LINE_NOT_WRITTEN not in out and App.AUDIT_NOT_WRITTEN not in out
+
+
+def _client_with_replies(app):
+    record = ClientRecord.from_dict(sample_case())
+    app.save_client(record)
+    case, _ = app.read_case(record)
+    fake_services.save_forecast_replies(app.response_cache(), case)
+    return record
+
+
+def test_a_saved_assessment_whose_audit_line_was_not_written_says_saved_but(app, tmp_path, capsys):
+    record = _client_with_replies(app)
+    break_audit(tmp_path)
+    capsys.readouterr()
+    answers = TerminalApp(app, ConsoleUI(read=lambda question="": "n"))
+    assert answers.assess_client_record(record) is not None
+    out = capsys.readouterr().out
+    assert "Assessment saved." in out and App.AUDIT_NOT_WRITTEN in out
+    assert out.index(App.AUDIT_NOT_WRITTEN) < out.index("Assessment saved.")      # told right after the saving
+
+
+def test_an_assessment_that_could_not_be_saved_says_only_that_the_action_was_not_written(
+        app, tmp_path, capsys, monkeypatch):
+    record = _client_with_replies(app)
+    monkeypatch.setattr(app.assessments(), "save", lambda data: False)
+    break_audit(tmp_path)
+    capsys.readouterr()
+    TerminalApp(app, ConsoleUI(read=lambda question="": "n")).assess_client_record(record)
+    out = capsys.readouterr().out
+    assert "Could not save the assessment." in out
+    assert App.AUDIT_LINE_NOT_WRITTEN in out and App.AUDIT_NOT_WRITTEN not in out
+
+
+def test_a_successful_action_after_a_failed_one_shows_no_old_warning(app, tmp_path, capsys):
+    break_audit(tmp_path)
+    first = _run_menu(app, capsys, "7", "0")
+    assert App.AUDIT_LINE_NOT_WRITTEN in first
+    fix_audit(tmp_path)                                         # the log works again
+    second = _run_menu(app, capsys, "7", "0")
+    assert App.AUDIT_LINE_NOT_WRITTEN not in second and App.AUDIT_NOT_WRITTEN not in second
