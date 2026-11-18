@@ -247,3 +247,236 @@ def test_a_damaged_list_of_parts_that_did_not_run_is_logged_and_shows_no_empty_w
     verdict.report = {**verdict.report, "header": {**verdict.report["header"], "incomplete": damaged}}
     assert "INCOMPLETE ASSESSMENT" not in _view().format_verdict_report(verdict)
     assert "damaged" in caplog.text
+
+
+# ----- the (incomplete) tag in the assessment list ------------------------------------------------
+
+def _combined(incomplete=None, sections=None):
+    header = {"verdict": "PASSED"} if incomplete is None else {"verdict": "PASSED", "incomplete": incomplete}
+    return {"assessment_id": "A1", "client_ref": "SOW-1", "kind": "combined",
+            "verdict": {"assessed_on": "2026-09-24", "verdict": "PASSED"},
+            "report": {"header": header, "sections": sections or []}}
+
+
+def test_a_combined_assessment_with_parts_that_did_not_run_is_tagged_incomplete_in_the_list():
+    lines = _view().format_assessment_list([_combined(["The forecast"]), _combined([])]).splitlines()
+    assert lines[1].endswith("PASSED (incomplete)")
+    assert lines[2].endswith("PASSED")
+
+
+def test_the_incomplete_tag_comes_before_the_archive_mark():
+    lines = _view().format_assessment_list([_combined(["The forecast"])], ["archived"]).splitlines()
+    assert lines[1].endswith("PASSED (incomplete) (archived)")
+
+
+def test_an_older_report_is_tagged_from_its_could_not_run_section():
+    could_not_run = {"title": "Could not run", "items": [{"mark": "skip", "text": "The forecast", "sub": []}]}
+    record = _combined(sections=[could_not_run])
+    assert "(incomplete)" in _view().format_assessment_list([record]).splitlines()[1]
+
+
+@pytest.mark.parametrize("damaged", [{"The forecast": 1}, [""], [None], "damaged"])
+def test_a_damaged_list_of_parts_that_did_not_run_adds_no_tag_and_is_logged(damaged, caplog):
+    text = _view().format_assessment_list([_combined(damaged)])
+    assert "(incomplete)" not in text
+    assert "damaged" in caplog.text
+
+
+def test_a_forecast_only_record_has_no_incomplete_tag():
+    records = [{"assessment_id": "A2", "client_ref": "SOW-2", "kind": "onboarding",
+                "assessment": {"assessed_on": "2026-09-25", "outcome": "PASSED"}}]
+    assert "(incomplete)" not in _view().format_assessment_list(records, ["archived"])
+
+
+# ----- last activity in the client list -----------------------------------------------------------
+
+def _event(action="client_edited", at="2026-11-16T06:02:11Z", actor="terminal", client="CL-1", result="ok",
+           details=None):
+    from app.model.audit_event import AuditEvent
+    return AuditEvent(at=at, actor=actor, action=action, client_ref=client, result=result, details=details or {})
+
+
+def test_the_client_list_shows_each_clients_last_activity_in_singapore_time(capsys):
+    records = [{"client_ref": "CL-1", "name": "Ada Tan", "career": {"industry": "Banking"}},
+               {"client_ref": "CL-2", "name": "Ben Lim", "career": {"industry": "Shipping"}}]
+    _view().show_client_list(records, {"cl-1": _event()})
+    lines = capsys.readouterr().out.splitlines()
+    assert any("Last activity" in line for line in lines)
+    row_1 = next(line for line in lines if "CL-1" in line)
+    row_2 = next(line for line in lines if "CL-2" in line)
+    assert "16 Nov 14:02" in row_1 and "Client edited" in row_1      # 06:02 UTC is 14:02 in Singapore
+    assert row_2.rstrip().endswith("—")
+
+
+def test_the_client_list_says_why_the_activity_is_missing_when_the_log_could_not_be_read(capsys):
+    _view().show_client_list([{"client_ref": "CL-1", "name": "Ada Tan", "career": {"industry": "Banking"}}],
+                             None, "We can't load the audit log right now.")
+    out = capsys.readouterr().out
+    assert "Ada Tan" in out and "We can't load the audit log right now." in out
+    assert "Last activity" not in out
+
+
+# ----- a client's history -------------------------------------------------------------------------
+
+def test_a_clients_history_is_grouped_by_singapore_day_newest_first():
+    events = [_event("assessment_run", "2026-11-16T17:30:00Z", "Orbit Officer", details={"outcome": "PASSED"}),
+              _event("client_edited", "2026-11-16T06:02:11Z", "terminal", details={"changes": [1, 2]}),
+              _event("client_created", "2026-11-15T01:00:00Z", "Orbit Officer")]
+    text = _view().format_client_history(events)
+    assert text.index("17 November 2026") < text.index("16 November 2026") < text.index("15 November 2026")
+    assert "01:30  Assessment saved for client CL-1: PASSED  |  by Orbit Officer" in text
+    assert "14:02  Edited client CL-1 (2 fields changed)  |  by terminal" in text
+    assert "No history" not in text and "Nothing matches" not in text and "incomplete" not in text
+
+
+def test_a_failed_event_is_shown_as_failed():
+    text = _view().format_client_history([_event("assessment_failed", result="failed")])
+    assert text.count("failed") == 1 and "FAILED" not in text and "|  OK" not in text
+
+
+def test_a_history_says_when_entries_of_the_log_could_not_be_read():
+    one = _view().format_client_history([_event()], 1, 1)
+    assert "1 entry in the audit log can't be read, so this history may be incomplete." in one
+    many = _view().format_client_history([_event()], 1, 3)
+    assert "3 entries in the audit log can't be read, so this history may be incomplete." in many
+    assert "3 entries in the audit log" in _view().format_client_history([], 0, 3)       # even with nothing else to show
+
+
+def test_a_history_tells_no_history_yet_from_no_match():
+    assert _view().format_client_history([], 0) == "No history recorded yet."
+    assert _view().format_client_history([], 4) == 'Nothing matches these filters. Try "All" or "All time".'
+
+
+def test_showing_a_history_prints_it(capsys):
+    _view().show_client_history([_event()])
+    assert "Edited client CL-1" in capsys.readouterr().out
+
+
+# ----- damaged saved records never stop the list ------------------------------------------------
+
+@pytest.mark.parametrize("sections", [None, 5, "text", {"a": 1}])
+def test_a_damaged_sections_value_never_crashes_the_list_and_adds_no_tag(sections):
+    record = _combined(sections=None)
+    record["report"] = {"header": {"verdict": "PASSED"}, "sections": sections}
+    assert "(incomplete)" not in _view().format_assessment_list([record])
+
+
+@pytest.mark.parametrize("items", [None, 5, "text", {"a": 1}])
+def test_a_damaged_items_value_never_crashes_the_list_and_adds_no_tag(items):
+    record = _combined(sections=[{"title": "Could not run", "items": items}])
+    assert "(incomplete)" not in _view().format_assessment_list([record])
+
+
+@pytest.mark.parametrize("sections, items", [(None, None), (5, None), ("x", None), ([{"title": "Could not run", "items": None}], None)])
+def test_a_damaged_report_does_not_crash_the_verdict_report_either(sections, items):
+    verdict = _report()
+    header = {key: value for key, value in verdict.report["header"].items() if key != "incomplete"}
+    verdict.report = {**verdict.report, "header": header, "sections": sections}
+    # the report body needs its sections, so only the "what did not run" part is checked
+    assert ReportView._ReportView__missing_parts(verdict.report) == []
+
+
+@pytest.mark.parametrize("change", [
+    {"verdict": "damaged"}, {"verdict": {"assessed_on": None, "verdict": "PASSED"}},
+    {"verdict": {"assessed_on": 5, "verdict": "PASSED"}}, {"kind": None}, {"client_ref": 7}, {"client_ref": None},
+    {"verdict": ["x"]}, {"verdict": None, "assessment": "bad"}])
+def test_a_damaged_saved_record_shows_question_marks_and_is_logged_without_stopping_the_list(change, caplog):
+    good = {"client_ref": "SOW-2", "kind": "onboarding", "assessment": {"assessed_on": "2026-09-25", "outcome": "PASSED"}}
+    bad = {**_combined(), **change}
+    lines = _view().format_assessment_list([bad, good]).splitlines()
+    assert len(lines) == 3 and "SOW-2" in lines[2] and "PASSED" in lines[2]
+    assert "?" in lines[1] and "damaged" in caplog.text
+
+
+def test_a_saved_record_without_its_reference_or_kind_is_shown_with_question_marks():
+    lines = _view().format_assessment_list([{"assessment": {"assessed_on": "2026-09-25", "outcome": "PASSED"}}])
+    assert lines.splitlines()[1].startswith("?")
+
+
+def test_a_row_that_is_not_a_record_is_shown_as_unknown():
+    assert len(_view().format_assessment_list(["junk", None]).splitlines()) == 3
+
+
+# ----- long values, and one row for the list and for picking --------------------------------------
+
+def test_a_long_name_or_industry_is_cut_with_an_ellipsis_and_never_runs_into_the_next_column(capsys):
+    record = {"client_ref": "CL-1", "name": "Marcus Lim Wei Jie test test eddit more",
+              "career": {"industry": "Industrial parts distribution and more"}}
+    _view().show_client_list([record], {"cl-1": _event()})
+    row = next(line for line in capsys.readouterr().out.splitlines() if "CL-1" in line)
+    name_start = row.index("Marcus")
+    assert row[name_start + 27] == " " and "…" in row[name_start:name_start + 27]
+    industry_start = name_start + 28
+    assert row[industry_start:industry_start + 20].endswith("… ")
+    assert "16 Nov 14:02" in row and "distribution16" not in row.replace(" ", "")
+
+
+def test_a_short_value_is_not_cut(capsys):
+    _view().show_client_list([{"client_ref": "CL-1", "name": "Ada Tan", "career": {"industry": "Banking"}}])
+    assert "…" not in capsys.readouterr().out
+
+
+def test_the_row_used_for_picking_is_the_row_of_the_list_and_tells_assessments_apart():
+    first = {**_combined(["The forecast"]), "verdict": {"assessed_on": "2026-09-24", "verdict": "RISKY"}}
+    second = {**_combined([]), "verdict": {"assessed_on": "2026-09-25", "verdict": "PASSED"}}
+    rows = [ReportView.format_assessment_row(first, "archived").rstrip(), ReportView.format_assessment_row(second)]
+    assert rows[0] != rows[1]
+    assert "2026-09-24" in rows[0] and "RISKY (incomplete) (archived)" in rows[0]
+    assert _view().format_assessment_list([first, second], ["archived", ""]).splitlines()[1:] == \
+        [ReportView.format_assessment_row(first, "archived"), ReportView.format_assessment_row(second)]
+
+
+# ----- the assessment id on each row ------------------------------------------------------------
+
+def test_the_list_has_an_assessment_id_column_between_date_and_outcome():
+    record = {**_combined(["The forecast"]), "assessment_id": "a72de5e5-1111-2222-3333-444455556666"}
+    head, row = _view().format_assessment_list([record], ["archived"]).splitlines()
+    assert head.split() == ["Client", "Kind", "Date", "Assessment", "ID", "Outcome"]
+    assert head.index("Assessment ID") > head.index("Date") and head.index("Outcome") > head.index("Assessment ID")
+    assert row.split()[:5] == ["SOW-1", "combined", "2026-09-24", "a72de5e5", "PASSED"]
+    assert "a72de5e5-" not in row and row.endswith("PASSED (incomplete) (archived)")
+
+
+def test_a_pick_line_labels_the_assessment_id():
+    record = {**_combined(), "assessment_id": "a72de5e5-1111"}
+    line = ReportView.format_assessment_row(record, "", labelled=True)
+    assert "Assessment ID a72de5e5" in line and line.rstrip().endswith("PASSED")
+
+
+@pytest.mark.parametrize("bad", [None, "", "   ", 5, ["x"]])
+def test_a_record_without_a_usable_id_says_so_and_never_invents_one(bad):
+    record = {**_combined(), "assessment_id": bad}
+    assert "no ID" in ReportView.format_assessment_row(record)
+    assert "Assessment ID: none" in ReportView.format_assessment_row(record, labelled=True)
+    assert "no ID" in _view().format_assessment_list([record])
+    del record["assessment_id"]
+    assert "no ID" in ReportView.format_assessment_row(record)
+
+
+def test_a_long_reference_still_finds_its_last_activity(capsys):
+    ref = "CL-" + "X" * 20
+    _view().show_client_list([{"client_ref": ref, "name": "Ada Tan", "career": {"industry": "Banking"}}],
+                             {ref.casefold(): _event(client=ref[:40])})
+    row = next(line for line in capsys.readouterr().out.splitlines() if "CL-X" in line)
+    assert "…" in row and "16 Nov 14:02" in row and not row.rstrip().endswith("—")
+
+
+def test_a_long_client_reference_or_kind_is_cut_so_the_columns_stay_in_place():
+    record = {**_combined(), "client_ref": "CL-" + "X" * 30, "kind": "k" * 40, "assessment_id": "abcdef123456"}
+    row = ReportView.format_assessment_row(record)
+    assert row.index("2026-09-24") == 16 + 1 + 20 + 1 and "abcdef12" in row
+    assert row.count("…") == 2
+
+
+def test_a_damaged_onboarding_record_shows_nothing_and_raises_before_printing(capsys):
+    with pytest.raises((KeyError, TypeError)):
+        _view().show_onboarding({"outcome": "PASSED"})
+    assert capsys.readouterr().out == ""
+
+
+def test_a_history_line_cannot_carry_escape_characters_to_the_terminal():
+    event = _event(action="document_uploaded", details={"file_id": "id\x1b[31m\u202e-1\n"})
+    text = _view().format_client_history([event])
+    assert "id?[31m?-1?" in text and "\x1b" not in text and "\u202e" not in text
+    assert all(line.isprintable() for line in text.splitlines())
+

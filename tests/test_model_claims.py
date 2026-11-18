@@ -107,3 +107,80 @@ def test_the_problems_say_what_to_enter_and_do_not_assume_the_clients_gender():
     assert "Declared net worth is missing: enter an amount greater than 0." in problems
     assert any("which kind of PEP the client is" in problem for problem in problems)
     assert not any(" he " in problem for problem in problems)
+
+
+# ----- a list of countries or counterparties is a list, never a text taken apart ----------------------------
+
+@pytest.mark.parametrize("field", ["wealth_countries", "declared_counterparties"])
+@pytest.mark.parametrize("bad", ["Singapore", "SG, HK", 5, {"SG": 1}, {"SG"}, 1.5, True, False, 0, 0.0, {}])
+def test_a_list_field_refuses_anything_that_is_not_a_list_or_tuple(field, bad):
+    with pytest.raises(ValueError, match="must be a list"):
+        Claims(**{field: bad})
+
+
+@pytest.mark.parametrize("bad", ["Singapore", 5, {"SG": 1}, True, False, 0])
+def test_the_countries_setter_refuses_a_text_instead_of_storing_its_letters(bad):
+    claims = Claims(wealth_countries=["SG"])
+    with pytest.raises(ValueError, match="must be a list"):
+        claims.wealth_countries = bad
+    assert claims.wealth_countries == ["SG"]                        # unchanged
+
+
+def test_lists_tuples_and_nothing_are_still_accepted():
+    assert Claims(wealth_countries=["SG", "HK"]).wealth_countries == ["SG", "HK"]
+    assert Claims(wealth_countries=("SG", "HK")).wealth_countries == ["SG", "HK"]
+    for nothing in (None, [], "", ()):
+        assert Claims(wealth_countries=nothing, declared_counterparties=nothing).wealth_countries == []
+    claims = Claims()
+    claims.wealth_countries = ("SG", " HK ")
+    assert claims.wealth_countries == ["SG", "HK"]
+    claims.wealth_countries = None
+    assert claims.wealth_countries == []
+
+
+def test_saved_claims_holding_a_text_for_the_countries_are_refused_not_split_into_letters():
+    from app.model.client_record import ClientRecord
+    from tests.logic_fixtures import sample_case
+    data = sample_case()
+    data["claims"]["wealth_countries"] = "Singapore"
+    with pytest.raises(ValueError, match="must be a list"):
+        ClientRecord.from_dict(data)
+
+
+def test_the_refusal_is_in_plain_words_without_python_syntax_or_type_names():
+    for bad in ("Singapore", 5, {"SG": 1}):
+        with pytest.raises(ValueError) as error:
+            Claims(wealth_countries=bad)
+        assert str(error.value) == ("the wealth countries must be a list of names, for example Singapore and Malaysia, "
+                                    "or left empty; a single value was given")
+    with pytest.raises(ValueError) as error:
+        Claims(declared_counterparties="DBS")
+    assert str(error.value) == ("the declared counterparties must be a list of names, for example DBS and OCBC, "
+                                "or left empty; a single value was given")
+    for symbol in "[]{}'":
+        assert symbol not in str(error.value)
+
+
+ODD_ITEMS = [["SG", None, 5], [["x"]], ["SG", ""], ["SG", "   "], [5], [None], [{"a": 1}], [True], ("SG", 5)]
+
+
+@pytest.mark.parametrize("items", ODD_ITEMS)
+def test_every_item_of_the_countries_and_counterparties_must_be_text_that_is_not_blank(items):
+    with pytest.raises(ValueError, match="each of the wealth countries must be a name"):
+        Claims(wealth_countries=items)
+    with pytest.raises(ValueError, match="each of the declared counterparties must be a name"):
+        Claims(declared_counterparties=items)
+    claims = Claims(wealth_countries=["SG"])
+    with pytest.raises(ValueError, match="each of the wealth countries must be a name"):
+        claims.wealth_countries = items
+    assert claims.wealth_countries == ["SG"]
+
+
+def test_the_constructor_and_the_setter_treat_the_items_the_same_way():
+    names = ["  Singapore ", "Hong Kong"]
+    claims = Claims(wealth_countries=names, declared_counterparties=[" DBS "])
+    other = Claims()
+    other.wealth_countries = names
+    assert claims.wealth_countries == other.wealth_countries == ["Singapore", "Hong Kong"]
+    assert claims.declared_counterparties == ["DBS"]
+    assert claims.to_dict()["wealth_countries"] == ["Singapore", "Hong Kong"]
