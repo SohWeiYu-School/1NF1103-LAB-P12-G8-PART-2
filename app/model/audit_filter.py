@@ -407,6 +407,11 @@ class AuditFilter:
         start = (page - 1) * AuditFilter.PAGE_SIZE
         return events[start:start + AuditFilter.PAGE_SIZE]
 
+    def with_page(self, page: int) -> "AuditFilter":
+        """The same filter on another page. Raises ValueError for a page that is not a whole number, 1 or more."""
+        return AuditFilter(self.__preset, self.__date_from, self.__date_to, self.__groups, self.__result,
+                           self.__actor, self.__client_ref, self.__query, self.__sort, page, self.__flagged_only)
+
     def to_query(self) -> dict[str, str | list[str]]:
         """Only the values that are not the default, as text for a web address (groups as a list)."""
         query: dict[str, str | list[str]] = {}

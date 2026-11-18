@@ -209,14 +209,7 @@ class AdminConsole:
                 if audit_filter is None:
                     return
             else:
-                audit_filter = AdminConsole.__on_page(audit_filter, number + (1 if actions[picked] == "next" else -1))
-
-    @staticmethod
-    def __on_page(audit_filter: AuditFilter, page: int) -> AuditFilter:
-        """The same filter on another page (a filter does not change once built)."""
-        return AuditFilter(audit_filter.preset, audit_filter.date_from, audit_filter.date_to, audit_filter.groups,
-                           audit_filter.result, audit_filter.actor, audit_filter.client_ref, audit_filter.query,
-                           audit_filter.sort, page, audit_filter.flagged_only)
+                audit_filter = audit_filter.with_page(number + (1 if actions[picked] == "next" else -1))
 
     @staticmethod
     def __rejected(**values: object) -> str:

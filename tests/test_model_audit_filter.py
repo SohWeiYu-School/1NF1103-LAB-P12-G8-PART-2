@@ -336,3 +336,20 @@ def test_range_problem_judges_only_the_missing_date_and_the_future():
     assert judge("nov", "2026-11-16", today) == ""                 # the format check owns this
     assert judge("2026-11-12", "2026-11-10", today) == ""          # the order rule is the constructor's
     assert judge("2026-11-20", "2026-11-16", today) == ""
+
+
+def test_with_page_keeps_every_field_and_changes_only_the_page():
+    original = AuditFilter("custom", "2026-11-01", "2026-11-06", ["Assessment", "Client"], "failed", "Adrian",
+                           "sow-1", "crime  scan", "asc", 1, True)
+    moved = original.with_page(3)
+    assert moved is not original and moved.page == 3 and original.page == 1
+    for name in ("preset", "date_from", "date_to", "groups", "result", "actor", "client_ref", "query", "sort",
+                 "flagged_only"):
+        assert getattr(moved, name) == getattr(original, name), name
+    assert moved.to_query() == {**original.to_query(), "page": "3"}
+
+
+def test_with_page_validates_the_page_like_the_constructor():
+    for bad in (0, -1, "2", True, 1.5):
+        with pytest.raises(ValueError):
+            AuditFilter().with_page(bad)
