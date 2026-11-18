@@ -9,6 +9,7 @@ from app.application.app import App
 from app.interface.case_builder import CaseBuilder
 from app.interface.client_form import ClientForm
 from app.interface.console_ui import ConsoleUI
+from app.interface.rate_limiter import RateLimiter
 from app.interface.report_view import ReportView
 from app.model.audit_filter import AuditFilter
 from app.model.client_record import ClientRecord
@@ -27,11 +28,16 @@ class TerminalApp:
 
     GOODBYE: str = "Thank you for using Orbit. Goodbye."      # shown for 0. Quit and for the end of input (Ctrl-D)
 
-    def __init__(self, app: App, ui: ConsoleUI | None = None) -> None:
-        """app is the App to ask. ui is the screen to use (App passes its own, so there is one screen)."""
+    def __init__(self, app: App, ui: ConsoleUI | None = None, limiter: RateLimiter | None = None) -> None:
+        """app is the App to ask. ui is the screen to use (App passes its own, so there is one screen).
+        limiter decides how often an assessment may be started here; without one, the App's own limiter
+        (made from the policy) is used, as for WebApp."""
         if not isinstance(app, App):
             raise ValueError("The terminal needs the App it asks for everything.")
+        if limiter is not None and not isinstance(limiter, RateLimiter):
+            raise ValueError("The limiter must be a RateLimiter (or none, for the App's own).")
         self.__app: App = app
+        self.__limiter: RateLimiter = limiter if limiter is not None else app.rate_limiter()
         self.__ui: ConsoleUI = ui or ConsoleUI()
         self.__report_view: ReportView = ReportView(self.__ui)
         self.__client_form: ClientForm = ClientForm(self.__ui, self.__report_view)
@@ -216,7 +222,7 @@ class TerminalApp:
 
     def __maybe_assess(self, record: ClientRecord) -> None:
         """Check the rate limit; if clear, run the assessment."""
-        limiter = self.__app.rate_limiter()
+        limiter = self.__limiter
         allowed, wait = limiter.check("cli")
         if not allowed:
             self.__ui.show_rate_limit_error(wait)

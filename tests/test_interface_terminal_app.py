@@ -742,3 +742,17 @@ def test_zero_at_the_archive_reason_cancels_and_is_not_saved_as_the_reason(app, 
     assert "Nothing was archived." in out and "Assessment archived." not in out
     assert all(App.archive_state(app.assessments().find(f"A{n}")) == App.ARCHIVE_ACTIVE for n in (1, 2))
     assert app.assessments().find("A2").get("archive_log") is None
+
+
+def test_the_terminal_uses_the_limiter_it_is_given_and_refuses_something_that_is_not_one(app, capsys):
+    from app.interface.rate_limiter import RateLimiter
+    with pytest.raises(ValueError, match="RateLimiter"):
+        TerminalApp(app, limiter="slow")
+    limiter = RateLimiter(60, True)
+    limiter.record("cli")                                    # an assessment was just started
+    app.clients().save(sample_case())
+    capsys.readouterr()
+    waiting = iter(["4", sample_case()["client_ref"], "0"])
+    TerminalApp(app, ConsoleUI(read=lambda question="": next(waiting)), limiter).run_menu()
+    out = capsys.readouterr().out
+    assert "Assessing" not in out and "wait" in out.lower()

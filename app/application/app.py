@@ -332,7 +332,7 @@ class App:
         if "--web" in arguments:
             return self.start_web()
         from app.interface.terminal_app import TerminalApp    # imported here: TerminalApp itself imports App
-        return TerminalApp(self, self.__ui).start(arguments)
+        return TerminalApp(self, self.__ui, self.__limiter).start(arguments)
 
     def start_web(self, host: str = "", port: int = 0) -> int:
         """Start the web app. HOST and PORT in .env set where it listens (default 127.0.0.1:5000)."""
