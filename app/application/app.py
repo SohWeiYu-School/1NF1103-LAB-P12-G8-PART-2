@@ -1384,10 +1384,10 @@ class App:
         without the step, False to stop the assessment."""
         if step in App.CRITICAL_STEPS:
             logger.error("App: critical step failed, stopping the assessment: %s (%s)", step, error)
-            self.__ui.show_error(f"{step} failed, so no verdict can be given: {error}")
+            self.__ui.show_error(f"{step} failed, so no verdict can be given.")     # the reason is in the log only
             return False
         logger.warning("App: step failed, carrying on without it: %s (%s)", step, error)
-        self.__ui.show_message(f"   ! {step} could not be completed and is left out: {error}")
+        self.__ui.show_message(f"   ! {step} could not be completed and is left out.")  # the reason is in the log only
         return True
 
     def __handle_failure_quietly(self, step: str, error: str) -> bool:
