@@ -1371,7 +1371,6 @@ button:hover{background:#18405f}button:focus-visible{outline:3px solid var(--gol
         </p>
       </form>
 
-      {% if demo %}
       <aside class="demo">
         <header><span class="badge">DEMO ONLY</span> This login is for demonstration</header>
         <p>It shows <b>who did what</b> in the activity log and keeps the admin pages separate. It is not how a real bank would do login.</p>
@@ -1380,9 +1379,8 @@ button:hover{background:#18405f}button:focus-visible{outline:3px solid var(--gol
           <li>Passwords are stored <b>hashed</b>, never as plain text.</li>
           <li>A real system would add single sign-on, a second factor (MFA), lockout after failed tries and self-service reset.</li>
         </ul>
-        <table>{% for account in demo %}<tr><td>{{ account.name }}</td><td>{{ account.password }}</td><td><button type="button" class="use" data-name="{{ account.name }}" data-password="{{ account.password }}">Use</button></td></tr>{% endfor %}</table>
+        {% if demo %}<table>{% for account in demo %}<tr><td>{{ account.name }}</td><td>{{ account.password }}</td><td><button type="button" class="use" data-name="{{ account.name }}" data-password="{{ account.password }}">Use</button></td></tr>{% endfor %}</table>{% endif %}
       </aside>
-      {% endif %}
     </div>
   </main>
 

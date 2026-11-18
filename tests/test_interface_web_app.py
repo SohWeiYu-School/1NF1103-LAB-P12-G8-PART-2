@@ -1075,6 +1075,15 @@ def test_the_sign_in_pages_show_the_demo_accounts_of_their_own_portal_and_the_tr
     assert "Officer sign-in" in officers and "System admin sign-in" in admins
 
 
+def test_the_demo_note_stays_on_a_sign_in_page_whose_portal_has_no_demo_account(tmp_path, monkeypatch):
+    application, _, browser = _anonymous(tmp_path, monkeypatch)
+    officers_only = [account for account in application.accounts() if not account.is_admin()]
+    monkeypatch.setattr(application, "accounts", lambda: officers_only)
+    admins = browser.get("/admin/signin").get_data(as_text=True)
+    assert "DEMO ONLY" in admins and "not how a real bank would do login" in admins
+    assert "data-name=" not in admins and "<table>" not in admins
+
+
 def test_the_logo_is_served_to_someone_not_signed_in_and_the_sign_in_page_uses_it(tmp_path, monkeypatch):
     _, _, browser = _anonymous(tmp_path, monkeypatch)
     logo = browser.get("/static/logo.svg")
