@@ -665,7 +665,8 @@ def test_start_stops_cleanly_on_ctrl_c_and_reports_an_unexpected_error_without_d
 def test_start_says_when_there_is_no_ai_key_and_still_runs_the_menu(app, capsys):
     assert TerminalApp(app, ConsoleUI(read=lambda question="": "0")).start([]) == 0
     out = capsys.readouterr().out
-    assert "No OPENAI_API_KEY set: only saved AI replies can be used." in out and "Goodbye." in out
+    assert "The AI service is not available right now, so only AI replies saved earlier can be used." in out
+    assert "OPENAI" not in out and "Goodbye." in out
 
 
 def test_start_needs_a_file_after_case(app, capsys):

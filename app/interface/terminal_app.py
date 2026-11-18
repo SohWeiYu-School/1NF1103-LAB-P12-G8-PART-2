@@ -48,7 +48,9 @@ class TerminalApp:
             --all-samples           assess every sample case
         """
         if not self.__app.ai_available():
-            self.__ui.show_error("No OPENAI_API_KEY set: only saved AI replies can be used.")
+            logger.warning("TerminalApp: the AI caller has no API key, so only AI replies saved earlier can be used")
+            self.__ui.show_error("The AI service is not available right now, so only AI replies saved earlier "
+                                 "can be used.")
         try:
             if "--all-samples" in arguments:
                 paths = self.__app.sample_case_files()

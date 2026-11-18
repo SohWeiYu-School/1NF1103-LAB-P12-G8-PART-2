@@ -95,7 +95,7 @@ def test_every_sample_is_assessed_from_saved_replies_with_no_ai(app, capsys):
     _save_replies_for_the_samples(app)
     assert app.start(["--all-samples"]) == 0
     out = capsys.readouterr().out
-    assert "only saved AI replies can be used" in out
+    assert "only AI replies saved earlier can be used" in out
     assert "Deciding the verdict" in out
     saved = app.assessments().load()
     assert len(saved) == 2
