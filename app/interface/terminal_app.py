@@ -26,6 +26,8 @@ class TerminalApp:
     it never works a manager's object itself.
     """
 
+    GOODBYE: str = "Thank you for using Orbit. Goodbye."      # shown for 0. Quit and for the end of input (Ctrl-D)
+
     def __init__(self, app: App, ui: ConsoleUI | None = None) -> None:
         """app is the App to ask. ui is the screen to use (App passes its own, so there is one screen)."""
         if not isinstance(app, App):
@@ -60,6 +62,10 @@ class TerminalApp:
                     return 1
                 return 0 if self.run_case_file(arguments[position + 1]) else 1
             self.run_menu()
+            return 0
+        except EOFError:                          # Ctrl-D: nobody can answer any more, so leave cleanly
+            logger.info("TerminalApp: the end of input was reached, leaving the app")
+            self.__ui.show_message("\n" + TerminalApp.GOODBYE)
             return 0
         except KeyboardInterrupt:
             self.__ui.show_message("\nStopped.")
@@ -131,7 +137,7 @@ class TerminalApp:
             elif choice == "8":
                 self.__client_history()
             elif choice == "0":
-                self.__ui.show_message("\nGoodbye.")
+                self.__ui.show_message("\n" + TerminalApp.GOODBYE)
                 break
 
     # ----- assessing ---------------------------------------------------------------------------

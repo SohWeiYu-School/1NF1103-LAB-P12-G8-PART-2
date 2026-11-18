@@ -671,3 +671,38 @@ def test_start_says_when_there_is_no_ai_key_and_still_runs_the_menu(app, capsys)
 def test_start_needs_a_file_after_case(app, capsys):
     assert _terminal(app).start(["--case"]) == 1
     assert "--case needs a file path" in capsys.readouterr().out
+
+
+def test_quit_says_thank_you_and_goodbye(app, capsys):
+    _terminal(app, "0").run_menu()
+    assert "Thank you for using Orbit. Goodbye." in capsys.readouterr().out
+
+
+def _ends_after(*typed):
+    """A screen that answers what is given and then reaches the end of input, as Ctrl-D does."""
+    waiting = iter(typed)
+
+    def read(question=""):
+        try:
+            return next(waiting)
+        except StopIteration:
+            raise EOFError from None
+
+    return ConsoleUI(read=read)
+
+
+@pytest.mark.parametrize("typed", [(), ("1",), ("5", "1"), ("8", "CL-1"), ("6",)])
+def test_the_end_of_input_anywhere_leaves_cleanly_with_exit_code_0(app, capsys, caplog, typed):
+    import logging
+    with caplog.at_level(logging.INFO):
+        assert TerminalApp(app, _ends_after(*typed)).start([]) == 0
+    out = capsys.readouterr().out
+    assert "Thank you for using Orbit. Goodbye." in out
+    assert "unexpected error" not in out.lower()
+    assert "reached" in caplog.text and "ERROR" not in caplog.text
+
+
+def test_the_end_of_input_while_asking_for_a_client_reference_also_leaves_cleanly(app, tmp_path, capsys):
+    app.clients().save(sample_case())
+    code = TerminalApp(app, _ends_after("4")).start([])        # asked for a client reference, then Ctrl-D
+    assert code == 0 and "Thank you for using Orbit. Goodbye." in capsys.readouterr().out
