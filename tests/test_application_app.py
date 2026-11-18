@@ -62,14 +62,22 @@ def test_a_caller_decides_whether_ai_is_available(tmp_path, monkeypatch):
     assert App(caller, data_folder=str(tmp_path)).ai_available() is False
 
 
-def _save_replies_for_the_samples(app):
-    """Save made-up forecast replies for every sample case, as if the AI had answered before."""
+def _sample_cases() -> list[dict]:
+    """Every sample case in the forecasting layout (career_history and client_ref)."""
     folder = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "sample")
+    cases = []
     for name in sorted(os.listdir(folder)):
         with open(os.path.join(folder, name), encoding="utf-8") as handle:
             case = json.load(handle)
         if "career_history" in case and "client_ref" in case:
-            fake_services.save_forecast_replies(app.response_cache(), case)
+            cases.append(case)
+    return cases
+
+
+def _save_replies_for_the_samples(app):
+    """Save made-up forecast replies for every sample case, as if the AI had answered before."""
+    for case in _sample_cases():
+        fake_services.save_forecast_replies(app.response_cache(), case)
 
 
 def test_a_new_client_reference_is_checked_against_the_saved_clients(app, tmp_path):
@@ -91,45 +99,32 @@ def test_a_client_file_that_cannot_be_read_is_an_error_not_a_free_reference(app,
     assert "App.client_ref_taken" in caplog.text
 
 
-def test_every_sample_is_assessed_from_saved_replies_with_no_ai(app, capsys):
+def test_every_sample_is_assessed_from_saved_replies_with_no_ai(app):
     _save_replies_for_the_samples(app)
-    assert app.start(["--all-samples"]) == 0
-    out = capsys.readouterr().out
-    assert "only AI replies saved earlier can be used" in out
-    assert "Deciding the verdict" in out
+    for case in _sample_cases():
+        result = app.assess(case, show_failures=False)
+        assert result is not None and result["forecast"] is not None
+        assert app.save_assessment(result)
     saved = app.assessments().load()
     assert len(saved) == 2
     assert all(record["outcome"] in ("PASSED", "MANUAL_REVIEW", "RISKY", "SERIOUS_RISK") for record in saved)
 
 
-def test_with_no_saved_replies_the_samples_still_get_a_verdict_but_the_run_reports_failure(app, capsys):
-    assert app.start(["--all-samples"]) == 1          # the forecast could not run
-    out = capsys.readouterr().out
-    assert "The forecast could not be completed and is left out" in out
+def test_with_no_saved_replies_the_samples_still_get_a_verdict_but_the_forecast_is_left_out(app, capsys):
+    for case in _sample_cases():
+        result = app.assess(case)
+        assert result is not None and result["forecast"] is None          # the forecast could not run
+        assert app.save_assessment(result)
+    assert "The forecast could not be completed and is left out" in capsys.readouterr().out
     assert len(app.assessments().load()) == 2
 
 
-def test_a_case_file_that_is_missing_is_reported_not_crashed(app, tmp_path, capsys):
-    assert app.start(["--case", str(tmp_path / "nowhere.json")]) == 1
-    assert "the case must be a JSON object" in capsys.readouterr().out
-
-
-def test_a_damaged_case_file_is_reported_not_crashed(app, tmp_path, capsys):
-    path = tmp_path / "broken.json"
-    path.write_text("{not json", encoding="utf-8")
-    assert app.start(["--case", str(path)]) == 1
-
-
-def test_an_unknown_option_is_refused_with_the_allowed_ones(app, capsys):
-    assert app.start(["--all-samples", "--demo"]) == 1
+@pytest.mark.parametrize("options", [["--demo"], ["--case", "x.json"], ["--all-samples"], ["--web", "--demo"]])
+def test_an_unknown_option_is_refused_with_the_allowed_ones(app, capsys, options):
+    assert app.start(options) == 1
     out = capsys.readouterr().out
-    assert "Unknown option --demo" in out and "--case FILE" in out
+    assert f"Unknown option {[o for o in options if o != '--web'][0]}" in out and "Allowed: --web" in out
     assert app.assessments().load() == []                   # nothing was run
-
-
-def test_case_needs_a_file_path(app, capsys):
-    assert app.start(["--case"]) == 1
-    assert "--case needs a file path" in capsys.readouterr().out
 
 
 def test_a_step_that_fails_is_left_out_and_the_assessment_carries_on(app, capsys):
@@ -291,6 +286,7 @@ def test_a_bad_rate_limit_setting_is_reported_at_start_not_crashed(tmp_path, mon
     monkeypatch.setenv("MONGODB_URI", "")
     root = tmp_path / "root"
     shutil.copytree("config", root / "config")
+    shutil.copytree("app/schemas", root / "app" / "schemas")   # the case schema App needs
     policy = json.loads((root / "config" / "policy.json").read_text())
     policy["assessment_rate_limit"] = {"enabled": True, "cooldown_seconds": 60.5}
     (root / "config" / "policy.json").write_text(json.dumps(policy))
@@ -308,6 +304,7 @@ def test_unreadable_settings_stop_the_app_with_a_message_and_nothing_runs(tmp_pa
     monkeypatch.setenv("MONGODB_URI", "")
     root = tmp_path / "root"
     shutil.copytree("config", root / "config")
+    shutil.copytree("app/schemas", root / "app" / "schemas")   # the case schema App needs
     policy = root / "config" / "policy.json"
     if damage == "missing":
         policy.unlink()
@@ -406,6 +403,7 @@ def _app_with_damaged_policy(tmp_path, monkeypatch):
     monkeypatch.setenv("MONGODB_URI", "")
     root = tmp_path / "root"
     shutil.copytree("config", root / "config")
+    shutil.copytree("app/schemas", root / "app" / "schemas")   # the case schema App needs
     (root / "config" / "policy.json").write_text("{broken")
     return root
 
@@ -573,6 +571,7 @@ def test_a_rate_limit_setting_that_is_not_an_object_is_logged_with_its_value(tmp
     monkeypatch.setenv("MONGODB_URI", "")
     root = tmp_path / "root"
     shutil.copytree("config", root / "config")
+    shutil.copytree("app/schemas", root / "app" / "schemas")   # the case schema App needs
     policy = json.loads((root / "config" / "policy.json").read_text())
     policy["assessment_rate_limit"] = "30 seconds"
     (root / "config" / "policy.json").write_text(json.dumps(policy))
@@ -685,6 +684,7 @@ def test_a_bad_accounts_file_stops_the_app_like_a_bad_policy_file(tmp_path, monk
     monkeypatch.setenv("MONGODB_URI", "")
     root = tmp_path / "root"
     shutil.copytree("config", root / "config")
+    shutil.copytree("app/schemas", root / "app" / "schemas")   # the case schema App needs
     accounts = root / "config" / "accounts.json"
     if damage == "missing":
         accounts.unlink()
@@ -1300,6 +1300,7 @@ def test_without_an_audit_key_app_is_built_but_start_and_start_web_stop_with_a_m
     monkeypatch.delenv("AUDIT_KEY", raising=False)
     import shutil
     shutil.copytree("config", tmp_path / "root" / "config")      # a root with no .env, so no key is read from it
+    shutil.copytree("app/schemas", tmp_path / "root" / "app" / "schemas")   # the case schema App needs
     application = App(ai_caller=None, root=str(tmp_path / "root"), data_folder=str(tmp_path / "data"))
     assert not application.audit_key_ok()
     for run in (lambda: application.start([]), lambda: application.start(["--web"]), application.start_web):
@@ -1398,6 +1399,7 @@ def test_a_bad_audit_setting_is_logged_and_the_defaults_are_used(tmp_path, monke
     monkeypatch.setenv("MONGODB_URI", "")
     root = tmp_path / "root"
     shutil.copytree("config", root / "config")
+    shutil.copytree("app/schemas", root / "app" / "schemas")   # the case schema App needs
     policy = json.loads((root / "config" / "policy.json").read_text())
     policy["audit"] = value
     (root / "config" / "policy.json").write_text(json.dumps(policy))
@@ -1524,6 +1526,7 @@ def test_a_log_without_a_key_cannot_be_checked_so_the_overview_says_so(tmp_path,
     monkeypatch.setenv("MONGODB_URI", "")
     import shutil
     shutil.copytree("config", tmp_path / "root" / "config")      # a root with no .env, so no key is read from it
+    shutil.copytree("app/schemas", tmp_path / "root" / "app" / "schemas")   # the case schema App needs
     seed_audit(tmp_path / "data", NIGHT_OWNER)
     monkeypatch.delenv("AUDIT_KEY")
     keyless = App(ai_caller=None, root=str(tmp_path / "root"), data_folder=str(tmp_path / "data"))
@@ -1838,13 +1841,7 @@ def test_all_assessments_can_be_limited_to_one_outcome(app):
     assert len(app.all_assessments()) == 2
 
 
-def test_app_hands_out_case_files_sample_names_and_document_folders(app, tmp_path):
-    samples = app.sample_case_files()
-    assert samples and all(path.endswith(".json") for path in samples)
-    case = app.load_case_file(samples[0])
-    assert app.is_forecasting_case(case) in (True, False)
-    assert app.load_case_file(str(tmp_path / "nowhere.json")) is None
-    assert app.is_forecasting_case([1]) is False
+def test_app_hands_out_document_folders_and_the_case_schema(app, tmp_path):
     assert app.list_document_folder(str(tmp_path / "nowhere")) is None
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "note.txt").write_text("hello", encoding="utf-8")
@@ -1920,17 +1917,9 @@ def test_the_record_methods_refuse_something_that_is_not_a_client_record(app):
 # ----- the inputs of the public helpers are checked ------------------------------------------------
 
 @pytest.mark.parametrize("bad", [None, 5, ["x"], b"bytes"])
-def test_a_case_file_path_and_a_document_folder_must_be_text(app, bad):
+def test_a_document_folder_must_be_text(app, bad):
     with pytest.raises(ValueError, match="text"):
         app.list_document_folder(bad)
-    with pytest.raises(ValueError, match="text"):
-        app.load_case_file(bad)
-
-
-@pytest.mark.parametrize("bad", ["", "   "])
-def test_an_empty_case_file_path_is_refused(app, bad):
-    with pytest.raises(ValueError):
-        app.load_case_file(bad)
 
 
 def test_saved_verdict_refuses_what_is_not_a_record_and_gives_none_without_a_report(app, caplog):
@@ -1984,3 +1973,19 @@ def test_the_set_record_field_messages_read_on_after_that_value_cannot_be_used_b
     assert str(error.value) == "the field to change must be given as a path of names and positions"
     for text in ("the record has no such field (career.no_such)", "it is not possible there (wrong kind of value)"):
         assert text[0].islower() and not text.endswith(".")
+
+
+def test_an_unreadable_case_schema_stops_the_app_instead_of_accepting_every_case(tmp_path, monkeypatch, capsys, caplog):
+    """An empty schema would let every case through unchecked: App must say the settings are broken."""
+    import shutil
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    root = tmp_path / "root"
+    shutil.copytree("config", root / "config")
+    (root / "app" / "schemas").mkdir(parents=True)
+    (root / "app" / "schemas" / "case_input.schema.json").write_text("{broken", encoding="utf-8")
+    application = App(ai_caller=None, root=str(root), data_folder=str(tmp_path / "data"))
+    assert application.settings_ok() is False
+    assert application.start([]) == 1
+    assert App.SETTINGS_UNAVAILABLE in capsys.readouterr().out
+    assert "case schema" in caplog.text

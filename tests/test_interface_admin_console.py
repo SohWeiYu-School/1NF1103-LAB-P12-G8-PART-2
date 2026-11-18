@@ -721,3 +721,12 @@ def test_the_update_is_asked_with_the_admins_name_and_the_chosen_answers(tmp_pat
 def test_a_flag_can_be_updated_after_opening_it_from_the_overview(app):
     out = _run(app, "1", "4", "6", "1", "1", "1", "2", NOTE, "0", "0", "0")
     assert "F-SHO-SOW-1-4 is now In review." in out
+
+
+def test_an_error_that_is_not_a_value_error_keeps_the_admin_in_the_menu(tmp_path, monkeypatch, caplog):
+    application = _made_up_app(tmp_path, monkeypatch)
+    application.overview_error = TypeError("made-up detail nobody should see")
+    out = _run(application, "1", "4", "6", "5", "0")               # the overview fails, then verify still runs
+    assert "An unexpected error occurred" in out and "made-up detail" not in out
+    assert "made-up detail nobody should see" in caplog.text
+    assert out.count("--- ADMIN: AUDIT AND FLAGS ---") == 3 and "VERIFY THE AUDIT LOG" in out

@@ -67,6 +67,11 @@ class AdminConsole:
                  self.__verify)[picked]()
             except ValueError as error:
                 self.__show_error(error, AdminConsole.MENU[picked])
+            except EOFError:                       # Ctrl-D: TerminalApp signs the admin out and says goodbye
+                raise
+            except Exception:                      # any other failure: logged in full, the admin stays in the menu
+                logger.exception("AdminConsole: %s failed with an unexpected error", AdminConsole.MENU[picked])
+                self.__ui.show_unexpected_error()
 
     def __show_error(self, error: ValueError, where: str, not_saved: bool = False) -> None:
         """Tell the admin which kind of problem it is. Only the messages App chose for the admin (SAFE_ERRORS) are

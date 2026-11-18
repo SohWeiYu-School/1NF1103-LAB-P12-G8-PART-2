@@ -135,8 +135,6 @@ If you're actively coding and don't want to rebuild Docker every time you change
 ```bash
 python main.py                                  # the menu
 python main.py --web                            # the web app
-python main.py --case data/sample/case_001.json # assess one case file
-python main.py --all-samples                    # assess every sample case
 ```
 
 On a Mac, port 5000 is often taken by AirPlay. Start the web app on another port instead:

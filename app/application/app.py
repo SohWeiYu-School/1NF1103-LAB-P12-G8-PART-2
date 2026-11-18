@@ -210,7 +210,13 @@ class App:
         self.__ui: ConsoleUI = ConsoleUI()
         self.__client_form: ClientForm = ClientForm(self.__ui, ReportView(self.__ui))
         schema = self.__case_files.load(os.path.join(root, "app", "schemas", "case_input.schema.json"), default={})
-        self.__case_schema: dict = schema if isinstance(schema, dict) else {}
+        if not isinstance(schema, dict) or not schema:
+            # Without the schema every case would pass unchecked: an empty result is not a safe fallback.
+            # start() and start_web() see the flag, tell the officer and stop.
+            logger.error("App: the case schema app/schemas/case_input.schema.json could not be read")
+            self.__settings_ok = False
+            schema = {}
+        self.__case_schema: dict = schema
         self.__case_builder: CaseBuilder = CaseBuilder(self.__ui, schema)
         limits = policy.get("assessment_rate_limit", {})
         if not isinstance(limits, dict):
@@ -306,17 +312,12 @@ class App:
         """Run the command line app. Returns the exit code (0 = fine).
 
             (no arguments)          the menu
-            --case FILE             assess one case file
-            --all-samples           assess every sample case
             --web                   start the web app instead of the menu
         """
         self.__configure_logging()
-        allowed = ("--web", "--case", "--all-samples")
-        unknown = [argument for position, argument in enumerate(arguments)
-                   if argument not in allowed and not (position > 0 and arguments[position - 1] == "--case")]
+        unknown = [argument for argument in arguments if argument != "--web"]
         if unknown:
-            self.__ui.show_error(f"Unknown option {unknown[0]}. Allowed: --web, --case FILE, --all-samples "
-                                 "(or nothing, for the menu).")
+            self.__ui.show_error(f"Unknown option {unknown[0]}. Allowed: --web (or nothing, for the menu).")
             return 1
         if not self.__settings_ok:
             self.__ui.show_error(App.SETTINGS_UNAVAILABLE)
@@ -332,7 +333,7 @@ class App:
         if "--web" in arguments:
             return self.start_web()
         from app.interface.terminal_app import TerminalApp    # imported here: TerminalApp itself imports App
-        return TerminalApp(self, self.__ui, self.__limiter).start(arguments)
+        return TerminalApp(self, self.__ui, self.__limiter).start()
 
     def start_web(self, host: str = "", port: int = 0) -> int:
         """Start the web app. HOST and PORT in .env set where it listens (default 127.0.0.1:5000)."""
@@ -658,24 +659,9 @@ class App:
             raise ValueError("The folder must be given as text.")
         return self.__documents.list_folder(folder)
 
-    def load_case_file(self, path: str) -> object | None:
-        """The contents of one case file as it is (normally a JSON object; whatever is wrong with it is for
-        validate_case to say), or None if it is missing or cannot be read. Raises ValueError if path is not
-        non-empty text."""
-        if not isinstance(path, str) or not path.strip():
-            raise ValueError("The case file path must be non-empty text.")
-        return self.__case_files.load(path)
-
-    def is_forecasting_case(self, case: object) -> bool:
-        """True for a case in the forecasting layout (the layout that can be assessed directly)."""
-        return self.__case_files.is_forecasting_case(case)
-
-    def sample_case_files(self) -> list[str]:
-        """The path of every sample case file shipped with the code, sorted by name."""
-        return self.__case_files.list_samples()
-
     def case_schema(self) -> dict:
-        """The JSON schema a case is checked against ({} if it could not be read)."""
+        """The JSON schema a case is checked against ({} only if it could not be read, and then settings_ok() is
+        False and the app does not start)."""
         return dict(self.__case_schema)
 
     def read_failed(self, what: str, actor: str = "") -> None:

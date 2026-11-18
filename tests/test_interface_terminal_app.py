@@ -631,16 +631,13 @@ def test_the_terminal_refuses_to_assess_when_the_settings_could_not_be_loaded(tm
     monkeypatch.setenv("MONGODB_URI", "")
     root = tmp_path / "root"
     shutil.copytree("config", root / "config")
+    shutil.copytree("app/schemas", root / "app" / "schemas")   # the case schema App needs
     (root / "config" / "policy.json").write_text("{broken")
     application = App(ai_caller=fake_ai.caller, root=str(root), data_folder=str(tmp_path / "data"))
-    case_path = tmp_path / "case.json"
-    case_path.write_text(json.dumps(sample_case()))
     terminal = _terminal(application)
-    assert terminal.start([]) == 1                       # the settings message, not "unexpected error"
+    assert terminal.start() == 1                       # the settings message, not "unexpected error"
     out = capsys.readouterr().out
     assert App.SETTINGS_UNAVAILABLE in out and "unexpected error" not in out.lower()
-    with pytest.raises(RuntimeError, match="settings could not be loaded"):
-        terminal.run_case_file(str(case_path))
     with pytest.raises(RuntimeError, match="settings could not be loaded"):
         terminal.assess_client_record(ClientRecord.from_dict(sample_case()))
 
@@ -654,28 +651,23 @@ def test_start_stops_cleanly_on_ctrl_c_and_reports_an_unexpected_error_without_d
     def interrupt(question=""):
         raise KeyboardInterrupt
 
-    assert TerminalApp(app, ConsoleUI(read=interrupt)).start([]) == 130
+    assert TerminalApp(app, ConsoleUI(read=interrupt)).start() == 130
     assert "Stopped." in capsys.readouterr().out
 
     def break_down(question=""):
         raise RuntimeError("secret detail")
 
-    assert TerminalApp(app, ConsoleUI(read=break_down)).start([]) == 1
+    assert TerminalApp(app, ConsoleUI(read=break_down)).start() == 1
     out = capsys.readouterr().out
     assert "An unexpected error occurred" in out and "secret detail" not in out
     assert "secret detail" in caplog.text
 
 
 def test_start_says_when_there_is_no_ai_key_and_still_runs_the_menu(app, capsys):
-    assert TerminalApp(app, ConsoleUI(read=lambda question="": "0")).start([]) == 0
+    assert TerminalApp(app, ConsoleUI(read=lambda question="": "0")).start() == 0
     out = capsys.readouterr().out
     assert "The AI service is not available right now, so only AI replies saved earlier can be used." in out
     assert "OPENAI" not in out and "Goodbye." in out
-
-
-def test_start_needs_a_file_after_case(app, capsys):
-    assert _terminal(app).start(["--case"]) == 1
-    assert "--case needs a file path" in capsys.readouterr().out
 
 
 def test_quit_says_thank_you_and_goodbye(app, capsys):
@@ -700,7 +692,7 @@ def _ends_after(*typed):
 def test_the_end_of_input_anywhere_leaves_cleanly_with_exit_code_0(app, capsys, caplog, typed):
     import logging
     with caplog.at_level(logging.INFO):
-        assert TerminalApp(app, _ends_after(*typed)).start([]) == 0
+        assert TerminalApp(app, _ends_after(*typed)).start() == 0
     out = capsys.readouterr().out
     assert "Thank you for using Orbit. Goodbye." in out
     assert "unexpected error" not in out.lower()
@@ -709,25 +701,8 @@ def test_the_end_of_input_anywhere_leaves_cleanly_with_exit_code_0(app, capsys, 
 
 def test_the_end_of_input_while_asking_for_a_client_reference_also_leaves_cleanly(app, tmp_path, capsys):
     app.clients().save(sample_case())
-    code = TerminalApp(app, _ends_after("4")).start([])        # asked for a client reference, then Ctrl-D
+    code = TerminalApp(app, _ends_after("4")).start()        # asked for a client reference, then Ctrl-D
     assert code == 0 and "Thank you for using Orbit. Goodbye." in capsys.readouterr().out
-
-
-def test_the_end_of_input_inside_a_case_file_run_is_an_unexpected_error_not_a_clean_goodbye(app, tmp_path, capsys, caplog):
-    case_path = tmp_path / "case.json"
-    case_path.write_text(json.dumps(sample_case()))
-    seen = []
-
-    def write(text):
-        seen.append(text)
-        if "Assessing" in text:
-            raise EOFError                       # something below ran out of input where no question is asked
-
-    code = TerminalApp(app, ConsoleUI(write=write)).start(["--case", str(case_path)])
-    assert code == 1
-    assert not any("Thank you for using Orbit" in text for text in seen)
-    assert any("unexpected error" in text.lower() for text in seen)
-    assert "EOFError" in caplog.text
 
 
 def test_zero_at_the_archive_reason_cancels_and_is_not_saved_as_the_reason(app, capsys):
@@ -802,16 +777,15 @@ def test_a_refused_assessment_does_not_show_the_previous_actions_audit_failure_a
     monkeypatch.setenv("MONGODB_URI", "")
     root = tmp_path / "root"
     shutil.copytree("config", root / "config")
+    shutil.copytree("app/schemas", root / "app" / "schemas")   # the case schema App needs
     (root / "config" / "policy.json").write_text("{broken")
     application = App(ai_caller=fake_ai.caller, root=str(root), data_folder=str(tmp_path))
     break_audit(tmp_path)
     assert application.save_client(ClientRecord.from_dict(sample_case())) is True
     assert application.audit_failure_message() == App.AUDIT_NOT_WRITTEN          # the earlier action's failure
-    case_path = tmp_path / "case.json"
-    case_path.write_text(json.dumps(sample_case()))
     capsys.readouterr()
     with pytest.raises(RuntimeError, match="settings could not be loaded"):
-        _terminal(application).run_case_file(str(case_path))
+        _terminal(application).assess_client_record(ClientRecord.from_dict(sample_case()))
     assert application.audit_failure_message() == ""
     out = capsys.readouterr().out
     assert App.AUDIT_NOT_WRITTEN not in out and App.AUDIT_LINE_NOT_WRITTEN not in out
@@ -941,7 +915,7 @@ def test_keyboard_interrupt_inside_the_admin_screens_still_signs_out(app):
 
     shown = []
     ui = ConsoleUI(read=read, write=shown.append, secret=read)
-    assert TerminalApp(app, ui).start([]) == 130
+    assert TerminalApp(app, ui).start() == 130
     assert any("Stopped." in line for line in shown)
     assert [line.action for line in _audit_lines(app)] == ["signed_in", "signed_out"]
 
@@ -957,7 +931,7 @@ def test_the_end_of_input_inside_the_admin_screens_leaves_cleanly_and_signs_out(
             raise EOFError from None
 
     ui = ConsoleUI(read=read, write=shown.append, secret=read)
-    assert TerminalApp(app, ui).start([]) == 0
+    assert TerminalApp(app, ui).start() == 0
     assert any("Goodbye." in line for line in shown) and not any("unexpected" in line for line in shown)
     assert [line.action for line in _audit_lines(app)] == ["signed_in", "signed_out"]
 
@@ -975,7 +949,7 @@ def test_the_end_of_input_partway_through_a_flag_update_writes_nothing_and_signs
             raise EOFError from None
 
     ui = ConsoleUI(read=read, write=shown.append, secret=read)
-    assert TerminalApp(app, ui).start([]) == 0
+    assert TerminalApp(app, ui).start() == 0
     assert prompts[-1].startswith("Why (required")           # the note question was reached before the input ended
     assert not any("unexpected" in line for line in shown) and not any("Saved in the audit log" in line for line in shown)
     actions = [line.action for line in _audit_lines(app)]
@@ -993,7 +967,7 @@ def test_an_error_inside_the_admin_screens_still_signs_out(app):
             raise RuntimeError("made-up failure") from None
 
     ui = ConsoleUI(read=read, write=shown.append, secret=read)
-    assert TerminalApp(app, ui).start([]) == 1
+    assert TerminalApp(app, ui).start() == 1
     assert any("unexpected error" in line for line in shown)
     assert [line.action for line in _audit_lines(app)] == ["signed_in", "signed_out"]
 
@@ -1008,3 +982,13 @@ def test_a_sign_in_or_sign_out_line_that_could_not_be_written_is_told(app, tmp_p
 def test_the_menu_says_the_admin_screens_are_nine(app):
     out, _ = _admin_session(app, "0")
     assert "9. Admin: audit and flags" in out
+
+
+def test_an_unexpected_error_in_a_menu_screen_keeps_the_officer_in_the_menu(app, capsys, caplog, monkeypatch):
+    def broken(*args, **kwargs):
+        raise TypeError("made-up detail nobody should see")
+    monkeypatch.setattr(app, "all_clients", broken)
+    out = _run_menu(app, capsys, "6", "0")
+    assert "An unexpected error occurred" in out and "made-up detail" not in out
+    assert "made-up detail nobody should see" in caplog.text
+    assert "Thank you for using Orbit. Goodbye." in out                  # the menu came back and 0 left it

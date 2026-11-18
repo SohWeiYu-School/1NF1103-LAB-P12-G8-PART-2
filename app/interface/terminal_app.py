@@ -67,14 +67,8 @@ class TerminalApp:
 
     # ----- starting ------------------------------------------------------------------------
 
-    def start(self, arguments: list[str]) -> int:
-        """Run the command line app after App has checked the options and the settings. Returns the exit
-        code (0 = fine).
-
-            (no arguments)          the menu
-            --case FILE             assess one case file
-            --all-samples           assess every sample case
-        """
+    def start(self) -> int:
+        """Run the menu after App has checked the options and the settings. Returns the exit code (0 = fine)."""
         if not self.__app.settings_ok():            # App.start() checks this too; a direct caller is told honestly
             self.__ui.show_error(App.SETTINGS_UNAVAILABLE)
             return 1
@@ -83,16 +77,6 @@ class TerminalApp:
             self.__ui.show_error("The AI service is not available right now, so only AI replies saved earlier "
                                  "can be used.")
         try:
-            if "--all-samples" in arguments:
-                paths = self.__app.sample_case_files()
-                results = [self.run_case_file(path) for path in paths]
-                return 0 if paths and all(results) else 1
-            if "--case" in arguments:
-                position = arguments.index("--case")
-                if position + 1 >= len(arguments):
-                    self.__ui.show_error("--case needs a file path")
-                    return 1
-                return 0 if self.run_case_file(arguments[position + 1]) else 1
             try:
                 self.run_menu()
             except EOFError:                      # Ctrl-D: nobody can answer any more, so leave cleanly
@@ -118,62 +102,68 @@ class TerminalApp:
         while True:
             app.begin_request(App.TERMINAL)          # each pass of the menu is a new request
             choice = self.__ui.show_app_menu()
-            if choice == "1":
-                record = self.__client_form.create_new_client(
-                    save_fn=functools.partial(self.__audited(app.save_client), new_client=True),
-                    upload_fn=self.__audited(app.upload_document), is_taken_fn=app.client_ref_taken)
-                if record is not None:
-                    self.__maybe_assess(record)
-            elif choice == "2":
-                record = self.__new_client_from_documents()
-                if record is not None:
-                    self.__maybe_assess(record)
-            elif choice == "3":
-                self.__client_form.find_existing_client(
-                    find_fn=app.find_client, save_fn=self.__audited(app.save_client),
-                    download_fn=self.__audited(app.download_document),
-                    upload_fn=self.__audited(app.upload_document))
-            elif choice == "4":
-                ref = self.__ui.ask_client_ref()
-                if ref is None:
-                    continue
-                try:
-                    record = app.find_client(ref)
-                except ValueError as error:
-                    self.__ui.show_error(str(error))
-                    continue
-                if record is None:
-                    self.__ui.show_error(f"No client found with reference {ref}.")
-                    continue
-                self.__maybe_assess(record)
-            elif choice == "5":
-                self.list_assessments()
-            elif choice == "6":
-                try:
-                    clients = app.all_clients()
-                except ValueError as error:
-                    self.__ui.show_error(str(error))
-                    continue
-                activity, note = None, ""
-                if clients:                            # with no clients there is nothing to show activity for
+            try:
+                if choice == "1":
+                    record = self.__client_form.create_new_client(
+                        save_fn=functools.partial(self.__audited(app.save_client), new_client=True),
+                        upload_fn=self.__audited(app.upload_document), is_taken_fn=app.client_ref_taken)
+                    if record is not None:
+                        self.__maybe_assess(record)
+                elif choice == "2":
+                    record = self.__new_client_from_documents()
+                    if record is not None:
+                        self.__maybe_assess(record)
+                elif choice == "3":
+                    self.__client_form.find_existing_client(
+                        find_fn=app.find_client, save_fn=self.__audited(app.save_client),
+                        download_fn=self.__audited(app.download_document),
+                        upload_fn=self.__audited(app.upload_document))
+                elif choice == "4":
+                    ref = self.__ui.ask_client_ref()
+                    if ref is None:
+                        continue
                     try:
-                        activity = app.last_activity()
-                    except ValueError as error:        # the client list still shows, without the column
-                        logger.error("TerminalApp.run_menu: the last activity of the clients cannot be shown: %r",
-                                     error)
-                        note = f"{App.AUDIT_UNAVAILABLE} The last activity of each client cannot be shown."
-                self.__report_view.show_client_list(clients, activity, note)
-                self.__ui.read_answer("Press Enter to continue...")
-            elif choice == "7":
-                self.__ui.show_message("\n--- Synchronizing Local Data to Cloud Database ---")
-                self.__ui.show_sync_result(self.__audited(app.sync_to_cloud)())
-            elif choice == "8":
-                self.__client_history()
-            elif choice == "9":
-                self.__admin()
-            elif choice == "0":
-                self.__ui.show_message("\n" + TerminalApp.GOODBYE)
-                break
+                        record = app.find_client(ref)
+                    except ValueError as error:
+                        self.__ui.show_error(str(error))
+                        continue
+                    if record is None:
+                        self.__ui.show_error(f"No client found with reference {ref}.")
+                        continue
+                    self.__maybe_assess(record)
+                elif choice == "5":
+                    self.list_assessments()
+                elif choice == "6":
+                    try:
+                        clients = app.all_clients()
+                    except ValueError as error:
+                        self.__ui.show_error(str(error))
+                        continue
+                    activity, note = None, ""
+                    if clients:                            # with no clients there is nothing to show activity for
+                        try:
+                            activity = app.last_activity()
+                        except ValueError as error:        # the client list still shows, without the column
+                            logger.error("TerminalApp.run_menu: the last activity of the clients cannot be shown: %r",
+                                         error)
+                            note = f"{App.AUDIT_UNAVAILABLE} The last activity of each client cannot be shown."
+                    self.__report_view.show_client_list(clients, activity, note)
+                    self.__ui.read_answer("Press Enter to continue...")
+                elif choice == "7":
+                    self.__ui.show_message("\n--- Synchronizing Local Data to Cloud Database ---")
+                    self.__ui.show_sync_result(self.__audited(app.sync_to_cloud)())
+                elif choice == "8":
+                    self.__client_history()
+                elif choice == "9":
+                    self.__admin()
+                elif choice == "0":
+                    self.__ui.show_message("\n" + TerminalApp.GOODBYE)
+                    break
+            except EOFError:                       # Ctrl-D: start() says goodbye
+                raise
+            except Exception:                      # any other failure: logged in full, the officer stays in the menu
+                logger.exception("TerminalApp: menu choice %s failed with an unexpected error", choice)
+                self.__ui.show_unexpected_error()
 
     # ----- the admin ---------------------------------------------------------------------------
 
@@ -239,30 +229,6 @@ class TerminalApp:
         else:
             self.__ui.show_error("Could not save the assessment.")
         return verdict
-
-    def run_case_file(self, path: str) -> bool:
-        """Assess a case file (the same assessment as the menu). False if it could not be assessed."""
-        app = self.__app
-        case = app.load_case_file(path)
-        if case is not None and not app.is_forecasting_case(case):
-            self.__ui.show(f"\n{os.path.basename(path)}: not in the forecasting format "
-                           "(it's a client record), skipped. Use the menu to assess it.")
-            return True
-        problems = self.__case_builder.validate_case(case)
-        if problems:
-            self.__case_builder.show_case_problems(path, problems)
-            return False
-        self.__ui.show_message(f"\nAssessing {case['client_ref']} ({os.path.basename(path)}).")
-        result = self.__audited(app.assess)(case, on_step=self.__show_step)
-        if result is None:
-            self.__ui.show_error("The assessment was stopped. Nothing was saved.")
-            return False
-        if not self.__audited(app.save_assessment)(result, on_step=self.__show_step):
-            self.__ui.show_error("Could not save the assessment.")
-        self.__report_view.show_verdict_report(result["verdict"], ask_for_evidence=False,
-                                               crime_result=result.get("crime_result"),
-                                               typologies=result.get("typologies"))
-        return result["forecast"] is not None
 
     def __maybe_assess(self, record: ClientRecord) -> None:
         """Check the rate limit; if clear, run the assessment."""

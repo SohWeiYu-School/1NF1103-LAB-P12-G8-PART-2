@@ -559,7 +559,7 @@ def test_network_libraries_dont_flood_the_log(run):
     root = logging.getLogger()
     handlers, level = list(root.handlers), root.level
     try:
-        run.app().start(["--case"])                  # starting the app sets up logging, then stops at --case
+        run.app().start(["--demo"])                  # starting the app sets up logging, then stops at the unknown option
         for name in ("httpx", "httpcore", "openai"):
             assert logging.getLogger(name).getEffectiveLevel() >= logging.WARNING
     finally:

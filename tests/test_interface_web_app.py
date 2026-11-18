@@ -460,6 +460,7 @@ def test_the_wealth_split_is_left_alone_if_partly_typed(web):
 def test_only_this_apps_document_references_are_accepted(tmp_path, monkeypatch):
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     shutil.copytree("config", tmp_path / "config")                     # the settings App needs
+    shutil.copytree("app/schemas", tmp_path / "app" / "schemas")   # the case schema App needs
     site = WebApp(App(None, root=str(tmp_path), data_folder="data"))     # laid out as in production
     assert site._is_stored_document("data/documents/ab12cd34_cv.pdf")
     assert site._is_stored_document("0123456789abcdef01234567")
