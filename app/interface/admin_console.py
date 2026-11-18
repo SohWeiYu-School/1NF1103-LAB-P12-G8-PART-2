@@ -102,9 +102,16 @@ class AdminConsole:
                                       allow_back=True, back_label="Back to the admin menu")
         if picked is None:
             return
-        tab, number = OverviewPage.TABS[picked], 1
+        tab, number, shown = OverviewPage.TABS[picked], 1, ""      # shown: the error just told, if any
         while True:
-            page = self.__app.audit_overview(preset, tab, number, self.__now())
+            try:
+                page = self.__app.audit_overview(preset, tab, number, self.__now())
+            except ValueError as error:
+                if shown and str(error) == shown:      # the same problem again: told once, back to the menu
+                    logger.error("AdminConsole: the Overview cannot be reloaded either: %s", error)
+                    return
+                raise
+            shown = ""
             self.__listed = page.rows
             self.__view.show_overview(page)
             options, actions = [], []
@@ -131,6 +138,7 @@ class AdminConsole:
                     self.__open_flag()
                 except ValueError as error:            # stay on this page: the range, tab and page are kept
                     self.__show_error(error, "Open a flag")
+                    shown = str(error)
                 number = page.page
             else:
                 return

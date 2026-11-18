@@ -1,5 +1,6 @@
 """AdminView: how the admin screens look on the terminal (the twin of the admin pages of WebApp)."""
 
+import unicodedata
 from datetime import datetime, timezone
 from typing import Any
 
@@ -34,10 +35,15 @@ class AdminView:
 
     @staticmethod
     def __printable(lines: list[str]) -> str:
-        """The lines joined with newlines, after every character that cannot be printed (a control or escape
-        character, a newline inside a stored note) is replaced by "?": the log, notes and values come from saved
-        data, and must not be able to move the cursor or recolour another admin's terminal."""
-        return "\n".join("".join(char if char.isprintable() else "?" for char in line) for line in lines)
+        """The lines joined with newlines, after every control or format character (an escape, a bell, a bidi
+        override, a stray line break inside a stored value) is replaced by "?": the log, notes and values come
+        from saved data, and must not be able to move the cursor or recolour another terminal. A tab or a
+        no-break space becomes a plain space; every other character (accents, Chinese, dashes, arrows) stays."""
+        def clean(char: str) -> str:
+            if char in "\t\u00a0":
+                return " "
+            return "?" if unicodedata.category(char) in ("Cc", "Cf") else char
+        return "\n".join("".join(clean(char) for char in line) for line in lines)
 
     @staticmethod
     def __plural(count: int, word: str, many: str = "") -> str:
@@ -210,8 +216,7 @@ class AdminView:
             if item.get("outcome"):
                 extra += f" (outcome: {FlagTicket.OUTCOMES.get(item['outcome'], item['outcome'])})"
             lines.append(f"  {AdminView.__sgt(item['at'])}  {item['by']}{moved}{extra}")
-            if item.get("note"):
-                lines.append(f"      {item['note']}")
+            lines += [f"      {part}" for part in str(item.get("note") or "").splitlines() if part.strip()]
         return AdminView.__printable(lines)
 
     def show_flag(self, ticket: FlagTicket, evidence: list[AuditEvent], entries: int) -> None:
@@ -224,7 +229,7 @@ class AdminView:
         if not isinstance(client_ref, str) or not isinstance(tickets, list):
             raise ValueError("The client's flags need a client reference and a list of flags.")
         if not tickets:
-            return f"No flags to handle for {client_ref}."
+            return AdminView.__printable([f"No flags to handle for {client_ref}."])
         lines = [f"FLAGS FOR {client_ref.upper()}  ({AdminView.__plural(len(tickets), 'flag')} not resolved)",
                  ConsoleUI.LINE]
         for ticket in tickets:

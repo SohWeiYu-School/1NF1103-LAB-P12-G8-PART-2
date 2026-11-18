@@ -422,3 +422,39 @@ def test_an_error_opening_a_flag_from_the_overview_keeps_the_admin_on_that_page(
     assert f"[ERROR] {App.AUDIT_UNAVAILABLE}" in out
     assert out.count("OVERVIEW  90 days") == 2                       # shown again, not dropped to the menu
     assert out.index("[ERROR]") < out.rindex("OVERVIEW  90 days") < out.rindex("--- ADMIN")
+
+
+def test_a_reload_that_fails_with_the_error_just_shown_is_not_shown_twice(tmp_path, monkeypatch):
+    application = _made_up_app(tmp_path, monkeypatch)
+    application.flag_error = ValueError(App.AUDIT_UNAVAILABLE)
+
+    class _Reloading(type(application)):
+        calls = 0
+
+        def audit_overview(self, *args, **kwargs):
+            _Reloading.calls += 1
+            if _Reloading.calls > 1:                               # the first load works, the reload does not
+                raise ValueError(App.AUDIT_UNAVAILABLE)
+            return super().audit_overview(*args, **kwargs)
+
+    application.__class__ = _Reloading
+    out = _run(application, "1", "4", "6", "1", "1", "0")          # open a flag (fails), then sign out
+    assert out.count(App.AUDIT_UNAVAILABLE) == 1 and out.rindex("--- ADMIN") > out.index(App.AUDIT_UNAVAILABLE)
+
+
+def test_a_reload_that_fails_for_another_reason_is_still_shown(tmp_path, monkeypatch):
+    application = _made_up_app(tmp_path, monkeypatch)
+    application.flag_error = ValueError(App.AUDIT_UNAVAILABLE)
+
+    class _Reloading(type(application)):
+        calls = 0
+
+        def audit_overview(self, *args, **kwargs):
+            _Reloading.calls += 1
+            if _Reloading.calls > 1:
+                raise ValueError(App.FLAGS_UNAVAILABLE)
+            return super().audit_overview(*args, **kwargs)
+
+    application.__class__ = _Reloading
+    out = _run(application, "1", "4", "6", "1", "1", "0")
+    assert out.count(App.AUDIT_UNAVAILABLE) == 1 and out.count(App.FLAGS_UNAVAILABLE) == 1

@@ -214,10 +214,43 @@ def test_stored_text_cannot_carry_escape_or_control_characters_to_the_terminal(a
                             "note": "looked\x1b[31m red\nsecond line\r\x07", "waiting_on": "", "outcome": ""})])
     ticket, evidence, entries = app.flag_evidence("F-SHO-SOW-1-4", NOW)
     text = AdminView().format_flag(ticket, evidence, entries)
-    assert "looked?[31m red?second line??" in text
+    lines = text.splitlines()
+    assert "      looked?[31m red" in lines and "      second line" in lines    # the break makes a new line, ESC is "?"
     for char in ("\x1b", "\r", "\x07"):
         assert char not in text
     assert all(line.isprintable() for line in text.splitlines())
     audit_filter = AuditFilter("90", query="looked")
     page = app.audit_log(audit_filter, NOW)
     assert all(line.isprintable() for line in AdminView().format_log_page(page, audit_filter, NOW).splitlines())
+
+
+def _note_text(app, tmp_path, note: str) -> str:
+    seed_audit(tmp_path, [("flag_updated", "2026-11-07T02:00:00Z", "Orbit Admin", "SOW-1", "ok",
+                           {"flag_id": "F-SHO-SOW-1-4", "from": "open", "to": "review", "note": note,
+                            "waiting_on": "", "outcome": ""})])
+    ticket, evidence, entries = app.flag_evidence("F-SHO-SOW-1-4", NOW)
+    return AdminView().format_flag(ticket, evidence, entries)
+
+
+def test_a_note_written_in_a_browser_with_windows_line_breaks_prints_as_indented_lines(app, tmp_path):
+    lines = _note_text(app, tmp_path, "first line\r\n\r\nsecond line").splitlines()
+    assert lines.count("      first line") == 1 and lines.count("      second line") == 1
+    assert not any("?" in line for line in lines if "line" in line)
+
+
+def test_a_tab_or_no_break_space_prints_as_a_plain_space(app, tmp_path):
+    text = _note_text(app, tmp_path, "a\tb\u00a0c")
+    assert "      a b c" in text.splitlines() and "?" not in text.split("Activity")[1]
+
+
+def test_ordinary_text_in_other_scripts_and_symbols_comes_through_unchanged(app, tmp_path):
+    assert "      Zoë 李 — →" in _note_text(app, tmp_path, "Zoë 李 — →").splitlines()
+
+
+def test_a_bidi_override_is_replaced_but_not_the_text_around_it(app, tmp_path):
+    assert "      ab?cd" in _note_text(app, tmp_path, "ab\u202ecd").splitlines()
+
+
+def test_the_no_flags_line_for_a_client_is_cleaned_too():
+    text = AdminView().format_client_flags("SOW\x1b[31m-1", [])
+    assert text == "No flags to handle for SOW?[31m-1."
