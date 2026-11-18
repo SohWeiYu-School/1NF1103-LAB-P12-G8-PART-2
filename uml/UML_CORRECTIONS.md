@@ -745,3 +745,33 @@ round-trip PROBLEMS: 0; layout_check 0.
 - Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
   Scan 7 differences before (stage 3 = 2, 4 = 1, 5 = 4) plus 1 relationship, 0 after; round-trip PROBLEMS: 0; layout_check 0;
   make_views SELF-CHECK OK.
+
+## Phase 2: terminal admin screens (2026-11-18): code changed, the diagram follows it
+
+**Terminal admin screens (menu 9)**
+- Why: terminal parity. The admin pages of `WebApp` now have a command-line twin: `TerminalApp` menu 9 signs an admin in
+  and runs an `AdminConsole`, which prints through an `AdminView`. The code was right, so the diagram was brought up to it.
+- New class `AdminConsole` (IO Manager, `app/interface/admin_console.py`): constants `+SAFE_ERRORS`, `+MENU`,
+  `+LOG_PRESET_NAMES`, `+RESULT_NAMES`, `+SORT_NAMES`; attributes `−__app`, `−__ui`, `−__view`, `−__account`, `−__listed`;
+  `+__init__(app, ui, view, account)`, `+run`, and the private screens `−__overview`, `−__open_flag`, `−__client_flags`,
+  `−__activity_log`, `−__verify`, `−__ask_filter`, `−__ask_dates`, `−__ask_groups`, `−__ask_officer`, `−__ask_text`,
+  `−__show_error`, `−__show_audit_warning`, and the statics `−__now`, `−__on_page`, `−__rejected`.
+- New class `AdminView` (IO Manager, `app/interface/admin_view.py`): constants `+FAILURE_COLUMN`, `+LOG_PRESET_NAMES`,
+  `+PRESET_NAMES`, `+SGT_FORMAT`; attribute `−__ui`; `+__init__(ui = None)`, `+format_overview`, `+format_flag`,
+  `+format_client_flags`, `+format_log_page`, `+format_chain`, `+format_filter`, the matching `+show_overview`, `+show_flag`,
+  `+show_client_flags`, `+show_log_page`, `+show_chain`, and the private `−__flag_rows`, `−__failure_table`, and statics
+  `−__event_line`, `−__change`, `−__plural`, `−__printable`, `−__sgt`.
+- `ConsoleUI`: `+__init__` gained `secret : Callable[[str], str] | None = None`; added `−__secret` and `+ask_password(question) : str`
+  (the terminal's hidden password prompt). `MENU_CHOICES` now ends `"9", "0"`; the diagram shows its value as `(...)`, so no text changed.
+- `TerminalApp`: added `+OFFICER_AT_ADMIN «const»` and `−__admin() : None` (menu 9).
+- `ReportView`: added `−__printable(lines : list[str]) : str «static»` (control characters in stored text become "?").
+- `AuditFilter`: no change in the code since the last scan, so no change in the diagram.
+- Arrows added: `AdminConsole -- App : calls`, `AdminConsole -- ConsoleUI : prints via`, `AdminConsole -- AdminView : shows with`,
+  `AdminConsole -- Account : acts for` and `AdminConsole o-- "0..*" FlagTicket : lists` (both stored in attributes, so associations,
+  not dependencies), `AdminConsole ..> AuditFilter / OverviewPage / AuditChain / AuditPage : uses`,
+  `AdminView -- ConsoleUI : prints via`, `AdminView ..> AuditEvent / AuditFilter / AuditPage / FlagTicket / OverviewPage : uses`,
+  `TerminalApp ..> AdminConsole : creates`, `TerminalApp ..> AdminView : creates` (made inside `__admin`, not stored).
+- Not drawn: `AdminConsole → AuditEvent` (only a class constant is used), in the checker's not-drawn list.
+- Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
+  Scan 8 differences before (stage 1 = 2, 3 = 1, 5 = 5) plus 2 relationships, 0 after; round-trip PROBLEMS: 0; layout_check 0;
+  make_views SELF-CHECK OK.

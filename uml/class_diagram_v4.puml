@@ -191,6 +191,63 @@ package "Data Manager (app/data)" {
 }
 
 package "IO Manager (app/interface)" {
+  class AdminConsole {
+    +LOG_PRESET_NAMES : tuple[str, ...] = (...) «const»
+    +MENU : tuple[str, ...] = (...) «const»
+    +RESULT_NAMES : tuple[str, ...] = ("All", "OK only", "Failed only") «const»
+    +SAFE_ERRORS : tuple[str, ...] = (...) «const»
+    +SORT_NAMES : tuple[str, ...] = ("Newest first", "Oldest first") «const»
+    -__account : Account = account
+    -__app : App = app
+    -__listed : list[FlagTicket] = []
+    -__ui : ConsoleUI = ui
+    -__view : AdminView = view
+    --
+    -__activity_log() : None
+    -__ask_dates() : tuple[str, str]
+    -__ask_filter() : AuditFilter | None
+    -__ask_groups() : list[str] | None
+    -__ask_officer() : str
+    -__ask_text(question : str, field : str) : str
+    -__client_flags() : None
+    +__init__(app : App, ui : ConsoleUI, view : AdminView, account : Account)
+    {static} -__now() : datetime
+    {static} -__on_page(audit_filter : AuditFilter, page : int) : AuditFilter
+    -__open_flag() : None
+    -__overview() : None
+    {static} -__rejected(**values : object) : str
+    -__show_audit_warning() : None
+    -__show_error(error : ValueError, where : str) : None
+    -__verify() : None
+    +run() : None
+  }
+  class AdminView {
+    +FAILURE_COLUMN : int = 16 «const»
+    +LOG_PRESET_NAMES : dict[str, str] = {...} «const»
+    +PRESET_NAMES : dict[str, str] = {...} «const»
+    +SGT_FORMAT : str = "%Y-%m-%d %H:%M" «const»
+    -__ui : ConsoleUI = ui if ui is not None else ConsoleUI()
+    --
+    {static} -__change(has_previous : bool, change : int | None, diff : int) : str
+    {static} -__event_line(event : AuditEvent, marked : bool = False) : str
+    -__failure_table(page : OverviewPage) : list[str]
+    -__flag_rows(page : OverviewPage) : list[str]
+    +__init__(ui : ConsoleUI | None = None)
+    {static} -__plural(count : int, word : str, many : str = "") : str
+    {static} -__printable(lines : list[str]) : str
+    {static} -__sgt(text : str) : str
+    +format_chain(chain : Any) : str
+    +format_client_flags(client_ref : str, tickets : list[FlagTicket]) : str
+    +format_filter(audit_filter : AuditFilter, now : datetime) : str
+    +format_flag(ticket : FlagTicket, evidence : list[AuditEvent], entries : int) : str
+    +format_log_page(page : AuditPage, audit_filter : AuditFilter, now : datetime) : str
+    +format_overview(page : OverviewPage) : str
+    +show_chain(chain : Any) : None
+    +show_client_flags(client_ref : str, tickets : list[FlagTicket]) : None
+    +show_flag(ticket : FlagTicket, evidence : list[AuditEvent], entries : int) : None
+    +show_log_page(page : AuditPage, audit_filter : AuditFilter, now : datetime) : None
+    +show_overview(page : OverviewPage) : None
+  }
   class CaseBuilder {
     -__ui : ConsoleUI = ConsoleUI()
     -__case_schema : dict = {}
@@ -252,8 +309,9 @@ package "IO Manager (app/interface)" {
     +MAX_EMPLOYEES : int = 10_000_000 «const»
     +LABEL : str = " '.-&/,()%#0123456789" «const»
     +MENU_CHOICES : tuple[str, ...] = (...) «const»
+    -__secret : Callable[[str], str] = secret if secret is not None else lam...
     --
-    +__init__(read : Callable[[str], str] | None = None, write : Callable[[str], None] | None = None)
+    +__init__(read : Callable[[str], str] | None = None, write : Callable[[str], None] | None = None, secret : Callable[[str], str] | None = None)
     +show(text : str = "") : None
     +show_message(text : str) : None
     +show_error(text : str) : None
@@ -295,6 +353,7 @@ package "IO Manager (app/interface)" {
     +show_dropped_fields(messages : list[str]) : None
     +show_optional_intro(count : int) : None
     +ask_optional_text(question : str) : str
+    +ask_password(question : str) : str
   }
   class RateLimiter {
     -__cooldown_seconds : int = 60
@@ -345,6 +404,7 @@ package "IO Manager (app/interface)" {
     {static} -__by_day(events : list[AuditEvent]) : list[tuple[str, list[AuditEvent]]]
     {static} -__fit(value : object, width : int) : str
     {static} -__text_or_unknown(value : object) : str
+    {static} -__printable(lines : list[str]) : str
   }
   class TerminalApp {
     -__app : App
@@ -353,6 +413,7 @@ package "IO Manager (app/interface)" {
     -__client_form : ClientForm = ClientForm(...)
     -__case_builder : CaseBuilder = CaseBuilder(...)
     +GOODBYE : str = "Thank you for using Orbit. Goodbye." «const»
+    +OFFICER_AT_ADMIN : str = "This is an officer account. Only adm... «const»
     --
     +start(arguments : list[str]) : int
     +run_menu() : None
@@ -374,6 +435,7 @@ package "IO Manager (app/interface)" {
     +__init__(app : App, ui : ConsoleUI | None = None, limiter : RateLimiter | None = None)
     -__limiter : RateLimiter
     -__audited(action : Callable[..., T]) : Callable[..., T]
+    -__admin() : None
   }
   class WebApp {
     -__app : App | None = None
@@ -1936,6 +1998,21 @@ package "Domain Model (app/model)" {
   }
 }
 
+AdminConsole -- Account : acts for
+AdminConsole -- AdminView : shows with
+AdminConsole -- App : calls
+AdminConsole -- ConsoleUI : prints via
+AdminConsole ..> AuditChain : uses
+AdminConsole ..> AuditFilter : uses
+AdminConsole ..> AuditPage : uses
+AdminConsole ..> OverviewPage : uses
+AdminConsole o-- "0..*" FlagTicket : lists
+AdminView -- ConsoleUI : prints via
+AdminView ..> AuditEvent : uses
+AdminView ..> AuditFilter : uses
+AdminView ..> AuditPage : uses
+AdminView ..> FlagTicket : uses
+AdminView ..> OverviewPage : uses
 App *-- "1" AssessmentRunner
 App *-- "1" AuditPolicy
 App *-- "1" AuditRepository
@@ -2106,6 +2183,8 @@ TerminalApp *-- "1" ReportView
 TerminalApp -- App : calls
 TerminalApp -- ConsoleUI : prints via
 TerminalApp -- RateLimiter : checks with
+TerminalApp ..> AdminConsole : creates
+TerminalApp ..> AdminView : creates
 TerminalApp ..> AuditFilter : uses
 TerminalApp ..> ClientRecord : uses
 TerminalApp ..> TrailFilter : uses
