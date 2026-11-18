@@ -1661,3 +1661,6 @@ TEMPLATES: dict[str, str] = {
     "assessments.html": ASSESSMENTS,
     "error.html": ERROR,
 }
+
+from app.interface.signin_template import SIGNIN_HTML
+TEMPLATES["signin.html"] = SIGNIN_HTML
