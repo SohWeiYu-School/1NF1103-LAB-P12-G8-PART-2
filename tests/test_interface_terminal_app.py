@@ -793,3 +793,24 @@ def test_the_callbacks_handed_to_the_forms_are_wrapped_too(tmp_path, monkeypatch
     assert "Client saved. Reference: CL-" in out
     assert out.count(App.AUDIT_NOT_WRITTEN) >= 1 + len(os.listdir(folder))      # the client and each document kept
     assert App.AUDIT_LINE_NOT_WRITTEN in out                                    # the reading itself saved nothing
+
+
+def test_a_refused_assessment_does_not_show_the_previous_actions_audit_failure_again(tmp_path, monkeypatch, capsys):
+    import shutil
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("MONGODB_URI", "")
+    root = tmp_path / "root"
+    shutil.copytree("config", root / "config")
+    (root / "config" / "policy.json").write_text("{broken")
+    application = App(ai_caller=fake_ai.caller, root=str(root), data_folder=str(tmp_path))
+    break_audit(tmp_path)
+    assert application.save_client(ClientRecord.from_dict(sample_case())) is True
+    assert application.audit_failure_message() == App.AUDIT_NOT_WRITTEN          # the earlier action's failure
+    case_path = tmp_path / "case.json"
+    case_path.write_text(json.dumps(sample_case()))
+    capsys.readouterr()
+    with pytest.raises(RuntimeError, match="settings could not be loaded"):
+        _terminal(application).run_case_file(str(case_path))
+    assert application.audit_failure_message() == ""
+    out = capsys.readouterr().out
+    assert App.AUDIT_NOT_WRITTEN not in out and App.AUDIT_LINE_NOT_WRITTEN not in out

@@ -362,8 +362,8 @@ class App:
         then gets an "assessment failed" line for actor).
         on_failure defaults to App's own rule (CRITICAL_STEPS). show_failures=False keeps
         failed steps off the terminal (the web app shows them in the report instead)."""
+        self.__start(actor)            # first: a refusal must not leave the last action's audit failure showing
         self.__require_settings()
-        self.__start(actor)
         if on_failure is None:
             on_failure = self.__handle_failure if show_failures else self.__handle_failure_quietly
         decide = on_failure
