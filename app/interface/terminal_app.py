@@ -5,7 +5,7 @@ import logging
 import os
 from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TypeVar
 
 from app.application.app import App
 from app.interface.case_builder import CaseBuilder
@@ -19,6 +19,8 @@ from app.model.trail_filter import TrailFilter
 from app.model.verdict import Verdict
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 
 class TerminalApp:
@@ -44,23 +46,13 @@ class TerminalApp:
         self.__report_view: ReportView = ReportView(self.__ui)
         self.__client_form: ClientForm = ClientForm(self.__ui, self.__report_view)
         self.__case_builder: CaseBuilder = CaseBuilder(self.__ui, app.case_schema())
-        # Every App action that writes an audit line, wrapped once so a line that could not be written is told
-        # to the officer right after the action (App itself shows nothing).
-        self.__save_client = self.__audited(app.save_client)
-        self.__upload_document = self.__audited(app.upload_document)
-        self.__download_document = self.__audited(app.download_document)
-        self.__read_documents = self.__audited(app.read_documents)
-        self.__assess = self.__audited(app.assess)
-        self.__save_assessment = self.__audited(app.save_assessment)
-        self.__archive_assessment = self.__audited(app.archive_assessment)
-        self.__restore_assessment = self.__audited(app.restore_assessment)
-        self.__sync_to_cloud = self.__audited(app.sync_to_cloud)
 
-    def __audited(self, action: Callable) -> Callable:
-        """action, followed (even if it raises) by telling the officer when its audit line was not written:
-        "Saved, but ..." if the action had saved something, else that the action could not be written."""
+    def __audited(self, action: Callable[..., T]) -> Callable[..., T]:
+        """action (an App method that writes an audit line), followed even if it raises by telling the officer
+        when its line was not written: "Saved, but ..." if the action had saved something, else that the action
+        could not be written. Wrap each call: self.__audited(app.save_client)(record)."""
         @functools.wraps(action)
-        def run(*args: Any, **kwargs: Any) -> Any:
+        def run(*args: Any, **kwargs: Any) -> T:
             try:
                 return action(*args, **kwargs)
             finally:
@@ -124,8 +116,8 @@ class TerminalApp:
             choice = self.__ui.show_app_menu()
             if choice == "1":
                 record = self.__client_form.create_new_client(
-                    save_fn=functools.partial(self.__save_client, new_client=True),
-                    upload_fn=self.__upload_document, is_taken_fn=app.client_ref_taken)
+                    save_fn=functools.partial(self.__audited(app.save_client), new_client=True),
+                    upload_fn=self.__audited(app.upload_document), is_taken_fn=app.client_ref_taken)
                 if record is not None:
                     self.__maybe_assess(record)
             elif choice == "2":
@@ -134,8 +126,9 @@ class TerminalApp:
                     self.__maybe_assess(record)
             elif choice == "3":
                 self.__client_form.find_existing_client(
-                    find_fn=app.find_client, save_fn=self.__save_client,
-                    download_fn=self.__download_document, upload_fn=self.__upload_document)
+                    find_fn=app.find_client, save_fn=self.__audited(app.save_client),
+                    download_fn=self.__audited(app.download_document),
+                    upload_fn=self.__audited(app.upload_document))
             elif choice == "4":
                 ref = self.__ui.ask_client_ref()
                 if ref is None:
@@ -169,7 +162,7 @@ class TerminalApp:
                 self.__ui.read_answer("Press Enter to continue...")
             elif choice == "7":
                 self.__ui.show_message("\n--- Synchronizing Local Data to Cloud Database ---")
-                self.__ui.show_sync_result(self.__sync_to_cloud())
+                self.__ui.show_sync_result(self.__audited(app.sync_to_cloud)())
             elif choice == "8":
                 self.__client_history()
             elif choice == "0":
@@ -202,11 +195,11 @@ class TerminalApp:
             return None
         self.__ui.show_message(f"\nAssessing {case['client_ref']}: documents, crime scan, forecast "
                                "and benchmark together.")
-        result = self.__assess(case, record.documents(), on_step=self.__show_step)
+        result = self.__audited(app.assess)(case, record.documents(), on_step=self.__show_step)
         if result is None:
             self.__ui.show_error("The assessment was stopped. Nothing was saved.")
             return None
-        saved = self.__save_assessment(result, record, on_step=self.__show_step)
+        saved = self.__audited(app.save_assessment)(result, record, on_step=self.__show_step)
         verdict = result["verdict"]
         self.__report_view.show_verdict_report(verdict, crime_result=result.get("crime_result"),
                                                typologies=result.get("typologies"))
@@ -231,11 +224,11 @@ class TerminalApp:
             self.__case_builder.show_case_problems(path, problems)
             return False
         self.__ui.show_message(f"\nAssessing {case['client_ref']} ({os.path.basename(path)}).")
-        result = self.__assess(case, on_step=self.__show_step)
+        result = self.__audited(app.assess)(case, on_step=self.__show_step)
         if result is None:
             self.__ui.show_error("The assessment was stopped. Nothing was saved.")
             return False
-        if not self.__save_assessment(result, on_step=self.__show_step):
+        if not self.__audited(app.save_assessment)(result, on_step=self.__show_step):
             self.__ui.show_error("Could not save the assessment.")
         self.__report_view.show_verdict_report(result["verdict"], ask_for_evidence=False,
                                                crime_result=result.get("crime_result"),
@@ -277,7 +270,8 @@ class TerminalApp:
 
         # 2. Read the documents and let the AI pull out the details
         self.__ui.show_message(f"\nReading {len(paths)} document(s) with AI... this can take up to a minute.")
-        extracted, warnings = self.__read_documents([app.read_document_for_extraction(path) for path in paths])
+        extracted, warnings = self.__audited(app.read_documents)(
+            [app.read_document_for_extraction(path) for path in paths])
         if extracted is None:
             self.__ui.show_ai_unavailable("Document reading")
             if not self.__ui.ask_yes_no("Type the details in yourself?"):
@@ -327,7 +321,8 @@ class TerminalApp:
                 self.__ui.show_message("\nClient discarded. Nothing was saved.")
                 return None
             if action == "edit":
-                record = app.finish_record(self.__client_form.edit_existing_client(record, self.__upload_document))
+                edited = self.__client_form.edit_existing_client(record, self.__audited(app.upload_document))
+                record = app.finish_record(edited)
                 for field in app.missing_fields(record):
                     record = self.__fill_field(record, field)
                 continue
@@ -335,12 +330,12 @@ class TerminalApp:
 
         # 5. Keep the documents with the client, then save
         for path in paths:
-            stored = self.__upload_document(path)
+            stored = self.__audited(app.upload_document)(path)
             if stored is None:
                 self.__ui.show_error(f"Could not keep a copy of {os.path.basename(path)}.")
             else:
                 record.add_document({"file_name": os.path.basename(path), "file_path": stored})
-        if not self.__save_client(record, new_client=True):
+        if not self.__audited(app.save_client)(record, new_client=True):
             self.__ui.show_error("The client could not be saved.")
             return None
         self.__ui.show_message(f"\nClient saved. Reference: {record.client_ref} "
@@ -454,9 +449,10 @@ class TerminalApp:
             if not problem:
                 break
             self.__ui.show_error(problem)
+        app = self.__app
         try:
-            result = (self.__archive_assessment(assessment_id, reason, App.TERMINAL) if archive
-                      else self.__restore_assessment(assessment_id, App.TERMINAL))
+            result = (self.__audited(app.archive_assessment)(assessment_id, reason, App.TERMINAL) if archive
+                      else self.__audited(app.restore_assessment)(assessment_id, App.TERMINAL))
         except ValueError as error:
             logger.error("TerminalApp.__change_archive: the saved assessments cannot be read: %r", error)
             self.__ui.show_error(App.ASSESSMENTS_UNAVAILABLE)
