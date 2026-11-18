@@ -1863,7 +1863,7 @@ def test_saved_verdict_and_read_failed_are_public(app, tmp_path):
 def test_a_reading_becomes_a_record_with_the_given_reference(app):
     record, dropped = app.record_from_reading(_reading(), client_ref="CL-NEW00001")
     assert record.client_ref == "CL-NEW00001"
-    assert app.record_from_reading(_reading())[0].client_ref != "CL-NEW00001"
+    assert app.record_from_reading(_reading())[0].client_ref == ""          # none yet when not given
 
 
 def test_the_missing_fields_can_be_filled_one_at_a_time_and_summarised(app):
@@ -1885,9 +1885,21 @@ def test_set_record_field_refuses_an_impossible_value_and_a_bad_path_with_a_valu
     record, _ = app.record_from_reading(_reading(), client_ref="CL-NEW00001")
     with pytest.raises(ValueError):
         app.set_record_field(record, ["career", "age"], 5)
-    for bad_path in (["no_such_group", "x"], ["investments", 99, "income_produced"], [], "career", [None], [True]):
+    for bad_path in (["no_such_group", "x"], ["investments", 99, "income_produced"], [], "career", [None], [True],
+                     ["career", "no_such"], ["no_such"], ["career", "age", "deeper"]):
         with pytest.raises(ValueError):
             app.set_record_field(record, bad_path, 1)
+    stray = [key for key in app.set_record_field(record, ["career", "age"], 50).to_dict()["career"]
+             if key == "no_such"]
+    assert stray == []
+
+
+def test_a_value_of_the_wrong_kind_is_reported_as_not_possible_there_not_as_a_missing_field(app):
+    record, _ = app.record_from_reading(_reading(), client_ref="CL-NEW00001")
+    for value in ({"a": 1}, ["x"], object()):
+        with pytest.raises(ValueError) as error:
+            app.set_record_field(record, ["career", "age"], value)
+        assert "no field" not in str(error.value)
 
 
 def test_the_record_methods_refuse_something_that_is_not_a_client_record(app):
