@@ -2347,14 +2347,16 @@ def test_a_damaged_saved_assessment_is_reported_from_menu_8_and_never_ends_the_s
     out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "3", "1", "0", "0")
     assert _UNREADABLE in out and "Goodbye." in out
     assert "COMBINED ASSESSMENT" not in out and "ONBOARDING" not in out
+    assert "D1" in caplog.text and "ERROR" in caplog.text
 
 
-def test_a_damaged_saved_assessment_is_reported_from_menu_5_too(app, monkeypatch, capsys):
+def test_a_damaged_saved_assessment_is_reported_from_menu_5_too(app, monkeypatch, capsys, caplog):
     _history_client(app, with_assessments=False)
     assert app.assessments().save({"assessment_id": "D1", "client_ref": CLIENT_REF, "kind": "combined",
                                    "verdict": {"assessed_on": "2026-11-01", "verdict": "PASSED"}})
     out = _run_menu(app, monkeypatch, capsys, "5", "1", "1", "1", "0")
     assert _UNREADABLE in out and "Goodbye." in out
+    assert "App.__open_assessment" in caplog.text and "Traceback" in caplog.text
 
 
 def test_going_back_from_the_custom_dates_returns_to_the_period_question(app, tmp_path, monkeypatch, capsys):
@@ -2365,8 +2367,8 @@ def test_going_back_from_the_custom_dates_returns_to_the_period_question(app, tm
     assert "Showing: All, Last 7 days" in out
     out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "2", "1", "5", "", "", "1", "0", "0")   # both blank, then all time
     assert out.count("Which period?") == 2 and "Showing: All, All time" in out
-    out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "2", "1", "5", "2026-11-10", "0", "1", "0", "0")
-    assert out.count("Which period?") == 2
+    out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "2", "1", "5", "2026-11-10", "0", "3", "0", "0")
+    assert out.count("Which period?") == 2 and "Showing: All, Last 30 days" in out
 
 
 def test_todays_singapore_date_is_accepted_as_the_end_date(app, tmp_path, monkeypatch, capsys):
@@ -2375,3 +2377,15 @@ def test_todays_singapore_date_is_accepted_as_the_end_date(app, tmp_path, monkey
     today = AuditFilter.singapore_day(datetime.now(timezone.utc)).isoformat()
     out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "2", "1", "5", "2026-11-01", today, "0", "0")
     assert f"(2026-11-01 to {today})" in out and "cannot be in the future" not in out
+
+
+def test_a_saved_report_without_its_evidence_prints_nothing_of_the_report(app, tmp_path, monkeypatch, capsys, caplog):
+    saved = _saved_assessment(app)
+    records = app.assessments().load()
+    del records[0]["report"]["evidence"]
+    with open(tmp_path / "local database" / "ai_assessments.json", "w", encoding="utf-8") as handle:
+        json.dump(records, handle)
+    out = _run_menu(app, monkeypatch, capsys, "8", saved["client_ref"], "3", "1", "0", "0")
+    assert _UNREADABLE in out and "Goodbye." in out
+    assert "COMBINED ASSESSMENT" not in out and "VERDICT:" not in out
+    assert "App.__open_assessment" in caplog.text and "Traceback" in caplog.text

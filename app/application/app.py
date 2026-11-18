@@ -876,14 +876,14 @@ class App:
                     self.__report_view.show_verdict_report(verdict)
                 except (KeyError, TypeError, ValueError, AttributeError, IndexError) as error:
                     logger.error("App.__open_assessment: the saved report %s cannot be shown: %r",
-                                 chosen.get("assessment_id"), error)
+                                 chosen.get("assessment_id"), error, exc_info=True)
                     self.__ui.show_error(unreadable)
             return
         try:
             self.__report_view.show_onboarding(chosen["assessment"])     # saved before the combined verdict
         except (KeyError, TypeError, ValueError, AttributeError, IndexError) as error:
             logger.error("App.__open_assessment: the saved assessment %s cannot be shown: %r",
-                         chosen.get("assessment_id"), error)
+                         chosen.get("assessment_id"), error, exc_info=True)
             self.__ui.show_error(unreadable)
 
     def __change_archive(self, records: list[dict]) -> None:
