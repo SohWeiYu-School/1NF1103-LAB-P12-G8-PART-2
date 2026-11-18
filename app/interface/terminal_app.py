@@ -416,7 +416,10 @@ class TerminalApp:
             return
         while archive:
             reason = self.__ui.ask_optional_text(
-                f"Reason (optional, up to {App.MAX_ARCHIVE_REASON} characters, Enter to skip)")
+                f"Reason (optional, up to {App.MAX_ARCHIVE_REASON} characters, Enter to skip, 0 to cancel)")
+            if reason == "0":                        # 0 means back everywhere else, so it is never a reason
+                self.__ui.show_message("Nothing was archived.")
+                return
             problem = App.archive_reason_problem(reason)
             if not problem:
                 break

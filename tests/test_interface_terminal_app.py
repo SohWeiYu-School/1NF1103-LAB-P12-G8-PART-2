@@ -723,3 +723,21 @@ def test_the_end_of_input_inside_a_case_file_run_is_an_unexpected_error_not_a_cl
     assert not any("Thank you for using Orbit" in text for text in seen)
     assert any("unexpected error" in text.lower() for text in seen)
     assert "EOFError" in caplog.text
+
+
+def test_zero_at_the_archive_reason_cancels_and_is_not_saved_as_the_reason(app, capsys):
+    _history_client(app)
+    asked = []
+    waiting = iter(["8", CLIENT_REF, "4", "1", "y", "0", "0", "0"])
+
+    def read(question=""):
+        asked.append(question)
+        return next(waiting)
+
+    capsys.readouterr()
+    TerminalApp(app, ConsoleUI(read=read)).run_menu()
+    out = capsys.readouterr().out
+    assert any("0 to cancel" in question for question in asked)
+    assert "Nothing was archived." in out and "Assessment archived." not in out
+    assert all(App.archive_state(app.assessments().find(f"A{n}")) == App.ARCHIVE_ACTIVE for n in (1, 2))
+    assert app.assessments().find("A2").get("archive_log") is None
