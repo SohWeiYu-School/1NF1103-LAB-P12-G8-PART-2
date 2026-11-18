@@ -21,8 +21,9 @@ class Claims:
         self.__expected_aum: float | None = expected_aum
         self.__pep_status: str = pep_status
         self.__asset_composition: dict = dict(asset_composition or {})
-        self.__wealth_countries: list[str] = list(wealth_countries or [])
-        self.__declared_counterparties: list[str] = list(declared_counterparties or [])
+        self.__wealth_countries: list[str] = Claims.__as_list(wealth_countries, "the wealth countries")
+        self.__declared_counterparties: list[str] = Claims.__as_list(declared_counterparties,
+                                                                      "the declared counterparties")
         self.__biggest_wealth_jump: float | None = biggest_wealth_jump
         self.__wealth_jump_years: int | None = wealth_jump_years
         self.__extra: dict = dict(extra or {})
@@ -70,7 +71,7 @@ class Claims:
 
     @wealth_countries.setter
     def wealth_countries(self, countries: list[str]) -> None:
-        self.__wealth_countries = [str(country) for country in countries or []]
+        self.__wealth_countries = [str(country) for country in Claims.__as_list(countries, "the wealth countries")]
 
     @property
     def declared_counterparties(self) -> list[str]:
@@ -132,6 +133,17 @@ class Claims:
                 "biggest_wealth_jump": self.__biggest_wealth_jump,
                 "wealth_jump_years": self.__wealth_jump_years,
                 "declared_counterparties": list(self.__declared_counterparties)}
+
+    @staticmethod
+    def __as_list(value: object, name: str) -> list:
+        """value as a new list. Nothing (None, or an empty text or list) is an empty list. Anything else must be
+        a list or a tuple: a text would otherwise be taken apart letter by letter. Raises ValueError."""
+        if not value:
+            return []
+        if not isinstance(value, (list, tuple)):
+            raise ValueError(f"{name} must be a list (for example ['Singapore', 'Malaysia']) or left empty, "
+                             f"not {type(value).__name__}")
+        return list(value)
 
     def __check_net_worth(self, value: float | None) -> None:
         self.__check_positive(value)
