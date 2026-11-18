@@ -1575,9 +1575,9 @@ def test_a_log_where_every_row_is_unreadable_gives_no_events_and_the_count(app, 
 
 # ----- the audit Overview, flags and "database unreadable" lines ----------------------------------------
 
-import stat
 from datetime import date, datetime, timezone
 
+from app.data.audit_repository import AuditRepository
 from app.model.overview_page import OverviewPage
 from tests.audit_files import audit_path, seed_audit
 
@@ -1825,14 +1825,12 @@ def test_only_an_admin_can_update_a_flag_and_the_inputs_must_be_text(flagged):
     assert len(_events(flagged)) == 3
 
 
-def test_an_update_that_cannot_be_written_is_not_saved_and_the_caller_can_tell(flagged, tmp_path, caplog):
-    folder = tmp_path / "local database"
-    folder.chmod(stat.S_IRUSR | stat.S_IXUSR)                  # readable, but no new file can be made in it
-    try:
-        ticket, problems, entry = flagged.update_flag("F-OTH-SOW-1-2", ADMIN, "review", "Asked Adrian why.",
-                                                      now=FLAG_NOW)
-    finally:
-        folder.chmod(stat.S_IRWXU)
+def test_an_update_that_cannot_be_written_is_not_saved_and_the_caller_can_tell(flagged, monkeypatch, caplog):
+    # The log can still be read, but writing it fails (this works for every user, admin included)
+    monkeypatch.setattr(AuditRepository, "_write_all", lambda self, records: False)
+    ticket, problems, entry = flagged.update_flag("F-OTH-SOW-1-2", ADMIN, "review", "Asked Adrian why.",
+                                                  now=FLAG_NOW)
+    monkeypatch.undo()
     assert problems == [App.FLAG_NOT_SAVED] and entry == 0 and ticket.status == "open"
     assert flagged.audit_write_failed() is True
     assert "was not written" in caplog.text
