@@ -857,3 +857,59 @@ round-trip PROBLEMS: 0; layout_check 0.
 - Arrows: none added or changed; the relationship check found nothing missing or different.
 - Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
   Scan 6 differences before (stage 3 = 1, 4 = 4, 6 = 1), 0 after; round-trip PROBLEMS: 0; layout_check 0; make_views SELF-CHECK OK.
+
+## One-page layout (2026-11-18): layout only, no class or member changes
+
+The diagram is still one page. Only box positions, frame positions, arrow routes and the legend changed. All 86 classes, every member, and all 225 arrows (kind, verb, multiplicity, direction) are unchanged: the regenerated `class_diagram_v4.puml` is byte-identical to the one before.
+
+**Layout.** Interface on top; then AI | Application | Data side by side (AI left of App, Data right of it); then Logic; then the Domain Model at the bottom. Frames are coloured by layer. The legend is one column and shows the arrow kinds, the layer colours, "Start reading at App" and where the hidden arrows are. The main.py note stands left of App, and its dashed connector runs straight across the gap; no arrow crosses the note or that connector.
+
+**Rule for hidden arrows.** A dependency (`..>`) goes to the hidden draw.io layer **Background** (View > Layers to show it) when its target is:
+- a Domain Model class ("any group may import from app/model", CLAUDE.md section 3), including the "creates" arrows into the Model;
+- the «utility» `Formatter`; or
+- `AuditChain`, when the source is a front end (`WebApp`, `AdminConsole`, `AdminView`). `App ..> AuditChain` stays on the main layer.
+
+Arrows are moved, not deleted. A new "uses Model class" arrow must be put on the Background layer too. `CaseTimeline` is not marked «utility», so its arrows stay visible.
+
+**Counts.**
+
+| | Arrows |
+|---|---|
+| All arrows in the file | 225 |
+| Visible on the main layer | 136 |
+| On the Background layer | 89 (83 into the Model, 3 into Formatter, 3 front-end AuditChain) |
+
+Structural arrows (inheritance 23, realisation 2, composition 39, aggregation 16, association 28) are all visible, plus 28 dependencies between non-Model classes.
+
+**Scan.** Round trip PROBLEMS 0, relationships 225 (221 confirmed + 4 accepted), missing from UML 0, total 0. `layout_check.py` 0. The scan reads every arrow whatever layer it is on.
+
+**Before and after** (`metrics.py`, main layer only):
+
+| Measure | Before | After |
+|---|---|---|
+| Canvas | 5,830 x 16,906 | 6,090 x 9,891 |
+| Arrows visible | 225 | 136 |
+| Total arrow length | 1,203 k px | 196 k px |
+| Mean / median arrow | 5,345 / 3,114 px | 1,444 / 914 px |
+| Arrows longer than 3,000 px | 114 | 17 |
+| Bends | 1,183 | 585 |
+| Crossings | 1,115 | 137 |
+
+**Hidden arrows are drawn grey, straight and below the boxes.** On the Background layer each arrow keeps its kind, verb, source and target, but has no route: draw.io joins the two boxes with a thin grey line. The layer sits before the main layer, so it is drawn underneath.
+
+**Guard.** `layout_check.py` fails (so the scan step shows a problem) when a file that has a Background layer also has any of these:
+- a dependency (`..>`) into a Domain Model class or into `Formatter` on the main layer;
+- a front end (`WebApp`, `AdminConsole`, `AdminView`) dependency on `AuditChain` on the main layer;
+- any arrow on the Background layer that is not a dependency.
+
+It reports 0 on the finished diagram. When you add a new "uses a Model class" arrow, draw it, then move it to the Background layer.
+
+**Hand-in files.** `uml/class_diagram_v4.pdf` (vector, one page) and `uml/class_diagram_v4.png` (scale 0.7, 4,295 x 6,956 px) are exports of this diagram with the Background layer off. Re-export them after any change (`draw.io -x -f pdf --crop`, and `-f png -s 0.7`).
+
+**Tools changed** (in `~/Documents/uml-check-tools`, outside the repo):
+- `uml_arrows.py`, `Diagram.reroute_all` (about line 281): re-routes only arrows whose own tag has `parent="1"`; arrows on the Background layer keep their layer.
+- `uml_arrows.py`, `Diagram.load` (line 58) and `Diagram.route` (line 137): the main.py note, plus the gap from it to App, is an obstacle for the router.
+- `layout_check.py`, `load` (line 42): arrows on a hidden layer are skipped by the line checks, because they have no route.
+- `layout_check.py`, new `layer_guard` (line 94, called from `main` at line 158): the guard above.
+
+**Hand-routed arrows.** Six arrows were routed by hand so they no longer run through a frame that belongs to neither end: `AdminConsole -- Account`, `AdminConsole -- FlagTicket` (down the right margin), `AdminConsole -> App` (App|Data gap), `App -> AuditInsights` and `App -> AuditStats` (leave App's bottom edge), `AssessmentRunner -> VerdictEngine` (AI|App gap).
