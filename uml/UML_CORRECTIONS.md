@@ -844,3 +844,16 @@ round-trip PROBLEMS: 0; layout_check 0.
 - Arrows: none added or changed.
 - Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
   Scan 2 differences before, 0 after; round-trip PROBLEMS: 0; layout_check 0; make_views SELF-CHECK OK.
+
+## Command-line options removed (2026-11-18): code changed, the diagram follows it
+
+- Why: only the menu and `--web` remain; `--case` and `--all-samples` are gone, and an unreadable case schema now stops the app.
+  The code was right, so the diagram was brought up to it.
+- `App`: removed `+load_case_file`, `+is_forecasting_case` and `+sample_case_files`. `−__case_schema` now starts from
+  `self.__case_files.load(...)` (the schema file, loaded when `App` is made). `App ..> CaseFiles` stays, because `App` still loads
+  the schema with it.
+- `TerminalApp`: removed `+run_case_file`; `+start(arguments : list[str]) : int` became `+start() : int`.
+- `CaseFiles` is unchanged (its own `is_forecasting_case` stays).
+- Arrows: none added or changed; the relationship check found nothing missing or different.
+- Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
+  Scan 6 differences before (stage 3 = 1, 4 = 4, 6 = 1), 0 after; round-trip PROBLEMS: 0; layout_check 0; make_views SELF-CHECK OK.

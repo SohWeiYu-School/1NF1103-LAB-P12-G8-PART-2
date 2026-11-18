@@ -440,9 +440,8 @@ package "IO Manager (app/interface)" {
     -__show_trail(client_ref : str, trail_filter : TrailFilter) : None
     +assess_client_record(record : ClientRecord) : Verdict | None
     +list_assessments() : None
-    +run_case_file(path : str) : bool
     +run_menu() : None
-    +start(arguments : list[str]) : int
+    +start() : int
   }
   class WebApp {
     -__app : App | None = None
@@ -839,7 +838,7 @@ package "Application (app/application)" {
     +LOG_BACKUPS : int = 3 «const»
     +ARCHIVE_DONE_RESULTS : tuple[str, ...] = (...) «const»
     +READ_TARGETS : tuple[str, ...] = ("client records", "assessments") «const»
-    -__case_schema : dict = schema if isinstance(schema, dict) el...
+    -__case_schema : dict = self.__case_files.load(...)
     --
     +__init__(ai_caller : Callable[[str, dict, dict], str | None] | None = None, root : str = ROOT_DIR, data_folder : str = "data", rules : type[AuditInsights] = AuditInsights)
     +start(arguments : list[str]) : int
@@ -935,13 +934,10 @@ package "Application (app/application)" {
     {static} +archive_message(result : str, archive : bool, reason : str = "") : str
     +case_schema() : dict
     +finish_record(record : ClientRecord) : ClientRecord
-    +is_forecasting_case(case : object) : bool
     +list_document_folder(folder : str) : list[str] | None
-    +load_case_file(path : str) : object | None
     +missing_fields(record : ClientRecord) : list[dict]
     +read_failed(what : str, actor : str = "") : None
     +reading_summary(record : ClientRecord, from_documents : ClientRecord) : list[dict]
-    +sample_case_files() : list[str]
     +saved_verdict(saved : dict) : Verdict | None
     +set_record_field(record : ClientRecord, path : list, value : object) : ClientRecord
     +audit_failure_message() : str
