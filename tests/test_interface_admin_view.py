@@ -238,19 +238,6 @@ def test_a_note_written_in_a_browser_with_windows_line_breaks_prints_as_indented
     assert not any("?" in line for line in lines if "line" in line)
 
 
-def test_a_tab_or_no_break_space_prints_as_a_plain_space(app, tmp_path):
-    text = _note_text(app, tmp_path, "a\tb\u00a0c")
-    assert "      a b c" in text.splitlines() and "?" not in text.split("Activity")[1]
-
-
-def test_ordinary_text_in_other_scripts_and_symbols_comes_through_unchanged(app, tmp_path):
-    assert "      Zoë 李 — →" in _note_text(app, tmp_path, "Zoë 李 — →").splitlines()
-
-
-def test_a_bidi_override_is_replaced_but_not_the_text_around_it(app, tmp_path):
-    assert "      ab?cd" in _note_text(app, tmp_path, "ab\u202ecd").splitlines()
-
-
 def test_the_no_flags_line_for_a_client_is_cleaned_too():
     text = AdminView().format_client_flags("SOW\x1b[31m-1", [])
     assert text == "No flags to handle for SOW?[31m-1."

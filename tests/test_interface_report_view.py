@@ -480,7 +480,3 @@ def test_a_history_line_cannot_carry_escape_characters_to_the_terminal():
     assert "id?[31m?-1?" in text and "\x1b" not in text and "\u202e" not in text
     assert all(line.isprintable() for line in text.splitlines())
 
-
-def test_a_history_line_keeps_ordinary_text_and_turns_a_tab_into_a_space():
-    event = _event(action="document_uploaded", details={"file_id": "Zoë 李\t→"})
-    assert "Uploaded document Zoë 李 →" in _view().format_client_history([event])

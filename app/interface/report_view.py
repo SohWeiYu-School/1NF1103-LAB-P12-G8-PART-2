@@ -3,7 +3,6 @@
 import logging
 import os
 import textwrap
-import unicodedata
 from datetime import datetime, timezone
 from typing import Any
 
@@ -278,18 +277,6 @@ class ReportView:
             days[-1][1].append(event)
         return days
 
-    @staticmethod
-    def __printable(lines: list[str]) -> str:
-        """The lines joined with newlines, after every control or format character (an escape, a bell, a bidi
-        override, a stray line break inside a stored value) is replaced by "?": the log, notes and values come
-        from saved data, and must not be able to move the cursor or recolour an officer's terminal. A tab or a
-        no-break space becomes a plain space; every other character (accents, Chinese, dashes, arrows) stays."""
-        def clean(char: str) -> str:
-            if char in "\t\u00a0":
-                return " "
-            return "?" if unicodedata.category(char) in ("Cc", "Cf") else char
-        return "\n".join("".join(clean(char) for char in line) for line in lines)
-
     def format_client_history(self, events: list[AuditEvent], total: int | None = None,
                               unreadable: int = 0) -> str:
         """One client's audit trail as text: events (newest first, already filtered) grouped by Singapore
@@ -308,7 +295,7 @@ class ReportView:
                 lines += ["", f"  {label}"]
                 for event in day_events:
                     moment = ReportView.__singapore_time(event)
-                    lines.append(ReportView.__printable([f"    {moment:%H:%M}  {event.summary()}  |  by {event.actor}"]))
+                    lines.append(ConsoleUI.printable([f"    {moment:%H:%M}  {event.summary()}  |  by {event.actor}"]))
         if unreadable:
             lines += ["", f"{unreadable} {'entry' if unreadable == 1 else 'entries'} in the audit log can't be "
                           "read, so this history may be incomplete."]

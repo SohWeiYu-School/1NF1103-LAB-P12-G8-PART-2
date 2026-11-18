@@ -3,6 +3,7 @@
 import datetime
 import getpass
 import os
+import unicodedata
 from typing import Callable
 
 
@@ -129,6 +130,18 @@ class ConsoleUI:
         """After the summary: 'save', 'edit' or 'discard'."""
         options = ["Save this client", "Edit something first", "Discard (nothing is saved)"]
         return ["save", "edit", "discard"][self.ask_choice("\nIs everything correct?", options)]
+
+    @staticmethod
+    def printable(lines: list[str]) -> str:
+        """The lines joined with newlines, after every control or format character (an escape, a bell, a bidi
+        override, a stray line break inside a stored value) is replaced by "?": the log, notes and values come
+        from saved data, and must not be able to move the cursor or recolour a terminal. A tab or a no-break
+        space becomes a plain space; every other character (accents, Chinese, dashes, arrows) stays."""
+        def clean(char: str) -> str:
+            if char in "\t\u00a0":
+                return " "
+            return "?" if unicodedata.category(char) in ("Cc", "Cf") else char
+        return "\n".join("".join(clean(char) for char in line) for line in lines)
 
     def show(self, text: str = "") -> None:
         self.__write(text)

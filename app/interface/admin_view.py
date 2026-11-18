@@ -1,6 +1,5 @@
 """AdminView: how the admin screens look on the terminal (the twin of the admin pages of WebApp)."""
 
-import unicodedata
 from datetime import datetime, timezone
 from typing import Any
 
@@ -32,18 +31,6 @@ class AdminView:
         self.__ui: ConsoleUI = ui if ui is not None else ConsoleUI()
 
     # ----- small helpers ---------------------------------------------------------------------
-
-    @staticmethod
-    def __printable(lines: list[str]) -> str:
-        """The lines joined with newlines, after every control or format character (an escape, a bell, a bidi
-        override, a stray line break inside a stored value) is replaced by "?": the log, notes and values come
-        from saved data, and must not be able to move the cursor or recolour another terminal. A tab or a
-        no-break space becomes a plain space; every other character (accents, Chinese, dashes, arrows) stays."""
-        def clean(char: str) -> str:
-            if char in "\t\u00a0":
-                return " "
-            return "?" if unicodedata.category(char) in ("Cc", "Cf") else char
-        return "\n".join("".join(clean(char) for char in line) for line in lines)
 
     @staticmethod
     def __plural(count: int, word: str, many: str = "") -> str:
@@ -118,7 +105,7 @@ class AdminView:
                       + "  ".join(f"{OverviewPage.TAB_NAMES[tab]} {page.tab_counts[tab]}" for tab in OverviewPage.TABS),
                   "Each flag is a ticket. Flags stay here until resolved, whatever the date range."]
         lines += self.__flag_rows(page)
-        return AdminView.__printable(lines)
+        return ConsoleUI.printable(lines)
 
     def __failure_table(self, page: OverviewPage) -> list[str]:
         """One line per day that had failures, with the failures of each kind and the day's total, then the
@@ -217,7 +204,7 @@ class AdminView:
                 extra += f" (outcome: {FlagTicket.OUTCOMES.get(item['outcome'], item['outcome'])})"
             lines.append(f"  {AdminView.__sgt(item['at'])}  {item['by']}{moved}{extra}")
             lines += [f"      {part}" for part in str(item.get("note") or "").splitlines() if part.strip()]
-        return AdminView.__printable(lines)
+        return ConsoleUI.printable(lines)
 
     def show_flag(self, ticket: FlagTicket, evidence: list[AuditEvent], entries: int) -> None:
         self.__ui.show("\n" + self.format_flag(ticket, evidence, entries))
@@ -229,7 +216,7 @@ class AdminView:
         if not isinstance(client_ref, str) or not isinstance(tickets, list):
             raise ValueError("The client's flags need a client reference and a list of flags.")
         if not tickets:
-            return AdminView.__printable([f"No flags to handle for {client_ref}."])
+            return ConsoleUI.printable([f"No flags to handle for {client_ref}."])
         lines = [f"FLAGS FOR {client_ref.upper()}  ({AdminView.__plural(len(tickets), 'flag')} not resolved)",
                  ConsoleUI.LINE]
         for ticket in tickets:
@@ -237,7 +224,7 @@ class AdminView:
             lines.append(f"  {flag.flag_id}  [{flag.severity_name}] {flag.name} | {ticket.status_name} | "
                          f"raised {AdminView.__sgt(flag.raised_at)}")
             lines.append(f"     {flag.headline}")
-        return AdminView.__printable(lines)
+        return ConsoleUI.printable(lines)
 
     def show_client_flags(self, client_ref: str, tickets: list[FlagTicket]) -> None:
         self.__ui.show("\n" + self.format_client_flags(client_ref, tickets))
@@ -285,7 +272,7 @@ class AdminView:
         first = (number - 1) * AuditFilter.PAGE_SIZE + 1 if page.total else 0
         lines.append(f"Showing {first}-{min(number * AuditFilter.PAGE_SIZE, page.total)} of {page.total}   "
                      f"Page {number} of {pages}")
-        return AdminView.__printable(lines)
+        return ConsoleUI.printable(lines)
 
     def show_log_page(self, page: AuditPage, audit_filter: AuditFilter, now: datetime) -> None:
         self.__ui.show("\n" + self.format_log_page(page, audit_filter, now))
@@ -297,7 +284,7 @@ class AdminView:
         (summary() and intact(); the summary names the entries that do not match), so this class needs nothing from the Logic Manager."""
         lines = ["VERIFY THE AUDIT LOG", ConsoleUI.LINE,
                  ("OK: " if chain.intact() else "WARNING: ") + chain.summary()]
-        return AdminView.__printable(lines)
+        return ConsoleUI.printable(lines)
 
     def show_chain(self, chain: Any) -> None:
         self.__ui.show("\n" + self.format_chain(chain))

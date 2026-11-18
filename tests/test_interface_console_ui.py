@@ -276,3 +276,17 @@ def test_the_secret_reader_defaults_to_getpass(monkeypatch):
 def test_a_secret_reader_that_cannot_be_called_is_refused():
     with pytest.raises(ValueError):
         ConsoleUI(secret="not a function")
+
+
+def test_printable_replaces_control_and_format_characters_and_joins_the_lines():
+    assert ConsoleUI.printable(["a\x1b[31mb", "c\x07", "d\u202ee"]) == "a?[31mb\nc?\nd?e"
+    assert ConsoleUI.printable(["one\ntwo\r"]) == "one?two?"          # a break inside a value is not a new line
+    assert ConsoleUI.printable([]) == ""
+
+
+def test_printable_turns_a_tab_and_a_no_break_space_into_a_space():
+    assert ConsoleUI.printable(["a\tb\u00a0c"]) == "a b c"
+
+
+def test_printable_keeps_ordinary_text_in_other_scripts_and_symbols():
+    assert ConsoleUI.printable(["Zoë 李 — →"]) == "Zoë 李 — →"
