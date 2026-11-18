@@ -235,13 +235,14 @@ class ReportView:
         self.__ui.show(heading + ("Industry" if activity is None else f"{'Industry':<20}Last activity"))
         self.__ui.show("─" * W)
         for i, r in enumerate(records, start=1):
-            ref      = ReportView.__fit(r.get("client_ref", "—"), 18)
+            raw_ref  = r.get("client_ref", "—")
+            ref      = ReportView.__fit(raw_ref, 18)
             name     = ReportView.__fit(r.get("name") or r.get("client_profile", {}).get("full_name", "—"), 28)
             industry = r.get("career", {}).get("industry") or r.get("client_profile", {}).get("industry", "—")
             if activity is None:
                 self.__ui.show(f"  {i:<4}{ref:<18}{name:<28}{industry}")
             else:
-                last = ReportView.__last_activity_text(activity.get(str(ref).casefold()))
+                last = ReportView.__last_activity_text(activity.get(str(raw_ref).casefold()))
                 self.__ui.show(f"  {i:<4}{ref:<18}{name:<28}{ReportView.__fit(industry, 20):<20}{last}")
         self.__ui.show("─" * W + "\n")
         if activity_note:
@@ -539,17 +540,18 @@ class ReportView:
             id_text = f"{short_id or 'no ID':<14}"
         incomplete = " (incomplete)" if ReportView.__missing_parts(record.get("report")) else ""
         label = ReportView.OUTCOME_LABELS.get(outcome, "?") if isinstance(outcome, str) else "?"
-        return (f"{ReportView.__text_or_unknown(record.get('client_ref')):<16} "
-                f"{ReportView.__text_or_unknown(record.get('kind')):<20} {date_text:<12} "
+        return (f"{ReportView.__fit(ReportView.__text_or_unknown(record.get('client_ref')), 16):<16} "
+                f"{ReportView.__fit(ReportView.__text_or_unknown(record.get('kind')), 20):<20} {date_text:<12} "
                 f"{id_text} {label}{incomplete}{ReportView.ARCHIVE_MARKS.get(state, '')}")
 
     def show_onboarding(self, assessment: dict) -> None:
         """A forecast-only report (assessments saved before the combined verdict)."""
         W = 68
+        text = self.format_onboarding(assessment)        # first, so a damaged record shows nothing at all
         self.__ui.show("\n" + "═" * W)
         self.__ui.show("  FORECASTING — ONBOARDING ASSESSMENT (saved before the combined verdict)")
         self.__ui.show("═" * W)
-        self.__ui.show(self.format_onboarding(assessment))
+        self.__ui.show(text)
         self.__ui.show("═" * W + "\n")
 
     def show_assessment_list(self, records: list[dict], states: list[str] | None = None) -> None:

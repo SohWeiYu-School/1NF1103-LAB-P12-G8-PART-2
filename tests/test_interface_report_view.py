@@ -451,3 +451,24 @@ def test_a_record_without_a_usable_id_says_so_and_never_invents_one(bad):
     assert "no ID" in _view().format_assessment_list([record])
     del record["assessment_id"]
     assert "no ID" in ReportView.format_assessment_row(record)
+
+
+def test_a_long_reference_still_finds_its_last_activity(capsys):
+    ref = "CL-" + "X" * 20
+    _view().show_client_list([{"client_ref": ref, "name": "Ada Tan", "career": {"industry": "Banking"}}],
+                             {ref.casefold(): _event(client=ref[:40])})
+    row = next(line for line in capsys.readouterr().out.splitlines() if "CL-X" in line)
+    assert "…" in row and "16 Nov 14:02" in row and not row.rstrip().endswith("—")
+
+
+def test_a_long_client_reference_or_kind_is_cut_so_the_columns_stay_in_place():
+    record = {**_combined(), "client_ref": "CL-" + "X" * 30, "kind": "k" * 40, "assessment_id": "abcdef123456"}
+    row = ReportView.format_assessment_row(record)
+    assert row.index("2026-09-24") == 16 + 1 + 20 + 1 and "abcdef12" in row
+    assert row.count("…") == 2
+
+
+def test_a_damaged_onboarding_record_shows_nothing_and_raises_before_printing(capsys):
+    with pytest.raises((KeyError, TypeError)):
+        _view().show_onboarding({"outcome": "PASSED"})
+    assert capsys.readouterr().out == ""
