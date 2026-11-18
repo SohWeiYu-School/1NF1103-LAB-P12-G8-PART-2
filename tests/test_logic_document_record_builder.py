@@ -92,6 +92,23 @@ def test_a_text_where_a_list_of_countries_or_counterparties_belongs_is_dropped_n
     assert record.profile.name == READING["client"]["name"]
 
 
+def test_a_blank_text_for_countries_or_counterparties_means_none_and_the_reading_is_kept():
+    reading = {**READING, "claims": {**READING["claims"], "wealth_countries": "  ", "declared_counterparties": ""}}
+    record, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    saved = record.to_dict()
+    assert saved["claims"]["wealth_countries"] == [] and saved["claims"]["declared_counterparties"] == []
+    assert dropped == []
+    assert record.profile.name == READING["client"]["name"]
+    assert saved["claims"]["expected_aum"] == READING["claims"]["expected_aum_sgd"]
+
+
+def test_the_message_for_a_text_instead_of_a_list_reads_inside_the_dropped_sentence():
+    reading = {**READING, "claims": {**READING["claims"], "wealth_countries": "Singapore"}}
+    _, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    assert "is not possible (the wealth countries must be a list of names, for example Singapore and Malaysia, " \
+           "or left empty; a single value was given)" in dropped[0]["message"]
+
+
 def test_several_impossible_values_in_jobs_assets_and_claims_are_each_dropped_on_their_own():
     reading = {**READING, "jobs": [{**READING["jobs"][0], "start_year": 1800}],
                "assets": [{**READING["assets"][0], "price_paid_sgd": -5}],
