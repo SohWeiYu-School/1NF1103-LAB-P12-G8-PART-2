@@ -233,7 +233,7 @@ def test_the_crime_scan_rejects_a_policy_that_is_not_a_dict():
 # match_typologies: the warning signs and how they add up to a match
 # ===========================================================================
 
-def match_typologies(typologies, declaration, clean_case, policy):
+def match_typologies(typologies, declaration, policy):
     """The crime scan's matching, as these tests have always called it: the typology dicts become
     Typology objects and the declaration a Declaration, as the crime scan hands them over."""
     return CrimeScan(policy).match_typologies(Declaration(declaration["sources"]),
@@ -260,10 +260,6 @@ def _src(source_type="employment", counterparty=None, amount_sgd=0, occupation_m
         "evidence_sentence": "test.",
         "occupation_mismatch": occupation_mismatch,
     }
-
-
-def _clean_case():
-    return {}
 
 
 def _policy(limit=1):
@@ -307,7 +303,7 @@ def _typology(typ_id, indicators):
         "no amount", "amount given", "a friend is a related party", "a named company is not"])
 def test_each_warning_sign_fires_only_when_it_should(indicator, source, limit, fires):
     results = match_typologies([_typology("t1", [{"indicator": indicator, "weight": "core"}])],
-                               _decl(source), _clean_case(), _policy(limit=limit))
+                               _decl(source), _policy(limit=limit))
     assert results[0].breached is fires
 
 
@@ -316,7 +312,7 @@ def test_each_warning_sign_fires_only_when_it_should(indicator, source, limit, f
 # ---------------------------------------------------------------------------
 
 def test_empty_typologies_returns_empty():
-    results = match_typologies([], _decl(), _clean_case(), _policy())
+    results = match_typologies([], _decl(), _policy())
     assert results == []
 
 
@@ -326,7 +322,7 @@ def test_all_core_fire_gives_breach():
         {"indicator": "gift_or_inheritance_unnamed", "weight": "core"},
         {"indicator": "source_contradicts_occupation", "weight": "core"},
     ])
-    results = match_typologies([typ], decl, _clean_case(), _policy())
+    results = match_typologies([typ], decl, _policy())
     assert results[0].breached is True
     assert set(results[0].core_fired) == {"gift_or_inheritance_unnamed", "source_contradicts_occupation"}
 
@@ -338,7 +334,7 @@ def test_partial_core_fire_no_breach():
         {"indicator": "gift_or_inheritance_unnamed", "weight": "core"},
         {"indicator": "source_contradicts_occupation", "weight": "core"},
     ])
-    results = match_typologies([typ], decl, _clean_case(), _policy())
+    results = match_typologies([typ], decl, _policy())
     assert results[0].breached is False
 
 
@@ -349,7 +345,7 @@ def test_supporting_indicators_do_not_affect_breach():
         {"indicator": "gift_or_inheritance_unnamed", "weight": "core"},
         {"indicator": "counterparty_unnamed", "weight": "supporting"},
     ])
-    results = match_typologies([typ], decl, _clean_case(), _policy(limit=99))
+    results = match_typologies([typ], decl, _policy(limit=99))
     assert results[0].breached is True
     assert results[0].supporting_fired == []
 
@@ -358,7 +354,7 @@ def test_multiple_typologies_mixed_results():
     decl = _decl(_src(source_type="gift", counterparty=None, amount_sgd=None))
     typ1 = _typology("t1", [{"indicator": "gift_or_inheritance_unnamed", "weight": "core"}])
     typ2 = _typology("t2", [{"indicator": "counterparty_unnamed", "weight": "core"}])
-    results = match_typologies([typ1, typ2], decl, _clean_case(), _policy())
+    results = match_typologies([typ1, typ2], decl, _policy())
     # gift with no counterparty → both fire
     assert results[0].breached is True
     assert results[1].breached is True
@@ -369,7 +365,7 @@ def test_each_result_is_a_match_result_holding_its_typology():
     typ = _typology("t1", [{"indicator": "gift_or_inheritance_unnamed", "weight": "core"},
                            {"indicator": "unvalued_source_present", "weight": "supporting"},
                            {"indicator": "related_party_transaction", "weight": "supporting"}])
-    result = match_typologies([typ], decl, _clean_case(), _policy())[0]
+    result = match_typologies([typ], decl, _policy())[0]
     assert isinstance(result, MatchResult)
     assert isinstance(result.typology, Typology) and result.typology.typology_id == "t1"
     assert result.typology.to_dict() == {**typ, "crime_category": ""}       # the whole typology, not just its id

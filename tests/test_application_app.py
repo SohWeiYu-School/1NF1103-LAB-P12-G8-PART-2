@@ -1589,10 +1589,6 @@ def flagged(app, tmp_path):
     return app
 
 
-def _log_text(tmp_path):
-    return (tmp_path / "local database" / "audit_log.json").read_text(encoding="utf-8")
-
-
 def test_the_audit_settings_come_from_the_policy(app):
     assert app.audit_policy.window_days == 30 and app.audit_policy.jump_levels == 2
 
