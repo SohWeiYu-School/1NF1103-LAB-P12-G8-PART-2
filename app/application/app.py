@@ -561,7 +561,7 @@ class App:
             return sum(App.__count_fields(item) for item in value)
         return 1
 
-    def record_builder(self, date: str = "") -> DocumentRecordBuilder:
+    def __record_builder(self, date: str = "") -> DocumentRecordBuilder:
         """A DocumentRecordBuilder for one record, dated today unless another date is given."""
         return DocumentRecordBuilder(self.__config, date or self.today())
 
@@ -810,14 +810,14 @@ class App:
         if not given), and one entry for each field left out because no client record can have that value:
         {"path", "message", "optional_field"}. Raises ValueError, saying what is wrong, if today is not a
         YYYY-MM-DD date or if the reading as a whole cannot be a record."""
-        record, _, dropped = self.record_builder(today).build(extracted, client_ref)
+        record, _, dropped = self.__record_builder(today).build(extracted, client_ref)
         return record, dropped
 
     def missing_fields(self, record: ClientRecord) -> list[dict]:
         """The required fields of a record filled from documents that are still empty or unusable, in form
         order: {"path", "label", "kind", ...}. Raises ValueError if record is not a ClientRecord."""
         App.__need_record(record)
-        return self.record_builder().missing_fields(record)
+        return self.__record_builder().missing_fields(record)
 
     def set_record_field(self, record: ClientRecord, path: list, value: object) -> ClientRecord:
         """A copy of record with the value at path (a path from missing_fields) replaced. Raises ValueError,
@@ -828,7 +828,7 @@ class App:
                 isinstance(part, (str, int)) and not isinstance(part, bool) for part in path):
             raise ValueError("The field to change must be given as a path of names and positions.")
         try:
-            return self.record_builder().set_path(record, path, value)
+            return self.__record_builder().set_path(record, path, value)
         except (KeyError, IndexError, TypeError) as error:
             raise ValueError(f"The record has no field at {path!r}.") from error
 
@@ -836,7 +836,7 @@ class App:
         """The record with its current job copied into "career" again, after the officer has edited the jobs.
         Raises ValueError if record is not a ClientRecord."""
         App.__need_record(record)
-        return self.record_builder().finish(record)
+        return self.__record_builder().finish(record)
 
     def reading_summary(self, record: ClientRecord, from_documents: ClientRecord) -> list[dict]:
         """One row per field for the officer to check: its value and where it came from ("documents",
@@ -844,7 +844,7 @@ class App:
         ValueError if either is not a ClientRecord."""
         App.__need_record(record)
         App.__need_record(from_documents)
-        return self.record_builder().summarise(record, from_documents)
+        return self.__record_builder().summarise(record, from_documents)
 
     @staticmethod
     def __need_record(record: object) -> None:
@@ -853,7 +853,7 @@ class App:
 
     def reading_problems(self, record: ClientRecord, today: str = "") -> list[str]:
         """Things worth a second look in a record filled from documents. [] = nothing spotted."""
-        return self.record_builder(today).check(record)
+        return self.__record_builder(today).check(record)
 
     # ----- who is using the app, and the audit log ----------------------------------------------
 
