@@ -29,9 +29,6 @@ class AdminConsole:
                                     App.FLAG_ADMIN_ONLY)
     MENU: tuple[str, ...] = ("Overview", "Open a flag", "A client's flags", "Activity log",
                              "Verify the audit log")
-    LOG_PRESET_NAMES: tuple[str, ...] = ("Today", "7 days", "30 days", "90 days", "Custom dates")
-    RESULT_NAMES: tuple[str, ...] = ("All", "OK only", "Failed only")
-    SORT_NAMES: tuple[str, ...] = ("Newest first", "Oldest first")
 
     def __init__(self, app: App, ui: ConsoleUI, view: AdminView, account: Account) -> None:
         """Raises ValueError for anything of the wrong kind, and for an account that is not an admin."""
@@ -223,7 +220,8 @@ class AdminConsole:
     def __ask_filter(self) -> AuditFilter | None:
         """Ask the eight filters, each again until the filter accepts it. None if the admin goes back."""
         ui = self.__ui
-        picked = ui.ask_choice("Date range", list(AdminConsole.LOG_PRESET_NAMES), allow_back=True,
+        picked = ui.ask_choice("Date range", [AdminView.LOG_PRESET_NAMES[code] for code in AuditFilter.PRESETS],
+                               allow_back=True,
                                back_label="Back to the admin menu")
         if picked is None:
             return None
@@ -231,11 +229,13 @@ class AdminConsole:
         if preset == "custom":
             date_from, date_to = self.__ask_dates()
         groups = self.__ask_groups()
-        result = AuditFilter.RESULT_CHOICES[ui.ask_choice("Result", list(AdminConsole.RESULT_NAMES))]
+        result = AuditFilter.RESULT_CHOICES[ui.ask_choice(
+            "Result", [AdminView.RESULT_NAMES[code] for code in AuditFilter.RESULT_CHOICES])]
         actor = self.__ask_officer()
         client_ref = self.__ask_text("Client reference (blank for every client)", "client_ref")
         query = self.__ask_text(f"Search text (blank for none, at most {AuditFilter.MAX_QUERY} characters)", "query")
-        sort = AuditFilter.SORT_CHOICES[ui.ask_choice("Order", list(AdminConsole.SORT_NAMES))]
+        sort = AuditFilter.SORT_CHOICES[ui.ask_choice(
+            "Order", [AdminView.SORT_NAMES[code] for code in AuditFilter.SORT_CHOICES])]
         flagged_only = ui.ask_yes_no("Only events behind a flag that is not resolved?")
         return AuditFilter(preset, date_from, date_to, groups, result, actor, client_ref, query, sort, 1, flagged_only)
 

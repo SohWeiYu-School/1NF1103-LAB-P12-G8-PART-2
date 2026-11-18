@@ -21,7 +21,9 @@ class AdminView:
     SGT_FORMAT: str = "%Y-%m-%d %H:%M"
     PRESET_NAMES: dict[str, str] = {"today": "Today", "7": "7 days", "30": "30 days", "90": "90 days"}
     LOG_PRESET_NAMES: dict[str, str] = {"1": "Today", "7": "7 days", "30": "30 days", "90": "90 days",
-                                        "custom": "Custom"}
+                                        "custom": "Custom dates"}
+    RESULT_NAMES: dict[str, str] = {"all": "All", "ok": "OK only", "failed": "Failed only"}
+    SORT_NAMES: dict[str, str] = {"desc": "Newest first", "asc": "Oldest first"}
     FAILURE_COLUMN: int = 16                          # width of one failure kind's column in the table
 
     def __init__(self, ui: ConsoleUI | None = None) -> None:
@@ -236,7 +238,7 @@ class AdminView:
         if not isinstance(audit_filter, AuditFilter):
             raise ValueError("The filter summary needs an AuditFilter.")
         chips = [text for _, text in audit_filter.chips()]
-        order = "Oldest first" if audit_filter.sort == "asc" else "Newest first"
+        order = AdminView.SORT_NAMES[audit_filter.sort]
         return (f"Showing: {AdminView.LOG_PRESET_NAMES[audit_filter.preset]} ({audit_filter.range_text(now)}); "
                 f"{order}" + ("; " + "; ".join(chips) if chips else ""))
 

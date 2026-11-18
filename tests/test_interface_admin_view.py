@@ -241,3 +241,11 @@ def test_a_note_written_in_a_browser_with_windows_line_breaks_prints_as_indented
 def test_the_no_flags_line_for_a_client_is_cleaned_too():
     text = AdminView().format_client_flags("SOW\x1b[31m-1", [])
     assert text == "No flags to handle for SOW?[31m-1."
+
+
+def test_every_filter_code_has_a_name_for_the_menus_and_the_filter_line():
+    for names, codes in ((AdminView.LOG_PRESET_NAMES, AuditFilter.PRESETS),
+                         (AdminView.RESULT_NAMES, AuditFilter.RESULT_CHOICES),
+                         (AdminView.SORT_NAMES, AuditFilter.SORT_CHOICES)):
+        assert set(names) == set(codes) and all(names[code] for code in codes)
+    assert AdminView.LOG_PRESET_NAMES["custom"] == "Custom dates"
