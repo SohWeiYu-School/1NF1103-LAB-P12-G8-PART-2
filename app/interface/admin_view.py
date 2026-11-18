@@ -213,17 +213,19 @@ class AdminView:
 
     # ----- the result of updating a flag -----------------------------------------------------
 
-    def format_update_saved(self, ticket: FlagTicket, sequence: int, moved: bool) -> str:
-        """The words for an update that was saved (the web's). ticket is the flag as it is now, sequence the number
-        of the new audit entry (0 if the line was written but could not be found again to read its number) and
-        moved whether the status changed (otherwise a note was added). A failed update is worded by the console."""
+    def format_update_saved(self, ticket: FlagTicket, sequence: int, moved_to: str) -> str:
+        """The words for an update that was saved (the web's). ticket is the flag, sequence the number of the new audit
+        entry (0 if the line was written but could not be found again to read its number) and moved_to the name of
+        the status the flag was moved to ("" when only a note was added). The name comes from what the admin chose,
+        not from the ticket, which App may have fallen back to its old state. A failed update is worded by the
+        console."""
         if not sequence:
             return "Your update was saved in the audit log."
-        start = f"{ticket.flag.flag_id} is now {ticket.status_name}" if moved else "Note added"
+        start = f"{ticket.flag.flag_id} is now {moved_to}" if moved_to else "Note added"
         return f"{start}. Saved in the audit log as entry #{sequence}."
 
-    def show_update_saved(self, ticket: FlagTicket, sequence: int, moved: bool) -> None:
-        self.__ui.show("\n" + self.format_update_saved(ticket, sequence, moved))
+    def show_update_saved(self, ticket: FlagTicket, sequence: int, moved_to: str) -> None:
+        self.__ui.show("\n" + self.format_update_saved(ticket, sequence, moved_to))
 
     # ----- a client's flags ------------------------------------------------------------------
 

@@ -187,7 +187,8 @@ class AdminConsole:
             if updated is None or App.FLAG_NOT_SAVED in problems:
                 return updated                              # gone (None), or not written: the flag has not changed
             return self.__show_again(flag_id, "")           # not valid: it changed meanwhile, show it as it is now
-        self.__view.show_update_saved(updated, sequence, status != ticket.status)
+        self.__view.show_update_saved(updated, sequence,
+                                      FlagTicket.STATUSES[status] if status != ticket.status else "")
         return self.__show_again(flag_id, "Your update was saved, but the flag can't be shown again right now.")
 
     def __show_again(self, flag_id: str, lead: str) -> FlagTicket | None:

@@ -261,31 +261,37 @@ def _saved(app, status, note="Asked the officer why."):
 
 def test_a_move_says_the_new_status_and_the_entry_number(app):
     ticket, sequence = _saved(app, "review")
-    assert AdminView().format_update_saved(ticket, sequence, True) == \
+    assert AdminView().format_update_saved(ticket, sequence, "In review") == \
         "F-HOU-SOW-1-7 is now In review. Saved in the audit log as entry #11."
 
 
 def test_the_same_status_says_a_note_was_added(app):
     ticket, sequence = _saved(app, "open")
-    assert AdminView().format_update_saved(ticket, sequence, False) == "Note added. Saved in the audit log as entry #11."
+    assert AdminView().format_update_saved(ticket, sequence, "") == "Note added. Saved in the audit log as entry #11."
 
 
 def test_a_saved_update_with_no_entry_number_says_it_was_saved(app):
     ticket, _ = _saved(app, "review")
-    assert AdminView().format_update_saved(ticket, 0, True) == "Your update was saved in the audit log."
-    assert AdminView().format_update_saved(ticket, 0, False) == "Your update was saved in the audit log."
+    assert AdminView().format_update_saved(ticket, 0, "In review") == "Your update was saved in the audit log."
+    assert AdminView().format_update_saved(ticket, 0, "") == "Your update was saved in the audit log."
+
+
+def test_the_status_named_is_the_one_moved_to_not_the_one_the_ticket_shows(app):
+    ticket = app.flag("F-HOU-SOW-1-7", NOW)                  # still Open: as if App fell back to the old ticket
+    assert AdminView().format_update_saved(ticket, 11, "In review") == \
+        "F-HOU-SOW-1-7 is now In review. Saved in the audit log as entry #11."
 
 
 def test_moved_not_the_history_decides_between_a_move_and_a_note(app):
     ticket, sequence = _saved(app, "review")                 # the history's last line is a move either way
     view = AdminView()
-    assert view.format_update_saved(ticket, sequence, False).startswith("Note added.")
-    assert view.format_update_saved(ticket, sequence, True).startswith("F-HOU-SOW-1-7 is now In review.")
+    assert view.format_update_saved(ticket, sequence, "").startswith("Note added.")
+    assert view.format_update_saved(ticket, sequence, "In review").startswith("F-HOU-SOW-1-7 is now In review.")
 
 
 def test_show_update_saved_prints_the_text_and_is_not_an_error(app):
     ui, shown, _, _ = screen()
     ticket, sequence = _saved(app, "review")
-    AdminView(ui).show_update_saved(ticket, sequence, True)
+    AdminView(ui).show_update_saved(ticket, sequence, "In review")
     out = text_of(shown)
     assert "is now In review. Saved in the audit log as entry #11." in out and "[ERROR]" not in out

@@ -584,6 +584,13 @@ def test_a_flag_that_is_gone_when_saving_says_it_was_not_saved(tmp_path, monkeyp
     assert out.count("--- ADMIN") == 2 and out.count(f"{FLAG}  After-hours") == 1      # back to the menu, no re-show
 
 
+def test_several_problems_from_app_are_joined_and_say_not_saved(tmp_path, monkeypatch):
+    application = _update_app(tmp_path, monkeypatch)
+    application.answer = (application.flag(FLAG), ["First problem.", "Second problem."], 0)
+    out = _update(application, "2", NOTE)
+    assert "[ERROR] First problem. Second problem. Your update was not saved." in out
+
+
 def test_no_flag_and_no_problem_from_app_is_still_shown_as_not_saved(tmp_path, monkeypatch):
     application = _update_app(tmp_path, monkeypatch, answer=(None, [], 0))
     out = _update(application, "2", NOTE)
