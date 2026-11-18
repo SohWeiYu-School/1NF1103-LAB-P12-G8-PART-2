@@ -353,3 +353,36 @@ def test_with_page_validates_the_page_like_the_constructor():
     for bad in (0, -1, "2", True, 1.5):
         with pytest.raises(ValueError):
             AuditFilter().with_page(bad)
+
+
+NOW_FOR_PAGES = datetime(2026, 11, 18, 4, 0, tzinfo=timezone.utc)
+
+
+def test_with_page_keeps_dates_that_from_query_ignored_and_the_problem():
+    future = AuditFilter.from_query({"preset": "custom", "from": "2026-11-10", "to": "2026-11-30"}, NOW_FOR_PAGES)
+    moved = future.with_page(2)
+    assert moved.page == 2 and moved.problems() == future.problems() != []
+    assert moved.day_range(NOW_FOR_PAGES) is None                       # still showing all dates
+    assert (moved.date_from, moved.date_to) == ("2026-11-10", "2026-11-30")
+    assert moved.to_query() == {**future.to_query(), "page": "2"}
+
+
+def test_with_page_on_a_start_after_the_end_does_not_raise_and_keeps_the_problem():
+    backwards = AuditFilter.from_query({"preset": "custom", "from": "2026-11-12", "to": "2026-11-10"}, NOW_FOR_PAGES)
+    moved = backwards.with_page(2)
+    assert moved.page == 2 and moved.problems() == backwards.problems() == [AuditFilter.PROBLEM_DATE_ORDER]
+    assert moved.day_range(NOW_FOR_PAGES) is None
+    assert (moved.date_from, moved.date_to) == ("2026-11-12", "2026-11-10")
+
+
+def test_with_page_on_good_dates_still_uses_them():
+    good = AuditFilter.from_query({"preset": "custom", "from": "2026-11-01", "to": "2026-11-06"}, NOW_FOR_PAGES)
+    moved = good.with_page(2)
+    assert moved.day_range(NOW_FOR_PAGES) == good.day_range(NOW_FOR_PAGES) and moved.problems() == []
+
+
+def test_with_page_on_a_filter_built_directly_pages_as_before():
+    direct = AuditFilter("custom", "2026-11-01", "2026-11-06", result="failed")
+    moved = direct.with_page(4)
+    assert moved.page == 4 and moved.problems() == [] and moved.result == "failed"
+    assert moved.day_range(NOW_FOR_PAGES) == direct.day_range(NOW_FOR_PAGES)

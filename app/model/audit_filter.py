@@ -408,9 +408,17 @@ class AuditFilter:
         return events[start:start + AuditFilter.PAGE_SIZE]
 
     def with_page(self, page: int) -> "AuditFilter":
-        """The same filter on another page. Raises ValueError for a page that is not a whole number, 1 or more."""
-        return AuditFilter(self.__preset, self.__date_from, self.__date_to, self.__groups, self.__result,
-                           self.__actor, self.__client_ref, self.__query, self.__sort, page, self.__flagged_only)
+        """The same filter on another page, with everything from_query worked out kept: the dates that were
+        ignored stay ignored (and are still shown in the date boxes) and the problems are the same. Raises
+        ValueError for a page that is not a whole number, 1 or more."""
+        moved = AuditFilter(self.__preset, "" if self.__dates_ignored else self.__date_from,
+                            "" if self.__dates_ignored else self.__date_to, self.__groups, self.__result,
+                            self.__actor, self.__client_ref, self.__query, self.__sort, page, self.__flagged_only)
+        if self.__dates_ignored and self.__preset == "custom":
+            moved.__date_from, moved.__date_to = self.__date_from, self.__date_to
+        moved.__dates_ignored = self.__dates_ignored
+        moved.__problems = list(self.__problems)
+        return moved
 
     def to_query(self) -> dict[str, str | list[str]]:
         """Only the values that are not the default, as text for a web address (groups as a list)."""
