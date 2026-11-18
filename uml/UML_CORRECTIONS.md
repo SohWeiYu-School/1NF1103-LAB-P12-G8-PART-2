@@ -795,3 +795,19 @@ round-trip PROBLEMS: 0; layout_check 0.
 - Boxes changed size (`AuditEvent` widened to 760 and `AuditFilter` to 700, which carry many arrows), so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
   Scan 5 differences before (stage 3 = 0, 5 = 5), plus 2 relationships needing acceptance, 0 after; round-trip PROBLEMS: 0;
   layout_check 0; make_views SELF-CHECK OK.
+
+## Phase 3: terminal flag updates (2026-11-18): code changed, the diagram follows it
+
+- Why: terminal parity. An admin can now change a flag from the terminal (the twin of the flag page of `WebApp`). The code was
+  right, so the diagram was brought up to it.
+- `AdminConsole`: added `−__pick_flag() : str | None`, `−__show_flag(flag_id : str) : FlagTicket | None`,
+  `−__update_flag(ticket : FlagTicket) : FlagTicket | None`, `−__ask_update(ticket : FlagTicket) : tuple[str, str, str, str] | None`
+  and `−__show_again(flag_id : str, lead : str) : FlagTicket | None`. `−__show_error` gained `not_saved : bool = False`.
+  `−__open_flag() : None` is still in the code, so it stays.
+- `AdminView`: added `+NOT_SAVED : str «const»`, `+format_update_result(ticket : FlagTicket | None, problems : list[str],
+  sequence : int, status : str, before : str, says_not_saved : bool = False) : tuple[str, bool]` and `+show_update_result(...) : bool`
+  (same parameters).
+- Arrows: none added or changed. `AdminConsole o-- "0..*" FlagTicket` and `AdminView ..> FlagTicket` already cover the new
+  `FlagTicket` use; the relationship check found nothing missing.
+- Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
+  Scan 9 differences before (stage 3 = 1, 5 = 8), 0 after; round-trip PROBLEMS: 0; layout_check 0; make_views SELF-CHECK OK.

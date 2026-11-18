@@ -213,9 +213,14 @@ package "IO Manager (app/interface)" {
     -__overview() : None
     {static} -__rejected(**values : object) : str
     -__show_audit_warning() : None
-    -__show_error(error : ValueError, where : str) : None
+    -__show_error(error : ValueError, where : str, not_saved : bool = False) : None
     -__verify() : None
     +run() : None
+    -__ask_update(ticket : FlagTicket) : tuple[str, str, str, str] | None
+    -__pick_flag() : str | None
+    -__show_again(flag_id : str, lead : str) : FlagTicket | None
+    -__show_flag(flag_id : str) : FlagTicket | None
+    -__update_flag(ticket : FlagTicket) : FlagTicket | None
   }
   class AdminView {
     +FAILURE_COLUMN : int = 16 «const»
@@ -225,6 +230,7 @@ package "IO Manager (app/interface)" {
     -__ui : ConsoleUI = ui if ui is not None else ConsoleUI()
     +RESULT_NAMES : dict[str, str] = {...} «const»
     +SORT_NAMES : dict[str, str] = {...} «const»
+    +NOT_SAVED : str = "Your update was not saved." «const»
     --
     {static} -__change(has_previous : bool, change : int | None, diff : int) : str
     {static} -__event_line(event : AuditEvent, marked : bool = False) : str
@@ -244,6 +250,8 @@ package "IO Manager (app/interface)" {
     +show_flag(ticket : FlagTicket, evidence : list[AuditEvent], entries : int) : None
     +show_log_page(page : AuditPage, audit_filter : AuditFilter, now : datetime) : None
     +show_overview(page : OverviewPage) : None
+    +format_update_result(ticket : FlagTicket | None, problems : list[str], sequence : int, status : str, before : str, says_not_saved : bool = False) : tuple[str, bool]
+    +show_update_result(ticket : FlagTicket | None, problems : list[str], sequence : int, status : str, before : str, says_not_saved : bool = False) : bool
   }
   class CaseBuilder {
     -__ui : ConsoleUI = ConsoleUI()
