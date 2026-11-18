@@ -811,3 +811,22 @@ round-trip PROBLEMS: 0; layout_check 0.
   `FlagTicket` use; the relationship check found nothing missing.
 - Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
   Scan 9 differences before (stage 3 = 1, 5 = 8), 0 after; round-trip PROBLEMS: 0; layout_check 0; make_views SELF-CHECK OK.
+
+**Phase 3 design review follow-ups (2026-11-18)**
+- Why: review of the terminal flag update. The console words a failed update and the view words only a saved one, and the
+  status rules moved to `FlagTicket`. The code was right, so the diagram was brought up to it.
+- `FlagTicket`: added `+needs_waiting_on(status : str) : bool` and `+needs_outcome(status : str) : bool`.
+- `AdminView`: removed `+NOT_SAVED «const»`, `+format_update_result(...)` and `+show_update_result(...)`; added
+  `+format_update_saved(ticket : FlagTicket, sequence : int, moved_to : str) : str` and
+  `+show_update_saved(ticket : FlagTicket, sequence : int, moved_to : str) : None` (commit 6ce7448: the line names the status the admin
+  chose, so `moved : bool` became `moved_to : str`).
+- `AdminConsole`: added `+NOT_SAVED : str = "Your update was not saved." «const»` (the constant moved here from `AdminView`).
+- Member order (U1): the members of `AdminConsole` were not in the order every other box uses, because the five Phase 3
+  methods and `NOT_SAVED` were appended at the end. The order is: constants, then attributes, each A to Z; then methods
+  sorted by name as written (so `__init__` sits among the private ones and `run` comes last). `AdminConsole` was
+  re-sorted this way. `AdminView` (its added constants and the new methods sat at the end) and `FlagTicket` (the new
+  methods) were sorted the same way. No member was added or removed by the re-sort.
+- Arrows: none added or changed. `AdminConsole` calling `ticket.needs_*` is covered by `AdminConsole o-- "0..*" FlagTicket`;
+  the relationship check agrees (225 arrows: 221 confirmed, 4 accepted, none missing).
+- Boxes changed size, so the folders were re-packed, every line re-routed, the labels placed again and the views regenerated.
+  Scan 8 differences before (stage 5 = 8), 0 after; round-trip PROBLEMS: 0; layout_check 0; make_views SELF-CHECK OK.
