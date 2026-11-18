@@ -28,6 +28,7 @@ class AdminConsole:
 
     SAFE_ERRORS: tuple[str, ...] = (App.AUDIT_UNAVAILABLE, App.AUDIT_KEY_MISSING, App.FLAGS_UNAVAILABLE,
                                     App.FLAG_ADMIN_ONLY)
+    NOT_SAVED: str = "Your update was not saved."
     MENU: tuple[str, ...] = ("Overview", "Open a flag", "A client's flags", "Activity log",
                              "Verify the audit log")
 
@@ -71,7 +72,7 @@ class AdminConsole:
         shown as they are; any other ValueError is not an audit log problem, so it is logged with its details and
         shown as an unexpected error, never as "the audit log is unavailable". not_saved adds that the admin's update
         was not saved."""
-        tail = f" {AdminView.NOT_SAVED}" if not_saved else ""
+        tail = f" {AdminConsole.NOT_SAVED}" if not_saved else ""
         if str(error) in AdminConsole.SAFE_ERRORS:
             logger.error("AdminConsole: %s %s: %s", where, "failed" if not_saved else "could not be shown", error)
             self.__ui.show_error(str(error) + tail)
@@ -79,7 +80,7 @@ class AdminConsole:
             logger.error("AdminConsole: %s failed with an unexpected error: %r", where, error)
             self.__ui.show_unexpected_error()
             if not_saved:
-                self.__ui.show_error(AdminView.NOT_SAVED)
+                self.__ui.show_error(AdminConsole.NOT_SAVED)
 
     def __show_audit_warning(self) -> None:
         """If the last action's audit line could not be written, say so."""
@@ -168,22 +169,25 @@ class AdminConsole:
         status, waiting_on, outcome, note = asked
         flag_id = ticket.flag.flag_id
         result: tuple[FlagTicket | None, list[str], int] | None = None
+        failure: ValueError | None = None
         try:
-            try:
-                result = self.__app.update_flag(
-                    flag_id, self.__account.name, status, note, waiting_on, outcome, self.__now())
-            finally:
-                if result is None or App.FLAG_NOT_SAVED not in result[1]:   # that answer already says it
-                    self.__show_audit_warning()             # the line may be missing whether or not the update ran
+            result = self.__app.update_flag(
+                flag_id, self.__account.name, status, note, waiting_on, outcome, self.__now())
         except ValueError as error:
-            self.__show_error(error, "Update a flag", not_saved=True)
+            failure = error
+        if result is None or App.FLAG_NOT_SAVED not in result[1]:       # that answer already says it
+            self.__show_audit_warning()                 # the line may be missing whether or not the update ran
+        if result is None:
+            self.__show_error(failure, "Update a flag", not_saved=True)
             return ticket
         updated, problems, sequence = result
-        if not self.__view.show_update_result(updated, problems, sequence, status, ticket.status,
-                                              App.FLAG_NOT_SAVED in problems):
+        if updated is None or problems:
+            text = " ".join(problems) if problems else "That flag could not be found."
+            self.__ui.show_error(text if App.FLAG_NOT_SAVED in problems else f"{text} {AdminConsole.NOT_SAVED}")
             if updated is None or App.FLAG_NOT_SAVED in problems:
                 return updated                              # gone (None), or not written: the flag has not changed
             return self.__show_again(flag_id, "")           # not valid: it changed meanwhile, show it as it is now
+        self.__view.show_update_saved(updated, sequence, status != ticket.status)
         return self.__show_again(flag_id, "Your update was saved, but the flag can't be shown again right now.")
 
     def __show_again(self, flag_id: str, lead: str) -> FlagTicket | None:
