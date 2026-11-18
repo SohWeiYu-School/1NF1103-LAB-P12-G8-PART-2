@@ -2332,3 +2332,46 @@ def test_the_pick_list_shows_each_assessments_date_and_outcome_so_they_can_be_to
     assert all("Assessment ID P" in p for p in picks)
     assert any("2026-11-02" in p and "RISKY" in p for p in picks)
     assert any("2026-11-01" in p and "PASSED" in p and "(archived)" in p for p in picks)
+
+
+_UNREADABLE = "This saved assessment could not be read, so its report cannot be shown."
+
+
+@pytest.mark.parametrize("extra", [{}, {"assessment": "text"}, {"assessment": {"outcome": "PASSED"}},
+                                   {"report": {"header": {}}}])
+def test_a_damaged_saved_assessment_is_reported_from_menu_8_and_never_ends_the_session(app, monkeypatch, capsys,
+                                                                                      caplog, extra):
+    _history_client(app, with_assessments=False)
+    assert app.assessments().save({"assessment_id": "D1", "client_ref": CLIENT_REF, "kind": "combined",
+                                   "verdict": {"assessed_on": "2026-11-01", "verdict": "PASSED"}, **extra})
+    out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "3", "1", "0", "0")
+    assert _UNREADABLE in out and "Goodbye." in out
+    assert "COMBINED ASSESSMENT" not in out and "ONBOARDING" not in out
+
+
+def test_a_damaged_saved_assessment_is_reported_from_menu_5_too(app, monkeypatch, capsys):
+    _history_client(app, with_assessments=False)
+    assert app.assessments().save({"assessment_id": "D1", "client_ref": CLIENT_REF, "kind": "combined",
+                                   "verdict": {"assessed_on": "2026-11-01", "verdict": "PASSED"}})
+    out = _run_menu(app, monkeypatch, capsys, "5", "1", "1", "1", "0")
+    assert _UNREADABLE in out and "Goodbye." in out
+
+
+def test_going_back_from_the_custom_dates_returns_to_the_period_question(app, tmp_path, monkeypatch, capsys):
+    _history_client(app)
+    _seed_history(tmp_path)
+    out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "2", "1", "5", "0", "2", "0", "0")   # 0 at From, then 7 days
+    assert out.count("Which period?") == 2
+    assert "Showing: All, Last 7 days" in out
+    out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "2", "1", "5", "", "", "1", "0", "0")   # both blank, then all time
+    assert out.count("Which period?") == 2 and "Showing: All, All time" in out
+    out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "2", "1", "5", "2026-11-10", "0", "1", "0", "0")
+    assert out.count("Which period?") == 2
+
+
+def test_todays_singapore_date_is_accepted_as_the_end_date(app, tmp_path, monkeypatch, capsys):
+    from datetime import datetime, timezone
+    _history_client(app)
+    today = AuditFilter.singapore_day(datetime.now(timezone.utc)).isoformat()
+    out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "2", "1", "5", "2026-11-01", today, "0", "0")
+    assert f"(2026-11-01 to {today})" in out and "cannot be in the future" not in out

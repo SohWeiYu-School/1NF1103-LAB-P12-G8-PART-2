@@ -865,15 +865,26 @@ class App:
 
     def __open_assessment(self, chosen: dict) -> None:
         """Show one saved assessment in full: the combined report, or a forecast-only one saved before it."""
+        unreadable = ("This saved assessment could not be read, so its report cannot be "
+                      "shown. The other saved assessments are not affected.")
         if chosen.get("report"):                                         # the combined assessment
             verdict = self.__saved_verdict(chosen)
             if verdict is None:
-                self.__ui.show_error("This saved assessment could not be read, so its report cannot be "
-                                     "shown. The other saved assessments are not affected.")
+                self.__ui.show_error(unreadable)
             else:
-                self.__report_view.show_verdict_report(verdict)
-        else:
+                try:
+                    self.__report_view.show_verdict_report(verdict)
+                except (KeyError, TypeError, ValueError, AttributeError, IndexError) as error:
+                    logger.error("App.__open_assessment: the saved report %s cannot be shown: %r",
+                                 chosen.get("assessment_id"), error)
+                    self.__ui.show_error(unreadable)
+            return
+        try:
             self.__report_view.show_onboarding(chosen["assessment"])     # saved before the combined verdict
+        except (KeyError, TypeError, ValueError, AttributeError, IndexError) as error:
+            logger.error("App.__open_assessment: the saved assessment %s cannot be shown: %r",
+                         chosen.get("assessment_id"), error)
+            self.__ui.show_error(unreadable)
 
     def __change_archive(self, records: list[dict]) -> None:
         """Ask which of these assessments to archive or restore, ask for the reason (archive only) and do it.
@@ -992,25 +1003,30 @@ class App:
         model refuses is shown with its own message and asked again."""
         shows, whens = list(TrailFilter.SHOW_LABELS), list(TrailFilter.WHEN)
         show = shows[self.__ui.ask_choice("Show which events?", list(TrailFilter.SHOW_LABELS.values()))]
-        when = whens[self.__ui.ask_choice("Which period?", [TrailFilter.WHEN_LABELS[w] for w in whens])]
         while True:
-            first = last = ""
-            if when == "custom":
-                first = self.__ui.ask_optional_text("From date (YYYY-MM-DD, Enter for no start)")
-                last = self.__ui.ask_optional_text("To date (YYYY-MM-DD, Enter for no end)")
-            try:
-                trail_filter = TrailFilter(show, when, first, last)
-            except ValueError as error:
-                self.__ui.show_error(str(error))
-                continue
-            if when != "custom":
-                return trail_filter
-            if not first or not last:
-                self.__ui.show_error("Pick both a start and an end date.")
-            elif AuditFilter.parse_day(last) > AuditFilter.singapore_day(datetime.now(timezone.utc)):
-                self.__ui.show_error("The dates cannot be in the future.")
-            else:
-                return trail_filter
+            when = whens[self.__ui.ask_choice("Which period?", [TrailFilter.WHEN_LABELS[w] for w in whens])]
+            while True:
+                first = last = ""
+                if when == "custom":
+                    first = self.__ui.ask_optional_text("From date (YYYY-MM-DD, 0 to go back)")
+                    if first == "0":
+                        break                                # back to "Which period?"
+                    last = self.__ui.ask_optional_text("To date (YYYY-MM-DD)")
+                    if last == "0" or (not first and not last):
+                        break
+                try:
+                    trail_filter = TrailFilter(show, when, first, last)
+                except ValueError as error:
+                    self.__ui.show_error(str(error))
+                    continue
+                if when != "custom":
+                    return trail_filter
+                if not first or not last:
+                    self.__ui.show_error("Pick both a start and an end date.")
+                elif AuditFilter.parse_day(last) > AuditFilter.singapore_day(datetime.now(timezone.utc)):
+                    self.__ui.show_error("The dates cannot be in the future.")
+                else:
+                    return trail_filter
 
     def __show_trail(self, client_ref: str, trail_filter: TrailFilter) -> None:
         """Show the client's audit trail, newest first, through the filter. An audit log that cannot be read
