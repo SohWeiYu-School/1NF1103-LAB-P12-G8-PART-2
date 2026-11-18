@@ -235,14 +235,14 @@ class ReportView:
         self.__ui.show(heading + ("Industry" if activity is None else f"{'Industry':<20}Last activity"))
         self.__ui.show("─" * W)
         for i, r in enumerate(records, start=1):
-            ref      = r.get("client_ref", "—")
-            name     = r.get("name") or r.get("client_profile", {}).get("full_name", "—")
+            ref      = ReportView.__fit(r.get("client_ref", "—"), 18)
+            name     = ReportView.__fit(r.get("name") or r.get("client_profile", {}).get("full_name", "—"), 28)
             industry = r.get("career", {}).get("industry") or r.get("client_profile", {}).get("industry", "—")
             if activity is None:
                 self.__ui.show(f"  {i:<4}{ref:<18}{name:<28}{industry}")
             else:
                 last = ReportView.__last_activity_text(activity.get(str(ref).casefold()))
-                self.__ui.show(f"  {i:<4}{ref:<18}{name:<28}{str(industry):<20}{last}")
+                self.__ui.show(f"  {i:<4}{ref:<18}{name:<28}{ReportView.__fit(industry, 20):<20}{last}")
         self.__ui.show("─" * W + "\n")
         if activity_note:
             self.__ui.show_error(activity_note)
@@ -492,8 +492,15 @@ class ReportView:
         lines = [f"{'Client':<16} {'Kind':<20} {'Date':<12} Outcome"]
         for position, record in enumerate(records):
             state = states[position] if position < len(states) else ""
-            lines.append(self.__list_line(record, state))
+            lines.append(ReportView.format_assessment_row(record, state))
         return "\n".join(lines)
+
+    @staticmethod
+    def __fit(value: object, width: int) -> str:
+        """value as text that fits a column of this width (one space is left free): a longer one is cut
+        and ends with "…"."""
+        text = " ".join(str(value).split())
+        return text if len(text) < width else text[:width - 2] + "…"
 
     @staticmethod
     def __text_or_unknown(value: object) -> str:
@@ -501,8 +508,10 @@ class ReportView:
         return value if isinstance(value, str) and value.strip() else "?"
 
     @staticmethod
-    def __list_line(record: object, state: str) -> str:
-        """One line of the assessment list. A damaged saved record shows "?" for what cannot be read (and is
+    def format_assessment_row(record: object, state: str = "") -> str:
+        """One line of the assessment list (client, kind, date, outcome, then the (incomplete) and archive
+        marks; state is "archived", "unreadable" or anything else for no mark); the same line is used to
+        pick an assessment. A damaged saved record shows "?" for what cannot be read (and is
         logged once); it never stops the list."""
         if not isinstance(record, dict):
             logger.warning("ReportView: a saved assessment is not a record and is shown as '?': %r", record)

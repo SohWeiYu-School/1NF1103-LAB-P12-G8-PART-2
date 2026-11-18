@@ -2317,3 +2317,17 @@ def test_a_custom_range_ending_after_today_is_refused_and_asked_again(app, tmp_p
                     "2026-11-10", "2999-01-01", "2026-11-10", "2026-11-12", "0", "0")
     assert out.count("The dates cannot be in the future.") == 1
     assert "(2026-11-10 to 2026-11-12)" in out
+
+
+def test_the_pick_list_shows_each_assessments_date_and_outcome_so_they_can_be_told_apart(app, monkeypatch, capsys):
+    assert app.clients().save(sample_case())
+    for number, outcome in ((1, "PASSED"), (2, "RISKY")):
+        assert app.assessments().save({"assessment_id": f"P{number}", "client_ref": CLIENT_REF, "kind": "onboarding",
+                                       "assessed_at": f"2026-11-0{number}T00:00:00+00:00", "outcome": outcome,
+                                       "assessment": {"assessed_on": f"2026-11-0{number}", "outcome": outcome}})
+    app.archive_assessment("P1")
+    out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "3", "0", "0", "0")
+    picks = [line for line in out.split("Which one?")[1].splitlines() if line.startswith("  ") and ". " in line][:2]
+    assert len(set(picks)) == 2
+    assert any("2026-11-02" in p and "RISKY" in p for p in picks)
+    assert any("2026-11-01" in p and "PASSED" in p and "(archived)" in p for p in picks)

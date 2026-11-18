@@ -395,3 +395,32 @@ def test_a_saved_record_without_its_reference_or_kind_is_shown_with_question_mar
 
 def test_a_row_that_is_not_a_record_is_shown_as_unknown():
     assert len(_view().format_assessment_list(["junk", None]).splitlines()) == 3
+
+
+# ----- long values, and one row for the list and for picking --------------------------------------
+
+def test_a_long_name_or_industry_is_cut_with_an_ellipsis_and_never_runs_into_the_next_column(capsys):
+    record = {"client_ref": "CL-1", "name": "Marcus Lim Wei Jie test test eddit more",
+              "career": {"industry": "Industrial parts distribution and more"}}
+    _view().show_client_list([record], {"cl-1": _event()})
+    row = next(line for line in capsys.readouterr().out.splitlines() if "CL-1" in line)
+    name_start = row.index("Marcus")
+    assert row[name_start + 27] == " " and "…" in row[name_start:name_start + 27]
+    industry_start = name_start + 28
+    assert row[industry_start:industry_start + 20].endswith("… ")
+    assert "16 Nov 14:02" in row and "distribution16" not in row.replace(" ", "")
+
+
+def test_a_short_value_is_not_cut(capsys):
+    _view().show_client_list([{"client_ref": "CL-1", "name": "Ada Tan", "career": {"industry": "Banking"}}])
+    assert "…" not in capsys.readouterr().out
+
+
+def test_the_row_used_for_picking_is_the_row_of_the_list_and_tells_assessments_apart():
+    first = {**_combined(["The forecast"]), "verdict": {"assessed_on": "2026-09-24", "verdict": "RISKY"}}
+    second = {**_combined([]), "verdict": {"assessed_on": "2026-09-25", "verdict": "PASSED"}}
+    rows = [ReportView.format_assessment_row(first, "archived").rstrip(), ReportView.format_assessment_row(second)]
+    assert rows[0] != rows[1]
+    assert "2026-09-24" in rows[0] and "RISKY (incomplete) (archived)" in rows[0]
+    assert _view().format_assessment_list([first, second], ["archived", ""]).splitlines()[1:] == \
+        [ReportView.format_assessment_row(first, "archived"), ReportView.format_assessment_row(second)]
