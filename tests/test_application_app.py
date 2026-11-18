@@ -2329,5 +2329,6 @@ def test_the_pick_list_shows_each_assessments_date_and_outcome_so_they_can_be_to
     out = _run_menu(app, monkeypatch, capsys, "8", CLIENT_REF, "3", "0", "0", "0")
     picks = [line for line in out.split("Which one?")[1].splitlines() if line.startswith("  ") and ". " in line][:2]
     assert len(set(picks)) == 2
+    assert all("Assessment ID P" in p for p in picks)
     assert any("2026-11-02" in p and "RISKY" in p for p in picks)
     assert any("2026-11-01" in p and "PASSED" in p and "(archived)" in p for p in picks)

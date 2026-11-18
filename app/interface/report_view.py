@@ -489,7 +489,7 @@ class ReportView:
         states = states or []
         if not records:
             return "No saved assessments match."
-        lines = [f"{'Client':<16} {'Kind':<20} {'Date':<12} Outcome"]
+        lines = [f"{'Client':<16} {'Kind':<20} {'Date':<12} {'Assessment ID':<14} Outcome"]
         for position, record in enumerate(records):
             state = states[position] if position < len(states) else ""
             lines.append(ReportView.format_assessment_row(record, state))
@@ -508,10 +508,12 @@ class ReportView:
         return value if isinstance(value, str) and value.strip() else "?"
 
     @staticmethod
-    def format_assessment_row(record: object, state: str = "") -> str:
-        """One line of the assessment list (client, kind, date, outcome, then the (incomplete) and archive
-        marks; state is "archived", "unreadable" or anything else for no mark); the same line is used to
-        pick an assessment. A damaged saved record shows "?" for what cannot be read (and is
+    def format_assessment_row(record: object, state: str = "", labelled: bool = False) -> str:
+        """One line of the assessment list (client, kind, date, the first 8 characters of the assessment id,
+        outcome, then the (incomplete) and archive marks; state is "archived", "unreadable" or anything else
+        for no mark); the same line is used to pick an assessment. With labelled (a line with no heading
+        above it) the id reads "Assessment ID a72de5e5"; a record with no usable id shows "no ID"
+        ("Assessment ID: none" when labelled); an id is never made up. A damaged saved record shows "?" for what cannot be read (and is
         logged once); it never stops the list."""
         if not isinstance(record, dict):
             logger.warning("ReportView: a saved assessment is not a record and is shown as '?': %r", record)
@@ -529,11 +531,17 @@ class ReportView:
             logger.warning("ReportView: a saved assessment is damaged (%s) and is shown with '?': %r",
                            ", ".join(unreadable) or "verdict", record.get("assessment_id"))
         date_text = date if isinstance(date, str) else "?"
+        raw_id = record.get("assessment_id")
+        short_id = raw_id.strip()[:8] if isinstance(raw_id, str) else ""
+        if labelled:
+            id_text = f"{'Assessment ID ' + short_id if short_id else 'Assessment ID: none':<23}"
+        else:
+            id_text = f"{short_id or 'no ID':<14}"
         incomplete = " (incomplete)" if ReportView.__missing_parts(record.get("report")) else ""
         label = ReportView.OUTCOME_LABELS.get(outcome, "?") if isinstance(outcome, str) else "?"
         return (f"{ReportView.__text_or_unknown(record.get('client_ref')):<16} "
                 f"{ReportView.__text_or_unknown(record.get('kind')):<20} {date_text:<12} "
-                f"{label}{incomplete}{ReportView.ARCHIVE_MARKS.get(state, '')}")
+                f"{id_text} {label}{incomplete}{ReportView.ARCHIVE_MARKS.get(state, '')}")
 
     def show_onboarding(self, assessment: dict) -> None:
         """A forecast-only report (assessments saved before the combined verdict)."""

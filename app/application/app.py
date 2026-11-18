@@ -860,7 +860,7 @@ class App:
         """Ask which of the listed assessments (states: one per record, or None for all active); its position
         in records, or None if the officer goes back."""
         states = states or [""] * len(records)
-        labels = [ReportView.format_assessment_row(record, state).rstrip() for record, state in zip(records, states)]
+        labels = [ReportView.format_assessment_row(record, state, labelled=True).rstrip() for record, state in zip(records, states)]
         return self.__ui.ask_choice(question, labels, allow_back=True, back_label=back_label)
 
     def __open_assessment(self, chosen: dict) -> None:

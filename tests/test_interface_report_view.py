@@ -424,3 +424,30 @@ def test_the_row_used_for_picking_is_the_row_of_the_list_and_tells_assessments_a
     assert "2026-09-24" in rows[0] and "RISKY (incomplete) (archived)" in rows[0]
     assert _view().format_assessment_list([first, second], ["archived", ""]).splitlines()[1:] == \
         [ReportView.format_assessment_row(first, "archived"), ReportView.format_assessment_row(second)]
+
+
+# ----- the assessment id on each row ------------------------------------------------------------
+
+def test_the_list_has_an_assessment_id_column_between_date_and_outcome():
+    record = {**_combined(["The forecast"]), "assessment_id": "a72de5e5-1111-2222-3333-444455556666"}
+    head, row = _view().format_assessment_list([record], ["archived"]).splitlines()
+    assert head.split() == ["Client", "Kind", "Date", "Assessment", "ID", "Outcome"]
+    assert head.index("Assessment ID") > head.index("Date") and head.index("Outcome") > head.index("Assessment ID")
+    assert row.split()[:5] == ["SOW-1", "combined", "2026-09-24", "a72de5e5", "PASSED"]
+    assert "a72de5e5-" not in row and row.endswith("PASSED (incomplete) (archived)")
+
+
+def test_a_pick_line_labels_the_assessment_id():
+    record = {**_combined(), "assessment_id": "a72de5e5-1111"}
+    line = ReportView.format_assessment_row(record, "", labelled=True)
+    assert "Assessment ID a72de5e5" in line and line.rstrip().endswith("PASSED")
+
+
+@pytest.mark.parametrize("bad", [None, "", "   ", 5, ["x"]])
+def test_a_record_without_a_usable_id_says_so_and_never_invents_one(bad):
+    record = {**_combined(), "assessment_id": bad}
+    assert "no ID" in ReportView.format_assessment_row(record)
+    assert "Assessment ID: none" in ReportView.format_assessment_row(record, labelled=True)
+    assert "no ID" in _view().format_assessment_list([record])
+    del record["assessment_id"]
+    assert "no ID" in ReportView.format_assessment_row(record)
