@@ -28,6 +28,7 @@ class AdminConsole:
 
     SAFE_ERRORS: tuple[str, ...] = (App.AUDIT_UNAVAILABLE, App.AUDIT_KEY_MISSING, App.FLAGS_UNAVAILABLE,
                                     App.FLAG_ADMIN_ONLY)
+    NO_SUCH_FLAG: str = "No flag has the id {flag_id}. Check the id, or pick one from the Overview."
     NOT_SAVED: str = "Your update was not saved."
     MENU: tuple[str, ...] = ("Overview", "Open a flag", "A client's flags", "Activity log",
                              "Verify the audit log")
@@ -153,7 +154,8 @@ class AdminConsole:
         flag_id = self.__pick_flag()
         if flag_id is None:
             return
-        ticket = self.__show_flag(flag_id)
+        typed = flag_id not in {listed.flag.flag_id for listed in self.__listed}
+        ticket = self.__show_flag(flag_id, typed)
         while ticket is not None:
             if self.__ui.ask_choice("What next?", ["Update this flag"], allow_back=True, back_label="Back") is None:
                 return
@@ -256,12 +258,15 @@ class AdminConsole:
                 continue
             return answer
 
-    def __show_flag(self, flag_id: str) -> FlagTicket | None:
-        """Fetch the flag fresh and show it with its evidence. None (after saying the flag is gone) if the rules find
-        no flag with that id now."""
+    def __show_flag(self, flag_id: str, typed: bool = False) -> FlagTicket | None:
+        """Fetch the flag fresh and show it with its evidence. None if the rules find no flag with that id now: for an
+        id the admin typed, that no flag has it (most likely a typo); for one picked or shown before, that it is gone."""
         ticket, evidence, entries = self.__app.flag_evidence(flag_id, self.__now())
         if ticket is None:
-            self.__ui.show_message(f"\n{App.FLAG_GONE}")
+            if typed:
+                self.__ui.show_message("\n" + ConsoleUI.printable([AdminConsole.NO_SUCH_FLAG.format(flag_id=flag_id)]))
+            else:
+                self.__ui.show_message(f"\n{App.FLAG_GONE}")
             return None
         self.__view.show_flag(ticket, evidence, entries)
         return ticket

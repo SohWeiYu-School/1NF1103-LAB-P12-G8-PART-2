@@ -118,9 +118,15 @@ def test_a_flag_is_opened_by_its_id_with_its_evidence(app):
     assert "F-HOU-SOW-1-7  After-hours activity" in out and "Evidence" in out and "#7" in out
 
 
-def test_a_flag_that_no_longer_exists_says_so(app):
+def test_a_typed_flag_id_that_matches_no_flag_says_no_flag_has_it_not_that_it_is_gone(app):
     out = _run(app, "2", "F-NOPE-99", "0")
-    assert App.FLAG_GONE in out and "Evidence" not in out and "[ERROR]" not in out
+    assert "No flag has the id F-NOPE-99. Check the id, or pick one from the Overview." in out
+    assert App.FLAG_GONE not in out and "Evidence" not in out and "[ERROR]" not in out
+
+
+def test_a_typed_flag_id_is_cleaned_before_it_is_shown(app):
+    out = _run(app, "2", "F-\x1b[31mX", "0")
+    assert "No flag has the id F-?[31mX." in out and "\x1b" not in out
 
 
 def test_the_flag_prompt_can_be_left_with_zero(app):
@@ -399,7 +405,7 @@ def test_a_value_error_that_app_did_not_choose_is_an_unexpected_error_not_an_aud
 def test_a_digit_that_int_cannot_read_is_not_a_number_and_is_not_an_audit_log_problem(app):
     out = _run(app, "2", "²", "0", "0")                        # "²".isdigit() is True, int("²") raises
     assert App.AUDIT_UNAVAILABLE not in out and "unexpected" not in out
-    assert App.FLAG_GONE in out                                # taken as a flag id, which does not exist
+    assert "No flag has the id" in out                         # taken as a flag id, which does not exist
     out = _run(app, "1", "4", "6", "1", "²", "1", "1", "0", "0", "0")
     assert App.AUDIT_UNAVAILABLE not in out and "F-SHO-SOW-1-4  Verdict" in out
 
