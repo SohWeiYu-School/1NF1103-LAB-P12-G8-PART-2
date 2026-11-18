@@ -34,6 +34,7 @@ def test_the_overview_shows_the_numbers_the_failure_table_and_the_flags(app):
     assert "To handle 5  Open 5  In review 0  Following up 0  Resolved 0  All 5" in text
     assert "F-SHO-SOW-1-4  [High] Verdict jump after edit" in text
     assert "Showing 1-5 of 5   Page 1 of 1" in text
+    assert "     System | Open | raised 2026-11-06 10:20" in text and "     Client SOW-1 | Open" in text
 
 
 def test_the_overview_has_one_line_for_each_day_that_had_failures_and_counts_the_quiet_ones(app):

@@ -141,7 +141,7 @@ class AdminView:
         for number, ticket in enumerate(page.rows, start=1):
             flag = ticket.flag
             lines.append(f"  {number}. {flag.flag_id}  [{flag.severity_name}] {flag.name}")
-            lines.append(f"     Client {flag.client_ref or 'System'} | {ticket.status_name} | "
+            lines.append(f"     {'Client ' + flag.client_ref if flag.client_ref else 'System'} | {ticket.status_name} | "
                          f"raised {AdminView.__sgt(flag.raised_at)}")
             lines.append(f"     {flag.headline}")
         first = (page.page - 1) * OverviewPage.PAGE_SIZE + 1
