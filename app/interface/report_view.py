@@ -190,9 +190,12 @@ class ReportView:
     def show_verdict_report(self, verdict: Verdict, ask_for_evidence: bool = True,
                             crime_result: dict | None = None, typologies: list[Typology] | None = None) -> None:
         """The short report, then (if the officer wants it) the full evidence."""
-        self.__ui.show("\n" + self.format_verdict_report(verdict, crime_result=crime_result, typologies=typologies) + "\n")
+        # Both texts are built before anything is printed: a damaged report prints nothing at all.
+        report = self.format_verdict_report(verdict, crime_result=crime_result, typologies=typologies)
+        evidence = self.format_evidence(verdict) if ask_for_evidence else ""
+        self.__ui.show("\n" + report + "\n")
         if ask_for_evidence and self.__ui.ask_yes_no("Show the full evidence?"):
-            self.__ui.show("\n" + self.format_evidence(verdict) + "\n")
+            self.__ui.show("\n" + evidence + "\n")
 
     def _field_name(self, key: str) -> str:
         return ReportView.FIELD_NAMES.get(key, key.replace("_", " ").title())
