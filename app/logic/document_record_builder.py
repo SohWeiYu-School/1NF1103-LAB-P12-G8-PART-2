@@ -46,9 +46,14 @@ class DocumentRecordBuilder:
 
     @staticmethod
     def __names(value: Any) -> Any:
-        """A reading's list of names as it is, except that a text with nothing in it means no names (so the
-        reading is kept); a text with something in it is left for the record to refuse."""
-        return [] if value is None or (isinstance(value, str) and not value.strip()) else value
+        """A reading's list of names as it is, except that a text with nothing in it means no names, and blank
+        texts inside a list are left out (so one empty name does not cost the whole list). Anything else, such
+        as a text with something in it, a number or a non-text item, is left for the record to refuse."""
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return []
+        if isinstance(value, (list, tuple)):
+            return [item for item in value if not (isinstance(item, str) and not item.strip())]
+        return value
 
     def _blank(self, value: Any) -> bool:
         return value is None or (isinstance(value, str) and not value.strip()) or value == []

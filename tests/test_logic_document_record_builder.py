@@ -109,7 +109,7 @@ def test_the_message_for_a_text_instead_of_a_list_reads_inside_the_dropped_sente
            "or left empty; a single value was given)" in dropped[0]["message"]
 
 
-@pytest.mark.parametrize("odd", [["SG", None, 5], [["x"]], ["SG", "  "], 0, False, {}, 0.0])
+@pytest.mark.parametrize("odd", [["SG", None, 5], [["x"]], 0, False, {}, 0.0])
 def test_a_reading_with_odd_items_or_a_non_list_for_the_countries_drops_only_that_field_with_its_message(odd):
     reading = {**READING, "claims": {**READING["claims"], "wealth_countries": odd, "declared_counterparties": odd}}
     record, _, dropped = _builder().build(reading, "SOW-DOC-1")
@@ -121,6 +121,26 @@ def test_a_reading_with_odd_items_or_a_non_list_for_the_countries_drops_only_tha
                for entry in dropped)
     assert saved["claims"]["expected_aum"] == READING["claims"]["expected_aum_sgd"]       # the rest is kept
     assert record.profile.name == READING["client"]["name"]
+
+
+def test_blank_names_inside_a_list_are_left_out_and_the_good_names_are_kept():
+    reading = {**READING, "claims": {**READING["claims"], "wealth_countries": ["Singapore", "", "  ", "Malaysia"],
+                                     "declared_counterparties": ["", "DBS"]}}
+    record, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    saved = record.to_dict()
+    assert saved["claims"]["wealth_countries"] == ["Singapore", "Malaysia"]
+    assert saved["claims"]["declared_counterparties"] == ["DBS"]
+    assert dropped == []
+
+
+def test_a_list_of_only_blank_names_means_none_and_a_non_text_item_still_drops_the_field():
+    reading = {**READING, "claims": {**READING["claims"], "wealth_countries": ["", " "],
+                                     "declared_counterparties": ["DBS", 5, ""]}}
+    record, _, dropped = _builder().build(reading, "SOW-DOC-1")
+    saved = record.to_dict()
+    assert saved["claims"]["wealth_countries"] == []
+    assert saved["claims"]["declared_counterparties"] == []
+    assert [entry["path"] for entry in dropped] == [["claims", "declared_counterparties"]]
 
 
 def test_several_impossible_values_in_jobs_assets_and_claims_are_each_dropped_on_their_own():
