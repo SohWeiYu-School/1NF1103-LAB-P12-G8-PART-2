@@ -209,12 +209,12 @@ class AdminConsole:
         if picked is None:
             return None
         status, waiting_on, outcome = statuses[picked], "", ""
-        if status == "followup" and status != ticket.status:
+        if ticket.needs_waiting_on(status):
             picked = self.__ui.ask_choice("Waiting on", list(FlagTicket.WAITING_ON), allow_back=True, back_label="Back")
             if picked is None:
                 return None
             waiting_on = FlagTicket.WAITING_ON[picked]
-        if status == "resolved" and status != ticket.status:
+        if ticket.needs_outcome(status):
             outcomes = list(FlagTicket.OUTCOMES)
             picked = self.__ui.ask_choice("Outcome", [FlagTicket.OUTCOMES[key] for key in outcomes], allow_back=True,
                                           back_label="Back")

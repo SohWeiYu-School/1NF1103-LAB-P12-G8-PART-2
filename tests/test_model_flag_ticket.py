@@ -166,3 +166,17 @@ def test_the_details_make_a_line_that_replays_to_the_same_state():
     details = ticket.update_details("Admin A", "followup", NOTE, "Compliance")
     event = AuditEvent(sequence=10, actor="Admin A", action="flag_updated", details=details)
     assert FlagTicket(FLAG, [event]).waiting_on == "Compliance"
+
+
+def test_only_moving_to_following_up_needs_waiting_on_and_only_moving_to_resolved_needs_an_outcome():
+    ticket = FlagTicket(FLAG, [])                                      # Open
+    assert [ticket.needs_waiting_on(key) for key in FlagTicket.STATUSES] == [False, False, True, False]
+    assert [ticket.needs_outcome(key) for key in FlagTicket.STATUSES] == [False, False, False, True]
+    assert ticket.needs_waiting_on("nonsense") is False and ticket.needs_outcome("") is False
+
+
+def test_staying_in_following_up_or_resolved_needs_nothing_extra():
+    following = FlagTicket(FLAG, [_update("followup", waiting_on="IT support")])
+    assert following.needs_waiting_on("followup") is False and following.needs_outcome("resolved") is True
+    resolved = FlagTicket(FLAG, [_update("resolved", outcome="fixed")])
+    assert resolved.needs_outcome("resolved") is False and resolved.needs_waiting_on("followup") is True
