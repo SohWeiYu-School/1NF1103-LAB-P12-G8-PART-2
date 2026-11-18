@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from typing import Any, TypeVar
 
 from app.application.app import App
+from app.interface.admin_console import AdminConsole
+from app.interface.admin_view import AdminView
 from app.interface.case_builder import CaseBuilder
 from app.interface.client_form import ClientForm
 from app.interface.console_ui import ConsoleUI
@@ -165,9 +167,30 @@ class TerminalApp:
                 self.__ui.show_sync_result(self.__audited(app.sync_to_cloud)())
             elif choice == "8":
                 self.__client_history()
+            elif choice == "9":
+                self.__admin()
             elif choice == "0":
                 self.__ui.show_message("\n" + TerminalApp.GOODBYE)
                 break
+
+    # ----- the admin ---------------------------------------------------------------------------
+
+    def __admin(self) -> None:
+        """Menu 9: ask for an admin's name and password (the password is not shown), sign in at the admin portal
+        and run the AdminConsole. The admin is signed out when the console ends, however it ends (0, the end of
+        input, an error). A refused sign-in shows App's message and goes back to the menu."""
+        app = self.__app
+        name = self.__ui.ask_optional_text("Admin name")
+        password = self.__ui.ask_password("Password")
+        account, message = self.__audited(app.sign_in)(name, password, App.ADMIN_PORTAL)
+        if account is None:
+            self.__ui.show_error(message)
+            return
+        try:
+            AdminConsole(app, self.__ui, AdminView(self.__ui), account).run()
+        finally:
+            self.__audited(app.sign_out)(account)
+            self.__ui.show_message("Signed out of the admin screens.")
 
     # ----- assessing ---------------------------------------------------------------------------
 

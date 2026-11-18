@@ -14,6 +14,7 @@ from app.model.audit_filter import AuditFilter
 from app.model.client_record import ClientRecord
 from app.model.verdict import Verdict
 from tests import fake_ai, fake_services
+from tests.admin_session import ALL_RULES, screen, text_of
 from tests.audit_files import break_audit, fix_audit, seed_audit
 from tests.logic_fixtures import sample_case
 
@@ -863,3 +864,103 @@ def test_a_successful_action_after_a_failed_one_shows_no_old_warning(app, tmp_pa
     fix_audit(tmp_path)                                         # the log works again
     second = _run_menu(app, capsys, "7", "0")
     assert App.AUDIT_LINE_NOT_WRITTEN not in second and App.AUDIT_NOT_WRITTEN not in second
+
+
+# ----- 9. Admin: audit and flags (the sign-in; the screens are tested with AdminConsole) --------------------------
+
+def _admin_session(app, *typed):
+    """Run the menu with the answers given (the password is asked with the secret reader). Returns the text shown
+    and the hidden questions asked."""
+    ui, shown, _, hidden = screen(*typed)
+    TerminalApp(app, ui).run_menu()
+    return text_of(shown), hidden
+
+
+def _audit_lines(app) -> list:
+    return app.audit_log(AuditFilter("custom", sort="asc", page=1)).events
+
+
+def test_an_admin_signs_in_from_the_menu_uses_the_admin_screens_and_is_signed_out(app, tmp_path):
+    seed_audit(tmp_path, ALL_RULES)
+    out, hidden = _admin_session(app, "9", "Orbit Admin", "admin123", "5", "0", "0")
+    assert "Signed in as Orbit Admin (admin)." in out and "OK: No changes found in the 11 entries." in out
+    assert "Signed out of the admin screens." in out and "Goodbye." in out
+    assert hidden == ["Password: "]
+    lines = _audit_lines(app)[len(ALL_RULES):]
+    assert [(line.action, line.actor) for line in lines] == [("signed_in", "Orbit Admin"),
+                                                              ("audit_verified", "Orbit Admin"),
+                                                              ("signed_out", "Orbit Admin")]
+
+
+def test_the_password_is_never_shown_logged_or_saved(app, tmp_path, caplog):
+    caplog.set_level("DEBUG")
+    out, _ = _admin_session(app, "9", "Orbit Admin", "admin123", "0", "0")
+    _admin_session(app, "9", "Orbit Admin", "wrong-password-XYZ", "0")
+    saved = (tmp_path / "local database" / "audit_log.json").read_text(encoding="utf-8")
+    for secret in ("admin123", "wrong-password-XYZ"):
+        assert secret not in out and secret not in caplog.text and secret not in saved
+
+
+def test_a_wrong_admin_password_is_refused_and_recorded_without_the_password(app):
+    out, _ = _admin_session(app, "9", "Orbit Admin", "wrong-password-XYZ", "0")
+    assert f"[ERROR] {App.SIGN_IN_WRONG}" in out and "Signed in as" not in out and "ADMIN: AUDIT" not in out
+    line = _audit_lines(app)[-1]
+    assert (line.action, line.actor, line.result, line.details) == ("sign_in_failed", "Orbit Admin", "failed",
+                                                                    {"portal": "admin"})
+
+
+def test_an_officer_cannot_sign_in_at_the_admin_screens_and_is_told_where_to_go(app):
+    out, _ = _admin_session(app, "9", "Shareen", "officer123", "0")
+    assert f"[ERROR] {App.SIGN_IN_OFFICER_AT_ADMIN}" in out and "ADMIN: AUDIT" not in out
+    line = _audit_lines(app)[-1]
+    assert (line.action, line.actor, line.result) == ("sign_in_failed", "Shareen", "failed")
+
+
+def test_an_unknown_name_and_a_blank_answer_are_refused(app):
+    out, _ = _admin_session(app, "9", "Nobody Here", "admin123", "9", "", "", "0")
+    assert f"[ERROR] {App.SIGN_IN_WRONG}" in out and f"[ERROR] {App.SIGN_IN_EMPTY}" in out
+    assert [line.actor for line in _audit_lines(app)] == ["unknown"]          # the blank attempt wrote nothing
+
+
+def test_the_end_of_input_inside_the_admin_screens_leaves_cleanly_and_signs_out(app, capsys):
+    answers = iter(["9", "Orbit Admin", "admin123"])
+    shown = []
+
+    def read(question: str = "") -> str:
+        try:
+            return next(answers)
+        except StopIteration:
+            raise EOFError from None
+
+    ui = ConsoleUI(read=read, write=shown.append, secret=read)
+    assert TerminalApp(app, ui).start([]) == 0
+    assert any("Goodbye." in line for line in shown) and not any("unexpected" in line for line in shown)
+    assert [line.action for line in _audit_lines(app)] == ["signed_in", "signed_out"]
+
+
+def test_an_error_inside_the_admin_screens_still_signs_out(app):
+    answers = iter(["9", "Orbit Admin", "admin123"])
+    shown = []
+
+    def read(question: str = "") -> str:
+        try:
+            return next(answers)
+        except StopIteration:
+            raise RuntimeError("made-up failure") from None
+
+    ui = ConsoleUI(read=read, write=shown.append, secret=read)
+    assert TerminalApp(app, ui).start([]) == 1
+    assert any("unexpected error" in line for line in shown)
+    assert [line.action for line in _audit_lines(app)] == ["signed_in", "signed_out"]
+
+
+def test_a_sign_in_or_sign_out_line_that_could_not_be_written_is_told(app, tmp_path):
+    break_audit(tmp_path)
+    out, _ = _admin_session(app, "9", "Orbit Admin", "admin123", "0", "0")
+    assert out.count(App.AUDIT_LINE_NOT_WRITTEN) == 2                    # once after signing in, once after out
+    assert "Signed in as Orbit Admin" in out
+
+
+def test_the_menu_says_the_admin_screens_are_nine(app):
+    out, _ = _admin_session(app, "0")
+    assert "9. Admin: audit and flags" in out
