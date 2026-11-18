@@ -741,9 +741,11 @@ def test_no_valid_quotes_drops_typology():
 # Test 6: Corroborated — 2 reports from different orgs → corroborated=True
 # ---------------------------------------------------------------------------
 
-def test_corroborated_different_orgs():
+@pytest.mark.parametrize("second_org, corroborated", [("MAS", True), ("FATF", False)],
+                         ids=["different orgs", "same org"])
+def test_a_quote_is_corroborated_only_by_a_different_org(second_org, corroborated):
     r1 = _sources_report("R1", org="FATF", excerpts=["shared quote"])
-    r2 = _sources_report("R2", org="MAS", excerpts=["shared quote"])
+    r2 = _sources_report("R2", org=second_org, excerpts=["shared quote"])
     clean = _sample_clean_research([r1, r2])
     typ = _sample_typology(
         "T1",
@@ -757,33 +759,13 @@ def test_corroborated_different_orgs():
     cleaned, warnings = verify_typology_sources([typ], clean, _sources_policy())
 
     assert len(cleaned) == 1
-    assert cleaned[0].corroborated is True
-    assert not any("corroborat" in w for w in warnings)
+    assert cleaned[0].corroborated is corroborated
+    assert not any("corroborat" in w for w in warnings)  # either way, not a warning
 
 
 # ---------------------------------------------------------------------------
 # Test 7: Not corroborated — 2 reports from same org → corroborated=False
 # ---------------------------------------------------------------------------
-
-def test_not_corroborated_same_org():
-    r1 = _sources_report("R1", org="FATF", excerpts=["shared quote"])
-    r2 = _sources_report("R2", org="FATF", excerpts=["shared quote"])
-    clean = _sample_clean_research([r1, r2])
-    typ = _sample_typology(
-        "T1",
-        ["R1", "R2"],
-        [
-            {"report_id": "R1", "quote": "shared quote"},
-            {"report_id": "R2", "quote": "shared quote"},
-        ],
-    )
-
-    cleaned, warnings = verify_typology_sources([typ], clean, _sources_policy())
-
-    assert len(cleaned) == 1
-    assert cleaned[0].corroborated is False
-    assert not any("corroborat" in w for w in warnings)  # not a warning
-
 
 # ---------------------------------------------------------------------------
 # Test 8: Org splitting — "FATF and Egmont Group" vs "FATF" → same;

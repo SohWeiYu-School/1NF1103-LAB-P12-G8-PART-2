@@ -288,16 +288,11 @@ def test_flagged_only_still_has_to_pass_the_other_filters():
     assert AuditFilter(flagged_only=True, actor="Shareen").matches(event, NOW, {5}) is True
 
 
-@pytest.mark.parametrize("text", ["1", "on", "TRUE", " yes "])
-def test_flagged_in_the_address_turns_it_on(text):
+@pytest.mark.parametrize("text, on", [("1", True), ("on", True), ("TRUE", True), (" yes ", True),
+                                      ("0", False), ("off", False), ("false", False), ("No", False)])
+def test_flagged_in_the_address_turns_it_on_or_off(text, on):
     f = AuditFilter.from_query({"flagged": text}, NOW)
-    assert f.flagged_only is True and f.problems() == []
-
-
-@pytest.mark.parametrize("text", ["0", "off", "false", "No"])
-def test_flagged_in_the_address_can_say_no(text):
-    f = AuditFilter.from_query({"flagged": text}, NOW)
-    assert f.flagged_only is False and f.problems() == []
+    assert f.flagged_only is on and f.problems() == []
 
 
 def test_a_bad_flagged_value_falls_back_to_all_events_and_says_so():

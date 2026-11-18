@@ -536,12 +536,18 @@ def test_the_menu_tells_the_user_when_the_saved_assessments_cannot_be_read(app, 
     assert "No assessments" not in out
 
 
-def test_find_client_raises_a_safe_message_when_the_database_cannot_be_read(app, tmp_path, caplog):
-    _damage(tmp_path, "sow_cases.json")
+@pytest.mark.parametrize("damaged, method, args, message", [
+    ("sow_cases.json", "find_client", ("CL-1",), App.CLIENTS_UNAVAILABLE),
+    ("sow_cases.json", "all_clients", (), App.CLIENTS_UNAVAILABLE),
+    ("ai_assessments.json", "all_assessments", (), App.ASSESSMENTS_UNAVAILABLE),
+], ids=["find_client", "all_clients", "all_assessments"])
+def test_a_database_that_cannot_be_read_raises_the_safe_message_and_logs_where(app, tmp_path, caplog,
+                                                                                damaged, method, args, message):
+    _damage(tmp_path, damaged)
     with pytest.raises(ValueError) as error:
-        app.find_client("CL-1")
-    assert str(error.value) == App.CLIENTS_UNAVAILABLE
-    assert "App.find_client" in caplog.text
+        getattr(app, method)(*args)
+    assert str(error.value) == message
+    assert f"App.{method}" in caplog.text
 
 
 def test_menu_find_client_shows_the_message_not_no_client_found(app, tmp_path, monkeypatch, capsys):
@@ -694,14 +700,6 @@ def test_all_clients_is_empty_when_there_are_none_and_lists_them_when_saved(app)
     assert [client["client_ref"] for client in app.all_clients()] == [sample_case()["client_ref"]]
 
 
-def test_all_clients_raises_the_safe_message_when_the_database_cannot_be_read(app, tmp_path, caplog):
-    _damage(tmp_path, "sow_cases.json")
-    with pytest.raises(ValueError) as error:
-        app.all_clients()
-    assert str(error.value) == App.CLIENTS_UNAVAILABLE
-    assert "App.all_clients" in caplog.text
-
-
 def test_all_assessments_is_empty_when_there_are_none(app):
     assert app.all_assessments() == []
 
@@ -710,14 +708,6 @@ def test_all_assessments_lists_the_saved_ones(app):
     saved = {"assessment_id": "A1", "client_ref": "C-1", "assessed_at": "2025-01-01T00:00:00+00:00"}
     assert app.assessments().save(saved)
     assert app.all_assessments() == [saved]
-
-
-def test_all_assessments_raises_the_safe_message_when_they_cannot_be_read(app, tmp_path, caplog):
-    _damage(tmp_path, "ai_assessments.json")
-    with pytest.raises(ValueError) as error:
-        app.all_assessments()
-    assert str(error.value) == App.ASSESSMENTS_UNAVAILABLE
-    assert "App.all_assessments" in caplog.text
 
 
 def test_a_reading_becomes_a_record_and_the_fields_left_out_are_named(app):
@@ -1579,7 +1569,7 @@ from datetime import date, datetime, timezone
 
 from app.data.audit_repository import AuditRepository
 from app.model.overview_page import OverviewPage
-from tests.audit_files import audit_path, seed_audit
+from tests.audit_files import seed_audit
 
 FLAG_NOW = datetime(2026, 11, 16, 8, 0, tzinfo=timezone.utc)          # 16:00 on Monday 16 Nov in Singapore
 ADMIN = "Orbit Admin"
